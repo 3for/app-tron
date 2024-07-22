@@ -13,7 +13,7 @@ from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
-from tron import TronClient, Errors, CLA, InsType
+from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
 from ragger.bip import pack_derivation_path
 from utils import check_tx_signature, check_hash_signature
 from eth_keys import KeyAPI
@@ -656,3 +656,45 @@ class TestTRX():
                 owner_address=bytes.fromhex(
                     client.getAccount(0)['addressHex'])))
         self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_sign_personal_message(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        # Magic define
+        SIGN_MAGIC = b'\x19TRON Signed Message:\n'
+        message = 'CryptoChain-TronSR Ledger Transactions Tests' * 32
+        message = message.encode()
+        data = pack_derivation_path(client.getAccount(0)['path'])
+        data += struct.pack(">I", len(message)) + message
+
+        chunk_cnt = (len(data) + MAX_APDU_LEN - 1) // MAX_APDU_LEN
+        index = 0
+        def gen_apdu(data, index):
+            data_chunk = data[index * MAX_APDU_LEN: (index + 1) * MAX_APDU_LEN]
+            return bytearray([CLA,
+                              InsType.SIGN_PERSONAL_MESSAGE,
+                              0x00 if index == 0 else 0x80,
+                              0x00]) + data_chunk
+
+        for _ in range(chunk_cnt - 1):
+            apdu = gen_apdu(data, index)
+            backend.exchange(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:])
+            index += 1
+        else:
+            apdu = gen_apdu(data, index)
+            with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:]):
+                if firmware.device == "stax":
+                    text = "Hold to sign"
+                else:
+                    text = "message"
+                client.navigate(Path(currentframe().f_code.co_name), text)
+
+        resp = backend.last_async_response
+
+        signedMessage = SIGN_MAGIC + str(len(message)).encode() + message
+        keccak_hash = keccak.new(digest_bits=256)
+        keccak_hash.update(signedMessage)
+        hash_to_sign = keccak_hash.digest()
+        print(hash_to_sign)
+
+        assert check_hash_signature(hash_to_sign, resp.data[0:65],
+                                    client.getAccount(0)['publicKey'][2:])
