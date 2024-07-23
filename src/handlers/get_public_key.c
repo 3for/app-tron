@@ -42,7 +42,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         return io_send_sw(E_INCORRECT_P1_P2);
     }
 
-    publicKeyContext.getChaincode = (p2Chain == P2_CHAINCODE);
+   global_ctx.publicKeyContext.getChaincode = (p2Chain == P2_CHAINCODE);
 
     // Add requested BIP path to tmp array
     if (read_bip32_path(dataBuffer, dataLength, &bip32_path) < 0) {
@@ -50,14 +50,14 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
 
-    if (initPublicKeyContext(&bip32_path, publicKeyContext.address58) != 0) {
+    if (initPublicKeyContext(&bip32_path, global_ctx.publicKeyContext.address58) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
-    memcpy(toAddress, publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
+    memcpy(toAddress, global_ctx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
 
     if (p1 == P1_NON_CONFIRM) {
-        return helper_send_response_pubkey(&publicKeyContext);
+        return helper_send_response_pubkey(&global_ctx.publicKeyContext);
     } else {
 #ifdef HAVE_SWAP
         if (G_called_from_swap) {

@@ -22,7 +22,7 @@
 #include "helpers.h"
 #include "app_errors.h"
 
-extern publicKeyContext_t publicKeyContext;
+extern tmpCtx_t global_ctx;
 
 void getAddressFromPublicKey(const uint8_t *publicKey, uint8_t address[static ADDRESS_SIZE]) {
     uint8_t hashAddress[HASH_SIZE];
@@ -140,14 +140,14 @@ int initPublicKeyContext(bip32_path_t *bip32_path, char *address58) {
     if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
                                     bip32_path->indices,
                                     bip32_path->length,
-                                    publicKeyContext.publicKey,
-                                    publicKeyContext.chainCode,
+                                    global_ctx.publicKeyContext.publicKey,
+                                    global_ctx.publicKeyContext.chainCode,
                                     CX_SHA512) != CX_OK) {
         return -1;
     }
 
     // Get base58 address from public key
-    getBase58FromPublicKey(publicKeyContext.publicKey, address58, false);
+    getBase58FromPublicKey(global_ctx.publicKeyContext.publicKey, address58, false);
 
     return 0;
 }

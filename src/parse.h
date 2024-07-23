@@ -158,6 +158,12 @@ typedef struct messageSigningContext712_t {
     uint8_t messageHash[32];
 } messageSigningContext712_t;
 
+typedef union {
+    transactionContext_t transactionContext;
+    publicKeyContext_t publicKeyContext;
+    messageSigningContext712_t messageSigningContext712;
+} tmpCtx_t;
+
 typedef struct txStringProperties_t {
     char fullAddress[43];
     char fullAmount[79];  // 2^256 is 78 digits long
