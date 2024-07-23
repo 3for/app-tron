@@ -29,8 +29,7 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_P1_P2);
     }
 
-    bip32_path_t bip32_path;
-    off_t ret = read_bip32_path(workBuffer, dataLength, &bip32_path);
+    off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
     if (ret < 0) {
         return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
@@ -41,11 +40,11 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_LENGTH);
     }
 
-    if (initPublicKeyContext(&bip32_path, fromAddress) != 0) {
+    publicKeyContext_t tmp_public_key_ctx;
+    if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path, fromAddress, &tmp_public_key_ctx) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
-    memcpy(&global_ctx.transactionContext.bip32_path, &bip32_path, sizeof(bip32_path_t));
     // Load raw Data
     memcpy(global_ctx.transactionContext.signature, workBuffer, PUBLIC_KEY_SIZE);
 
