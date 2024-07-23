@@ -50,7 +50,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
 
-    if (initPublicKeyContext(&bip32_path, global_ctx.publicKeyContext.address58) != 0) {
+    if (initPublicKeyContext(&bip32_path, global_ctx.publicKeyContext.address58, &global_ctx.publicKeyContext) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 

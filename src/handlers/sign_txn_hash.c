@@ -36,8 +36,7 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
     }
 
-    bip32_path_t bip32_path;
-    off_t ret = read_bip32_path(workBuffer, dataLength, &bip32_path);
+    off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
     if (ret < 0) {
         return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
@@ -45,7 +44,8 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     dataLength -= ret;
 
     // fromAddress
-    if (initPublicKeyContext(&bip32_path, fromAddress) != 0) {
+    publicKeyContext_t tmp_public_key_ctx;
+    if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path, fromAddress, &tmp_public_key_ctx) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
@@ -53,7 +53,6 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     if (dataLength != HASH_SIZE) {
         return io_send_sw(E_INCORRECT_LENGTH);
     }
-    memcpy(&global_ctx.transactionContext.bip32_path, &bip32_path, sizeof(bip32_path_t));
     memcpy(global_ctx.transactionContext.hash, workBuffer, HASH_SIZE);
     // Write fullHash
     format_hex(global_ctx.transactionContext.hash, HASH_SIZE, fullHash, sizeof(fullHash));
