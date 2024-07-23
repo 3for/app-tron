@@ -42,26 +42,26 @@ int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
     if (dataLength < 1) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    messageSigningContext712.pathLength = workBuffer[0];
-    if ((messageSigningContext712.pathLength < 0x01) ||
-        (messageSigningContext712.pathLength > MAX_BIP32_PATH)) {
+    global_ctx.messageSigningContext712.pathLength = workBuffer[0];
+    if ((global_ctx.messageSigningContext712.pathLength < 0x01) ||
+        (global_ctx.messageSigningContext712.pathLength > MAX_BIP32_PATH)) {
         return io_send_sw(E_INCORRECT_DATA);
     }
     workBuffer++;
     dataLength--;
-    for (i = 0; i < messageSigningContext712.pathLength; i++) {
+    for (i = 0; i < global_ctx.messageSigningContext712.pathLength; i++) {
         if (dataLength < 4) {
             return io_send_sw(E_INCORRECT_DATA);
         }
-        messageSigningContext712.bip32Path[i] = U4BE(workBuffer, 0);
+        global_ctx.messageSigningContext712.bip32Path[i] = U4BE(workBuffer, 0);
         workBuffer += 4;
         dataLength -= 4;
     }
     if (dataLength < HASH_SIZE * 2) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    memmove(messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
-    memmove(messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
+    memmove(global_ctx.messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
+    memmove(global_ctx.messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
 
     ux_flow_display(APPROVAL_SIGN_TIP72_TRANSACTION, false);
 

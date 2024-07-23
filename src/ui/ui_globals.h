@@ -51,9 +51,7 @@ extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];
 extern int8_t votes_count;
-extern transactionContext_t transactionContext;
-extern publicKeyContext_t publicKeyContext;
-extern messageSigningContext712_t messageSigningContext712;
+extern tmpCtx_t global_ctx;
 extern strings_t strings;
 
 bool ui_callback_tx_ok(bool display_menu);

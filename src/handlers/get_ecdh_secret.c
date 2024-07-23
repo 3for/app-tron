@@ -29,7 +29,8 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_P1_P2);
     }
 
-    off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+    bip32_path_t bip32_path;
+    off_t ret = read_bip32_path(workBuffer, dataLength, &bip32_path);
     if (ret < 0) {
         return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
@@ -40,15 +41,16 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_LENGTH);
     }
 
-    if (initPublicKeyContext(&transactionContext.bip32_path, fromAddress) != 0) {
+    if (initPublicKeyContext(&bip32_path, fromAddress) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
+    memcpy(&global_ctx.transactionContext.bip32_path, &bip32_path, sizeof(bip32_path_t));
     // Load raw Data
-    memcpy(transactionContext.signature, workBuffer, PUBLIC_KEY_SIZE);
+    memcpy(global_ctx.transactionContext.signature, workBuffer, PUBLIC_KEY_SIZE);
 
     // Get base58 address from workBuffer public key
-    getBase58FromPublicKey(transactionContext.signature, toAddress, false);
+    getBase58FromPublicKey(global_ctx.transactionContext.signature, toAddress, false);
 
     ux_flow_display(APPROVAL_SHARED_ECDH_SECRET, false);
 
