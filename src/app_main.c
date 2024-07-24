@@ -42,6 +42,14 @@ const internal_storage_t N_storage_real;
 txContent_t txContent;
 txContext_t txContext;
 
+uint8_t appState;
+
+void reset_app_context() {
+    appState = APP_STATE_IDLE;
+    memset((uint8_t *) &txContext, 0, sizeof(txContext));
+    memset((uint8_t *) &txContent, 0, sizeof(txContent));
+}
+
 static void nv_app_state_init(void) {
     if (!HAS_SETTING(S_INITIALIZED)) {
         internal_storage_t storage = 0x00;
