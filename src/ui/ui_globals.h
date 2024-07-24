@@ -61,3 +61,18 @@ bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
 bool ui_callback_signMessage712_v0_cancel(bool display_menu);
 bool ui_callback_signMessage712_v0_ok(bool display_menu);
+
+#define UI_191_BUFFER strings.tmp.tmp
+
+void reset_ui_191_buffer(void);
+size_t ui_191_buffer_length(void);
+size_t remaining_ui_191_buffer_length(void);
+char *remaining_ui_191_buffer(void);
+
+void ui_191_start(void);
+void ui_191_switch_to_message(void);
+void ui_191_switch_to_message_end(void);
+void ui_191_switch_to_sign(void);
+void ui_191_switch_to_question(void);
+
+uint8_t feed_display(void);

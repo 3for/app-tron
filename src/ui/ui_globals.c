@@ -35,6 +35,43 @@ int8_t votes_count;
 tmpCtx_t global_ctx;
 strings_t strings;
 
+/**
+ * Reset the UI buffer
+ *
+ * Simply sets its first byte to a NULL character
+ */
+void reset_ui_191_buffer(void) {
+    UI_191_BUFFER[0] = '\0';
+}
+
+/**
+ * Get used space from UI buffer
+ *
+ * @return size in bytes
+ */
+size_t ui_191_buffer_length(void) {
+    return strlen(UI_191_BUFFER);
+}
+
+/**
+ * Get remaining space from UI buffer
+ *
+ * @return size in bytes
+ */
+size_t remaining_ui_191_buffer_length(void) {
+    // -1 for the ending NULL byte
+    return (sizeof(UI_191_BUFFER) - 1) - ui_191_buffer_length();
+}
+
+/**
+ * Get free space from UI buffer
+ *
+ * @return pointer to the free space
+ */
+char *remaining_ui_191_buffer(void) {
+    return &UI_191_BUFFER[ui_191_buffer_length()];
+}
+
 bool ui_callback_address_ok(bool display_menu) {
     helper_send_response_pubkey(&global_ctx.publicKeyContext);
 

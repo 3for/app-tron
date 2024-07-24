@@ -103,6 +103,14 @@ typedef enum contractType_e {
     INVALID_CONTRACT = 255
 } contractType_e;
 
+enum { OFFSET_CLA = 0, OFFSET_INS, OFFSET_P1, OFFSET_P2, OFFSET_LC, OFFSET_CDATA };
+typedef enum { APP_STATE_IDLE, APP_STATE_SIGNING_MESSAGE, APP_STATE_SIGNING_MESSAGE_V2 } app_state_t;
+typedef enum { STATE_191_HASH_DISPLAY = 0, STATE_191_HASH_ONLY } sign_message_state;
+typedef struct states191_t {
+    sign_message_state sign_state : 1;
+    bool ui_started : 1;
+} states191_t;
+
 typedef struct stage_t {
     uint16_t total;
     uint16_t count;
@@ -201,6 +209,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
 
 extern txContent_t txContent;
 extern txContext_t txContext;
+extern uint8_t appState;
+extern states191_t states191;
+extern uint8_t processed_size_191;
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 
