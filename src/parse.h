@@ -31,6 +31,8 @@
 #endif
 #define SHARED_CTX_FIELD_2_SIZE 40
 
+#define SHARED_BUFFER_SIZE SHARED_CTX_FIELD_1_SIZE
+
 typedef union {
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
