@@ -4,6 +4,8 @@
 #include "io.h"
 #include <ctype.h>
 
+#include "ui_globals.h"
+
 /**
  * Get unprocessed data from last received APDU
  *
@@ -87,7 +89,6 @@ uint8_t feed_display(void) {
     if ((remaining_ui_191_buffer_length() == 0) ||
         (txContent.dataBytes == 0)) {
         if (!states191.ui_started) {
-            // ux_flow_init(0, ux_191_flow, NULL);
             ui_191_start();
             states191.ui_started = true;
         } else {
