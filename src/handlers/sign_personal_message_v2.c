@@ -29,12 +29,12 @@
 #include "parse.h"
 #include "ui_globals.h"
 
+extern void reset_app_context();
+
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
 states191_t states191;
 uint8_t processed_size_191;
-
-cx_sha3_t global_sha3;
 
 int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     processed_size_191 = 0;
@@ -46,11 +46,12 @@ int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uin
         }
         appState = APP_STATE_SIGNING_MESSAGE_V2;
 
-        off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+        off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
         if (ret < 0) {
             return io_send_sw(E_INCORRECT_BIP32_PATH);
         }
-        if (initPublicKeyContext(&transactionContext.bip32_path, fromAddress) != 0) {
+        publicKeyContext_t tmp_public_key_ctx;
+        if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path, fromAddress, &tmp_public_key_ctx) != 0) {
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
         workBuffer += ret;
@@ -101,12 +102,13 @@ int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uin
                                    CX_LAST,
                                    workBuffer,
                                    0,
-                                   transactionContext.hash,
+                                   global_ctx.transactionContext.hash,
                                    32));
     }
 
     if (states191.sign_state == STATE_191_HASH_DISPLAY) {
-        if (feed_display()==1){
+        feed_display();
+        if (txContent.dataBytes > 0) {
             return io_send_sw(E_OK);
         }
     } else  // hash only

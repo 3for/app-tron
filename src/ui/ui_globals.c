@@ -33,7 +33,16 @@ char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
 int8_t votes_count;
 tmpCtx_t global_ctx;
+cx_sha3_t global_sha3;
 strings_t strings;
+
+
+#ifdef HAVE_NBGL
+e_ui_signing_position g_position;
+
+char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
+
+#endif
 
 /**
  * Reset the UI buffer
