@@ -1,15 +1,10 @@
 #ifdef HAVE_NBGL
 #include <nbgl_page.h>
-// #include "shared_context.h"
-// #include "ui_callbacks.h"
-// #include "ui_nbgl.h"
-// #include "sign_message.h"
 #include "glyphs.h"
 #include "nbgl_use_case.h"
-// #include "common_ui.h"
-// #include "ui_message_signing.h"
-// #include "ui_signing.h"
 #include "ui_globals.h"
+#include "ui_idle_menu.h"
+#include "ui_review_menu.h"
 
 #define TEXT_REVIEW_TIP191 REVIEW(TEXT_MESSAGE)
 #define TEXT_SIGN_TIP191   SIGN(TEXT_MESSAGE)
@@ -22,178 +17,125 @@ typedef enum {
 
 static e_ui_191_action g_action;
 
-static bool skip_message;
-
 static nbgl_contentTagValue_t pair;
+static nbgl_contentTagValueList_t pairs_list;
 
-static uint32_t tip191MessageIdx = 0;
-static uint32_t stringsTmpTmpIdx = 0;
+static uint32_t g_display_buffer_idx;
+static uint32_t g_rcv_buffer_idx;
+static bool g_skipped;
 
-static void (*g_approved_func)(void) = NULL;
-static void (*g_rejected_func)(void) = NULL;
+static void ui_191_process_state(void);
 
-static void ui_message_rejection_handler() {
-    nbgl_useCaseStatus("Message signing\ncancelled", false, g_rejected_func);
-}
-
-static void ui_message_confirm_rejection(void) {
-    nbgl_useCaseConfirm(REJECT_QUESTION(TEXT_MESSAGE),
-                        NULL,
-                        REJECT_CONFIRM_BUTTON,
-                        RESUME(TEXT_MESSAGE),
-                        ui_message_rejection_handler);
-}
-
-void ui_message_review_choice(bool confirm) {
+static void ui_191_finish_cb(bool confirm) {
     if (confirm) {
-        nbgl_useCaseStatus("MESSAGE\nSIGNED", true, g_approved_func);
+        if (ui_callback_signMessage_ok(false)) {
+            nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_SIGNED, ui_idle);
+        } else {
+            nbgl_useCaseStatus("Transaction failure", false, ui_idle);
+        }
     } else {
-        ui_message_confirm_rejection();
+        rejectChoice();
     }
 }
 
-void ui_message_start(const char *title,
-                      void (*start_func)(void),
-                      void (*approved_func)(void),
-                      void (*rejected_func)(void)) {
-    g_approved_func = approved_func;
-    g_rejected_func = rejected_func;
-    nbgl_useCaseReviewStart(&C_Review_64px,
-                            title,
-                            NULL,
-                            REJECT_BUTTON,
-                            start_func,
-                            ui_message_confirm_rejection);
+static void ui_191_skip_cb(void) {
+    g_skipped = true;
+    skip_rest_of_message();
 }
 
-static void reject_message(void) {
-    ui_callback_tx_cancel(false);
-}
-
-static void sign_message(void) {
-    ui_callback_signMessage_ok(false);
-}
-
-static bool display_message(nbgl_pageContent_t *content) {
+static bool ui_191_update_display_buffer(void) {
     uint16_t len = 0;
     bool reached;
 
-    if (g_action == UI_191_ACTION_ADVANCE_IN_MESSAGE) {
-        strncpy(g_stax_shared_buffer + tip191MessageIdx,
-                strings.tmp.tmp + stringsTmpTmpIdx,
-                SHARED_BUFFER_SIZE - tip191MessageIdx);
-        reached = nbgl_getTextMaxLenInNbLines(LARGE_MEDIUM_FONT,
-                                              (char *) g_stax_shared_buffer,
-                                              SCREEN_WIDTH - (2 * BORDER_MARGIN),
-                                              NB_MAX_LINES_IN_REVIEW,
-#if (API_LEVEL == 0 || API_LEVEL >= 14)
-                                              &len,
-                                              false);
-#else
-                                              &len);
-#endif
+    g_stax_shared_buffer[g_display_buffer_idx] = '\0';
+    strlcat(g_stax_shared_buffer + g_display_buffer_idx,
+            strings.tmp.tmp + g_rcv_buffer_idx,
+            sizeof(g_stax_shared_buffer) - g_display_buffer_idx);
+    reached = nbgl_getTextMaxLenInNbLines(LARGE_MEDIUM_FONT,
+                                          (char *) g_stax_shared_buffer,
+                                          SCREEN_WIDTH - (2 * BORDER_MARGIN),
+                                          NB_MAX_LINES_IN_REVIEW,
+                                          &len,
+                                          false);
 
-        stringsTmpTmpIdx = len - tip191MessageIdx;
-        tip191MessageIdx = len;
-        g_stax_shared_buffer[tip191MessageIdx] = '\0';
+    g_rcv_buffer_idx += (len - g_display_buffer_idx);
+    g_display_buffer_idx = len;
+    g_stax_shared_buffer[g_display_buffer_idx] = '\0';
 
-        if (!reached && tip191MessageIdx < SHARED_BUFFER_SIZE) {
-            stringsTmpTmpIdx = 0;
-            question_switcher();
-
-            if (g_action != UI_191_ACTION_GO_TO_SIGN) {
-                return false;
-            }
-        } else if (reached || tip191MessageIdx == SHARED_BUFFER_SIZE) {
-            tip191MessageIdx = 0;
-        }
-    }
-
-    pair.value = g_stax_shared_buffer;
-    pair.item = "Message";
-    content->type = TAG_VALUE_LIST;
-    content->tagValueList.nbPairs = 1;
-    content->tagValueList.pairs = &pair;
-    content->tagValueList.smallCaseForValue = false;
-    content->tagValueList.nbMaxLinesForValue = NB_MAX_LINES_IN_REVIEW;
-    content->tagValueList.wrapping = false;
-
-    if ((g_action != UI_191_ACTION_IDLE) && (stringsTmpTmpIdx >= strlen(strings.tmp.tmp))) {
-        // Fetch the next content to display into strings.tmp.tmp buffer.
-        stringsTmpTmpIdx = 0;
+    if (!reached) {
+        g_rcv_buffer_idx = 0;
         question_switcher();
+        return false;
     }
+    g_display_buffer_idx = 0;
     return true;
 }
 
-static bool display_sign(nbgl_pageContent_t *content) {
-    bool ret = false;
-
-    if (g_position != UI_SIGNING_POSITION_SIGN) {
-        content->type = INFO_LONG_PRESS, content->infoLongPress.icon = &C_Review_64px;
-        content->infoLongPress.text = TEXT_SIGN_TIP191;
-        content->infoLongPress.longPressText = SIGN_BUTTON;
-        g_position = UI_SIGNING_POSITION_SIGN;
-        ret = true;
-    }
-    return ret;
-}
-
-static bool nav_callback(uint8_t page, nbgl_pageContent_t *content) {
-    bool ret = true;
-
-    if (page == LAST_PAGE_FOR_REVIEW) {  // was skipped
-        skip_message = true;
-        skip_rest_of_message();
-    }
-    if ((g_action != UI_191_ACTION_GO_TO_SIGN) && (g_position != UI_SIGNING_POSITION_SIGN)) {
-        if (skip_message) {
-            // do not refresh when this callback triggers after user validation
-            ret = false;
-        } else {
-            ret = display_message(content);
-        }
+static void ui_191_data_cb(bool more) {
+    if (more) {
+        ui_191_process_state();
     } else {
-        // the last page must contain a long press button
-        ret = display_sign(content);
+        ui_191_finish_cb(false);
     }
-    return ret;
 }
 
-static void continue_review(void) {
-    nbgl_useCaseForwardOnlyReview(REJECT_BUTTON, NULL, nav_callback, ui_message_review_choice);
+static void ui_191_show_message(void) {
+    pair.value = g_stax_shared_buffer;
+    pair.item = "Message";
+    pairs_list.nbPairs = 1;
+    pairs_list.pairs = &pair;
+    pairs_list.smallCaseForValue = false;
+    pairs_list.nbMaxLinesForValue = NB_MAX_LINES_IN_REVIEW;
+    pairs_list.wrapping = false;
+    nbgl_useCaseReviewStreamingContinueExt(&pairs_list, ui_191_data_cb, ui_191_skip_cb);
+}
+
+static void ui_191_process_state(void) {
+    switch (g_action) {
+        case UI_191_ACTION_IDLE:
+            g_action = UI_191_ACTION_ADVANCE_IN_MESSAGE;
+            __attribute__((fallthrough));
+        case UI_191_ACTION_ADVANCE_IN_MESSAGE:
+            if (ui_191_update_display_buffer()) {
+                ui_191_show_message();
+            }
+            break;
+        case UI_191_ACTION_GO_TO_SIGN:
+            nbgl_useCaseReviewStreamingFinish(TEXT_SIGN_TIP191, ui_191_finish_cb);
+            break;
+    }
 }
 
 void ui_191_start(void) {
-    g_position = UI_SIGNING_POSITION_START;
+    g_action = UI_191_ACTION_IDLE;
+    g_display_buffer_idx = 0;
+    g_rcv_buffer_idx = 0;
+    g_skipped = false;
 
-    skip_message = false;
-    tip191MessageIdx = 0;
-    stringsTmpTmpIdx = 0;
-
-    ui_message_start(TEXT_REVIEW_TIP191, &ui_191_switch_to_message, &sign_message, &reject_message);
+    nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
+                                     &C_Review_64px,
+                                     TEXT_REVIEW_TIP191,
+                                     NULL,
+                                     ui_191_data_cb);
 }
 
 void ui_191_switch_to_message(void) {
-    g_position = UI_SIGNING_POSITION_REVIEW;
-    g_action = UI_191_ACTION_ADVANCE_IN_MESSAGE;
-    // No question mechanism on Stax:
-    // Message is already displayed
-    continue_review();
+    // Get following part of the message
+    ui_191_process_state();
 }
 
 void ui_191_switch_to_sign(void) {
     g_action = UI_191_ACTION_GO_TO_SIGN;
-    // Next nav_callback callback must display
-    // the hold to approve screen
-    if (skip_message) {
-        continue_review();  // to force screen refresh
+    if (g_skipped) {
+        nbgl_useCaseReviewStreamingFinish(TEXT_SIGN_TIP191, ui_191_finish_cb);
+    } else if (g_display_buffer_idx > 0) {
+        // still on an incomplete display buffer, show it before the last page
+        ui_191_show_message();
     }
 }
 
 void ui_191_switch_to_question(void) {
-    // No question mechanism on Stax:
-    // Always display the next message chunk.
+    // No question mechanism on Stax: Always display the next message chunk.
     continue_displaying_message();
 }
 

@@ -168,10 +168,17 @@ typedef struct messageSigningContext712_t {
     uint8_t messageHash[32];
 } messageSigningContext712_t;
 
+// typedef struct messageSigningContext_t {
+//     bip32_path_t bip32;
+//     uint8_t hash[HASH_SIZE];
+//     uint32_t remainingLength;
+// } messageSigningContext_t;
+
 typedef union {
     transactionContext_t transactionContext;
     publicKeyContext_t publicKeyContext;
     messageSigningContext712_t messageSigningContext712;
+    // messageSigningContext_t messageSigningContext;
 } tmpCtx_t;
 
 typedef struct txStringProperties_t {
