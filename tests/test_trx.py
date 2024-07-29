@@ -682,7 +682,7 @@ class TestTRX():
         else:
             apdu = gen_apdu(data, index)
             with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:]):
-                if firmware.device == "stax":
+                if firmware.device in ["stax", "flex"]:
                     text = "Hold to sign"
                 else:
                     text = "message"
