@@ -661,7 +661,7 @@ class TestTRX():
         client = TronClient(backend, firmware, navigator)
         # Magic define
         SIGN_MAGIC = b'\x19TRON Signed Message:\n'
-        message = 'CryptoChain-TronSR Ledger Transactions Tests' * 32
+        message = 'CryptoChain-TronSR Ledger Transactions Tests. ' * 10
         message = message.encode()
         data = pack_derivation_path(client.getAccount(0)['path'])
         data += struct.pack(">I", len(message)) + message

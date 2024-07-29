@@ -4,6 +4,7 @@
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
+#include "ui_review_menu.h"
 
 #define TEXT_REVIEW_TIP191 REVIEW(TEXT_MESSAGE)
 #define TEXT_SIGN_TIP191   SIGN(TEXT_MESSAGE)
