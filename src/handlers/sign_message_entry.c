@@ -96,5 +96,8 @@ uint8_t feed_display(void) {
         }
     }
 
+    if (unprocessed_length() == 0 && txContent.dataBytes > 0) {
+        io_send_sw(E_OK);
+    }
     return 0;
 }

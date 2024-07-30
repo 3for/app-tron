@@ -108,9 +108,6 @@ int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uin
 
     if (states191.sign_state == STATE_191_HASH_DISPLAY) {
         feed_display();
-        if (txContent.dataBytes > 0) {
-            return io_send_sw(E_OK);
-        }
     } else  // hash only
     {
         if (txContent.dataBytes == 0) {
