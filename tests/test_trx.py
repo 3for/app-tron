@@ -658,10 +658,14 @@ class TestTRX():
         self.sign_and_validate(client, firmware, 0, tx)
 
     def test_trx_sign_personal_message(self, backend, firmware, navigator):
+        if firmware.device == 'nanos':
+            pytest.skip("Not supported on LNS")
         client = TronClient(backend, firmware, navigator)
         # Magic define
         SIGN_MAGIC = b'\x19TRON Signed Message:\n'
-        message = 'CryptoChain-TronSR Ledger Transactions Tests. ' * 10
+        message = ''
+        for i in range(6):
+            message += 'CryptoChain-TronSR Ledger Transactions Tests %d. ' % i
         message = message.encode()
         data = pack_derivation_path(client.getAccount(0)['path'])
         data += struct.pack(">I", len(message)) + message
