@@ -34,6 +34,8 @@
 #include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
+extern void reset_app_context();
+
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
 #ifdef HAVE_BAGL
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
@@ -70,6 +72,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
+        if (appState != APP_STATE_IDLE) {
+            reset_app_context();
+        }
+        appState = APP_STATE_SIGNING;
         off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
         if (ret < 0) {
             return io_send_sw(E_INCORRECT_BIP32_PATH);
@@ -126,6 +132,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         }
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
         return io_send_sw(E_INCORRECT_P1_P2);
+    }
+
+    if (p1 == P1_MORE && appState != APP_STATE_SIGNING) {
+        PRINTF("Signature not initialized\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
 
     // Context must be initialized first

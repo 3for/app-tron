@@ -29,11 +29,8 @@
 #include "parse.h"
 #include "ui_globals.h"
 
-extern void reset_app_context();
-
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        reset_app_context();
         if (appState != APP_STATE_IDLE) {
             return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }

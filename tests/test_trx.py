@@ -686,10 +686,10 @@ class TestTRX():
         else:
             apdu = gen_apdu(data, index)
             with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:]):
-                if firmware.device in ["stax", "flex"]:
-                    text = "Hold to sign"
-                else:
+                if firmware.is_nano:
                     text = "message"
+                else:
+                    text = "Hold to sign"
                 client.navigate(Path(currentframe().f_code.co_name), text)
 
         resp = backend.last_async_response

@@ -44,6 +44,8 @@ char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
 
 #endif
 
+extern void reset_app_context();
+
 /**
  * Reset the UI buffer
  *
@@ -84,6 +86,7 @@ char *remaining_ui_191_buffer(void) {
 bool ui_callback_address_ok(bool display_menu) {
     helper_send_response_pubkey(&global_ctx.publicKeyContext);
 
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -104,6 +107,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
                                  E_OK);
     }
 
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -113,6 +117,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 }
 
 bool ui_callback_tx_cancel(bool display_menu) {
+    reset_app_context();
     io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
 
     if (display_menu) {
@@ -135,6 +140,7 @@ bool ui_callback_tx_ok(bool display_menu) {
                                  E_OK);
     }
 
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -176,6 +182,7 @@ end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));
 
+    reset_app_context();
     if (err == CX_OK) {
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
     } else {
@@ -297,6 +304,7 @@ end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));
 
+    reset_app_context();
     if (err == CX_OK) {
         // Send back the response, do not restart the event loop
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
@@ -319,6 +327,7 @@ end:
 bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
     G_io_apdu_buffer[0] = 0x69;
     G_io_apdu_buffer[1] = 0x85;
+    reset_app_context();
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     if (display_menu) {
