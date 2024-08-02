@@ -31,8 +31,6 @@
 
 extern void reset_app_context();
 
-static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
-
 states191_t states191;
 uint8_t processed_size_191;
 

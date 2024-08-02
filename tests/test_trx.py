@@ -675,7 +675,7 @@ class TestTRX():
         def gen_apdu(data, index):
             data_chunk = data[index * MAX_APDU_LEN: (index + 1) * MAX_APDU_LEN]
             return bytearray([CLA,
-                              InsType.SIGN_PERSONAL_MESSAGE,
+                              InsType.SIGN_PERSONAL_MESSAGE_V2,
                               0x00 if index == 0 else 0x80,
                               0x00]) + data_chunk
 
