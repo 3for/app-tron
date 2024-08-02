@@ -106,7 +106,13 @@ typedef enum contractType_e {
 } contractType_e;
 
 enum { OFFSET_CLA = 0, OFFSET_INS, OFFSET_P1, OFFSET_P2, OFFSET_LC, OFFSET_CDATA };
-typedef enum { APP_STATE_IDLE, APP_STATE_SIGNING_MESSAGE, APP_STATE_SIGNING_MESSAGE_V2 } app_state_t;
+typedef enum {
+    APP_STATE_IDLE,
+    APP_STATE_SIGNING_MESSAGE,
+    APP_STATE_SIGNING_MESSAGE_V2,
+    APP_STATE_SIGNING
+} app_state_t;
+
 typedef enum { STATE_191_HASH_DISPLAY = 0, STATE_191_HASH_ONLY } sign_message_state;
 typedef struct states191_t {
     sign_message_state sign_state : 1;

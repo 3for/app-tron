@@ -30,6 +30,8 @@
 #include "ui_globals.h"
 #include "settings.h"
 
+extern void reset_app_context();
+
 int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint8_t i;
     if (!HAS_SETTING(S_SIGN_BY_HASH)) {
@@ -38,6 +40,9 @@ int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
 
     if ((p1 != 00) || (p2 != 00)) {
         return io_send_sw(E_INCORRECT_P1_P2);
+    }
+    if (appState != APP_STATE_IDLE) {
+        reset_app_context();
     }
     if (dataLength < 1) {
         return io_send_sw(E_INCORRECT_DATA);
