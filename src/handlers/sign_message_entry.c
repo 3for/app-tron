@@ -62,7 +62,7 @@ void continue_displaying_message(void) {
 /**
  * Feed the UI with new data
  */
-uint8_t feed_display(void) {
+void feed_display(void) {
     int c;
 
     while ((unprocessed_length() > 0) && (remaining_ui_191_buffer_length() > 0)) {
@@ -99,5 +99,4 @@ uint8_t feed_display(void) {
     if (unprocessed_length() == 0 && txContent.dataBytes > 0) {
         io_send_sw(E_OK);
     }
-    return 0;
 }

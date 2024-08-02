@@ -29,10 +29,16 @@
 #include "parse.h"
 #include "ui_globals.h"
 
-static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
+extern void reset_app_context();
 
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
+        reset_app_context();
+        if (appState != APP_STATE_IDLE) {
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+        appState = APP_STATE_SIGNING_MESSAGE;
+
         off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
         if (ret < 0) {
             return io_send_sw(E_INCORRECT_BIP32_PATH);
@@ -61,6 +67,9 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 
     } else if (p1 != P1_MORE) {
         return io_send_sw(E_INCORRECT_P1_P2);
+    } else if (appState != APP_STATE_SIGNING_MESSAGE) {
+        PRINTF("Error: App not already in signing state!\n");
+        return io_send_sw(E_INCORRECT_DATA);
     }
 
     if (p2 != 0) {

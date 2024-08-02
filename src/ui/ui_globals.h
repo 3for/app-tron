@@ -55,6 +55,8 @@ extern tmpCtx_t global_ctx;
 extern cx_sha3_t global_sha3;
 extern strings_t strings;
 
+static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
+
 bool ui_callback_tx_ok(bool display_menu);
 bool ui_callback_tx_cancel(bool display_menu);
 bool ui_callback_address_ok(bool display_menu);
@@ -76,7 +78,7 @@ void ui_191_switch_to_message_end(void);
 void ui_191_switch_to_sign(void);
 void ui_191_switch_to_question(void);
 
-uint8_t feed_display(void);
+void feed_display(void);
 void skip_rest_of_message(void);
 void question_switcher(void);
 void continue_displaying_message(void);
@@ -84,18 +86,9 @@ void continue_displaying_message(void);
 #ifdef HAVE_NBGL
 
 #define TEXT_MESSAGE       "message"
-#define TEXT_TYPED_MESSAGE "typed " TEXT_MESSAGE
-#define TEXT_REVIEW_EIP712 REVIEW(TEXT_TYPED_MESSAGE)
-#define TEXT_SIGN_EIP712   SIGN(TEXT_TYPED_MESSAGE)
 
-#define SIGN_BUTTON           "Hold to sign"
-#define REJECT_BUTTON         "Reject"
 #define SIGN(msg)             "Sign " msg "?"
 #define REVIEW(msg)           "Review " msg
-#define REJECT(msg)           "Reject " msg
-#define REJECT_QUESTION(msg)  REJECT(msg) "?"
-#define REJECT_CONFIRM_BUTTON "Yes, reject"
-#define RESUME(msg)           "Go back to " msg
 
 typedef enum {
     UI_SIGNING_POSITION_START = 0,

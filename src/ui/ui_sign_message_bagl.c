@@ -76,7 +76,7 @@ UX_STEP_INIT(
     {
       dummy_post_cb();
     });
-UX_STEP_VALID(
+UX_STEP_CB(
     ux_191_step_sign,
     pbb,
     ui_callback_signMessage_ok(true),
@@ -85,7 +85,7 @@ UX_STEP_VALID(
       "Sign",
       "message",
     });
-UX_STEP_VALID(
+UX_STEP_CB(
     ux_191_step_cancel,
     pbb,
     ui_callback_tx_cancel(true),
@@ -98,7 +98,6 @@ UX_STEP_VALID(
 UX_FLOW(ux_191_flow,
         &ux_191_step_review,
         &ux_191_step_message,
-        // &ux_sign_flow_13_step,
         &ux_191_step_dummy_pre,
         &ux_191_step_theres_more,
         &ux_191_step_dummy_post,

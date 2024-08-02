@@ -61,9 +61,11 @@ int apdu_dispatcher(const command_t *cmd) {
             // Request Signature
             return handleECDHSecret(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-        case INS_SIGN_PERSONAL_MESSAGE:
+        case INS_SIGN_PERSONAL_MESSAGE_V2:
             return handleSignPersonalMessageV2(cmd->p1, cmd->p2, cmd->data, cmd->lc);
-            // return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_SIGN_PERSONAL_MESSAGE:
+            return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_TIP_712_MESSAGE:
             return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
