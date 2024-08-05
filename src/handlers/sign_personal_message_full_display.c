@@ -32,21 +32,26 @@
 states191_t states191;
 uint8_t processed_size_191;
 
-int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+extern void reset_app_context();
+
+int handleSignPersonalMessageFullDisplay(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     processed_size_191 = 0;
 
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
         if (appState != APP_STATE_IDLE) {
+            reset_app_context();
             return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
-        appState = APP_STATE_SIGNING_MESSAGE_V2;
+        appState = APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY;
 
         off_t ret = read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
         if (ret < 0) {
+            reset_app_context();
             return io_send_sw(E_INCORRECT_BIP32_PATH);
         }
         publicKeyContext_t tmp_public_key_ctx;
         if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path, fromAddress, &tmp_public_key_ctx) != 0) {
+            reset_app_context();
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
         workBuffer += ret;
@@ -77,16 +82,20 @@ int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uin
         states191.sign_state = STATE_191_HASH_DISPLAY;
         states191.ui_started = false;
     } else if (p1 != P1_MORE) {
+        reset_app_context();
         return io_send_sw(E_INCORRECT_P1_P2);
-    } else if (appState != APP_STATE_SIGNING_MESSAGE_V2) {
+    } else if (appState != APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY) {
         PRINTF("Error: App not already in signing state!\n");
+        reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
 
     if (p2 != 0) {
+        reset_app_context();
         return io_send_sw(E_INCORRECT_P1_P2);
     }
     if (dataLength > txContent.dataBytes) {
+        reset_app_context();
         return io_send_sw(E_INCORRECT_LENGTH);
     }
 
