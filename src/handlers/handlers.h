@@ -23,14 +23,14 @@
 // Define command events
 #define CLA 0xE0  // Start byte for any communications
 
-#define INS_GET_PUBLIC_KEY           0x02
-#define INS_SIGN                     0x04
-#define INS_SIGN_TXN_HASH            0x05  // unsafe
-#define INS_GET_APP_CONFIGURATION    0x06  // version and settings
-#define INS_SIGN_PERSONAL_MESSAGE    0x08
-#define INS_SIGN_PERSONAL_MESSAGE_V2 0xC8
-#define INS_GET_ECDH_SECRET          0x0A
-#define INS_SIGN_TIP_712_MESSAGE     0x0C
+#define INS_GET_PUBLIC_KEY                     0x02
+#define INS_SIGN                               0x04
+#define INS_SIGN_TXN_HASH                      0x05  // unsafe
+#define INS_GET_APP_CONFIGURATION              0x06  // version and settings
+#define INS_SIGN_PERSONAL_MESSAGE              0x08
+#define INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY 0xC8
+#define INS_GET_ECDH_SECRET                    0x0A
+#define INS_SIGN_TIP_712_MESSAGE               0x0C
 
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
@@ -54,4 +54,4 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
-int handleSignPersonalMessageV2(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+int handleSignPersonalMessageFullDisplay(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
