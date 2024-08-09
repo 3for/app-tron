@@ -2,6 +2,7 @@
 #include "cx.h"
 #include <stdbool.h>
 #include "core/Contract.pb.h"
+#include "common_utils.h"
 
 #ifndef PARSE_H
 #define PARSE_H
@@ -32,6 +33,8 @@
 #define SHARED_CTX_FIELD_2_SIZE 40
 
 #define SHARED_BUFFER_SIZE SHARED_CTX_FIELD_1_SIZE
+
+#define MAX_ASSETS 5
 
 typedef union {
     protocol_TransferContract transfer_contract;
@@ -141,11 +144,46 @@ typedef struct {
     uint8_t length;
 } bip32_path_t;
 
+#define COLLECTION_NAME_MAX_LEN 70
+
+typedef struct nftInfo_t {
+    uint8_t contractAddress[ADDRESS_LENGTH];  // must be first item
+    char collectionName[COLLECTION_NAME_MAX_LEN + 1];
+} nftInfo_t;
+
+// TOKENS
+
+#define MAX_TICKER_LEN 11  // 10 characters + '\0'
+
+typedef struct tokenDefinition_t {
+    uint8_t address[ADDRESS_LENGTH + 1];  // must be first item
+#ifdef HAVE_CONTRACT_NAME_IN_DESCRIPTOR
+    uint8_t contractName[ADDRESS_LENGTH];
+#endif
+    char ticker[MAX_TICKER_LEN];
+    uint8_t decimals;
+} tokenDefinition_t;
+
+// UNION
+
+typedef union extraInfo_t {
+    tokenDefinition_t token;
+// Would have used HAVE_NFT_SUPPORT but it is only declared for the Ethereum app
+// and not plugins
+#ifndef TARGET_NANOS
+    nftInfo_t nft;
+#endif
+} extraInfo_t;
+
+
 typedef struct transactionContext_t {
     bip32_path_t bip32_path;
     uint8_t hash[HASH_SIZE];
     uint8_t signature[MAX_RAW_SIGNATURE];
     uint8_t signatureLength;
+    union extraInfo_t extraInfo[MAX_ASSETS];
+    bool assetSet[MAX_ASSETS];
+    uint8_t currentAssetIndex;
 } transactionContext_t;
 
 typedef struct txContent_t {
@@ -174,17 +212,17 @@ typedef struct messageSigningContext712_t {
     uint8_t messageHash[32];
 } messageSigningContext712_t;
 
-// typedef struct messageSigningContext_t {
-//     bip32_path_t bip32;
-//     uint8_t hash[HASH_SIZE];
-//     uint32_t remainingLength;
-// } messageSigningContext_t;
+typedef struct messageSigningContext_t {
+    bip32_path_t bip32;
+    uint8_t hash[HASH_SIZE];
+    uint32_t remainingLength;
+} messageSigningContext_t;
 
 typedef union {
     transactionContext_t transactionContext;
     publicKeyContext_t publicKeyContext;
     messageSigningContext712_t messageSigningContext712;
-    // messageSigningContext_t messageSigningContext;
+    messageSigningContext_t messageSigningContext;
 } tmpCtx_t;
 
 typedef struct txStringProperties_t {
@@ -204,6 +242,28 @@ typedef union {
     txStringProperties_t common;
     strDataTmp_t tmp;
 } strings_t;
+
+typedef struct internalStorage_t {
+    bool contractDetails;
+    bool displayNonce;
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    bool verbose_tip712;
+#endif  // HAVE_TIP712_FULL_SUPPORT
+#ifdef HAVE_DOMAIN_NAME
+    bool verbose_domain_name;
+#endif  // HAVE_DOMAIN_NAME
+    bool initialized;
+} internalStorage_t;
+
+#define N_storage (*(volatile internalStorage_t *) PIC(&N_internal_storage))
+extern const internalStorage_t N_internal_storage;
+
+typedef struct chain_config_s {
+    char coinName[10];  // ticker
+    uint64_t chainId;
+} chain_config_t;
+
+extern const chain_config_t *chainConfig;
 
 bool setContractType(contractType_e type, char *out, size_t outlen);
 bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen);
@@ -227,7 +287,14 @@ extern txContext_t txContext;
 extern uint8_t appState;
 extern states191_t states191;
 extern uint8_t processed_size_191;
+extern uint16_t apdu_response_code;
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
+void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx);
+void hash_byte(uint8_t byte, cx_hash_t *hash_ctx);
 
+void forget_known_assets(void);
+
+int get_asset_index_by_addr(const uint8_t *addr);
+int array_bytes_string(char *out, size_t outl, const void *value, size_t len);
 #endif

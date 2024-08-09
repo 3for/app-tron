@@ -58,6 +58,11 @@ DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
 
+ifneq ($(TARGET_NAME),TARGET_NANOS)
+    DEFINES	+= HAVE_TIP712_FULL_SUPPORT
+	DEFINES += HAVE_DYN_MEM_ALLOC
+endif
+
 .PHONY: proto
 proto:
 	$(MAKE) -C proto

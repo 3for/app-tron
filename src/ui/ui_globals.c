@@ -23,6 +23,11 @@
 #include "ui_idle_menu.h"
 #include "app_errors.h"
 
+#ifdef HAVE_NBGL
+#include "nbgl_use_case.h"
+#include "ui_logic.h"
+#endif
+
 volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
@@ -337,3 +342,23 @@ bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
 
     return true;
 }
+
+#ifdef HAVE_NBGL
+
+static void ui_message_712_approved(void) {
+    ui_712_approve();
+}
+
+static void ui_message_712_rejected(void) {
+    ui_712_reject();
+}
+
+void ui_typed_message_review_choice(bool confirm) {
+    if (confirm) {
+        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_SIGNED, ui_message_712_approved);
+    } else {
+        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_message_712_rejected);
+    }
+}
+
+#endif

@@ -20,6 +20,11 @@
 
 #include "handlers.h"
 #include "app_errors.h"
+#include "parse.h"
+
+#ifdef HAVE_TIP712_FULL_SUPPORT
+#include "commands_712.h"
+#endif
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -68,8 +73,26 @@ int apdu_dispatcher(const command_t *cmd) {
             return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_TIP_712_MESSAGE:
-            return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            switch (cmd->p2) {
+                case P2_TIP712_LEGACY_IMPLEM:
+                    return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#ifdef HAVE_TIP712_FULL_SUPPORT
+                case P2_TIP712_FULL_IMPLEM:
+                    //*flags |= IO_ASYNCH_REPLY;
+                    return handle_tip712_sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+        case INS_TIP712_STRUCT_DEF:
+            // *flags |= IO_ASYNCH_REPLY;
+            return handle_tip712_struct_def(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 
+        case INS_TIP712_STRUCT_IMPL:
+            // *flags |= IO_ASYNCH_REPLY;
+            return handle_tip712_struct_impl(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+
+        case INS_TIP712_FILTERING:
+            // *flags |= IO_ASYNCH_REPLY;
+            return handle_tip712_filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+#endif  // HAVE_TIP712_FULL_SUPPORT
+            }
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);
     }

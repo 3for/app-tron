@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
+// #include "uint128.h"
 typedef struct uint128_t {
     uint64_t elements[2];
 } uint128_t;
@@ -65,3 +65,23 @@ void divmod128(uint128_t *l, uint128_t *r, uint128_t *div, uint128_t *mod);
 void divmod256(uint256_t *l, uint256_t *r, uint256_t *div, uint256_t *mod);
 bool tostring128(uint128_t *number, uint32_t base, char *out, uint32_t outLength);
 bool tostring256(uint256_t *number, uint32_t base, char *out, uint32_t outLength);
+bool tostring256_signed(const uint256_t *const number,
+                        uint32_t base,
+                        char *const out,
+                        uint32_t out_length);
+void convertUint64BEto128(const uint8_t *const data, uint32_t length, uint128_t *const target);
+void convertUint256BE(const uint8_t *const data, uint32_t length, uint256_t *const target);
+void sub256(const uint256_t *const number1,
+            const uint256_t *const number2,
+            uint256_t *const target);
+
+void convertUint128BE(const uint8_t *const data, uint32_t length, uint128_t *const target);
+
+bool tostring128_signed(const uint128_t *const number,
+                        uint32_t base,
+                        char *const out,
+                        uint32_t out_length);
+
+void sub128(const uint128_t *const number1,
+            const uint128_t *const number2,
+            uint128_t *const target);

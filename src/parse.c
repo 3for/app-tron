@@ -24,6 +24,8 @@
 #include "settings.h"
 #include "tokens.h"
 #include "app_errors.h"
+#include "ui_globals.h"
+
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
@@ -891,6 +893,76 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
 }
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len) {
+    if (outl <= 2) {
+        // Need at least '0x' and 1 digit
+        return -1;
+    }
+    if (strlcpy(out, "0x", outl) != 2) {
+        goto err;
+    }
+    if (format_hex(value, len, out + 2, outl - 2) < 0) {
+        goto err;
+    }
+    return 0;
+err:
+    *out = '\0';
+    return -1;
+}
+
+/**
+ * Continue given progressive hash on given bytes
+ *
+ * @param[in] bytes_ptr pointer to bytes
+ * @param[in] n number of bytes to hash
+ * @param[in] hash_ctx pointer to the hashing context
+ */
+void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx) {
+    CX_ASSERT(cx_hash_no_throw(hash_ctx, 0, bytes_ptr, n, NULL, 0));
+}
+
+/**
+ * Continue given progressive hash on given byte
+ *
+ * @param[in] byte byte to hash
+ * @param[in] hash_ctx pointer to the hashing context
+ */
+void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
+    hash_nbytes(&byte, 1, hash_ctx);
+}
+
+void forget_known_assets(void) {
+    memset(global_ctx.transactionContext.assetSet, false, MAX_ASSETS);
+    global_ctx.transactionContext.currentAssetIndex = 0;
+}
+
+static extraInfo_t *get_asset_info(int index) {
+    if ((index < 0) || (index >= MAX_ASSETS)) {
+        return NULL;
+    }
+    return &global_ctx.transactionContext.extraInfo[index];
+}
+
+static bool asset_info_is_set(int index) {
+    if ((index < 0) || (index >= MAX_ASSETS)) {
+        return false;
+    }
+    return global_ctx.transactionContext.assetSet[index];
+}
+
+int get_asset_index_by_addr(const uint8_t *addr) {
+    // Works for ERC-20 & NFT tokens since both structs in the union have the
+    // contract address aligned
+    for (int i = 0; i < MAX_ASSETS; i++) {
+        extraInfo_t *asset = get_asset_info(i);
+        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
+            PRINTF("Token found at index %d\n", i);
+            return i;
+        }
+    }
+    return -1;
+}
+
+int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
     if (outl <= 2) {
         // Need at least '0x' and 1 digit
         return -1;
