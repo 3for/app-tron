@@ -55,4 +55,14 @@
 #define E_LICENSING                           0x6f42
 #define E_HALTED                              0x6faa
 
+
+#define APDU_RESPONSE_OK                      0x9000
+#define APDU_RESPONSE_ERROR_NO_INFO           0x6a00
+#define APDU_RESPONSE_INVALID_DATA            0x6a80
+#define APDU_RESPONSE_INSUFFICIENT_MEMORY     0x6a84
+#define APDU_RESPONSE_INVALID_INS             0x6d00
+#define APDU_RESPONSE_INVALID_P1_P2           0x6b00
+#define APDU_RESPONSE_CONDITION_NOT_SATISFIED 0x6985
+#define APDU_RESPONSE_REF_DATA_NOT_FOUND      0x6a88
+#define APDU_RESPONSE_UNKNOWN                 0x6f00
 #endif  // once

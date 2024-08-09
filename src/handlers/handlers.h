@@ -31,6 +31,9 @@
 #define INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY 0xC8
 #define INS_GET_ECDH_SECRET                    0x0A
 #define INS_SIGN_TIP_712_MESSAGE               0x0C
+#define INS_TIP712_STRUCT_DEF                  0x1A
+#define INS_TIP712_STRUCT_IMPL                 0x1C
+#define INS_TIP712_FILTERING                   0x1E
 
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
@@ -44,6 +47,10 @@
 
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01
+
+#define P2_TIP712_LEGACY_IMPLEM             0x00
+#define P2_TIP712_FULL_IMPLEM               0x01
+
 
 int apdu_dispatcher(const command_t *cmd);
 
