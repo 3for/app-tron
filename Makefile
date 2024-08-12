@@ -63,6 +63,12 @@ ifneq ($(TARGET_NAME),TARGET_NANOS)
 	DEFINES += HAVE_DYN_MEM_ALLOC
 endif
 
+CAL_TEST_KEY ?= 0
+ifneq ($(CAL_TEST_KEY),0)
+    # Key used in our test framework
+    DEFINES += HAVE_CAL_TEST_KEY
+endif
+
 .PHONY: proto
 proto:
 	$(MAKE) -C proto
