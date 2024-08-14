@@ -112,7 +112,7 @@ bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint
     bool reply_apdu = true;
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 1;
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
@@ -160,7 +160,7 @@ bool handle_tip712_filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     bool reply_apdu = true;
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 2;
         return false;
     }
     if ((p2 != P2_FILT_ACTIVATE) &&
@@ -224,7 +224,7 @@ bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t da
 
     if (tip712_context == NULL) {
         // return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+3;
     }
     // if the final hashes are still zero or if there are some unimplemented fields
     else if (allzeroes(global_ctx.messageSigningContext712.domainHash,
@@ -232,7 +232,7 @@ bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t da
              allzeroes(global_ctx.messageSigningContext712.messageHash,
                        sizeof(global_ctx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+4;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());

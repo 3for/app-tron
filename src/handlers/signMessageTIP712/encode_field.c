@@ -27,23 +27,23 @@ static void *field_encode(const uint8_t *const value,
     uint8_t *padded_value;
     uint8_t start_idx;
 
-    if (length > TIP_ENCODED_FIELD_LENGTH)  // sanity check
+    if (length > TIP_712_ENCODED_FIELD_LENGTH)  // sanity check
     {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;
     }
-    if ((padded_value = mem_alloc(TIP_ENCODED_FIELD_LENGTH)) != NULL) {
+    if ((padded_value = mem_alloc(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
         switch (ptype) {
             case MSB:
-                memset(padded_value, pval, TIP_ENCODED_FIELD_LENGTH - length);
-                start_idx = TIP_ENCODED_FIELD_LENGTH - length;
+                memset(padded_value, pval, TIP_712_ENCODED_FIELD_LENGTH - length);
+                start_idx = TIP_712_ENCODED_FIELD_LENGTH - length;
                 break;
             case LSB:
-                explicit_bzero(padded_value + length, TIP_ENCODED_FIELD_LENGTH - length);
+                explicit_bzero(padded_value + length, TIP_712_ENCODED_FIELD_LENGTH - length);
                 start_idx = 0;
                 break;
             default:
-                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+5;
                 return NULL;  // should not be here
         }
         memcpy(&padded_value[start_idx], value, length);

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TIP_ENCODED_FIELD_LENGTH 32
+#define TIP_712_ENCODED_FIELD_LENGTH 32
 
 void *encode_uint(const uint8_t *const value, uint8_t length);
 void *encode_int(const uint8_t *const value, uint8_t length, uint8_t typesize);

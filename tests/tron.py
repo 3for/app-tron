@@ -2,6 +2,7 @@
 import sys
 import base58
 
+from typing import Optional
 from contextlib import contextmanager
 from enum import IntEnum
 from pathlib import Path
@@ -15,7 +16,11 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from ragger.backend.interface import BackendInterface, RAPDU
 from ragger.navigator import NavInsID, NavIns
 from ragger.bip import pack_derivation_path
+from ragger.error import ExceptionRAPDU
+from ragger.firmware import Firmware
 from conftest import MNEMONIC
+
+from InputData import PKIPubKeyUsage
 '''
 Tron Protobuf
 '''
@@ -110,7 +115,19 @@ class Errors(IntEnum):
     GP_AUTH_FAILED = 0x6300
     LICENSING = 0x6f42
     HALTED = 0x6faa
+    NOT_IMPLEMENTED = 0x911c
 
+class StatusWord(IntEnum):
+    OK = 0x9000
+    ERROR_NO_INFO = 0x6a00
+    INVALID_DATA = 0x6a80
+    INSUFFICIENT_MEMORY = 0x6a84
+    INVALID_INS = 0x6d00
+    INVALID_P1_P2 = 0x6b00
+    CONDITION_NOT_SATISFIED = 0x6985
+    REF_DATA_NOT_FOUND = 0x6a88
+    EXCEPTION_OVERFLOW = 0x6807
+    NOT_IMPLEMENTED = 0x911c
 
 class APDUOffsets(IntEnum):
     CLA = 0
@@ -120,6 +137,29 @@ class APDUOffsets(IntEnum):
     LC = 4
     CDATA = 5
 
+class PKIClient:
+    _CLA: int = 0xE0   # 0xB0 in eth
+    _INS: int = 0x06
+
+    def __init__(self, client: BackendInterface) -> None:
+        self._client = client
+
+    def send_certificate(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
+        try:
+            response = self.send_raw(p1, payload)
+            assert response.status == Errors.OK
+        except ExceptionRAPDU as err:
+            if err.status == Errors.NOT_IMPLEMENTED:
+                print("Ledger-PKI APDU not yet implemented. Legacy path will be used")
+
+    def send_raw(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
+        header = bytearray()
+        header.append(self._CLA)
+        header.append(self._INS)
+        header.append(p1)
+        header.append(0x00)
+        header.append(len(payload))
+        return self._client.exchange_raw(header + payload)
 
 class TronClient:
     # default APDU TCP server
@@ -134,6 +174,10 @@ class TronClient:
         self._navigator = navigator
         self.accounts = [None, None]
         self.hardware = True
+        self._pki_client: Optional[PKIClient] = None
+        if self._firmware != Firmware.NANOS:
+            # LedgerPKI not supported on Nanos
+            self._pki_client = PKIClient(self._client)
 
         # Init account with default address to compare with ledger
         for i in range(2):
@@ -155,6 +199,17 @@ class TronClient:
                 "dh":
                 diffieHellman,
             }
+
+    def exchange_async_raw(self, payload: bytes):
+        return self._client.exchange_async_raw(payload)
+    
+    def exchange_raw(self, payload: bytes):
+        return self._client.exchange_raw(payload)
+
+    def exchange_async_raw_chunks(self, chunks):
+        for chunk in chunks[:-1]:
+            self.exchange_raw(chunk)
+        return self.exchange_async_raw(chunks[-1])
 
     def address_hex(self, address):
         return base58.b58decode_check(address).hex().upper()

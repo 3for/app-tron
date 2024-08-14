@@ -150,7 +150,7 @@ static void field_hash_feed_parent(e_type field_type, const uint8_t *const hash)
     if (IS_DYN(field_type)) {
         len = KECCAK256_HASH_BYTESIZE;
     } else {
-        len = TIP_ENCODED_FIELD_LENGTH;
+        len = TIP_712_ENCODED_FIELD_LENGTH;
     }
 
     // last thing in mem is the hash of the previous field
@@ -245,7 +245,7 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
     bool first = fh->state == FHS_IDLE;
 
     if ((fh == NULL) || ((field_ptr = path_get_field()) == NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+6;
         return false;
     }
 

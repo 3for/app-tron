@@ -67,8 +67,8 @@ static void nv_app_state_init(void) {
         internalStorage_t storage;
         storage.contractDetails = false;
         storage.displayNonce = false;
-    #ifdef HAVE_EIP712_FULL_SUPPORT
-        storage.verbose_eip712 = false;
+    #ifdef HAVE_TIP712_FULL_SUPPORT
+        storage.verbose_tip712 = false;
     #endif
     #ifdef HAVE_DOMAIN_NAME
         storage.verbose_domain_name = false;
@@ -76,6 +76,12 @@ static void nv_app_state_init(void) {
         storage.initialized = true;
         nvm_write((void *) &N_storage, (void *) &storage, sizeof(internalStorage_t));
     }
+}
+
+void init_coin_config(chain_config_t *coin_config) {
+    memset(coin_config, 0, sizeof(chain_config_t));
+    strcpy(coin_config->coinName, CHAINID_COINNAME);
+    coin_config->chainId = CHAIN_ID;
 }
 
 // App main loop
@@ -88,6 +94,11 @@ void app_main(void) {
     nv_app_state_init();
 
     io_init();
+    chain_config_t config;
+    if (chainConfig == NULL) {
+        init_coin_config(&config);
+        chainConfig = &config;
+    }
 
 #ifdef HAVE_SWAP
     if (!G_called_from_swap) {
@@ -97,6 +108,7 @@ void app_main(void) {
 
     // Reset context
     explicit_bzero(&txContent, sizeof(txContent));
+    // reset_app_context();
 
     for (;;) {
         BEGIN_TRY {

@@ -156,7 +156,7 @@ typedef struct nftInfo_t {
 #define MAX_TICKER_LEN 11  // 10 characters + '\0'
 
 typedef struct tokenDefinition_t {
-    uint8_t address[ADDRESS_LENGTH + 1];  // must be first item
+    uint8_t address[ADDRESS_LENGTH];  // must be first item
 #ifdef HAVE_CONTRACT_NAME_IN_DESCRIPTOR
     uint8_t contractName[ADDRESS_LENGTH];
 #endif
@@ -294,7 +294,8 @@ void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx);
 void hash_byte(uint8_t byte, cx_hash_t *hash_ctx);
 
 void forget_known_assets(void);
-
+extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);
+void validate_current_asset_info(void);
 int array_bytes_string(char *out, size_t outl, const void *value, size_t len);
 #endif
