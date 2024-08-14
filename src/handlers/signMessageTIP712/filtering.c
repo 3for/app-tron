@@ -4,7 +4,7 @@
 // #include "hash_bytes.h"
 // #include "ethUstream.h"      // INT256_LENGTH
 // #include "apdu_constants.h"  // APDU return codes
-// #include "public_keys.h"
+#include "public_keys.h"
 // #include "manage_asset_info.h"
 #include "context_712.h"
 #include "commands_712.h"
@@ -16,6 +16,9 @@
 #include "parse.h"
 #include "ui_globals.h"
 
+#ifdef HAVE_LEDGER_PKI
+#include "os_pki.h"
+#endif
 
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_AMOUNT_JOIN_TOKEN 11
@@ -24,36 +27,6 @@
 #define FILT_MAGIC_RAW_FIELD         72
 
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
-
-
-static const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[] = {
-#if defined(HAVE_CAL_TEST_KEY)
-    0x04, 0x4c, 0xca, 0x8f, 0xad, 0x49, 0x6a, 0xa5, 0x04, 0x0a, 0x00, 0xa7, 0xeb, 0x2f,
-    0x5c, 0xc3, 0xb8, 0x53, 0x76, 0xd8, 0x8b, 0xa1, 0x47, 0xa7, 0xd7, 0x05, 0x4a, 0x99,
-    0xc6, 0x40, 0x56, 0x18, 0x87, 0xfe, 0x17, 0xa0, 0x96, 0xe3, 0x6c, 0x3b, 0x52, 0x3b,
-    0x24, 0x4f, 0x3e, 0x2f, 0xf7, 0xf8, 0x40, 0xae, 0x26, 0xc4, 0xe7, 0x7a, 0xd3, 0xbc,
-    0x73, 0x9a, 0xf5, 0xde, 0x6f, 0x2d, 0x77, 0xa7, 0xb6
-#elif defined(HAVE_CAL_STAGING_KEY)
-    // staging key 2019-01-11 03:07PM (erc20signer)
-    0x04, 0x20, 0xda, 0x62, 0x00, 0x3c, 0x0c, 0xe0, 0x97, 0xe3, 0x36, 0x44, 0xa1, 0x0f,
-    0xe4, 0xc3, 0x04, 0x54, 0x06, 0x9a, 0x44, 0x54, 0xf0, 0xfa, 0x9d, 0x4e, 0x84, 0xf4,
-    0x50, 0x91, 0x42, 0x9b, 0x52, 0x20, 0xaf, 0x9e, 0x35, 0xc0, 0xb2, 0xd9, 0x28, 0x93,
-    0x80, 0x13, 0x73, 0x07, 0xde, 0x4d, 0xd1, 0xd4, 0x18, 0x42, 0x8c, 0xf2, 0x1a, 0x93,
-    0xb3, 0x35, 0x61, 0xbb, 0x09, 0xd8, 0x8f, 0xe5, 0x79
-#else
-    // production key 2019-01-11 03:07PM (erc20signer)
-    0x04, 0x5e, 0x6c, 0x10, 0x20, 0xc1, 0x4d, 0xc4, 0x64, 0x42, 0xfe, 0x89, 0xf9, 0x7c,
-    0x0b, 0x68, 0xcd, 0xb1, 0x59, 0x76, 0xdc, 0x24, 0xf2, 0x4c, 0x31, 0x6e, 0x7b, 0x30,
-    0xfe, 0x4e, 0x8c, 0xc7, 0x6b, 0x14, 0x89, 0x15, 0x0c, 0x21, 0x51, 0x4e, 0xbf, 0x44,
-    0x0f, 0xf5, 0xde, 0xa5, 0x39, 0x3d, 0x83, 0xde, 0x53, 0x58, 0xcd, 0x09, 0x8f, 0xce,
-    0x8f, 0xd0, 0xf8, 0x1d, 0xaa, 0x94, 0x97, 0x91, 0x83
-#endif
-};
-
-#define _PRINT_MACRO(x) #x
-#define PRINT_MACRO(x) #x"="_PRINT_MACRO(x)
-
-#pragma message(PRINT_MACRO(HAVE_CAL_TEST_KEY))
 
 /**
  * Reconstruct the field path and hash it
@@ -129,27 +102,25 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
  */
 static bool sig_verif_end(cx_sha256_t *hash_ctx, const uint8_t *sig, uint8_t sig_length) {
     uint8_t hash[INT256_LENGTH];
-    cx_ecfp_public_key_t verifying_key;
     cx_err_t error = CX_INTERNAL_ERROR;
+    bool ret_code = false;
 
     // Finalize hash
     CX_CHECK(cx_hash_no_throw((cx_hash_t *) hash_ctx, CX_LAST, NULL, 0, hash, INT256_LENGTH));
-
-    CX_CHECK(cx_ecfp_init_public_key_no_throw(CX_CURVE_256K1,
-                                              LEDGER_SIGNATURE_PUBLIC_KEY,
-                                              sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
-                                              &verifying_key));
-
-    if (!cx_ecdsa_verify_no_throw(&verifying_key, hash, sizeof(hash), sig, sig_length)) {
-#ifndef HAVE_BYPASS_SIGNATURES
-        PRINTF("Invalid TIP-712 filtering signature\n");
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-        return false;
+    CX_CHECK(check_signature_with_pubkey("TIP712 Filtering",
+                                         hash,
+                                         sizeof(hash),
+                                         LEDGER_SIGNATURE_PUBLIC_KEY,
+                                         sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
+#ifdef HAVE_LEDGER_PKI
+                                         CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
 #endif
-    }
-    return true;
+                                         (uint8_t *) (sig),
+                                         sig_length));
+
+    ret_code = true;
 end:
-    return false;
+    return ret_code;
 }
 
 /**
@@ -206,7 +177,7 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_DOMAIN) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+7;
         return false;
     }
 
@@ -273,7 +244,7 @@ bool filtering_date_time(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+8;
         return false;
     }
 
@@ -332,7 +303,7 @@ bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+9;
         return false;
     }
 
@@ -386,7 +357,7 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED +10;
         return false;
     }
 
@@ -465,7 +436,7 @@ bool filtering_raw_field(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+11;
         return false;
     }
 

@@ -275,7 +275,7 @@ const uint8_t *get_next_struct_field_array_lvl(const uint8_t *const array_depth_
             break;
         default:
             // should not be in here :^)
-            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+17;
             return NULL;
     }
     return ptr + 1;
@@ -293,7 +293,7 @@ const uint8_t *get_struct_field_array_lvls_array(const uint8_t *const field_ptr,
     const uint8_t *ptr;
 
     if (field_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+18;
         return NULL;
     }
     ptr = field_skip_typedesc(field_ptr, NULL);
@@ -313,7 +313,7 @@ const char *get_struct_field_keyname(const uint8_t *field_ptr, uint8_t *const le
     const uint8_t *ptr;
 
     if (field_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+19;
         return NULL;
     }
     ptr = field_skip_typedesc(field_ptr, NULL);
@@ -333,7 +333,7 @@ const uint8_t *get_next_struct_field(const void *const field_ptr) {
     const void *ptr;
 
     if (field_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+20;
         return NULL;
     }
     ptr = field_skip_typedesc(field_ptr, NULL);
@@ -352,7 +352,7 @@ const uint8_t *get_next_struct_field(const void *const field_ptr) {
  */
 const char *get_struct_name(const uint8_t *const struct_ptr, uint8_t *const length) {
     if (struct_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+21;
         return NULL;
     }
     return (char *) get_string_in_mem(struct_ptr, length);
@@ -370,7 +370,7 @@ const uint8_t *get_struct_fields_array(const uint8_t *const struct_ptr, uint8_t 
     uint8_t name_length;
 
     if (struct_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+22;
         return NULL;
     }
     ptr = struct_ptr;
@@ -390,7 +390,7 @@ const uint8_t *get_next_struct(const uint8_t *const struct_ptr) {
     const void *ptr;
 
     if (struct_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+23;
         return NULL;
     }
     ptr = get_struct_fields_array(struct_ptr, &fields_count);
@@ -424,7 +424,7 @@ const uint8_t *get_structn(const char *const name, const uint8_t length) {
     uint8_t name_length;
 
     if (name == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+24;
         return NULL;
     }
     struct_ptr = get_structs_array(&structs_count);
@@ -435,7 +435,7 @@ const uint8_t *get_structn(const char *const name, const uint8_t length) {
         }
         struct_ptr = get_next_struct(struct_ptr);
     }
-    apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+    apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+25;
     return NULL;
 }
 
@@ -451,14 +451,14 @@ bool set_struct_name(uint8_t length, const uint8_t *const name) {
     char *name_ptr;
 
     if ((name == NULL) || (typed_data == NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+26;
         return false;
     }
 
     // increment number of structs
     if ((*(typed_data->structs_array) += 1) == 0) {
         PRINTF("TIP712 Structs count overflow!\n");
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+27;
         return false;
     }
 
@@ -693,19 +693,19 @@ bool set_struct_field(uint8_t length, const uint8_t *const data) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     } else if (typed_data == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+28;
         return false;
     }
 
     if (struct_state == NOT_INITIALIZED) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+29;
         return false;
     }
 
     // increment number of struct fields
     if ((*(typed_data->current_struct_fields_array) += 1) == 0) {
         PRINTF("TIP712 Struct fields count overflow!\n");
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+30;
         return false;
     }
 
@@ -717,7 +717,7 @@ bool set_struct_field(uint8_t length, const uint8_t *const data) {
     if (*typedesc_ptr & TYPESIZE_MASK) {
         // TYPESIZE and TYPE_CUSTOM are mutually exclusive
         if ((*typedesc_ptr & TYPE_MASK) == TYPE_CUSTOM) {
-            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+31;
             return false;
         }
 

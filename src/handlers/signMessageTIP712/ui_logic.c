@@ -170,7 +170,7 @@ e_tip712_nfs ui_712_next_field(void) {
     e_tip712_nfs state = TIP712_NO_MORE_FIELD;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+32;
     } else {
         if (ui_ctx->structs_to_review > 0) {
             ui_712_review_struct(path_get_nth_field_to_last(ui_ctx->structs_to_review));
@@ -530,13 +530,14 @@ bool ui_712_feed_to_display(const void *field_ptr,
                             bool first,
                             bool last) {
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+33;
         return false;
     }
 
     if (first && (strlen(strings.tmp.tmp) > 0)) {
         return false;
     }
+
     // Value
     if (ui_712_field_shown()) {
         switch (struct_field_type(field_ptr)) {
@@ -607,7 +608,7 @@ bool ui_712_feed_to_display(const void *field_ptr,
  */
 void ui_712_end_sign(void) {
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+34;
         return;
     }
 

@@ -942,6 +942,10 @@ static extraInfo_t *get_asset_info(int index) {
     return &global_ctx.transactionContext.extraInfo[index];
 }
 
+extraInfo_t *get_current_asset_info(void) {
+    return get_asset_info(global_ctx.transactionContext.currentAssetIndex);
+}
+
 static bool asset_info_is_set(int index) {
     if ((index < 0) || (index >= MAX_ASSETS)) {
         return false;
@@ -960,6 +964,14 @@ int get_asset_index_by_addr(const uint8_t *addr) {
         }
     }
     return -1;
+}
+
+void validate_current_asset_info(void) {
+    // mark it as set
+    global_ctx.transactionContext.assetSet[global_ctx.transactionContext.currentAssetIndex] = true;
+    // increment index
+    global_ctx.transactionContext.currentAssetIndex =
+        (global_ctx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
 }
 
 int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {

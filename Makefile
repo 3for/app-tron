@@ -54,7 +54,7 @@ ENABLE_SWAP = 1
 ENABLE_NBGL_QRCODE = 1
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
-DEBUG ?= 0
+DEBUG ?= 1
 
 APP_SOURCE_PATH  += src
 
@@ -63,11 +63,13 @@ ifneq ($(TARGET_NAME),TARGET_NANOS)
 	DEFINES += HAVE_DYN_MEM_ALLOC
 endif
 
-CAL_TEST_KEY ?= 0
+CAL_TEST_KEY ?= 1
 ifneq ($(CAL_TEST_KEY),0)
     # Key used in our test framework
     DEFINES += HAVE_CAL_TEST_KEY
 endif
+
+DEFINES += CHAINID_COINNAME=\"$(TICKER)\" CHAIN_ID=1
 
 .PHONY: proto
 proto:
@@ -80,7 +82,7 @@ cleanall : clean
 #include nanopb/extra/nanopb.mk
 NANOPB_DIR = nanopb
 
-CFLAGS += "-I$(NANOPB_DIR)" -Iproto
+CFLAGS += "-I$(NANOPB_DIR)" -Iproto -g
 DEFINES   += PB_NO_ERRMSG=1
 SOURCE_FILES += $(NANOPB_DIR)/pb_encode.c $(NANOPB_DIR)/pb_decode.c $(NANOPB_DIR)/pb_common.c
 APP_SOURCE_PATH += proto

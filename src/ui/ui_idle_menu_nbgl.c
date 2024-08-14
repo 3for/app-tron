@@ -80,6 +80,15 @@ static const nbgl_genericContents_t settingContents = {.callbackCallNeeded = fal
                                                        .contentsList = contents,
                                                        .nbContents = SETTING_CONTENTS_NB};
 void ui_idle(void) {
+
+// #ifdef HAVE_TIP712_FULL_SUPPORT
+//     switches[TIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
+//     switches[TIP712_VERBOSE_ID].text = "Raw messages";
+//     switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
+//     switches[TIP712_VERBOSE_ID].token = TIP712_VERBOSE_TOKEN;
+//     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+// #endif  // HAVE_TIP712_FULL_SUPPORT
+
     switches[0].text = "Transactions data";
     switches[0].subText = "Allow extra data in\ntransactions";
     switches[0].token = SWITCH_ALLOW_TX_DATA_TOKEN;

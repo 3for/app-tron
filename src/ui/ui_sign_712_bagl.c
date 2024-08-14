@@ -1,6 +1,7 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
 #ifdef HAVE_BAGL
 #include "ui_logic.h"
+#include "ui_globals.h"
 // #include "shared_context.h"  // strings
 
 enum { UI_712_POS_REVIEW, UI_712_POS_END };

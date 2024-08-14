@@ -1,5 +1,5 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
-
+#ifdef HAVE_NBGL
 #include <string.h>  // explicit_bzero
 // #include "common_ui.h"
 // #include "ui_nbgl.h"
@@ -95,4 +95,5 @@ void ui_712_switch_to_sign(void) {
     }
 }
 
+#endif  // HAVE_NBGL
 #endif  // HAVE_TIP712_FULL_SUPPORT
