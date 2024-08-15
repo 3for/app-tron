@@ -36,6 +36,7 @@ import response_parser as ResponseParser
 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS
 from utils import recover_message
+
 '''
 Tron Protobuf
 '''
@@ -53,6 +54,7 @@ class SnapshotsConfig:
         self.idx = idx
 
 SNAPS_CONFIG: Optional[SnapshotsConfig] = None
+WALLET_ADDR: Optional[bytes] = None
 
 def autonext(firmware, navigator, default_screenshot_path: Path):
     moves = []
@@ -88,7 +90,7 @@ def tip712_new_common(firmware,
                                   filters,
                                   partial(autonext, firmware, navigator, default_screenshot_path),
                                   golden_run)
-    return
+    # return
     with client.exchange_async_raw(builder.tip712_sign_new("m/44'/60'/0'/0/0")):
         moves = []
         if firmware.is_nano:
@@ -909,16 +911,16 @@ class TestTRX():
                                 False,
                                 golden_run)
 
-        # recovered_addr = recover_message(data_set.data, vrs)
+        recovered_addr = recover_message(data_set.data, vrs)
 
-        # global WALLET_ADDR
-        # # don't ask again if we already have it
-        # if WALLET_ADDR is None:
-        #     with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
-        #                 chaincode = False,
-        #                 bip32_path = "m/44'/60'/0'/0/0",
-        #                 chain_id = None)):
-        #         pass
-        #     _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
+        global WALLET_ADDR
+        # don't ask again if we already have it
+        if WALLET_ADDR is None:
+            with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
+                        chaincode = False,
+                        bip32_path = "m/44'/60'/0'/0/0",
+                        chain_id = None)):
+                pass
+            _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
 
-        # assert recovered_addr == WALLET_ADDR
+        assert recovered_addr == WALLET_ADDR
