@@ -91,7 +91,7 @@ def tip712_new_common(firmware,
                                   partial(autonext, firmware, navigator, default_screenshot_path),
                                   golden_run)
     # return
-    with client.exchange_async_raw(builder.tip712_sign_new("m/44'/60'/0'/0/0")):
+    with client.exchange_async_raw(builder.tip712_sign_new("m/44'/195'/0'/0/0")):
         moves = []
         if firmware.is_nano:
             # need to skip the message hash
@@ -858,17 +858,17 @@ class TestTRX():
         if verbose:
             settings_toggle(firmware, navigator, [SettingID.verbose_tip712])
 
-        with open(input_file, encoding="utf-8") as file:
-            data = json.load(file)
-            vrs = tip712_new_common(firmware,
-                                    navigator,
-                                    default_screenshot_path,
-                                    client,
-                                    cmd_builder,
-                                    data,
-                                    filters,
-                                    verbose,
-                                    False)
+        # with open(input_file, encoding="utf-8") as file:
+        #     data = json.load(file)
+        #     vrs = tip712_new_common(firmware,
+        #                             navigator,
+        #                             default_screenshot_path,
+        #                             client,
+        #                             cmd_builder,
+        #                             data,
+        #                             filters,
+        #                             verbose,
+        #                             False)
 
         #     recovered_addr = recover_message(data, vrs)
 
@@ -916,9 +916,9 @@ class TestTRX():
         global WALLET_ADDR
         # don't ask again if we already have it
         if WALLET_ADDR is None:
-            with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
+            with client.exchange_async_raw(cmd_builder.get_public_addr(display = False,
                         chaincode = False,
-                        bip32_path = "m/44'/60'/0'/0/0",
+                        bip32_path = "m/44'/195'/0'/0/0",
                         chain_id = None)):
                 pass
             _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)

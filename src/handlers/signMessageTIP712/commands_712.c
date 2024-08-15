@@ -110,7 +110,7 @@ bool handle_tip712_struct_def(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
     bool ret = false;
     bool reply_apdu = true;
-
+    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter handle_tip712_struct_impl");
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 1;
     } else {

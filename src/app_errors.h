@@ -20,6 +20,7 @@
 #define E_INCORRECT_DATA 0x6a80
 // "Invalid parameter received"
 #define E_INCORRECT_P1_P2 0x6b00
+#define E_NOT_IMPLEMENTED 0x911c
 
 // TRON defined:
 #define E_INCORRECT_BIP32_PATH            0x6a8a

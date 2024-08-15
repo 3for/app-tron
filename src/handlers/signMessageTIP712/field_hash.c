@@ -248,7 +248,7 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+6;
         return false;
     }
-
+    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter field_hash");
     field_type = struct_field_type(field_ptr);
     // first packet for this frame
     if (first) {

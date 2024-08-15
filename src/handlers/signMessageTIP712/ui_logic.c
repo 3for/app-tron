@@ -76,7 +76,8 @@ static t_ui_context *ui_ctx = NULL;
  */
 static bool ui_712_field_shown(void) {
     bool ret = false;
-
+    PRINTF("%s:%d: ui_712_field_shown args: %d %d %d %d\n", __FILE__, __LINE__,
+        ui_ctx->filtering_mode, N_storage.verbose_tip712, path_get_root_type(), ui_ctx->field_flags);
     if (ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) {
         if (N_storage.verbose_tip712 || (path_get_root_type() == ROOT_DOMAIN)) {
             ret = true;
@@ -151,10 +152,13 @@ void ui_712_set_value(const char *str, size_t length) {
  * Redraw the dynamic UI step that shows TIP712 information
  */
 void ui_712_redraw_generic_step(void) {
+    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter ui_712_redraw_generic_step");
     if (!ui_ctx->shown) {  // Initialize if it is not already
+        PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter ui_712_start");
         ui_712_start();
         ui_ctx->shown = true;
     } else {
+        PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter ui_712_switch_to_message");
         ui_712_switch_to_message();
     }
 }
@@ -529,6 +533,7 @@ bool ui_712_feed_to_display(const void *field_ptr,
                             uint8_t length,
                             bool first,
                             bool last) {
+    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter ui_712_feed_to_display");
     if (ui_ctx == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+33;
         return false;
@@ -594,7 +599,7 @@ bool ui_712_feed_to_display(const void *field_ptr,
             return false;
         }
     }
-
+    PRINTF("%s:%d: %s %d\n", __FILE__, __LINE__, "Enter ui_712_feed_to_display end: ", last); 
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
         ui_712_redraw_generic_step();
