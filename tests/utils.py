@@ -1,3 +1,15 @@
+from eth_keys import KeyAPI
+from eth_keys.datatypes import Signature
+from eth_keys.datatypes import PublicKey
+
+from eth_account import Account 
+from eth_account.messages import encode_defunct, SignableMessage
+from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
+
+from typing import Any, Dict, List
+from hexbytes import HexBytes
+from eth_utils import keccak
+
 import hashlib
 from decimal import Decimal
 
@@ -22,7 +34,6 @@ def check_tx_signature(transaction, signature, public_key):
     txID = hashlib.sha256(transaction).digest()
     return check_hash_signature(txID, signature, public_key)
 
-<<<<<<< HEAD
 
 def build_trc20_calldata(to_address_hex: str, amount: Decimal):
     # Function selector for transfer(address,uint256)
@@ -38,7 +49,7 @@ def build_trc20_calldata(to_address_hex: str, amount: Decimal):
     amount_bytes = amount_int.to_bytes(32, 'big')
 
     return selector + address_bytes + amount_bytes
-=======
+
 def recover_message(msg, vrs: tuple) -> bytes:
     if isinstance(msg, dict):  # TIP-712
         smsg = encode_typed_data(full_message=msg)
@@ -46,33 +57,6 @@ def recover_message(msg, vrs: tuple) -> bytes:
         smsg = encode_defunct(primitive=msg)
     addr = Account.recover_message(smsg, normalize_vrs(vrs))
     return bytes.fromhex(addr[2:])
-
-def is_array_type(type_: str) -> bool:
-    return type_.endswith("]")
-
-# strip all brackets: Person[][] -> Person
-def parse_core_array_type(type_: str) -> str:
-    if is_array_type(type_):
-        type_ = type_[: type_.index("[")]
-    return type_
-
-
-def get_primary_type(types: Dict[str, List[Dict[str, str]]]) -> str:
-    custom_types = set(types.keys())
-    custom_types_that_are_deps = set()
-
-    for type_ in custom_types:
-        type_fields = types[type_]
-        for field in type_fields:
-            parsed_type = parse_core_array_type(field["type"])
-            if parsed_type in custom_types and parsed_type != type_:
-                custom_types_that_are_deps.add(parsed_type)
-
-    primary_type = list(custom_types.difference(custom_types_that_are_deps))
-    if len(primary_type) == 1:
-        return primary_type[0]
-    else:
-        raise ValueError("Unable to determine primary type")
 
 def encode_typed_data(
     domain_data: Dict[str, Any] = None,
@@ -138,4 +122,33 @@ def encode_typed_data(
         hash_domain(parsed_domain_data),
         hash_tip712_message(parsed_message_types, parsed_message_data),
     )
->>>>>>> cc4b45f (feat: update tip712 ut)
+
+def hash_tip712_message(
+    # returns the same hash as `hash_struct`, but automatically determines primary type
+    message_types: Dict[str, List[Dict[str, str]]],
+    message_data: Dict[str, Any],
+) -> bytes:
+    primary_type = get_primary_type(message_types)
+    return bytes(keccak(encode_data(primary_type, message_types, message_data)))
+
+
+def hash_domain(domain_data: Dict[str, Any]) -> bytes:
+    tip712_domain_map = {
+        "name": {"name": "name", "type": "string"},
+        "version": {"name": "version", "type": "string"},
+        "chainId": {"name": "chainId", "type": "uint256"},
+        "verifyingContract": {"name": "verifyingContract", "type": "address"},
+        "salt": {"name": "salt", "type": "bytes32"},
+    }
+
+    for k in domain_data.keys():
+        if k not in tip712_domain_map.keys():
+            raise ValueError(f"Invalid domain key: `{k}`")
+
+    domain_types = {
+        "TIP712Domain": [
+            tip712_domain_map[k] for k in tip712_domain_map.keys() if k in domain_data
+        ]
+    }
+
+    return hash_struct("TIP712Domain", domain_types, domain_data)
