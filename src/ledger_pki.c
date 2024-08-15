@@ -5,6 +5,7 @@
 #include "cx.h"
 #include "app_errors.h"
 #ifdef HAVE_LEDGER_PKI
+typedef uint32_t bolos_err_t;
 #include "os_pki.h"
 #endif
 

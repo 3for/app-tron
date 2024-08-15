@@ -16,7 +16,7 @@ ADVANCED_DATA_SETS = [
     DataSet(
         {
             "domain": {
-                "chainId": 1,
+                "chainId": 1151668124,
                 "name": "Advanced test",
                 "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
                 "version": "1"
@@ -54,13 +54,13 @@ ADVANCED_DATA_SETS = [
                     "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
                     "ticker": "DAI",
                     "decimals": 18,
-                    "chain_id": 1,
+                    "chain_id": 1151668124,
                 },
                 {
                     "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     "ticker": "WETH",
                     "decimals": 18,
-                    "chain_id": 1,
+                    "chain_id": 1151668124,
                 },
             ],
             "fields": {
@@ -115,7 +115,7 @@ ADVANCED_DATA_SETS = [
                 "name": "ENS",
                 "version": "1",
                 "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
-                "chainId": 1,
+                "chainId": 1151668124,
             },
             "message": {
                 "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
@@ -132,7 +132,7 @@ ADVANCED_DATA_SETS = [
                     "addr": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
                     "ticker": "ENS",
                     "decimals": 18,
-                    "chain_id": 1,
+                    "chain_id": 1151668124,
                 },
             ],
             "fields": {
@@ -169,7 +169,7 @@ ADVANCED_DATA_SETS = [
                 "name": "test",
                 "version": "1",
                 "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 1,
+                "chainId": 1151668124,
             },
             "message": {
                 "token_big": "0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -185,7 +185,7 @@ ADVANCED_DATA_SETS = [
                     "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
                     "ticker": "DAI",
                     "decimals": 18,
-                    "chain_id": 1,
+                    "chain_id": 1151668124,
                 },
             ],
             "fields": {

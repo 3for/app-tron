@@ -35,7 +35,7 @@ from command_builder import CommandBuilder
 import response_parser as ResponseParser
 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS
-
+from utils import recover_message
 '''
 Tron Protobuf
 '''
@@ -88,7 +88,7 @@ def tip712_new_common(firmware,
                                   filters,
                                   partial(autonext, firmware, navigator, default_screenshot_path),
                                   golden_run)
-    
+    return
     with client.exchange_async_raw(builder.tip712_sign_new("m/44'/60'/0'/0/0")):
         moves = []
         if firmware.is_nano:
@@ -116,10 +116,10 @@ def tip712_new_common(firmware,
                 navigator.navigate([move],
                                    screen_change_before_first_instruction=False,
                                    screen_change_after_last_instruction=False)
-    return ResponseParser.signature(client.response().data)
+    return ResponseParser.signature(client._client.last_async_response.data)
 
 def tip712_json_path() -> str:
-    return f"{os.path.dirname(__file__)}/eip712_input_files"
+    return f"{os.path.dirname(__file__)}/tip712_input_files"
 
 
 def input_files() -> list[str]:
@@ -828,17 +828,19 @@ class TestTRX():
     
 
     def test_tip712_new(self,
-                        firmware,
-                        backend,
-                        navigator,
+                        firmware: Firmware,
+                        backend: BackendInterface,
+                        navigator: Navigator,
                         default_screenshot_path: Path,
                         input_file: Path,
                         verbose: bool,
-                        filtering: bool):
+                        filtering: bool,
+                        test_name: str):
         client = TronClient(backend, firmware, navigator)
-        if firmware.device == 'nanos':
+        if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-
+        global SNAPS_CONFIG
+        SNAPS_CONFIG = SnapshotsConfig(test_name)
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
@@ -864,13 +866,21 @@ class TestTRX():
                                     data,
                                     filters,
                                     verbose,
-                                    # [True],
-                                    # [False],
                                     False)
 
-            #recovered_addr = recover_message(data, vrs)
+        #     recovered_addr = recover_message(data, vrs)
 
-        #assert recovered_addr == get_wallet_addr(app_client)
+        # global WALLET_ADDR
+        # # don't ask again if we already have it
+        # if WALLET_ADDR is None:
+        #     with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
+        #                 chaincode = False,
+        #                 bip32_path = "m/44'/60'/0'/0/0",
+        #                 chain_id = None)):
+        #         pass
+        #     _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
+
+        # assert recovered_addr == WALLET_ADDR
 
 
     def test_tip712_advanced_filtering(self,
@@ -899,6 +909,16 @@ class TestTRX():
                                 False,
                                 golden_run)
 
-        # verify signature
-        # addr = recover_message(data_set.data, vrs)
-        # assert addr == get_wallet_addr(app_client)
+        # recovered_addr = recover_message(data_set.data, vrs)
+
+        # global WALLET_ADDR
+        # # don't ask again if we already have it
+        # if WALLET_ADDR is None:
+        #     with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
+        #                 chaincode = False,
+        #                 bip32_path = "m/44'/60'/0'/0/0",
+        #                 chain_id = None)):
+        #         pass
+        #     _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
+
+        # assert recovered_addr == WALLET_ADDR

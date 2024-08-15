@@ -1,6 +1,6 @@
 {
     "domain": {
-        "chainId": 1,
+        "chainId": 1151668124,
         "name": "Simple Mail",
         "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
         "version": "1"
