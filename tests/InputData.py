@@ -370,9 +370,6 @@ def provide_token_metadata(ticker: str,
         print(f"Ledger-PKI Not supported on '{app_client._firmware.name}'")
     else:
         # pylint: disable=line-too-long
-        print('app_client._firmware:', dir(app_client))
-        print('app_client._firmware:', dir(app_client._firmware))
-        print('app_client._firmware:', app_client._firmware.name)
         if app_client._firmware == Firmware.NANOSP:
             cert_apdu = "01010102010211040000000212010013020002140101160400000000200B45524332305F546F6B656E300200063101083201213321024CCA8FAD496AA5040A00A7EB2F5CC3B85376D88BA147A7D7054A99C64056188734010135010310040102000015473045022100C15795C2AE41E6FAE6B1362EE1AE216428507D7C1D6939B928559CC7A1F6425C02206139CF2E133DD62F3E00F183E42109C9853AC62B6B70C5079B9A80DBB9D54AB5"  # noqa: E501
         elif app_client._firmware == Firmware.NANOX:
@@ -512,7 +509,6 @@ def process_data(aclient,
         print(f"Ledger-PKI Not supported on '{app_client._firmware.name}'")
     else:
         # pylint: disable=line-too-long
-        print('line513 app_client._firmware: ', app_client._firmware)
         if app_client._firmware == Firmware.NANOSP:
             cert_apdu = "0101010201021004010200001104000000021201001302000214010116040000000020104549503731325f46696c746572696e67300200053101083201213321024cca8fad496aa5040a00a7eb2f5cc3b85376d88ba147a7d7054a99c64056188734010135010315473045022100ef197e5b1cabb3de5dfc62f965db8536b0463d272c6fea38ebc73605715b1df9022017bef619d52a9728b37a9b5a33f0143bcdcc714694eed07c326796ffbb7c2958"  # noqa: E501
         elif app_client._firmware == Firmware.NANOX:

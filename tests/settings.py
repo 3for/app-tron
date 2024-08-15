@@ -7,8 +7,10 @@ from typing import Union
 class SettingID(Enum):
     VERBOSE_ENS = auto()
     verbose_tip712 = auto()
-    NONCE = auto()
-    DEBUG_DATA = auto()
+    FLOW_1 = auto()
+    FLOW_2 = auto()
+    FLOW_3 = auto()
+    FLOW_4 = auto()
 
 
 def get_device_settings(firmware: Firmware) -> list[SettingID]:
@@ -20,8 +22,10 @@ def get_device_settings(firmware: Firmware) -> list[SettingID]:
     return [
         SettingID.VERBOSE_ENS,
         SettingID.verbose_tip712,
-        SettingID.NONCE,
-        SettingID.DEBUG_DATA,
+        SettingID.FLOW_1,
+        SettingID.FLOW_2,
+        SettingID.FLOW_3,
+        SettingID.FLOW_4,
     ]
 
 

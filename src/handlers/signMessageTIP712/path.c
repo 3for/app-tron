@@ -376,7 +376,8 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
-
+    PRINTF("%s:%d: path_set_root args: %s\n", __FILE__, __LINE__,
+        struct_name);
     if (push_new_hash_depth(true) == false) {
         return false;
     }
@@ -392,7 +393,8 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
 
     // init array levels at 0
     path_struct->array_depth_count = 0;
-
+    PRINTF("%s:%d: path_set_root args: %s\n", __FILE__, __LINE__,
+        struct_name);
     if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
         (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
         path_struct->root_type = ROOT_DOMAIN;
