@@ -36,12 +36,17 @@ SIGN_MAGIC = b'\x19TRON Signed Message:\n'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help="BIP 32 path to sign with", default=None)
-parser.add_argument('--message', help="Message to sign", default='Hello Tron!')
+parser.add_argument('--message', help="Message to sign", default='Hello Tron! ' * 32)
+parser.add_argument('--fulldisplay', help="Enable full display mode", default='disable')
 args = parser.parse_args()
 
 args.message = args.message.encode()
 if args.path == None:
     args.path = "44'/195'/0'/0/0"
+
+MSG_INS = 0x08
+if args.fulldisplay == 'enable':
+    MSG_INS = 0xC8
 
 encodedTx = struct.pack(">I", len(args.message))
 encodedTx += args.message
@@ -55,8 +60,26 @@ size = result[0]
 if size == 65:
     publicKey = result[1:1 + size].hex()
 
-result = dongle.exchange(
-    apduMessage(0x08, 0x00, 0x00, donglePath, encodedTx.hex()))
+index = 0
+
+while True:
+    if index == 0:
+        index = len(encodedTx)
+        if index > 255-len(donglePath)/2 - 1:
+            index = int(255-len(donglePath)/2) - 1
+        print(index)
+        result = dongle.exchange(apduMessage(MSG_INS, 0x00, 0x00, donglePath, encodedTx[0:index].hex()))
+    else:
+        if index >= len(encodedTx):
+            break
+        last = index
+        index += 255
+        if index > len(encodedTx):
+            index = len(encodedTx)
+        result = dongle.exchange(apduMessage(MSG_INS, 0x80, 0x00, None, encodedTx[last:index].hex()))
+
+# result = dongle.exchange(
+    # apduMessage(0x08, 0x00, 0x00, donglePath, encodedTx.hex()))
 
 signedMessage = SIGN_MAGIC + str(len(args.message)).encode() + args.message
 keccak_hash = keccak.new(digest_bits=256)
