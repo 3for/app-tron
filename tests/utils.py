@@ -131,7 +131,6 @@ def hash_tip712_message(
     primary_type = get_primary_type(message_types)
     return bytes(keccak(encode_data(primary_type, message_types, message_data)))
 
-
 def hash_domain(domain_data: Dict[str, Any]) -> bytes:
     tip712_domain_map = {
         "name": {"name": "name", "type": "string"},

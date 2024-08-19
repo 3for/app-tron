@@ -272,8 +272,12 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
                          sizeof(hash)) != CX_OK) {
         return false;
     }
-    PRINTF("TIP712 hash to sign %.*H\n", 32, hash);
+    PRINTF("Old TIP712 Domain hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.domainHash);
+    PRINTF("Old TIP712 Message hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.messageHash);
 
+    PRINTF("Old TIP712 hash to sign %.*H\n", 32, hash);
+
+    PRINTF("Old TIP712 bip32 %.*H\n", 40, (uint8_t*) (&global_ctx.messageSigningContext712.bip32Path[0]));
     io_seproxyhal_io_heartbeat();
     // Get private key
     err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
@@ -304,7 +308,7 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
         G_io_apdu_buffer[64]++;
     }
     tx = 65;
-
+    PRINTF("TIP712 SIGN 0x%.*h\n", 64, G_io_apdu_buffer);
 end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));

@@ -222,6 +222,7 @@ void ui_712_message_hash(void) {
                        sizeof(strings.tmp.tmp),
                        global_ctx.messageSigningContext712.messageHash,
                        KECCAK256_HASH_BYTESIZE);
+    PRINTF("message hash: %s\n", strings.tmp.tmp);
     ui_ctx->end_reached = true;
     ui_712_redraw_generic_step();
 }

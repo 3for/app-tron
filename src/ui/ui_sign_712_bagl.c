@@ -57,6 +57,7 @@ UX_STEP_INIT(
 UX_STEP_CB(
     ux_712_step_approve,
     pb,
+    // ui_callback_signMessage712_v0_ok(true),
     ui_712_approve(),
     {
       &C_icon_validate_14,

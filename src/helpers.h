@@ -35,6 +35,8 @@ int helper_send_response_pubkey(const publicKeyContext_t *pub_key_ctx);
 
 off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path);
 
+off_t read_bip32_path_712(const uint8_t *buffer, size_t length, messageSigningContext712_t* ctx_712);
+
 int initPublicKeyContext(bip32_path_t *bip32_path, char *address58, publicKeyContext_t* public_key_ctx);
 
 #endif

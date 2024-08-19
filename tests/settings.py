@@ -3,30 +3,48 @@ from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 from typing import Union
 
-
 class SettingID(Enum):
-    VERBOSE_ENS = auto()
-    verbose_tip712 = auto()
+    pass
+
+class NanoSettingID(SettingID):
     FLOW_1 = auto()
     FLOW_2 = auto()
     FLOW_3 = auto()
     FLOW_4 = auto()
+    VERBOSE_ENS = auto()
+    VERBOSE_TIP712 = auto()
+
+class NonNanoSettingID(SettingID):
+    TX_DATA_ID = auto()
+    CSTM_CONTRACTS_ID = auto()
+    HASH_TX_ID = auto()
+    VERBOSE_ENS = auto()
+    VERBOSE_TIP712 = auto()
 
 
-def get_device_settings(firmware: Firmware) -> list[SettingID]:
-    if firmware == Firmware.NANOS:
+def get_device_settings(firmware: Firmware) -> list:
+    if firmware.is_nano:
+        if firmware == Firmware.NANOS:
+            return [
+                NanoSettingID.NONCE,
+                NanoSettingID.DEBUG_DATA,
+            ]
         return [
-            SettingID.NONCE,
-            SettingID.DEBUG_DATA,
+            NanoSettingID.FLOW_1,
+            NanoSettingID.FLOW_2,
+            NanoSettingID.FLOW_3,
+            NanoSettingID.FLOW_4,
+            NanoSettingID.VERBOSE_ENS,
+            NanoSettingID.VERBOSE_TIP712,
         ]
-    return [
-        SettingID.VERBOSE_ENS,
-        SettingID.verbose_tip712,
-        SettingID.FLOW_1,
-        SettingID.FLOW_2,
-        SettingID.FLOW_3,
-        SettingID.FLOW_4,
-    ]
+    else:
+        return [
+            NonNanoSettingID.TX_DATA_ID,
+            NonNanoSettingID.CSTM_CONTRACTS_ID,
+            NonNanoSettingID.HASH_TX_ID,
+            NonNanoSettingID.VERBOSE_ENS,
+            NonNanoSettingID.VERBOSE_TIP712,
+        ]
 
 
 def get_setting_per_page(firmware: Firmware) -> int:
@@ -35,22 +53,39 @@ def get_setting_per_page(firmware: Firmware) -> int:
     return 2
 
 
+# def get_setting_position(firmware: Firmware, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
+#     settings_per_page = get_setting_per_page(firmware)
+#     if firmware == Firmware.STAX:
+#         screen_height = 672  # px
+#         header_height = 88  # px
+#         footer_height = 92  # px
+#         option_offset = 350  # px
+#     else:
+#         screen_height = 600  # px
+#         header_height = 92  # px
+#         footer_height = 97  # px
+#         option_offset = 420  # px
+#     usable_height = screen_height - (header_height + footer_height)
+#     setting_height = usable_height // settings_per_page
+#     index_in_page = get_device_settings(firmware).index(NonNanoSettingID(setting)) % settings_per_page
+#     return option_offset, header_height + (setting_height * index_in_page) + (setting_height // 2)
+
 def get_setting_position(firmware: Firmware, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
     settings_per_page = get_setting_per_page(firmware)
-    if firmware == Firmware.STAX:
-        screen_height = 672  # px
-        header_height = 88  # px
-        footer_height = 92  # px
-        option_offset = 350  # px
-    else:
-        screen_height = 600  # px
-        header_height = 92  # px
-        footer_height = 97  # px
-        option_offset = 420  # px
-    usable_height = screen_height - (header_height + footer_height)
-    setting_height = usable_height // settings_per_page
-    index_in_page = get_device_settings(firmware).index(SettingID(setting)) % settings_per_page
-    return option_offset, header_height + (setting_height * index_in_page) + (setting_height // 2)
+    # if firmware == Firmware.STAX:
+    #     screen_height = 672  # px
+    #     header_height = 88  # px
+    #     footer_height = 92  # px
+    #     option_offset = 350  # px
+    # else:
+    #     screen_height = 600  # px
+    #     header_height = 92  # px
+    #     footer_height = 97  # px
+    #     option_offset = 420  # px
+    print(get_device_settings(firmware).index(NonNanoSettingID(setting)))
+    y_index = get_device_settings(firmware).index(NonNanoSettingID(setting)) % settings_per_page
+    print('y_index: ', y_index)
+    return 200, 150 * (y_index + 1)
 
 
 def settings_toggle(firmware: Firmware, nav: Navigator, to_toggle: list[SettingID]):
@@ -70,9 +105,11 @@ def settings_toggle(firmware: Firmware, nav: Navigator, to_toggle: list[SettingI
         settings_per_page = get_setting_per_page(firmware)
         for setting in settings:
             setting_idx = settings.index(setting)
+            # print(setting_idx)
             if (setting_idx > 0) and (setting_idx % settings_per_page) == 0:
                 moves += [NavInsID.USE_CASE_SETTINGS_NEXT]
             if setting in to_toggle:
+                print(get_setting_position(firmware, setting))
                 moves += [NavIns(NavInsID.TOUCH, get_setting_position(firmware, setting))]
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
     nav.navigate(moves, screen_change_before_first_instruction=False)

@@ -138,7 +138,7 @@ class APDUOffsets(IntEnum):
     CDATA = 5
 
 class PKIClient:
-    _CLA: int = 0xE0   # 0xB0 in eth
+    _CLA: int = 0xB0   # 0xB0 in eth
     _INS: int = 0x06
 
     def __init__(self, client: BackendInterface) -> None:
@@ -175,9 +175,9 @@ class TronClient:
         self.accounts = [None, None]
         self.hardware = True
         self._pki_client: Optional[PKIClient] = None
-        if self._firmware != Firmware.NANOS:
-            # LedgerPKI not supported on Nanos
-            self._pki_client = PKIClient(self._client)
+        # if self._firmware != Firmware.NANOS:
+        #     # LedgerPKI not supported on Nanos
+        #     self._pki_client = PKIClient(self._client)
 
         # Init account with default address to compare with ledger
         for i in range(2):

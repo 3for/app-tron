@@ -237,7 +237,7 @@ bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t da
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path(workBuffer, &dataLength, &global_ctx.messageSigningContext.bip32) !=
+    } else if (read_bip32_path_712(workBuffer, &dataLength, &global_ctx.messageSigningContext712) !=
                0) {
         if (!N_storage.verbose_tip712 && (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ui_712_message_hash();
