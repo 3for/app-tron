@@ -558,6 +558,6 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
     }
-
+    PRINTF("Sign done!\n");
     return 0;
 }

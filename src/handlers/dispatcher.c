@@ -45,14 +45,14 @@ int apdu_dispatcher(const command_t *cmd) {
     }
 #endif  // HAVE_SWAP
 
-#ifndef HAVE_LEDGER_PKI
-    if (cmd->ins == INS_GET_APP_CONFIGURATION) {
-        // Ledger-PKI APDU not yet caught by the running OS.
-        // Command code not supported
-        PRINTF("Ledger-PKI not yet supported!\n");
-        return io_send_sw(E_NOT_IMPLEMENTED);
-    }
-#endif  // HAVE_LEDGER_PKI
+// #ifndef HAVE_LEDGER_PKI
+//     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
+//         // Ledger-PKI APDU not yet caught by the running OS.
+//         // Command code not supported
+//         PRINTF("Ledger-PKI not yet supported!\n");
+//         return io_send_sw(E_NOT_IMPLEMENTED);
+//     }
+// #endif  // HAVE_LEDGER_PKI
 
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
@@ -88,7 +88,9 @@ int apdu_dispatcher(const command_t *cmd) {
 #ifdef HAVE_TIP712_FULL_SUPPORT
                 case P2_TIP712_FULL_IMPLEM:
                     return handle_tip712_sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#endif  // HAVE_TIP712_FULL_SUPPORT
             }
+#ifdef HAVE_TIP712_FULL_SUPPORT
         case INS_TIP712_STRUCT_DEF:
             return handle_tip712_struct_def(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 

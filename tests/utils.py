@@ -102,7 +102,6 @@ def encode_typed_data(
         hash_tip712_message(parsed_message_types, parsed_message_data),
     )
 
-
 def hash_tip712_message(
     # returns the same hash as `hash_struct`, but automatically determines primary type
     message_types: Dict[str, List[Dict[str, str]]],
@@ -110,7 +109,6 @@ def hash_tip712_message(
 ) -> bytes:
     primary_type = get_primary_type(message_types)
     return bytes(keccak(encode_data(primary_type, message_types, message_data)))
-
 
 def hash_domain(domain_data: Dict[str, Any]) -> bytes:
     tip712_domain_map = {

@@ -1,3 +1,5 @@
+import base58
+
 def signature(data: bytes) -> tuple[bytes, bytes, bytes]:
     assert len(data) == (1 + 32 + 32)
 
@@ -49,4 +51,4 @@ def pk_addr(data: bytes, has_chaincode: bool = False):
     if idx != len(data):
         return None
 
-    return pk, bytes.fromhex(addr.decode()), chaincode
+    return pk, base58.b58decode_check(addr), chaincode

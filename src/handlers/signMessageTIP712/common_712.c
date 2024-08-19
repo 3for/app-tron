@@ -39,9 +39,10 @@ unsigned int ui_712_approve_cb(void) {
                                sizeof(global_ctx.messageSigningContext712.messageHash),
                                hash,
                                sizeof(hash)));
-    PRINTF("TIP712 Domain hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.domainHash);
-    PRINTF("TIP712 Message hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.messageHash);
-
+    PRINTF("New TIP712 Domain hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.domainHash);
+    PRINTF("New TIP712 Message hash 0x%.*h\n", 32, global_ctx.messageSigningContext712.messageHash);
+    PRINTF("New TIP712 hash to sign %.*H\n", 32, hash);
+    PRINTF("New TIP712 bip32 %.*H\n", 40, (uint8_t*) (&global_ctx.messageSigningContext712.bip32Path[0]));
     unsigned int info = 0;
     if (bip32_derive_ecdsa_sign_rs_hash_256(CX_CURVE_256K1,
                                             global_ctx.messageSigningContext712.bip32Path,
@@ -65,6 +66,7 @@ unsigned int ui_712_approve_cb(void) {
     tx = 65;
     G_io_apdu_buffer[tx++] = 0x90;
     G_io_apdu_buffer[tx++] = 0x00;
+    PRINTF("TIP712 SIGN 0x%.*h\n", 64, G_io_apdu_buffer);
     reset_app_context();
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);

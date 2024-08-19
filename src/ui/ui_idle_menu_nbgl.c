@@ -23,18 +23,33 @@
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
 #include "settings.h"
-
+#include "parse.h"
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
-    SWITCH_ALLOW_HASH_TX_TOKEN
+    SWITCH_ALLOW_HASH_TX_TOKEN,
+    DOMAIN_NAME_VERBOSE_TOKEN,
+    EIP712_VERBOSE_TOKEN
 };
 
-#define NB_INFO_FIELDS 3
+enum {
+    TX_DATA_ID,
+    CSTM_CONTRACTS_ID,
+    HASH_TX_ID,
+#ifdef HAVE_DOMAIN_NAME
+    DOMAIN_NAME_VERBOSE_ID,
+#endif
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    EIP712_VERBOSE_ID,
+#endif
+    SETTINGS_SWITCHES_NB
+};
+
+#define NB_INFO_FIELDS SETTINGS_SWITCHES_NB
 static const char* const infoTypes[] = {"Version", "Developer", "Copyright"};
 static const char* const infoContents[] = {APPVERSION, "Klever", "(c) 2024 Ledger"};
 
-#define NB_SETTINGS_SWITCHES 3
+#define NB_SETTINGS_SWITCHES SETTINGS_SWITCHES_NB
 #define SETTING_IDX(token)   (token - SWITCH_ALLOW_TX_DATA_TOKEN)
 static uint8_t settings[NB_SETTINGS_SWITCHES] = {S_DATA_ALLOWED, S_CUSTOM_CONTRACT, S_SIGN_BY_HASH};
 static nbgl_layoutSwitch_t switches[NB_SETTINGS_SWITCHES] = {0};
@@ -46,15 +61,30 @@ void onQuitCallback(void) {
 static void settingsControlsCallback(int token, uint8_t index, int page) {
     UNUSED(index);
     UNUSED(page);
+    bool value;
     switch (token) {
         case SWITCH_ALLOW_TX_DATA_TOKEN:
         case SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN:
         case SWITCH_ALLOW_HASH_TX_TOKEN:
             SETTING_TOGGLE(settings[SETTING_IDX(token)]);
-            switches[0].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
-            switches[1].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
-            switches[2].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
+            switches[TX_DATA_ID].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
+            switches[CSTM_CONTRACTS_ID].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
+            switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
+#ifdef HAVE_TIP712_FULL_SUPPORT
+        case EIP712_VERBOSE_TOKEN:
+            value = !N_storage.verbose_tip712;
+            switches[EIP712_VERBOSE_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.verbose_tip712, (void *) &value, sizeof(uint8_t));
+            break;
+#endif  // HAVE_TIP712_FULL_SUPPORT
+#ifdef HAVE_DOMAIN_NAME
+        case DOMAIN_NAME_VERBOSE_TOKEN:
+            value = !N_storage.verbose_domain_name;
+            switches[DOMAIN_NAME_VERBOSE_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.verbose_domain_name, (void *) &value, sizeof(uint8_t));
+            break;
+#endif  // HAVE_DOMAIN_NAME
         default:
             PRINTF("Should not happen !");
             break;
@@ -80,34 +110,40 @@ static const nbgl_genericContents_t settingContents = {.callbackCallNeeded = fal
                                                        .contentsList = contents,
                                                        .nbContents = SETTING_CONTENTS_NB};
 void ui_idle(void) {
+    switches[TX_DATA_ID].text = "Transactions data";
+    switches[TX_DATA_ID].subText = "Allow extra data in\ntransactions";
+    switches[TX_DATA_ID].token = SWITCH_ALLOW_TX_DATA_TOKEN;
+    switches[TX_DATA_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[TX_DATA_ID].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
 
-// #ifdef HAVE_TIP712_FULL_SUPPORT
-//     switches[TIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
-//     switches[TIP712_VERBOSE_ID].text = "Raw messages";
-//     switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
-//     switches[TIP712_VERBOSE_ID].token = TIP712_VERBOSE_TOKEN;
-//     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
-// #endif  // HAVE_TIP712_FULL_SUPPORT
+    switches[CSTM_CONTRACTS_ID].text = "Custom contracts";
+    switches[CSTM_CONTRACTS_ID].subText = "Allow unverified contracts";
+    switches[CSTM_CONTRACTS_ID].token = SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN;
+    switches[CSTM_CONTRACTS_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[CSTM_CONTRACTS_ID].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
 
-    switches[0].text = "Transactions data";
-    switches[0].subText = "Allow extra data in\ntransactions";
-    switches[0].token = SWITCH_ALLOW_TX_DATA_TOKEN;
-    switches[0].tuneId = TUNE_TAP_CASUAL;
-    switches[0].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
-    switches[1].text = "Custom contracts";
-    switches[1].subText = "Allow unverified\ncontracts";
-    switches[1].token = SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN;
-    switches[1].tuneId = TUNE_TAP_CASUAL;
-    switches[1].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
-    switches[2].text = "Blind signing";
-#ifdef TARGET_STAX
-    switches[2].subText = "Allow transaction blind signing";
-#else
-    switches[2].subText = "Allow transaction blind\nsigning";
-#endif
-    switches[2].token = SWITCH_ALLOW_HASH_TX_TOKEN;
-    switches[2].tuneId = TUNE_TAP_CASUAL;
-    switches[2].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
+    switches[HASH_TX_ID].text = "Blind signing";
+    switches[HASH_TX_ID].subText = "Allow transaction blind signing";
+    switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
+    switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
+
+#ifdef HAVE_DOMAIN_NAME
+    switches[DOMAIN_NAME_VERBOSE_ID].initState =
+        N_storage.verbose_domain_name ? ON_STATE : OFF_STATE;
+    switches[DOMAIN_NAME_VERBOSE_ID].text = "ENS addresses";
+    switches[DOMAIN_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
+    switches[DOMAIN_NAME_VERBOSE_ID].token = DOMAIN_NAME_VERBOSE_TOKEN;
+    switches[DOMAIN_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+#endif  // HAVE_DOMAIN_NAME
+
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    switches[EIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
+    switches[EIP712_VERBOSE_ID].text = "Raw messages";
+    switches[EIP712_VERBOSE_ID].subText = "Display raw content from EIP712 messages.";
+    switches[EIP712_VERBOSE_ID].token = EIP712_VERBOSE_TOKEN;
+    switches[EIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+#endif  // HAVE_TIP712_FULL_SUPPORT
 
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &APP_TRON_ICON,

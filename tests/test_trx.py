@@ -30,7 +30,7 @@ from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID
 
 
-from settings import SettingID, settings_toggle
+from settings import NanoSettingID, NonNanoSettingID, settings_toggle
 from command_builder import CommandBuilder
 import response_parser as ResponseParser
 import InputData as InputData
@@ -84,6 +84,9 @@ def tip712_new_common(firmware,
                       filters,
                       verbose: bool,
                       golden_run: bool):
+    # default_screenshot_path += '/tests/'
+    default_screenshot_path = Path(__file__).parent.resolve()
+    print(default_screenshot_path)
     assert InputData.process_data(client,
                                   builder,
                                   json_data,
@@ -91,7 +94,7 @@ def tip712_new_common(firmware,
                                   partial(autonext, firmware, navigator, default_screenshot_path),
                                   golden_run)
     # return
-    with client.exchange_async_raw(builder.tip712_sign_new("m/44'/195'/0'/0/0")):
+    with client.exchange_async_raw(builder.tip712_sign_new(client.getAccount(0)['path'])):
         moves = []
         if firmware.is_nano:
             # need to skip the message hash
@@ -129,6 +132,7 @@ def input_files() -> list[str]:
     for file in os.scandir(tip712_json_path()):
         if fnmatch.fnmatch(file, "*-data.json"):
             files.append(file.path)
+    print(files)
     return sorted(files)
 
 
@@ -136,17 +140,17 @@ def input_files() -> list[str]:
 def input_file_fixture(request) -> str:
     return Path(request.param)
 
-@pytest.fixture(name="verbose", params=[True])
+@pytest.fixture(name="verbose", params=[True, False])
 def verbose_fixture(request) -> bool:
     return request.param
 
 
-@pytest.fixture(name="filtering", params=[False])
+@pytest.fixture(name="filtering", params=[False, True])
 def filtering_fixture(request) -> bool:
     return request.param
 
 
-@pytest.fixture(name="data_set", params=ADVANCED_DATA_SETS[:1])
+@pytest.fixture(name="data_set", params=ADVANCED_DATA_SETS)
 def data_set_fixture(request) -> DataSet:
     return request.param
 
@@ -829,7 +833,7 @@ class TestTRX():
                                     client.getAccount(0)['publicKey'][2:])
     
 
-    def test_tip712_new(self,
+    def test_trx_tip712_new(self,
                         firmware: Firmware,
                         backend: BackendInterface,
                         navigator: Navigator,
@@ -838,11 +842,12 @@ class TestTRX():
                         verbose: bool,
                         filtering: bool,
                         test_name: str):
+        # global SNAPS_CONFIG
         client = TronClient(backend, firmware, navigator)
+        setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-        global SNAPS_CONFIG
-        SNAPS_CONFIG = SnapshotsConfig(test_name)
+        
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
@@ -856,43 +861,47 @@ class TestTRX():
                 pytest.skip(f"{filterfile.name}: {e.strerror}")
 
         if verbose:
-            settings_toggle(firmware, navigator, [SettingID.verbose_tip712])
+            settings_toggle(firmware, navigator, [setting_id])
+        # print('verbose filtering: ', verbose, filtering, SNAPS_CONFIG)
+        # if verbose == True:
+        #     SNAPS_CONFIG = SnapshotsConfig(test_name)
+        with open(input_file, encoding="utf-8") as file:
+            data = json.load(file)
+            vrs = tip712_new_common(firmware,
+                                    navigator,
+                                    default_screenshot_path,
+                                    client,
+                                    cmd_builder,
+                                    data,
+                                    filters,
+                                    verbose,
+                                    False)
+            recovered_addr = recover_message(data, vrs)
 
-        # with open(input_file, encoding="utf-8") as file:
-        #     data = json.load(file)
-        #     vrs = tip712_new_common(firmware,
-        #                             navigator,
-        #                             default_screenshot_path,
-        #                             client,
-        #                             cmd_builder,
-        #                             data,
-        #                             filters,
-        #                             verbose,
-        #                             False)
+        global WALLET_ADDR
+        # don't ask again if we already have it
+        if WALLET_ADDR is None:
+            with client.exchange_async_raw(cmd_builder.get_public_addr(display = False,
+                        chaincode = False,
+                        bip32_path = client.getAccount(0)['path'],
+                        chain_id = None)):
+                pass
+            _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
 
-        #     recovered_addr = recover_message(data, vrs)
-
-        # global WALLET_ADDR
-        # # don't ask again if we already have it
-        # if WALLET_ADDR is None:
-        #     with client.exchange_async_raw(cmd_builder.get_public_addr(display = True,
-        #                 chaincode = False,
-        #                 bip32_path = "m/44'/60'/0'/0/0",
-        #                 chain_id = None)):
-        #         pass
-        #     _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
-
-        # assert recovered_addr == WALLET_ADDR
+        assert recovered_addr == WALLET_ADDR[1:]
+        # SNAPS_CONFIG = None
+        if verbose:
+            settings_toggle(firmware, navigator, [setting_id])
 
 
-    def test_tip712_advanced_filtering(self,
-                                       firmware: Firmware,
-                                       backend: BackendInterface,
-                                       navigator: Navigator,
-                                       default_screenshot_path: Path,
-                                       test_name: str,
-                                       data_set: DataSet,
-                                       golden_run: bool):
+    def test_trx_tip712_advanced_filtering(self,
+                                           firmware: Firmware,
+                                           backend: BackendInterface,
+                                           navigator: Navigator,
+                                           default_screenshot_path: Path,
+                                           test_name: str,
+                                           data_set: DataSet,
+                                           golden_run: bool):
         global SNAPS_CONFIG
 
         client = TronClient(backend, firmware, navigator)
@@ -910,17 +919,17 @@ class TestTRX():
                                 data_set.filters,
                                 False,
                                 golden_run)
-
         recovered_addr = recover_message(data_set.data, vrs)
+        assert client.getAccount(0)['addressHex'][2:] == recovered_addr.hex().upper()
 
         global WALLET_ADDR
         # don't ask again if we already have it
         if WALLET_ADDR is None:
             with client.exchange_async_raw(cmd_builder.get_public_addr(display = False,
                         chaincode = False,
-                        bip32_path = "m/44'/195'/0'/0/0",
+                        bip32_path = client.getAccount(0)['path'],
                         chain_id = None)):
                 pass
             _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
 
-        assert recovered_addr == WALLET_ADDR
+        assert recovered_addr == WALLET_ADDR[1:]
