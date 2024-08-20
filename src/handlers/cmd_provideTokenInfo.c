@@ -1,15 +1,10 @@
-// #include "shared_context.h"
-// #include "apdu_constants.h"
+#include <stdint.h>
+
 #include "public_keys.h"
 #include "common_utils.h"
 #include "parse.h"
 #include "ui_globals.h"
 #include "app_errors.h"
-// #include "os_io_seproxyhal.h"
-// #include "network.h"
-// #include "manage_asset_info.h"
-
-#include <stdint.h>
 
 #ifdef HAVE_LEDGER_PKI
 #include "os_pki.h"
@@ -21,8 +16,6 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t dataLength) {
     UNUSED(p1);
     UNUSED(p2);
-    // UNUSED(flags);
-    // UNUSED(tx);
     uint32_t offset = 0;
     uint8_t tickerLength;
     uint64_t chain_id;
@@ -58,10 +51,10 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     dataLength -= 4;
     // TODO: Handle 64-bit long chain IDs
     chain_id = U4BE(workBuffer, offset);
-    // if (!app_compatible_with_chain_id(&chain_id)) {
-    //     UNSUPPORTED_CHAIN_ID_MSG(chain_id);
-    //     THROW(APDU_RESPONSE_INVALID_DATA);
-    // }
+    if (chainConfig->chainId != chain_id) {
+        UNSUPPORTED_CHAIN_ID_MSG(chain_id);
+        THROW(APDU_RESPONSE_INVALID_DATA);
+    }
     offset += 4;
     dataLength -= 4;
 
@@ -77,8 +70,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
                                         dataLength);
 #ifndef HAVE_BYPASS_SIGNATURES
     if (error != CX_OK) {
-        THROW(error);
-        // THROW(APDU_RESPONSE_INVALID_DATA);
+        THROW(APDU_RESPONSE_INVALID_DATA);
     }
 #endif
     G_io_apdu_buffer[0] = global_ctx.transactionContext.currentAssetIndex;

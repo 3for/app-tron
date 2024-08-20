@@ -3,13 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-// #include "mem.h"
 #include "mem_utils.h"
 #include "type_hash.h"
-// #include "shared_context.h"
 #include "format_hash_field_type.h"
-// #include "hash_bytes.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "typed_data.h"
 #include "ui_globals.h"
 #include "app_errors.h"

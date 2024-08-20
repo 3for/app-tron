@@ -54,7 +54,7 @@ ENABLE_SWAP = 1
 ENABLE_NBGL_QRCODE = 1
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
-DEBUG = 1
+DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
 
@@ -83,7 +83,7 @@ cleanall : clean
 #include nanopb/extra/nanopb.mk
 NANOPB_DIR = nanopb
 
-CFLAGS += "-I$(NANOPB_DIR)" -Iproto -g
+CFLAGS += "-I$(NANOPB_DIR)" -Iproto
 DEFINES   += PB_NO_ERRMSG=1
 SOURCE_FILES += $(NANOPB_DIR)/pb_encode.c $(NANOPB_DIR)/pb_decode.c $(NANOPB_DIR)/pb_common.c
 APP_SOURCE_PATH += proto

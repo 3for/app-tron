@@ -5,7 +5,6 @@
 
 #include <stdbool.h>
 #include "parse.h"
-// #include "ethUstream.h"  // ADDRESS_LENGTH
 
 typedef struct {
     uint8_t contract_addr[ADDRESS_LENGTH];

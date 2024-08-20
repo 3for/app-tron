@@ -2,7 +2,6 @@
 #ifdef HAVE_BAGL
 #include "ui_logic.h"
 #include "ui_globals.h"
-// #include "shared_context.h"  // strings
 
 enum { UI_712_POS_REVIEW, UI_712_POS_END };
 static uint8_t ui_pos;
@@ -57,7 +56,6 @@ UX_STEP_INIT(
 UX_STEP_CB(
     ux_712_step_approve,
     pb,
-    // ui_callback_signMessage712_v0_ok(true),
     ui_712_approve(),
     {
       &C_icon_validate_14,

@@ -28,12 +28,6 @@ int verifyExchangeID(const unsigned char *exchangeValidation,
                      uint8_t *signature,
                      uint8_t signatureLength);
 
-// typedef struct tokenDefinition_t {
-//     uint8_t address[21];
-//     char ticker[10];
-//     uint8_t decimals;
-// } tokenDefinition_t;
-
 #define NUM_TOKENS_TRC20 382
 
 extern tokenDefinition_t const TOKENS_TRC20[NUM_TOKENS_TRC20];

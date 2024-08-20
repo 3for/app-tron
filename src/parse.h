@@ -156,7 +156,7 @@ typedef struct nftInfo_t {
 #define MAX_TICKER_LEN 11  // 10 characters + '\0'
 
 typedef struct tokenDefinition_t {
-    uint8_t address[ADDRESS_LENGTH];  // must be first item
+    uint8_t address[ADDRESS_LENGTH + 1];  // must be first item
 #ifdef HAVE_CONTRACT_NAME_IN_DESCRIPTOR
     uint8_t contractName[ADDRESS_LENGTH];
 #endif
@@ -212,17 +212,17 @@ typedef struct messageSigningContext712_t {
     uint8_t messageHash[32];
 } messageSigningContext712_t;
 
-typedef struct messageSigningContext_t {
-    bip32_path_t bip32;
-    uint8_t hash[HASH_SIZE];
-    uint32_t remainingLength;
-} messageSigningContext_t;
+// typedef struct messageSigningContext_t {
+//     bip32_path_t bip32;
+//     uint8_t hash[HASH_SIZE];
+//     uint32_t remainingLength;
+// } messageSigningContext_t;
 
 typedef union {
     transactionContext_t transactionContext;
     publicKeyContext_t publicKeyContext;
     messageSigningContext712_t messageSigningContext712;
-    messageSigningContext_t messageSigningContext;
+    // messageSigningContext_t messageSigningContext;
 } tmpCtx_t;
 
 typedef struct txStringProperties_t {
@@ -290,6 +290,7 @@ extern uint8_t processed_size_191;
 extern uint16_t apdu_response_code;
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
+
 void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx);
 void hash_byte(uint8_t byte, cx_hash_t *hash_ctx);
 

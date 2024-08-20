@@ -108,7 +108,6 @@ void app_main(void) {
 
     // Reset context
     explicit_bzero(&txContent, sizeof(txContent));
-    // reset_app_context();
 
     for (;;) {
         BEGIN_TRY {

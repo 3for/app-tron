@@ -138,7 +138,7 @@ class APDUOffsets(IntEnum):
     CDATA = 5
 
 class PKIClient:
-    _CLA: int = 0xB0   # 0xB0 in eth
+    _CLA: int = 0xB0
     _INS: int = 0x06
 
     def __init__(self, client: BackendInterface) -> None:
@@ -202,7 +202,7 @@ class TronClient:
 
     def exchange_async_raw(self, payload: bytes):
         return self._client.exchange_async_raw(payload)
-    
+
     def exchange_raw(self, payload: bytes):
         return self._client.exchange_raw(payload)
 

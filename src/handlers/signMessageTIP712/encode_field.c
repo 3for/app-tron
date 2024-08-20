@@ -4,8 +4,6 @@
 #include <string.h>
 #include "encode_field.h"
 #include "mem_utils.h"
-// #include "shared_context.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "parse.h"
 #include "app_errors.h"
 

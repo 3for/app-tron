@@ -78,6 +78,9 @@ void ui_191_switch_to_message_end(void);
 void ui_191_switch_to_sign(void);
 void ui_191_switch_to_question(void);
 
+void ui_712_start(void);
+void ui_712_switch_to_message(void);
+
 void feed_display(void);
 void skip_rest_of_message(void);
 void question_switcher(void);

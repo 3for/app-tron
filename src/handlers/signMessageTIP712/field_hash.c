@@ -4,16 +4,12 @@
 #include "field_hash.h"
 #include "encode_field.h"
 #include "path.h"
-// #include "mem.h"
 #include "mem_utils.h"
-// #include "shared_context.h"
 #include "ui_logic.h"
 #include "context_712.h"     // contract_addr
 #include "common_utils.h"    // u64_from_BE
-// #include "apdu_constants.h"  // APDU response codes
 #include "typed_data.h"
 #include "commands_712.h"
-// #include "hash_bytes.h"
 #include "app_errors.h"
 #include "parse.h"
 #include "ui_globals.h"
@@ -248,7 +244,6 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+6;
         return false;
     }
-    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter field_hash");
     field_type = struct_field_type(field_ptr);
     // first packet for this frame
     if (first) {

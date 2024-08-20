@@ -136,7 +136,7 @@ off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) 
     return 1 + 4 * path_length;
 }
 
-off_t read_bip32_path_712(const uint8_t *buffer, size_t length, messageSigningContext712_t* ctx_712) {
+off_t read_bip32_path_712(const uint8_t *buffer, uint16_t length, messageSigningContext712_t* ctx_712) {
     if (length < 1) {
         return -1;
     }

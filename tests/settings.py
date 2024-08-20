@@ -52,39 +52,9 @@ def get_setting_per_page(firmware: Firmware) -> int:
         return 3
     return 2
 
-
-# def get_setting_position(firmware: Firmware, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
-#     settings_per_page = get_setting_per_page(firmware)
-#     if firmware == Firmware.STAX:
-#         screen_height = 672  # px
-#         header_height = 88  # px
-#         footer_height = 92  # px
-#         option_offset = 350  # px
-#     else:
-#         screen_height = 600  # px
-#         header_height = 92  # px
-#         footer_height = 97  # px
-#         option_offset = 420  # px
-#     usable_height = screen_height - (header_height + footer_height)
-#     setting_height = usable_height // settings_per_page
-#     index_in_page = get_device_settings(firmware).index(NonNanoSettingID(setting)) % settings_per_page
-#     return option_offset, header_height + (setting_height * index_in_page) + (setting_height // 2)
-
 def get_setting_position(firmware: Firmware, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
     settings_per_page = get_setting_per_page(firmware)
-    # if firmware == Firmware.STAX:
-    #     screen_height = 672  # px
-    #     header_height = 88  # px
-    #     footer_height = 92  # px
-    #     option_offset = 350  # px
-    # else:
-    #     screen_height = 600  # px
-    #     header_height = 92  # px
-    #     footer_height = 97  # px
-    #     option_offset = 420  # px
-    print(get_device_settings(firmware).index(NonNanoSettingID(setting)))
     y_index = get_device_settings(firmware).index(NonNanoSettingID(setting)) % settings_per_page
-    print('y_index: ', y_index)
     return 200, 150 * (y_index + 1)
 
 
@@ -105,11 +75,9 @@ def settings_toggle(firmware: Firmware, nav: Navigator, to_toggle: list[SettingI
         settings_per_page = get_setting_per_page(firmware)
         for setting in settings:
             setting_idx = settings.index(setting)
-            # print(setting_idx)
             if (setting_idx > 0) and (setting_idx % settings_per_page) == 0:
                 moves += [NavInsID.USE_CASE_SETTINGS_NEXT]
             if setting in to_toggle:
-                print(get_setting_position(firmware, setting))
                 moves += [NavIns(NavInsID.TOUCH, get_setting_position(firmware, setting))]
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
     nav.navigate(moves, screen_change_before_first_instruction=False)

@@ -46,8 +46,6 @@ DEPRECATED static inline void array_hexstr(char *strbuf, const void *bin, unsign
     format_hex(bin, len, strbuf, (2 * len + 1));
 }
 
-// int array_bytes_string(char *out, size_t outl, const void *value, size_t len);
-
 uint64_t u64_from_BE(const uint8_t *in, uint8_t size);
 
 bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size);
@@ -60,12 +58,6 @@ bool amountToString(const uint8_t *amount,
                     const char *ticker,
                     char *out_buffer,
                     size_t out_buffer_size);
-
-// bool adjustDecimals(const char *src,
-//                     size_t srcLength,
-//                     char *target,
-//                     size_t targetLength,
-//                     uint8_t decimals);
 
 void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
                              uint8_t out[static ADDRESS_LENGTH]);
@@ -97,3 +89,8 @@ static __attribute__((no_instrument_function)) inline int ismaxint(uint8_t *buf,
     }
     return 1;
 }
+
+#define UNSUPPORTED_CHAIN_ID_MSG(id)                                              \
+    do {                                                                          \
+        PRINTF("Unsupported chain ID: %u (app: %u)\n", id, chainConfig->chainId); \
+    } while (0)
