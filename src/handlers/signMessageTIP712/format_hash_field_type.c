@@ -1,11 +1,8 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
 
 #include "format_hash_field_type.h"
-// #include "mem.h"
 #include "mem_utils.h"
 #include "commands_712.h"
-// #include "hash_bytes.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "typed_data.h"
 #include "app_errors.h"
 #include "parse.h"

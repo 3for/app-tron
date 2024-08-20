@@ -84,9 +84,7 @@ def tip712_new_common(firmware,
                       filters,
                       verbose: bool,
                       golden_run: bool):
-    # default_screenshot_path += '/tests/'
     default_screenshot_path = Path(__file__).parent.resolve()
-    print(default_screenshot_path)
     assert InputData.process_data(client,
                                   builder,
                                   json_data,
@@ -132,7 +130,6 @@ def input_files() -> list[str]:
     for file in os.scandir(tip712_json_path()):
         if fnmatch.fnmatch(file, "*-data.json"):
             files.append(file.path)
-    print(files)
     return sorted(files)
 
 
@@ -831,7 +828,6 @@ class TestTRX():
 
         assert check_hash_signature(hash_to_sign, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
-    
 
     def test_trx_tip712_new(self,
                         firmware: Firmware,
@@ -842,12 +838,11 @@ class TestTRX():
                         verbose: bool,
                         filtering: bool,
                         test_name: str):
-        # global SNAPS_CONFIG
         client = TronClient(backend, firmware, navigator)
         setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-        
+
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
@@ -862,9 +857,6 @@ class TestTRX():
 
         if verbose:
             settings_toggle(firmware, navigator, [setting_id])
-        # print('verbose filtering: ', verbose, filtering, SNAPS_CONFIG)
-        # if verbose == True:
-        #     SNAPS_CONFIG = SnapshotsConfig(test_name)
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
             vrs = tip712_new_common(firmware,

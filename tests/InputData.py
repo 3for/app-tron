@@ -12,7 +12,6 @@ from command_builder import CommandBuilder, TIP712FieldType
 import keychain
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
-# from tron import TronClient 
 
 class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_GENUINE_CHECK = 0x01

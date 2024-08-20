@@ -24,6 +24,7 @@
 #include "ui_globals.h"
 #include "settings.h"
 #include "parse.h"
+
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,

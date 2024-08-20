@@ -3,16 +3,12 @@
 #include <string.h>
 #include <stdint.h>
 #include "context_712.h"
-// #include "mem.h"
 #include "mem_utils.h"
 #include "sol_typenames.h"
 #include "path.h"
 #include "field_hash.h"
 #include "ui_logic.h"
 #include "typed_data.h"
-// #include "apdu_constants.h"  // APDU response codes
-// #include "shared_context.h"  // reset_app_context
-// #include "common_ui.h"       // ui_idle
 
 #include "app_errors.h"
 
@@ -66,6 +62,8 @@ bool tip712_context_init(void) {
 /**
  * De-initialize the TIP712 context
  */
+extern void reset_app_context();
+
 void tip712_context_deinit(void) {
     typed_data_deinit();
     path_deinit();

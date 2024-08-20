@@ -3,13 +3,10 @@
 #include <stdint.h>
 #include <string.h>
 #include "path.h"
-// #include "mem.h"
 #include "context_712.h"
 #include "commands_712.h"
 #include "type_hash.h"
-// #include "shared_context.h"
 #include "mem_utils.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "typed_data.h"
 #include "crypto_helpers.h"
 #include "parse.h"
@@ -376,8 +373,6 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
-    PRINTF("%s:%d: path_set_root args: %s\n", __FILE__, __LINE__,
-        struct_name);
     if (push_new_hash_depth(true) == false) {
         return false;
     }
@@ -393,8 +388,6 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
 
     // init array levels at 0
     path_struct->array_depth_count = 0;
-    PRINTF("%s:%d: path_set_root args: %s\n", __FILE__, __LINE__,
-        struct_name);
     if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
         (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
         path_struct->root_type = ROOT_DOMAIN;

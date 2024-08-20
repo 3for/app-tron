@@ -2,7 +2,7 @@ from eth_keys import KeyAPI
 from eth_keys.datatypes import Signature
 from eth_keys.datatypes import PublicKey
 
-from eth_account import Account 
+from eth_account import Account
 from eth_account.messages import encode_defunct, SignableMessage
 from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
 

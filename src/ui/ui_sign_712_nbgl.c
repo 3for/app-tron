@@ -1,12 +1,9 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
 #ifdef HAVE_NBGL
 #include <string.h>  // explicit_bzero
-// #include "common_ui.h"
-// #include "ui_nbgl.h"
 #include "ui_logic.h"
 #include "common_712.h"
 #include "nbgl_use_case.h"
-// #include "ui_message_signing.h"
 #include "ledger_assert.h"
 #include "ui_globals.h"
 

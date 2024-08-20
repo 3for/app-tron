@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "commands_712.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "context_712.h"
 #include "field_hash.h"
 #include "path.h"
@@ -16,7 +15,6 @@
 #include "parse.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"  // ui_idle
-// #include "manage_asset_info.h"
 #include "helpers.h"
 #include "app_errors.h"
 
@@ -71,6 +69,8 @@ void handle_tip712_return_code(bool success) {
  * @return whether the command was successful or not
  */
 bool handle_tip712_struct_def(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+    UNUSED(p1);
+    UNUSED(ins);
     bool ret = true;
 
     if (tip712_context == NULL) {
@@ -108,9 +108,9 @@ bool handle_tip712_struct_def(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
  * @return whether the command was successful or not
  */
 bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+    UNUSED(ins);
     bool ret = false;
     bool reply_apdu = true;
-    PRINTF("%s:%d: %s\n", __FILE__, __LINE__, "Enter handle_tip712_struct_impl");
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 1;
     } else {
@@ -156,6 +156,8 @@ bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint
  * @return whether the command was successful or not
  */
 bool handle_tip712_filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+    UNUSED(p1);
+    UNUSED(ins);
     bool ret = true;
     bool reply_apdu = true;
 
@@ -221,9 +223,9 @@ bool handle_tip712_filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
  */
 bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     bool ret = false;
-
+    UNUSED(p1);
+    UNUSED(p2);
     if (tip712_context == NULL) {
-        // return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+3;
     }
     // if the final hashes are still zero or if there are some unimplemented fields
@@ -237,7 +239,7 @@ bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t da
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(workBuffer, &dataLength, &global_ctx.messageSigningContext712) !=
+    } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
                0) {
         if (!N_storage.verbose_tip712 && (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ui_712_message_hash();

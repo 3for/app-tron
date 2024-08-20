@@ -3,13 +3,12 @@
 #include <stdint.h>
 #include <string.h>
 #include "sol_typenames.h"
-// #include "mem.h"
 #include "os_pic.h"
-// #include "apdu_constants.h"  // APDU response codes
 #include "typed_data.h"
 #include "common_utils.h"  // ARRAY_SIZE
 #include "parse.h"
 #include "app_errors.h"
+#include "mem_utils.h"
 
 // Bit indicating they are more types associated to this typename
 #define TYPENAME_MORE_TYPE (1 << 7)

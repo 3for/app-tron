@@ -56,12 +56,6 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
-// static void convertUint256BE(uint8_t *data, uint32_t length, uint256_t *target) {
-//     uint8_t tmp[32] = {0};
-//     memcpy(tmp + 32 - length, data, length);
-//     readu256BE(tmp, target);
-// }
-
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -558,6 +552,6 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
     }
-    PRINTF("Sign done!\n");
+
     return 0;
 }

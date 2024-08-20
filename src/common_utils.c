@@ -18,28 +18,10 @@
 #include <stdint.h>
 #include <string.h>
 
-// #include "asset_info.h"
 #include "common_utils.h"
 #include "lcx_ecfp.h"
 #include "lcx_sha3.h"
 #include "parse.h"
-
-// int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
-//     if (outl <= 2) {
-//         // Need at least '0x' and 1 digit
-//         return -1;
-//     }
-//     if (strlcpy(out, "0x", outl) != 2) {
-//         goto err;
-//     }
-//     if (format_hex(value, len, out + 2, outl - 2) < 0) {
-//         goto err;
-//     }
-//     return 0;
-// err:
-//     *out = '\0';
-//     return -1;
-// }
 
 uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
     uint8_t i = 0;
@@ -125,73 +107,6 @@ bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_
     out[out_len - pos] = 0;
     return true;
 }
-
-// bool adjustDecimals(const char *src,
-//                     size_t srcLength,
-//                     char *target,
-//                     size_t targetLength,
-//                     uint8_t decimals) {
-//     uint32_t startOffset;
-//     uint32_t lastZeroOffset = 0;
-//     uint32_t offset = 0;
-//     if ((srcLength == 1) && (*src == '0')) {
-//         if (targetLength < 2) {
-//             return false;
-//         }
-//         target[0] = '0';
-//         target[1] = '\0';
-//         return true;
-//     }
-//     if (srcLength <= decimals) {
-//         uint32_t delta = decimals - srcLength;
-//         if (targetLength < srcLength + 1 + 2 + delta) {
-//             return false;
-//         }
-//         target[offset++] = '0';
-//         target[offset++] = '.';
-//         for (uint32_t i = 0; i < delta; i++) {
-//             target[offset++] = '0';
-//         }
-//         startOffset = offset;
-//         for (uint32_t i = 0; i < srcLength; i++) {
-//             target[offset++] = src[i];
-//         }
-//         target[offset] = '\0';
-//     } else {
-//         uint32_t sourceOffset = 0;
-//         uint32_t delta = srcLength - decimals;
-//         if (targetLength < srcLength + 1 + 1) {
-//             return false;
-//         }
-//         while (offset < delta) {
-//             target[offset++] = src[sourceOffset++];
-//         }
-//         if (decimals != 0) {
-//             target[offset++] = '.';
-//         }
-//         startOffset = offset;
-//         while (sourceOffset < srcLength) {
-//             target[offset++] = src[sourceOffset++];
-//         }
-//         target[offset] = '\0';
-//     }
-//     for (uint32_t i = startOffset; i < offset; i++) {
-//         if (target[i] == '0') {
-//             if (lastZeroOffset == 0) {
-//                 lastZeroOffset = i;
-//             }
-//         } else {
-//             lastZeroOffset = 0;
-//         }
-//     }
-//     if (lastZeroOffset != 0) {
-//         target[lastZeroOffset] = '\0';
-//         if (target[lastZeroOffset - 1] == '.') {
-//             target[lastZeroOffset - 1] = '\0';
-//         }
-//     }
-//     return true;
-// }
 
 bool amountToString(const uint8_t *amount,
                     uint8_t amount_size,

@@ -22,8 +22,6 @@
 #include "uint256.h"
 #include "common_utils.h"
 
-// static const char HEXDIGITS[] = "0123456789abcdef";
-
 static uint64_t readUint64BE(uint8_t *buffer) {
     return (((uint64_t) buffer[0]) << 56) | (((uint64_t) buffer[1]) << 48) |
            (((uint64_t) buffer[2]) << 40) | (((uint64_t) buffer[3]) << 32) |
@@ -49,12 +47,12 @@ bool zero256(uint256_t *number) {
     return (zero128(&LOWER_P(number)) && zero128(&UPPER_P(number)));
 }
 
-void copy128(uint128_t *target, uint128_t *number) {
+void copy128(uint128_t *target, const uint128_t *number) {
     UPPER_P(target) = UPPER_P(number);
     LOWER_P(target) = LOWER_P(number);
 }
 
-void copy256(uint256_t *target, uint256_t *number) {
+void copy256(uint256_t *target, const uint256_t *number) {
     copy128(&UPPER_P(target), &UPPER_P(number));
     copy128(&LOWER_P(target), &LOWER_P(number));
 }
@@ -199,7 +197,7 @@ uint32_t bits256(uint256_t *number) {
     return result;
 }
 
-bool equal128(uint128_t *number1, uint128_t *number2) {
+bool equal128(const uint128_t *number1, uint128_t *number2) {
     return (UPPER_P(number1) == UPPER_P(number2)) && (LOWER_P(number1) == LOWER_P(number2));
 }
 
@@ -208,14 +206,14 @@ bool equal256(uint256_t *number1, uint256_t *number2) {
             equal128(&LOWER_P(number1), &LOWER_P(number2)));
 }
 
-bool gt128(uint128_t *number1, uint128_t *number2) {
+bool gt128(const uint128_t *number1, const uint128_t *number2) {
     if (UPPER_P(number1) == UPPER_P(number2)) {
         return (LOWER_P(number1) > LOWER_P(number2));
     }
     return (UPPER_P(number1) > UPPER_P(number2));
 }
 
-bool gt256(uint256_t *number1, uint256_t *number2) {
+bool gt256(const uint256_t *number1, uint256_t *number2) {
     if (equal128(&UPPER_P(number1), &UPPER_P(number2))) {
         return gt128(&LOWER_P(number1), &LOWER_P(number2));
     }
@@ -490,7 +488,7 @@ static void reverseString(char *str, uint32_t length) {
     }
 }
 
-bool tostring128(uint128_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
+bool tostring128(const uint128_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
     uint128_t rDiv;
     uint128_t rMod;
     uint128_t base;
@@ -514,7 +512,7 @@ bool tostring128(uint128_t *number, uint32_t baseParam, char *out, uint32_t outL
     return true;
 }
 
-bool tostring256(uint256_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
+bool tostring256(const uint256_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
     uint256_t rDiv;
     uint256_t rMod;
     uint256_t base;
