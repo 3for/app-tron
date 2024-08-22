@@ -77,7 +77,6 @@ def configuration(backend: BackendInterface, navigator, firmware):
             if firmware.device != "nanos":
                 # Skip two step
                 instructions+=[
-                    NavInsID.RIGHT_CLICK,
                     NavInsID.RIGHT_CLICK
                 ]
             instructions+=[

@@ -41,14 +41,6 @@ tmpCtx_t global_ctx;
 cx_sha3_t global_sha3;
 strings_t strings;
 
-
-#ifdef HAVE_NBGL
-e_ui_signing_position g_position;
-
-char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
-
-#endif
-
 extern void reset_app_context();
 
 /**
@@ -342,23 +334,3 @@ bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
 
     return true;
 }
-
-#ifdef HAVE_NBGL
-
-static void ui_message_712_approved(void) {
-    ui_712_approve();
-}
-
-static void ui_message_712_rejected(void) {
-    ui_712_reject();
-}
-
-void ui_typed_message_review_choice(bool confirm) {
-    if (confirm) {
-        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_SIGNED, ui_message_712_approved);
-    } else {
-        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_message_712_rejected);
-    }
-}
-
-#endif

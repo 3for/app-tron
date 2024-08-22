@@ -5,9 +5,12 @@
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
 #include "ui_review_menu.h"
+#include "ui_nbgl.h"
 
 #define TEXT_REVIEW_TIP191 REVIEW(TEXT_MESSAGE)
 #define TEXT_SIGN_TIP191   SIGN(TEXT_MESSAGE)
+
+char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
 
 typedef enum {
     UI_191_ACTION_IDLE = 0,

@@ -56,7 +56,7 @@ UX_STEP_INIT(
 UX_STEP_CB(
     ux_712_step_approve,
     pb,
-    ui_712_approve(),
+    ui_712_approve(true),
     {
       &C_icon_validate_14,
       "Approve",
@@ -64,7 +64,7 @@ UX_STEP_CB(
 UX_STEP_CB(
     ux_712_step_reject,
     pb,
-    ui_712_reject(),
+    ui_712_reject(true),
     {
       &C_icon_crossmark,
       "Reject",

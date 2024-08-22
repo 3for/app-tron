@@ -2,10 +2,10 @@
 #ifdef HAVE_NBGL
 #include <string.h>  // explicit_bzero
 #include "ui_logic.h"
-#include "common_712.h"
 #include "nbgl_use_case.h"
 #include "ledger_assert.h"
 #include "ui_globals.h"
+#include "ui_nbgl.h"
 
 static nbgl_contentTagValue_t pairs[6];
 static nbgl_contentTagValueList_t pairs_list;
@@ -89,6 +89,22 @@ void ui_712_switch_to_sign(void) {
         nbgl_useCaseReviewStreamingContinue(&pairs_list, message_progress);
     } else {
         nbgl_useCaseReviewStreamingFinish(TEXT_SIGN_TIP712, ui_typed_message_review_choice);
+    }
+}
+
+static void ui_message_712_approved(void) {
+    ui_712_approve(true);
+}
+
+static void ui_message_712_rejected(void) {
+    ui_712_reject(true);
+}
+
+void ui_typed_message_review_choice(bool confirm) {
+    if (confirm) {
+        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_SIGNED, ui_message_712_approved);
+    } else {
+        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_message_712_rejected);
     }
 }
 

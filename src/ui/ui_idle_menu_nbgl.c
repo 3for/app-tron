@@ -29,7 +29,6 @@ enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
-    DOMAIN_NAME_VERBOSE_TOKEN,
     EIP712_VERBOSE_TOKEN
 };
 
@@ -37,9 +36,6 @@ enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
-#ifdef HAVE_DOMAIN_NAME
-    DOMAIN_NAME_VERBOSE_ID,
-#endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     EIP712_VERBOSE_ID,
 #endif
@@ -79,13 +75,6 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
             nvm_write((void *) &N_storage.verbose_tip712, (void *) &value, sizeof(uint8_t));
             break;
 #endif  // HAVE_TIP712_FULL_SUPPORT
-#ifdef HAVE_DOMAIN_NAME
-        case DOMAIN_NAME_VERBOSE_TOKEN:
-            value = !N_storage.verbose_domain_name;
-            switches[DOMAIN_NAME_VERBOSE_ID].initState = (nbgl_state_t) value;
-            nvm_write((void *) &N_storage.verbose_domain_name, (void *) &value, sizeof(uint8_t));
-            break;
-#endif  // HAVE_DOMAIN_NAME
         default:
             PRINTF("Should not happen !");
             break;
@@ -128,15 +117,6 @@ void ui_idle(void) {
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
-
-#ifdef HAVE_DOMAIN_NAME
-    switches[DOMAIN_NAME_VERBOSE_ID].initState =
-        N_storage.verbose_domain_name ? ON_STATE : OFF_STATE;
-    switches[DOMAIN_NAME_VERBOSE_ID].text = "ENS addresses";
-    switches[DOMAIN_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
-    switches[DOMAIN_NAME_VERBOSE_ID].token = DOMAIN_NAME_VERBOSE_TOKEN;
-    switches[DOMAIN_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
-#endif  // HAVE_DOMAIN_NAME
 
 #ifdef HAVE_TIP712_FULL_SUPPORT
     switches[EIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;

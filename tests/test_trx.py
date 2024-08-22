@@ -881,7 +881,6 @@ class TestTRX():
             _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
 
         assert recovered_addr == WALLET_ADDR[1:]
-        # SNAPS_CONFIG = None
         if verbose:
             settings_toggle(firmware, navigator, [setting_id])
 

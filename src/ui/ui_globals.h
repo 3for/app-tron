@@ -88,25 +88,3 @@ void continue_displaying_message(void);
 
 void ui_712_switch_to_sign(void);
 void ui_typed_message_review_choice(bool confirm);
-
-#ifdef HAVE_NBGL
-
-#define TEXT_MESSAGE       "message"
-
-#define SIGN(msg)             "Sign " msg "?"
-#define REVIEW(msg)           "Review " msg
-
-#define TEXT_TYPED_MESSAGE "typed " TEXT_MESSAGE
-#define TEXT_REVIEW_TIP712 REVIEW(TEXT_TYPED_MESSAGE)
-#define TEXT_SIGN_TIP712   SIGN(TEXT_TYPED_MESSAGE)
-
-typedef enum {
-    UI_SIGNING_POSITION_START = 0,
-    UI_SIGNING_POSITION_REVIEW,
-    UI_SIGNING_POSITION_SIGN
-} e_ui_signing_position;
-
-extern e_ui_signing_position g_position;
-
-extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
-#endif
