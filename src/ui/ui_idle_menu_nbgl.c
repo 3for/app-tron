@@ -29,7 +29,9 @@ enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
-    EIP712_VERBOSE_TOKEN
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    SWITCH_EIP712_VERBOSE_TOKEN,
+#endif
 };
 
 enum {
@@ -42,13 +44,20 @@ enum {
     SETTINGS_SWITCHES_NB
 };
 
-#define NB_INFO_FIELDS SETTINGS_SWITCHES_NB
+#define NB_INFO_FIELDS 3
 static const char* const infoTypes[] = {"Version", "Developer", "Copyright"};
 static const char* const infoContents[] = {APPVERSION, "Klever", "(c) 2024 Ledger"};
 
 #define NB_SETTINGS_SWITCHES SETTINGS_SWITCHES_NB
 #define SETTING_IDX(token)   (token - SWITCH_ALLOW_TX_DATA_TOKEN)
-static uint8_t settings[NB_SETTINGS_SWITCHES] = {S_DATA_ALLOWED, S_CUSTOM_CONTRACT, S_SIGN_BY_HASH};
+static uint8_t settings[NB_SETTINGS_SWITCHES] = {
+    S_DATA_ALLOWED,
+    S_CUSTOM_CONTRACT,
+    S_SIGN_BY_HASH,
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    S_VERBOSE_TIP712,
+#endif
+};
 static nbgl_layoutSwitch_t switches[NB_SETTINGS_SWITCHES] = {0};
 
 void onQuitCallback(void) {
@@ -68,9 +77,9 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
 #ifdef HAVE_TIP712_FULL_SUPPORT
-        case EIP712_VERBOSE_TOKEN:
+        case SWITCH_EIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
-            switches[EIP712_VERBOSE_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
+            switches[EIP712_VERBOSE_ID].initState = (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
             break;
 #endif  // HAVE_TIP712_FULL_SUPPORT
         default:
@@ -120,7 +129,7 @@ void ui_idle(void) {
     switches[EIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[EIP712_VERBOSE_ID].text = "Raw messages";
     switches[EIP712_VERBOSE_ID].subText = "Display raw content from EIP712 messages.";
-    switches[EIP712_VERBOSE_ID].token = EIP712_VERBOSE_TOKEN;
+    switches[EIP712_VERBOSE_ID].token = SWITCH_EIP712_VERBOSE_TOKEN;
     switches[EIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
 #endif  // HAVE_TIP712_FULL_SUPPORT
 
