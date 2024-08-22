@@ -15,6 +15,7 @@
 #include "ui_globals.h"
 #include "app_errors.h"
 #include "parse.h"
+#include "settings.h"
 
 #define AMOUNT_JOIN_FLAG_TOKEN (1 << 0)
 #define AMOUNT_JOIN_FLAG_VALUE (1 << 1)
@@ -70,7 +71,7 @@ static t_ui_context *ui_ctx = NULL;
 static bool ui_712_field_shown(void) {
     bool ret = false;
     if (ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) {
-        if (N_storage.verbose_tip712 || (path_get_root_type() == ROOT_DOMAIN)) {
+        if (HAS_SETTING(S_VERBOSE_TIP712) || (path_get_root_type() == ROOT_DOMAIN)) {
             ret = true;
         }
     } else {  // TIP712_FILTERING_FULL
@@ -602,8 +603,7 @@ void ui_712_end_sign(void) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+34;
         return;
     }
-
-    if (N_storage.verbose_tip712 || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
+    if (HAS_SETTING(S_VERBOSE_TIP712) || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
         ui_ctx->end_reached = true;
         ui_712_switch_to_sign();
     }
@@ -727,7 +727,7 @@ void ui_712_field_flags_reset(void) {
  * Makes it so the user will have to go through a "Review struct" screen
  */
 void ui_712_queue_struct_to_review(void) {
-    if (N_storage.verbose_tip712) {
+    if (HAS_SETTING(S_VERBOSE_TIP712)) {
         ui_ctx->structs_to_review += 1;
     }
 }
