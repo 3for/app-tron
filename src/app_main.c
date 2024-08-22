@@ -41,7 +41,6 @@ uint16_t apdu_response_code;
 
 // The settings, stored in NVRAM.
 const internal_storage_t N_storage_real;
-const internalStorage_t N_internal_storage;
 
 txContent_t txContent;
 txContext_t txContext;
@@ -59,19 +58,7 @@ void reset_app_context() {
 
 static void nv_app_state_init(void) {
     if (!HAS_SETTING(S_INITIALIZED)) {
-        internal_storage_t storage = 0x00;
-        storage |= 0x80;
-        nvm_write((void *) &N_settings, (void *) &storage, sizeof(internal_storage_t));
-    }
-    if (!N_storage.initialized) {
-        internalStorage_t storage;
-        storage.contractDetails = false;
-        storage.displayNonce = false;
-    #ifdef HAVE_TIP712_FULL_SUPPORT
-        storage.verbose_tip712 = false;
-    #endif
-        storage.initialized = true;
-        nvm_write((void *) &N_storage, (void *) &storage, sizeof(internalStorage_t));
+        SETTING_TOGGLE(S_INITIALIZED);
     }
 }
 

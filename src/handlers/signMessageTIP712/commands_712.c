@@ -16,6 +16,7 @@
 #include "ui_idle_menu.h"  // ui_idle
 #include "helpers.h"
 #include "app_errors.h"
+#include "settings.h"
 
 // APDUs P1
 #define P1_COMPLETE 0x00
@@ -118,7 +119,7 @@ bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
                 // set root type
                 ret = path_set_root((char *) workBuffer, dataLength);
                 if (ret) {
-                    if (N_storage.verbose_tip712) {
+                    if (HAS_SETTING(S_VERBOSE_TIP712)) {
                         ui_712_review_struct(path_get_root());
                         reply_apdu = false;
                     }
@@ -171,7 +172,7 @@ bool handleTIP712Filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
-            if (!N_storage.verbose_tip712) {
+            if (!HAS_SETTING(S_VERBOSE_TIP712)) {
                 ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
                 ret = compute_schema_hash();
             }
@@ -240,7 +241,7 @@ bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t data
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
     } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
                0) {
-        if (!N_storage.verbose_tip712 && (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
+        if (!HAS_SETTING(S_VERBOSE_TIP712) && (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ui_712_message_hash();
         }
         ret = true;

@@ -11,6 +11,7 @@
 #include "app_errors.h"
 #include "parse.h"
 #include "ui_globals.h"
+#include "settings.h"
 
 #ifdef HAVE_LEDGER_PKI
 #include "os_pki.h"
@@ -217,7 +218,7 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
 
     // Handling
     ui_712_set_filters_count(filters_count);
-    if (!N_storage.verbose_tip712) {
+    if (!HAS_SETTING(S_VERBOSE_TIP712)) {
         ui_712_set_title("Contract", 8);
         ui_712_set_value(name, name_len);
         ui_712_redraw_generic_step();

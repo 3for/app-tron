@@ -138,7 +138,7 @@ static void display_settings(const ux_flow_step_t* const start_step) {
             sizeof(settings_param_value) - 28);
 #ifdef HAVE_TIP712_FULL_SUPPORT
     strlcpy(SETTING_VERBOSE_TIP712_STATE,
-            BOOL_TO_STATE_STR(N_storage.verbose_tip712),
+            BOOL_TO_STATE_STR(HAS_SETTING(S_VERBOSE_TIP712)),
             BUF_INCREMENT);
 #endif  // HAVE_TIP712_FULL_SUPPORT
     ux_flow_init(0, ux_settings_flow, start_step);
@@ -164,15 +164,10 @@ static void switch_settings_sign_by_hash() {
     display_settings(&ux_settings_flow_4_step);
 }
 
-static void toggle_setting(volatile bool* setting, const ux_flow_step_t* ui_step) {
-    bool value = !*setting;
-    nvm_write((void*) setting, (void*) &value, sizeof(value));
-    display_settings(ui_step);
-}
-
 #ifdef HAVE_TIP712_FULL_SUPPORT
 static void switch_settings_verbose_tip712(void) {
-    toggle_setting(&N_storage.verbose_tip712, &ux_settings_flow_verbose_tip712_step);
+    SETTING_TOGGLE(S_VERBOSE_TIP712);
+    display_settings(&ux_settings_flow_verbose_tip712_step);
 }
 #endif  // HAVE_TIP712_FULL_SUPPORT
 

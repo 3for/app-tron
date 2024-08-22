@@ -58,7 +58,6 @@ void onQuitCallback(void) {
 static void settingsControlsCallback(int token, uint8_t index, int page) {
     UNUSED(index);
     UNUSED(page);
-    bool value;
     switch (token) {
         case SWITCH_ALLOW_TX_DATA_TOKEN:
         case SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN:
@@ -70,9 +69,8 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
             break;
 #ifdef HAVE_TIP712_FULL_SUPPORT
         case EIP712_VERBOSE_TOKEN:
-            value = !N_storage.verbose_tip712;
-            switches[EIP712_VERBOSE_ID].initState = (nbgl_state_t) value;
-            nvm_write((void *) &N_storage.verbose_tip712, (void *) &value, sizeof(uint8_t));
+            SETTING_TOGGLE(S_VERBOSE_TIP712);
+            switches[EIP712_VERBOSE_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
 #endif  // HAVE_TIP712_FULL_SUPPORT
         default:
@@ -119,7 +117,7 @@ void ui_idle(void) {
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
 #ifdef HAVE_TIP712_FULL_SUPPORT
-    switches[EIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
+    switches[EIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[EIP712_VERBOSE_ID].text = "Raw messages";
     switches[EIP712_VERBOSE_ID].subText = "Display raw content from EIP712 messages.";
     switches[EIP712_VERBOSE_ID].token = EIP712_VERBOSE_TOKEN;

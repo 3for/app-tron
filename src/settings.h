@@ -29,6 +29,7 @@ extern const internal_storage_t N_storage_real;
 #define S_CUSTOM_CONTRACT  1
 #define S_TRUNCATE_ADDRESS 2
 #define S_SIGN_BY_HASH     3
+#define S_VERBOSE_TIP712   4
 
 #define S_INITIALIZED 7
 

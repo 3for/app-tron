@@ -243,18 +243,6 @@ typedef union {
     strDataTmp_t tmp;
 } strings_t;
 
-typedef struct internalStorage_t {
-    bool contractDetails;
-    bool displayNonce;
-#ifdef HAVE_TIP712_FULL_SUPPORT
-    bool verbose_tip712;
-#endif  // HAVE_TIP712_FULL_SUPPORT
-    bool initialized;
-} internalStorage_t;
-
-#define N_storage (*(volatile internalStorage_t *) PIC(&N_internal_storage))
-extern const internalStorage_t N_internal_storage;
-
 typedef struct chain_config_s {
     char coinName[10];  // ticker
     uint64_t chainId;
