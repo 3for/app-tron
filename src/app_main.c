@@ -70,9 +70,6 @@ static void nv_app_state_init(void) {
     #ifdef HAVE_TIP712_FULL_SUPPORT
         storage.verbose_tip712 = false;
     #endif
-    #ifdef HAVE_DOMAIN_NAME
-        storage.verbose_domain_name = false;
-    #endif
         storage.initialized = true;
         nvm_write((void *) &N_storage, (void *) &storage, sizeof(internalStorage_t));
     }

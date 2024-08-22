@@ -87,18 +87,18 @@ int apdu_dispatcher(const command_t *cmd) {
                     return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 #ifdef HAVE_TIP712_FULL_SUPPORT
                 case P2_TIP712_FULL_IMPLEM:
-                    return handle_tip712_sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+                    return handleTIP712Sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 #endif  // HAVE_TIP712_FULL_SUPPORT
             }
 #ifdef HAVE_TIP712_FULL_SUPPORT
         case INS_TIP712_STRUCT_DEF:
-            return handle_tip712_struct_def(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+            return handleTIP712StructDef(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 
         case INS_TIP712_STRUCT_IMPL:
-            return handle_tip712_struct_impl(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+            return handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 
         case INS_TIP712_FILTERING:
-            return handle_tip712_filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+            return handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 
         case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
             return handleProvideTrc20TokenInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);

@@ -11,7 +11,6 @@
 #include "typed_data.h"
 #include "schema_hash.h"
 #include "filtering.h"
-#include "common_712.h"
 #include "parse.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"  // ui_idle
@@ -68,7 +67,7 @@ void handle_tip712_return_code(bool success) {
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handle_tip712_struct_def(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712StructDef(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
@@ -107,7 +106,7 @@ bool handle_tip712_struct_def(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
     UNUSED(ins);
     bool ret = false;
     bool reply_apdu = true;
@@ -155,7 +154,7 @@ bool handle_tip712_struct_impl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handle_tip712_filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712Filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
@@ -221,7 +220,7 @@ bool handle_tip712_filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handle_tip712_sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     bool ret = false;
     UNUSED(p1);
     UNUSED(p2);

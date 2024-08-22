@@ -7,7 +7,6 @@
 #include "mem_utils.h"
 #include "os_io.h"
 #include "common_utils.h"  // uint256_to_decimal
-#include "common_712.h"
 #include "context_712.h"     // tip712_context_deinit
 #include "path.h"            // path_get_root_type
 #include "typed_data.h"
@@ -637,8 +636,8 @@ void ui_712_deinit(void) {
  * @param[in] e unused here, just needed to match the UI function signature
  * @return unused here, just needed to match the UI function signature
  */
-unsigned int ui_712_approve() {
-    ui_712_approve_cb();
+unsigned int ui_712_approve(bool display_menu) {
+    ui_callback_signMessage712_v0_ok(display_menu);
     tip712_context_deinit();
     return 0;
 }
@@ -650,8 +649,8 @@ unsigned int ui_712_approve() {
  * @param[in] e unused here, just needed to match the UI function signature
  * @return unused here, just needed to match the UI function signature
  */
-unsigned int ui_712_reject() {
-    ui_712_reject_cb();
+unsigned int ui_712_reject(bool display_menu) {
+    ui_callback_signMessage712_v0_cancel(display_menu);
     tip712_context_deinit();
     return 0;
 }

@@ -24,8 +24,8 @@ bool ui_712_feed_to_display(const void *field_ptr,
                             bool first,
                             bool last);
 void ui_712_end_sign(void);
-unsigned int ui_712_approve();
-unsigned int ui_712_reject();
+unsigned int ui_712_approve(bool);
+unsigned int ui_712_reject(bool);
 void ui_712_set_title(const char *str, size_t length);
 void ui_712_set_value(const char *str, size_t length);
 void ui_712_message_hash(void);
