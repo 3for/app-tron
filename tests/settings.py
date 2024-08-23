@@ -3,8 +3,10 @@ from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 from typing import Union
 
+
 class SettingID(Enum):
     pass
+
 
 class NanoSettingID(SettingID):
     FLOW_1 = auto()
@@ -12,6 +14,7 @@ class NanoSettingID(SettingID):
     FLOW_3 = auto()
     FLOW_4 = auto()
     VERBOSE_TIP712 = auto()
+
 
 class NonNanoSettingID(SettingID):
     TX_DATA_ID = auto()
@@ -48,13 +51,18 @@ def get_setting_per_page(firmware: Firmware) -> int:
         return 3
     return 2
 
-def get_setting_position(firmware: Firmware, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
+
+def get_setting_position(
+        firmware: Firmware, setting: Union[NavInsID,
+                                           SettingID]) -> tuple[int, int]:
     settings_per_page = get_setting_per_page(firmware)
-    y_index = get_device_settings(firmware).index(NonNanoSettingID(setting)) % settings_per_page
+    y_index = get_device_settings(firmware).index(
+        NonNanoSettingID(setting)) % settings_per_page
     return 200, 150 * (y_index + 1)
 
 
-def settings_toggle(firmware: Firmware, nav: Navigator, to_toggle: list[SettingID]):
+def settings_toggle(firmware: Firmware, nav: Navigator,
+                    to_toggle: list[SettingID]):
     moves: list[Union[NavIns, NavInsID]] = list()
     settings = get_device_settings(firmware)
     # Assume the app is on the home page
@@ -74,6 +82,9 @@ def settings_toggle(firmware: Firmware, nav: Navigator, to_toggle: list[SettingI
             if (setting_idx > 0) and (setting_idx % settings_per_page) == 0:
                 moves += [NavInsID.USE_CASE_SETTINGS_NEXT]
             if setting in to_toggle:
-                moves += [NavIns(NavInsID.TOUCH, get_setting_position(firmware, setting))]
+                moves += [
+                    NavIns(NavInsID.TOUCH,
+                           get_setting_position(firmware, setting))
+                ]
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
     nav.navigate(moves, screen_change_before_first_instruction=False)

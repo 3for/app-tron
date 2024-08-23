@@ -136,7 +136,9 @@ off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) 
     return 1 + 4 * path_length;
 }
 
-off_t read_bip32_path_712(const uint8_t *buffer, uint16_t length, messageSigningContext712_t* ctx_712) {
+off_t read_bip32_path_712(const uint8_t *buffer,
+                          uint16_t length,
+                          messageSigningContext712_t *ctx_712) {
     if (length < 1) {
         return -1;
     }
@@ -158,7 +160,9 @@ off_t read_bip32_path_712(const uint8_t *buffer, uint16_t length, messageSigning
     return 1 + 4 * path_length;
 }
 
-int initPublicKeyContext(bip32_path_t *bip32_path, char *address58, publicKeyContext_t* public_key_ctx) {
+int initPublicKeyContext(bip32_path_t *bip32_path,
+                         char *address58,
+                         publicKeyContext_t *public_key_ctx) {
     if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
                                     bip32_path->indices,
                                     bip32_path->length,

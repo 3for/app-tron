@@ -12,11 +12,13 @@ from eth_utils import keccak
 
 import hashlib
 
+
 def normalize_vrs(vrs: tuple) -> tuple:
     vrs_l = list()
     for elem in vrs:
         vrs_l.append(elem.lstrip(b'\x00'))
     return tuple(vrs_l)
+
 
 def check_hash_signature(txID, signature, public_key):
     s = Signature(signature_bytes=signature)
@@ -29,6 +31,7 @@ def check_tx_signature(transaction, signature, public_key):
     txID = hashlib.sha256(transaction).digest()
     return check_hash_signature(txID, signature, public_key)
 
+
 def recover_message(msg, vrs: tuple) -> bytes:
     if isinstance(msg, dict):  # TIP-712
         smsg = encode_typed_data(full_message=msg)
@@ -37,6 +40,7 @@ def recover_message(msg, vrs: tuple) -> bytes:
     addr = Account.recover_message(smsg, normalize_vrs(vrs))
     return bytes.fromhex(addr[2:])
 
+
 def encode_typed_data(
     domain_data: Dict[str, Any] = None,
     message_types: Dict[str, Any] = None,
@@ -44,16 +48,12 @@ def encode_typed_data(
     full_message: Dict[str, Any] = None,
 ) -> SignableMessage:
     if full_message is not None:
-        if (
-            domain_data is not None
-            or message_types is not None
-            or message_data is not None
-        ):
+        if (domain_data is not None or message_types is not None
+                or message_data is not None):
             raise ValueError(
                 "You may supply either `full_message` as a single argument or "
                 "`domain_data`, `message_types`, and `message_data` as three arguments,"
-                " but not both."
-            )
+                " but not both.")
 
         full_message_types = full_message["types"].copy()
         full_message_domain = full_message["domain"].copy()
@@ -70,8 +70,7 @@ def encode_typed_data(
                     "The fields provided in `domain` do not match the fields provided"
                     " in `types.TIP712Domain`. The fields provided in `domain` were"
                     f" `{domain_data_keys}`, but the fields provided in "
-                    f"`types.TIP712Domain` were `{domain_types_keys}`."
-                )
+                    f"`types.TIP712Domain` were `{domain_types_keys}`.")
 
         full_message_types.pop("TIP712Domain", None)
 
@@ -84,8 +83,7 @@ def encode_typed_data(
                     "The provided `primaryType` does not match the derived "
                     "`primaryType`. The provided `primaryType` was "
                     f"`{provided_primary_type}`, but the derived `primaryType` was "
-                    f"`{derived_primary_type}`."
-                )
+                    f"`{derived_primary_type}`.")
 
         parsed_domain_data = full_message_domain
         parsed_message_types = full_message_types
@@ -102,21 +100,39 @@ def encode_typed_data(
         hash_tip712_message(parsed_message_types, parsed_message_data),
     )
 
+
 def hash_tip712_message(
     # returns the same hash as `hash_struct`, but automatically determines primary type
     message_types: Dict[str, List[Dict[str, str]]],
     message_data: Dict[str, Any],
 ) -> bytes:
     primary_type = get_primary_type(message_types)
-    return bytes(keccak(encode_data(primary_type, message_types, message_data)))
+    return bytes(keccak(encode_data(primary_type, message_types,
+                                    message_data)))
+
 
 def hash_domain(domain_data: Dict[str, Any]) -> bytes:
     tip712_domain_map = {
-        "name": {"name": "name", "type": "string"},
-        "version": {"name": "version", "type": "string"},
-        "chainId": {"name": "chainId", "type": "uint256"},
-        "verifyingContract": {"name": "verifyingContract", "type": "address"},
-        "salt": {"name": "salt", "type": "bytes32"},
+        "name": {
+            "name": "name",
+            "type": "string"
+        },
+        "version": {
+            "name": "version",
+            "type": "string"
+        },
+        "chainId": {
+            "name": "chainId",
+            "type": "uint256"
+        },
+        "verifyingContract": {
+            "name": "verifyingContract",
+            "type": "address"
+        },
+        "salt": {
+            "name": "salt",
+            "type": "bytes32"
+        },
     }
 
     for k in domain_data.keys():
@@ -125,7 +141,8 @@ def hash_domain(domain_data: Dict[str, Any]) -> bytes:
 
     domain_types = {
         "TIP712Domain": [
-            tip712_domain_map[k] for k in tip712_domain_map.keys() if k in domain_data
+            tip712_domain_map[k] for k in tip712_domain_map.keys()
+            if k in domain_data
         ]
     }
 

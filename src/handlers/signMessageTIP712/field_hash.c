@@ -6,8 +6,8 @@
 #include "path.h"
 #include "mem_utils.h"
 #include "ui_logic.h"
-#include "context_712.h"     // contract_addr
-#include "common_utils.h"    // u64_from_BE
+#include "context_712.h"   // contract_addr
+#include "common_utils.h"  // u64_from_BE
 #include "typed_data.h"
 #include "commands_712.h"
 #include "app_errors.h"
@@ -241,7 +241,7 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
     bool first = fh->state == FHS_IDLE;
 
     if ((fh == NULL) || ((field_ptr = path_get_field()) == NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+6;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
     field_type = struct_field_type(field_ptr);

@@ -27,7 +27,7 @@
 #define DISABLED_STR  "Disabled"
 #define BUF_INCREMENT (MAX(strlen(ENABLED_STR), strlen(DISABLED_STR)) + 1)
 
-#define SETTING_VERBOSE_TIP712_STATE      (strings.common.fullAmount + (BUF_INCREMENT * 0))
+#define SETTING_VERBOSE_TIP712_STATE (strings.common.fullAmount + (BUF_INCREMENT * 0))
 
 #define BOOL_TO_STATE_STR(b) (b ? ENABLED_STR : DISABLED_STR)
 
@@ -74,13 +74,8 @@ UX_STEP_CB(
     ux_settings_flow_verbose_tip712_step,
     bnnn,
     switch_settings_verbose_tip712(),
-    {
-      "Raw messages",
-      "Displays raw content",
-      "from TIP712 messages",
-      SETTING_VERBOSE_TIP712_STATE
-    });
-#endif // HAVE_TIP712_FULL_SUPPORT
+    {"Raw messages", "Displays raw content", "from TIP712 messages", SETTING_VERBOSE_TIP712_STATE});
+#endif  // HAVE_TIP712_FULL_SUPPORT
 
 UX_STEP_VALID(ux_settings_flow_1_step,
               bnnn,

@@ -537,7 +537,6 @@ bool tostring256(const uint256_t *number, uint32_t baseParam, char *out, uint32_
     return true;
 }
 
-
 /**
  * Format a uint256_t into a string as a signed integer
  *
@@ -656,7 +655,6 @@ bool tostring128_signed(const uint128_t *const number,
     }
     return tostring128(number, base, out, out_length);  // positive value
 }
-
 
 void sub128(const uint128_t *const number1,
             const uint128_t *const number2,

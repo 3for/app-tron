@@ -45,14 +45,14 @@ int apdu_dispatcher(const command_t *cmd) {
     }
 #endif  // HAVE_SWAP
 
-// #ifndef HAVE_LEDGER_PKI
-//     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
-//         // Ledger-PKI APDU not yet caught by the running OS.
-//         // Command code not supported
-//         PRINTF("Ledger-PKI not yet supported!\n");
-//         return io_send_sw(E_NOT_IMPLEMENTED);
-//     }
-// #endif  // HAVE_LEDGER_PKI
+    // #ifndef HAVE_LEDGER_PKI
+    //     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
+    //         // Ledger-PKI APDU not yet caught by the running OS.
+    //         // Command code not supported
+    //         PRINTF("Ledger-PKI not yet supported!\n");
+    //         return io_send_sw(E_NOT_IMPLEMENTED);
+    //     }
+    // #endif  // HAVE_LEDGER_PKI
 
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:

@@ -157,9 +157,6 @@ typedef struct nftInfo_t {
 
 typedef struct tokenDefinition_t {
     uint8_t address[ADDRESS_LENGTH + 1];  // must be first item
-#ifdef HAVE_CONTRACT_NAME_IN_DESCRIPTOR
-    uint8_t contractName[ADDRESS_LENGTH];
-#endif
     char ticker[MAX_TICKER_LEN];
     uint8_t decimals;
 } tokenDefinition_t;
@@ -174,7 +171,6 @@ typedef union extraInfo_t {
     nftInfo_t nft;
 #endif
 } extraInfo_t;
-
 
 typedef struct transactionContext_t {
     bip32_path_t bip32_path;

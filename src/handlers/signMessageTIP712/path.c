@@ -220,10 +220,14 @@ static bool path_depth_list_pop(void) {
     } else {
         switch (path_struct->root_type) {
             case ROOT_DOMAIN:
-                memcpy(global_ctx.messageSigningContext712.domainHash, hash, KECCAK256_HASH_BYTESIZE);
+                memcpy(global_ctx.messageSigningContext712.domainHash,
+                       hash,
+                       KECCAK256_HASH_BYTESIZE);
                 break;
             case ROOT_MESSAGE:
-                memcpy(global_ctx.messageSigningContext712.messageHash, hash, KECCAK256_HASH_BYTESIZE);
+                memcpy(global_ctx.messageSigningContext712.messageHash,
+                       hash,
+                       KECCAK256_HASH_BYTESIZE);
                 break;
             default:
                 break;
@@ -244,11 +248,11 @@ static bool array_depth_list_push(uint8_t path_idx, uint8_t size) {
     s_array_depth *arr;
 
     if (path_struct == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+12;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
     if (path_struct->array_depth_count == MAX_ARRAY_DEPTH) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+13;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -458,7 +462,7 @@ bool path_new_array_depth(const uint8_t *const data, uint8_t length) {
     cx_err_t error = CX_INTERNAL_ERROR;
 
     if (path_struct == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+14;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     } else if (length != 1) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
@@ -472,12 +476,12 @@ bool path_new_array_depth(const uint8_t *const data, uint8_t length) {
     array_depth_count_bak = path_struct->array_depth_count;
     for (pidx = 0; pidx < path_struct->depth_count; ++pidx) {
         if ((field_ptr = get_nth_field(NULL, pidx + 1)) == NULL) {
-            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+15;
+            apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
             return false;
         }
         if (struct_field_is_array(field_ptr)) {
             if ((depth = get_struct_field_array_lvls_array(field_ptr, &depth_count)) == NULL) {
-                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+16;
+                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
                 return false;
             }
             total_count += depth_count;

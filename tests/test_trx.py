@@ -29,14 +29,12 @@ from ragger.backend import BackendInterface
 from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID
 
-
 from settings import NanoSettingID, NonNanoSettingID, settings_toggle
 from command_builder import CommandBuilder
 import response_parser as ResponseParser
 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS
 from utils import recover_message
-
 '''
 Tron Protobuf
 '''
@@ -53,8 +51,10 @@ class SnapshotsConfig:
         self.test_name = test_name
         self.idx = idx
 
+
 SNAPS_CONFIG: Optional[SnapshotsConfig] = None
 WALLET_ADDR: Optional[bytes] = None
+
 
 def autonext(firmware, navigator, default_screenshot_path: Path):
     moves = []
@@ -63,36 +63,32 @@ def autonext(firmware, navigator, default_screenshot_path: Path):
     else:
         moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
     if SNAPS_CONFIG is not None:
-        navigator.navigate_and_compare(default_screenshot_path,
-                                       SNAPS_CONFIG.test_name,
-                                       moves,
-                                       screen_change_before_first_instruction=False,
-                                       screen_change_after_last_instruction=False,
-                                       snap_start_idx=SNAPS_CONFIG.idx)
+        navigator.navigate_and_compare(
+            default_screenshot_path,
+            SNAPS_CONFIG.test_name,
+            moves,
+            screen_change_before_first_instruction=False,
+            screen_change_after_last_instruction=False,
+            snap_start_idx=SNAPS_CONFIG.idx)
         SNAPS_CONFIG.idx += 1
     else:
         navigator.navigate(moves,
                            screen_change_before_first_instruction=False,
                            screen_change_after_last_instruction=False)
 
-def tip712_new_common(firmware,
-                      navigator,
-                      default_screenshot_path: Path,
-                      client: TronClient,
-                      builder: CommandBuilder,
-                      json_data: dict,
-                      filters,
-                      verbose: bool,
+
+def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
+                      client: TronClient, builder: CommandBuilder,
+                      json_data: dict, filters, verbose: bool,
                       golden_run: bool):
     default_screenshot_path = Path(__file__).parent.resolve()
-    assert InputData.process_data(client,
-                                  builder,
-                                  json_data,
-                                  filters,
-                                  partial(autonext, firmware, navigator, default_screenshot_path),
-                                  golden_run)
+    assert InputData.process_data(
+        client, builder, json_data, filters,
+        partial(autonext, firmware, navigator, default_screenshot_path),
+        golden_run)
     # return
-    with client.exchange_async_raw(builder.tip712_sign_new(client.getAccount(0)['path'])):
+    with client.exchange_async_raw(
+            builder.tip712_sign_new(client.getAccount(0)['path'])):
         moves = []
         if firmware.is_nano:
             # need to skip the message hash
@@ -116,10 +112,12 @@ def tip712_new_common(firmware,
         else:
             # Do them one-by-one to prevent an unnecessary move from timing-out and failing the test
             for move in moves:
-                navigator.navigate([move],
-                                   screen_change_before_first_instruction=False,
-                                   screen_change_after_last_instruction=False)
+                navigator.navigate(
+                    [move],
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=False)
     return ResponseParser.signature(client._client.last_async_response.data)
+
 
 def tip712_json_path() -> str:
     return f"{os.path.dirname(__file__)}/tip712_input_files"
@@ -137,6 +135,7 @@ def input_files() -> list[str]:
 def input_file_fixture(request) -> str:
     return Path(request.param)
 
+
 @pytest.fixture(name="verbose", params=[True, False])
 def verbose_fixture(request) -> bool:
     return request.param
@@ -150,6 +149,7 @@ def filtering_fixture(request) -> bool:
 @pytest.fixture(name="data_set", params=ADVANCED_DATA_SETS)
 def data_set_fixture(request) -> DataSet:
     return request.param
+
 
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
@@ -798,12 +798,13 @@ class TestTRX():
 
         chunk_cnt = (len(data) + MAX_APDU_LEN - 1) // MAX_APDU_LEN
         index = 0
+
         def gen_apdu(data, index):
-            data_chunk = data[index * MAX_APDU_LEN: (index + 1) * MAX_APDU_LEN]
-            return bytearray([CLA,
-                              InsType.SIGN_PERSONAL_MESSAGE_FULL_DISPLAY,
-                              0x00 if index == 0 else 0x80,
-                              0x00]) + data_chunk
+            data_chunk = data[index * MAX_APDU_LEN:(index + 1) * MAX_APDU_LEN]
+            return bytearray([
+                CLA, InsType.SIGN_PERSONAL_MESSAGE_FULL_DISPLAY,
+                0x00 if index == 0 else 0x80, 0x00
+            ]) + data_chunk
 
         for _ in range(chunk_cnt - 1):
             apdu = gen_apdu(data, index)
@@ -811,7 +812,8 @@ class TestTRX():
             index += 1
         else:
             apdu = gen_apdu(data, index)
-            with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:]):
+            with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3],
+                                        apdu[4:]):
                 if firmware.is_nano:
                     text = "message"
                 else:
@@ -829,15 +831,10 @@ class TestTRX():
         assert check_hash_signature(hash_to_sign, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
 
-    def test_trx_tip712_new(self,
-                        firmware: Firmware,
-                        backend: BackendInterface,
-                        navigator: Navigator,
-                        default_screenshot_path: Path,
-                        input_file: Path,
-                        verbose: bool,
-                        filtering: bool,
-                        test_name: str):
+    def test_trx_tip712_new(self, firmware: Firmware,
+                            backend: BackendInterface, navigator: Navigator,
+                            default_screenshot_path: Path, input_file: Path,
+                            verbose: bool, filtering: bool, test_name: str):
         client = TronClient(backend, firmware, navigator)
         setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
         if firmware == Firmware.NANOS:
@@ -859,39 +856,33 @@ class TestTRX():
             settings_toggle(firmware, navigator, [setting_id])
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
-            vrs = tip712_new_common(firmware,
-                                    navigator,
-                                    default_screenshot_path,
-                                    client,
-                                    cmd_builder,
-                                    data,
-                                    filters,
-                                    verbose,
-                                    False)
+            vrs = tip712_new_common(firmware, navigator,
+                                    default_screenshot_path, client,
+                                    cmd_builder, data, filters, verbose, False)
             recovered_addr = recover_message(data, vrs)
 
         global WALLET_ADDR
         # don't ask again if we already have it
         if WALLET_ADDR is None:
-            with client.exchange_async_raw(cmd_builder.get_public_addr(display = False,
-                        chaincode = False,
-                        bip32_path = client.getAccount(0)['path'],
-                        chain_id = None)):
+            with client.exchange_async_raw(
+                    cmd_builder.get_public_addr(
+                        display=False,
+                        chaincode=False,
+                        bip32_path=client.getAccount(0)['path'],
+                        chain_id=None)):
                 pass
-            _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
+            _, WALLET_ADDR, _ = ResponseParser.pk_addr(
+                client._client.last_async_response.data)
 
         assert recovered_addr == WALLET_ADDR[1:]
         if verbose:
             settings_toggle(firmware, navigator, [setting_id])
 
-
-    def test_trx_tip712_advanced_filtering(self,
-                                           firmware: Firmware,
+    def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
                                            navigator: Navigator,
                                            default_screenshot_path: Path,
-                                           test_name: str,
-                                           data_set: DataSet,
+                                           test_name: str, data_set: DataSet,
                                            golden_run: bool):
         global SNAPS_CONFIG
 
@@ -901,26 +892,24 @@ class TestTRX():
         cmd_builder = CommandBuilder()
         SNAPS_CONFIG = SnapshotsConfig(test_name + data_set.suffix)
 
-        vrs = tip712_new_common(firmware,
-                                navigator,
-                                default_screenshot_path,
-                                client,
-                                cmd_builder,
-                                data_set.data,
-                                data_set.filters,
-                                False,
-                                golden_run)
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder, data_set.data,
+                                data_set.filters, False, golden_run)
         recovered_addr = recover_message(data_set.data, vrs)
-        assert client.getAccount(0)['addressHex'][2:] == recovered_addr.hex().upper()
+        assert client.getAccount(
+            0)['addressHex'][2:] == recovered_addr.hex().upper()
 
         global WALLET_ADDR
         # don't ask again if we already have it
         if WALLET_ADDR is None:
-            with client.exchange_async_raw(cmd_builder.get_public_addr(display = False,
-                        chaincode = False,
-                        bip32_path = client.getAccount(0)['path'],
-                        chain_id = None)):
+            with client.exchange_async_raw(
+                    cmd_builder.get_public_addr(
+                        display=False,
+                        chaincode=False,
+                        bip32_path=client.getAccount(0)['path'],
+                        chain_id=None)):
                 pass
-            _, WALLET_ADDR, _ = ResponseParser.pk_addr(client._client.last_async_response.data)
+            _, WALLET_ADDR, _ = ResponseParser.pk_addr(
+                client._client.last_async_response.data)
 
         assert recovered_addr == WALLET_ADDR[1:]

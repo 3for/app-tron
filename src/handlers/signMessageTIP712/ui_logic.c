@@ -7,8 +7,8 @@
 #include "mem_utils.h"
 #include "os_io.h"
 #include "common_utils.h"  // uint256_to_decimal
-#include "context_712.h"     // tip712_context_deinit
-#include "path.h"            // path_get_root_type
+#include "context_712.h"   // tip712_context_deinit
+#include "path.h"          // path_get_root_type
 #include "typed_data.h"
 #include "commands_712.h"
 #include "filtering.h"
@@ -163,7 +163,7 @@ e_tip712_nfs ui_712_next_field(void) {
     e_tip712_nfs state = TIP712_NO_MORE_FIELD;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+32;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else {
         if (ui_ctx->structs_to_review > 0) {
             ui_712_review_struct(path_get_nth_field_to_last(ui_ctx->structs_to_review));
@@ -523,7 +523,7 @@ bool ui_712_feed_to_display(const void *field_ptr,
                             bool first,
                             bool last) {
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+33;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -600,7 +600,7 @@ bool ui_712_feed_to_display(const void *field_ptr,
  */
 void ui_712_end_sign(void) {
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+34;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return;
     }
     if (HAS_SETTING(S_VERBOSE_TIP712) || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
