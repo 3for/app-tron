@@ -41,7 +41,9 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     }
 
     publicKeyContext_t tmp_public_key_ctx;
-    if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path, fromAddress, &tmp_public_key_ctx) != 0) {
+    if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path,
+                             fromAddress,
+                             &tmp_public_key_ctx) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 

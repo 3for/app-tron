@@ -35,7 +35,7 @@
 #define INS_TIP712_STRUCT_IMPL                 0x1C
 #define INS_TIP712_FILTERING                   0x1E
 
-#define INS_PROVIDE_TRC20_TOKEN_INFORMATION    0xCA   // 0x0A in eth
+#define INS_PROVIDE_TRC20_TOKEN_INFORMATION 0xCA  // 0x0A in eth
 
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
@@ -50,9 +50,8 @@
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01
 
-#define P2_TIP712_LEGACY_IMPLEM             0x00
-#define P2_TIP712_FULL_IMPLEM               0x01
-
+#define P2_TIP712_LEGACY_IMPLEM 0x00
+#define P2_TIP712_FULL_IMPLEM   0x01
 
 int apdu_dispatcher(const command_t *cmd);
 
@@ -63,5 +62,11 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
-int handleSignPersonalMessageFullDisplay(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
-int handleProvideTrc20TokenInformation(uint8_t p1, uint8_t p2, const uint8_t *workBuffer, uint8_t dataLength);
+int handleSignPersonalMessageFullDisplay(uint8_t p1,
+                                         uint8_t p2,
+                                         uint8_t *workBuffer,
+                                         uint16_t dataLength);
+int handleProvideTrc20TokenInformation(uint8_t p1,
+                                       uint8_t p2,
+                                       const uint8_t *workBuffer,
+                                       uint8_t dataLength);

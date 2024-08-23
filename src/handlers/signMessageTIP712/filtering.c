@@ -174,7 +174,7 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_DOMAIN) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+7;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -241,7 +241,7 @@ bool filtering_date_time(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+8;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -300,7 +300,7 @@ bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+9;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -354,7 +354,7 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED +10;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
@@ -433,7 +433,7 @@ bool filtering_raw_field(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+11;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 

@@ -117,6 +117,7 @@ class Errors(IntEnum):
     HALTED = 0x6faa
     NOT_IMPLEMENTED = 0x911c
 
+
 class StatusWord(IntEnum):
     OK = 0x9000
     ERROR_NO_INFO = 0x6a00
@@ -129,6 +130,7 @@ class StatusWord(IntEnum):
     EXCEPTION_OVERFLOW = 0x6807
     NOT_IMPLEMENTED = 0x911c
 
+
 class APDUOffsets(IntEnum):
     CLA = 0
     INS = 1
@@ -136,6 +138,7 @@ class APDUOffsets(IntEnum):
     P2 = 3
     LC = 4
     CDATA = 5
+
 
 class PKIClient:
     _CLA: int = 0xB0
@@ -150,7 +153,9 @@ class PKIClient:
             assert response.status == Errors.OK
         except ExceptionRAPDU as err:
             if err.status == Errors.NOT_IMPLEMENTED:
-                print("Ledger-PKI APDU not yet implemented. Legacy path will be used")
+                print(
+                    "Ledger-PKI APDU not yet implemented. Legacy path will be used"
+                )
 
     def send_raw(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
         header = bytearray()
@@ -160,6 +165,7 @@ class PKIClient:
         header.append(0x00)
         header.append(len(payload))
         return self._client.exchange_raw(header + payload)
+
 
 class TronClient:
     # default APDU TCP server

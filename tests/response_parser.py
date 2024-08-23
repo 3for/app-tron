@@ -1,5 +1,6 @@
 import base58
 
+
 def signature(data: bytes) -> tuple[bytes, bytes, bytes]:
     assert len(data) == (1 + 32 + 32)
 

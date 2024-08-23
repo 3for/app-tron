@@ -68,7 +68,11 @@ void handle_tip712_return_code(bool success) {
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712StructDef(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712StructDef(uint8_t p1,
+                           uint8_t p2,
+                           uint8_t *workBuffer,
+                           uint16_t dataLength,
+                           uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
@@ -90,9 +94,7 @@ bool handleTIP712StructDef(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t
                 ret = set_struct_field(dataLength, workBuffer);
                 break;
             default:
-                PRINTF("Unknown P2 0x%x for APDU 0x%x\n",
-                       p2,
-                       ins);
+                PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
                 apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
                 ret = false;
         }
@@ -107,12 +109,16 @@ bool handleTIP712StructDef(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712StructImpl(uint8_t p1,
+                            uint8_t p2,
+                            uint8_t *workBuffer,
+                            uint16_t dataLength,
+                            uint8_t ins) {
     UNUSED(ins);
     bool ret = false;
     bool reply_apdu = true;
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 1;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
@@ -127,9 +133,7 @@ bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
                 }
                 break;
             case P2_IMPL_FIELD:
-                if ((ret = field_hash(workBuffer,
-                                      dataLength,
-                                      p1 != P1_COMPLETE))) {
+                if ((ret = field_hash(workBuffer, dataLength, p1 != P1_COMPLETE))) {
                     reply_apdu = false;
                 }
                 break;
@@ -137,9 +141,7 @@ bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
                 ret = path_new_array_depth(workBuffer, dataLength);
                 break;
             default:
-                PRINTF("Unknown P2 0x%x for APDU 0x%x\n",
-                       p2,
-                       ins);
+                PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
                 apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
         }
     }
@@ -155,18 +157,21 @@ bool handleTIP712StructImpl(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712Filtering(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength, uint8_t ins) {
+bool handleTIP712Filtering(uint8_t p1,
+                           uint8_t p2,
+                           uint8_t *workBuffer,
+                           uint16_t dataLength,
+                           uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
     bool reply_apdu = true;
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED + 2;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-    if ((p2 != P2_FILT_ACTIVATE) &&
-        (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
+    if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
         handle_tip712_return_code(true);
         return true;
     }
@@ -226,7 +231,7 @@ bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t data
     UNUSED(p1);
     UNUSED(p2);
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+3;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
     // if the final hashes are still zero or if there are some unimplemented fields
     else if (allzeroes(global_ctx.messageSigningContext712.domainHash,
@@ -234,14 +239,15 @@ bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t data
              allzeroes(global_ctx.messageSigningContext712.messageHash,
                        sizeof(global_ctx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+4;
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
     } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
                0) {
-        if (!HAS_SETTING(S_VERBOSE_TIP712) && (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
+        if (!HAS_SETTING(S_VERBOSE_TIP712) &&
+            (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ui_712_message_hash();
         }
         ret = true;
@@ -251,7 +257,6 @@ bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t data
         handle_tip712_return_code(ret);
     }
     return ret;
-
 }
 
 #endif  // HAVE_TIP712_FULL_SUPPORT

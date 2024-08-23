@@ -41,7 +41,7 @@ static void *field_encode(const uint8_t *const value,
                 start_idx = 0;
                 break;
             default:
-                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED+5;
+                apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
                 return NULL;  // should not be here
         }
         memcpy(&padded_value[start_idx], value, length);

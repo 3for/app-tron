@@ -31,69 +31,52 @@ static void dummy_post_cb(void) {
 }
 
 UX_STEP_NOCB(ux_191_step_review,
-    pnn,
-    {
-        &C_icon_certificate,
-        "Review",
-        "Message",
-    });
-UX_STEP_NOCB(
-    ux_191_step_message,
-    bnnn_paging,
-    {
-      .title = "Message",
-      .text = strings.tmp.tmp,
-    });
-UX_STEP_INIT(
-    ux_191_step_dummy_pre,
-    NULL,
-    NULL,
-    {
-      dummy_pre_cb();
-    });
-UX_STEP_CB(
-    ux_191_step_theres_more,
+             pnn,
+             {
+                 &C_icon_certificate,
+                 "Review",
+                 "Message",
+             });
+UX_STEP_NOCB(ux_191_step_message,
+             bnnn_paging,
+             {
+                 .title = "Message",
+                 .text = strings.tmp.tmp,
+             });
+UX_STEP_INIT(ux_191_step_dummy_pre, NULL, NULL, { dummy_pre_cb(); });
+UX_STEP_CB(ux_191_step_theres_more,
 #ifdef TARGET_NANOS
-    nn,
+           nn,
 #else
-    nnn,
+           nnn,
 #endif
-    G_ux.stack[0].button_push_callback = NULL; // disable button clicks
-    skip_rest_of_message(),
-    {
+           G_ux.stack[0].button_push_callback = NULL;  // disable button clicks
+           skip_rest_of_message(),
+           {
 #ifndef TARGET_NANOS
-      "Press right to",
-      "continue message",
+               "Press right to",
+               "continue message",
 #else
-      "Press right to read",
+               "Press right to read",
 #endif
-      "Double-press to skip"
-    });
-UX_STEP_INIT(
-    ux_191_step_dummy_post,
-    NULL,
-    NULL,
-    {
-      dummy_post_cb();
-    });
-UX_STEP_CB(
-    ux_191_step_sign,
-    pbb,
-    ui_callback_signMessage_ok(true),
-    {
-      &C_icon_validate_14,
-      "Sign",
-      "message",
-    });
-UX_STEP_CB(
-    ux_191_step_cancel,
-    pbb,
-    ui_callback_tx_cancel(true),
-    {
-      &C_icon_crossmark,
-      "Cancel",
-      "signature",
-    });
+               "Double-press to skip"});
+UX_STEP_INIT(ux_191_step_dummy_post, NULL, NULL, { dummy_post_cb(); });
+UX_STEP_CB(ux_191_step_sign,
+           pbb,
+           ui_callback_signMessage_ok(true),
+           {
+               &C_icon_validate_14,
+               "Sign",
+               "message",
+           });
+UX_STEP_CB(ux_191_step_cancel,
+           pbb,
+           ui_callback_tx_cancel(true),
+           {
+               &C_icon_crossmark,
+               "Cancel",
+               "signature",
+           });
 
 UX_FLOW(ux_191_flow,
         &ux_191_step_review,

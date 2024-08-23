@@ -73,13 +73,15 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
         case SWITCH_ALLOW_HASH_TX_TOKEN:
             SETTING_TOGGLE(settings[SETTING_IDX(token)]);
             switches[TX_DATA_ID].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
-            switches[CSTM_CONTRACTS_ID].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
+            switches[CSTM_CONTRACTS_ID].initState =
+                (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
 #ifdef HAVE_TIP712_FULL_SUPPORT
         case SWITCH_EIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
-            switches[EIP712_VERBOSE_ID].initState = (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
+            switches[EIP712_VERBOSE_ID].initState =
+                (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
             break;
 #endif  // HAVE_TIP712_FULL_SUPPORT
         default:

@@ -26,7 +26,6 @@
 #include "app_errors.h"
 #include "ui_globals.h"
 
-
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
 

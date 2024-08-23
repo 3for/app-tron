@@ -13,6 +13,7 @@ import keychain
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
 
+
 class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_GENUINE_CHECK = 0x01
     PUBKEY_USAGE_EXCHANGE_PAYLOAD = 0x02
@@ -23,6 +24,7 @@ class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_PLUGIN_METADATA = 0x07
     PUBKEY_USAGE_COIN_META = 0x08
     PUBKEY_USAGE_SEED_ID_AUTH = 0x09
+
 
 # global variables
 app_client = None
@@ -124,12 +126,9 @@ def send_struct_def_field(typename, keyname):
     else:
         type_enum = TIP712FieldType.CUSTOM
         typesize = None
-    with app_client.exchange_async_raw(cmd_builder.tip712_send_struct_def_struct_field(
-                                       type_enum,
-                                       typename,
-                                       typesize,
-                                       array_lvls,
-                                       keyname)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_send_struct_def_struct_field(
+                type_enum, typename, typesize, array_lvls, keyname)):
         pass
     return (typename, type_enum, typesize, array_lvls)
 
@@ -144,11 +143,9 @@ def encode_integer(value: Union[str, int], typesize: int) -> bytes:
     else:
         # biggest uint type accepted by struct.pack
         uint64_mask = 0xffffffffffffffff
-        data = struct.pack(">QQQQ",
-                           (value >> 192) & uint64_mask,
+        data = struct.pack(">QQQQ", (value >> 192) & uint64_mask,
                            (value >> 128) & uint64_mask,
-                           (value >> 64) & uint64_mask,
-                           value & uint64_mask)
+                           (value >> 64) & uint64_mask, value & uint64_mask)
         data = data[len(data) - typesize:]
         data = data.lstrip(b'\x00')
     return data
@@ -216,7 +213,8 @@ def send_struct_impl_field(value, field):
         path = ".".join(current_path)
         if path in filtering_paths.keys():
             if filtering_paths[path]["type"] == "amount_join_token":
-                send_filtering_amount_join_token(filtering_paths[path]["token"])
+                send_filtering_amount_join_token(
+                    filtering_paths[path]["token"])
             elif filtering_paths[path]["type"] == "amount_join_value":
                 if "token" in filtering_paths[path].keys():
                     token = filtering_paths[path]["token"]
@@ -232,7 +230,8 @@ def send_struct_impl_field(value, field):
             else:
                 assert False
 
-    with app_client.exchange_async_raw_chunks(cmd_builder.tip712_send_struct_impl_struct_field(bytearray(data))):
+    with app_client.exchange_async_raw_chunks(
+            cmd_builder.tip712_send_struct_impl_struct_field(bytearray(data))):
         enable_autonext()
     disable_autonext()
 
@@ -243,12 +242,14 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
     if new_level:
         current_path.append(field["name"])
     if len(array_lvls) > 0 and lvls_left > 0:
-        with app_client.exchange_async_raw(cmd_builder.tip712_send_struct_impl_array(len(data))):
+        with app_client.exchange_async_raw(
+                cmd_builder.tip712_send_struct_impl_array(len(data))):
             pass
         idx = 0
         for subdata in data:
             current_path.append("[]")
-            if not evaluate_field(structs, subdata, field, lvls_left - 1, False):
+            if not evaluate_field(structs, subdata, field, lvls_left - 1,
+                                  False):
                 return False
             current_path.pop()
             idx += 1
@@ -276,7 +277,8 @@ def send_struct_impl(structs, data, structname):
 
     struct = structs[structname]
     for f in struct:
-        if not evaluate_field(structs, data[f["name"]], f, len(f["array_lvls"])):
+        if not evaluate_field(structs, data[f["name"]], f, len(
+                f["array_lvls"])):
             return False
     return True
 
@@ -301,7 +303,9 @@ def send_filtering_message_info(display_name: str, filters_count: int):
     to_sign += display_name.encode()
 
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(cmd_builder.tip712_filtering_message_info(display_name, filters_count, sig)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_filtering_message_info(display_name,
+                                                      filters_count, sig)):
         enable_autonext()
     disable_autonext()
 
@@ -315,7 +319,8 @@ def send_filtering_amount_join_token(token_idx: int):
     to_sign += path_str.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(cmd_builder.tip712_filtering_amount_join_token(token_idx, sig)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_filtering_amount_join_token(token_idx, sig)):
         pass
 
 
@@ -329,7 +334,9 @@ def send_filtering_amount_join_value(token_idx: int, display_name: str):
     to_sign += display_name.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(cmd_builder.tip712_filtering_amount_join_value(token_idx, display_name, sig)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_filtering_amount_join_value(
+                token_idx, display_name, sig)):
         pass
 
 
@@ -342,7 +349,8 @@ def send_filtering_datetime(display_name: str):
     to_sign += path_str.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(cmd_builder.tip712_filtering_datetime(display_name, sig)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_filtering_datetime(display_name, sig)):
         pass
 
 
@@ -356,8 +364,10 @@ def send_filtering_raw(display_name):
     to_sign += path_str.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(cmd_builder.tip712_filtering_raw(display_name, sig)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_filtering_raw(display_name, sig)):
         pass
+
 
 def provide_token_metadata(ticker: str,
                            addr: bytes,
@@ -377,25 +387,20 @@ def provide_token_metadata(ticker: str,
     #         cert_apdu = "01010102010211040000000212010013020002140101160400000000200B45524332305F546F6B656E300200063101083201213321024CCA8FAD496AA5040A00A7EB2F5CC3B85376D88BA147A7D7054A99C6405618873401013501041546304402206731FCD3E2432C5CA162381392FD17AD3A41EEF852E1D706F21A656AB165263602204B89FAE8DBAF191E2D79FB00EBA80D613CB7EDF0BE960CB6F6B29D96E1437F5F"  # noqa: E501
     #     elif app_client._firmware == Firmware.FLEX:
     #         cert_apdu = "01010102010211040000000212010013020002140101160400000000200B45524332305F546F6B656E300200063101083201213321024CCA8FAD496AA5040A00A7EB2F5CC3B85376D88BA147A7D7054A99C64056188734010135010515473045022100B59EA8B958AA40578A6FBE9BBFB761020ACD5DBD8AA863C11DA17F42B2AFDE790220186316059EFA58811337D47C7F815F772EA42BBBCEA4AE123D1118C80588F5CB"  # noqa: E501
-        # pylint: enable=line-too-long
+    #     pylint: enable=line-too-long
 
-        # app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
+    #     app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
 
     if sig is None:
         # Temporarily get a command with an empty signature to extract the payload and
         # compute the signature on it
-        tmp = cmd_builder.provide_erc20_token_information(ticker,
-                                                          addr,
-                                                          decimals,
-                                                          chain_id,
-                                                          bytes())
+        tmp = cmd_builder.provide_erc20_token_information(
+            ticker, addr, decimals, chain_id, bytes())
         # skip APDU header & empty sig
         sig = keychain.sign_data(keychain.Key.CAL, tmp[6:])
-    return app_client.exchange_raw(cmd_builder.provide_erc20_token_information(ticker,
-                                                                            addr,
-                                                                            decimals,
-                                                                            chain_id,
-                                                                            sig))
+    return app_client.exchange_raw(
+        cmd_builder.provide_erc20_token_information(ticker, addr, decimals,
+                                                    chain_id, sig))
 
 
 def prepare_filtering(filtr_data, message):
@@ -409,15 +414,15 @@ def prepare_filtering(filtr_data, message):
         for token in filtr_data["tokens"]:
             provide_token_metadata(token["ticker"],
                                    bytes.fromhex(token["addr"][2:]),
-                                   token["decimals"],
-                                   token["chain_id"])
+                                   token["decimals"], token["chain_id"])
 
 
 def handle_optional_domain_values(domain):
     if "chainId" not in domain.keys():
         domain["chainId"] = 0
     if "verifyingContract" not in domain.keys():
-        domain["verifyingContract"] = "0x0000000000000000000000000000000000000000"
+        domain[
+            "verifyingContract"] = "0x0000000000000000000000000000000000000000"
 
 
 def init_signature_context(types, domain):
@@ -444,9 +449,9 @@ def next_timeout(_signum: int, _frame):
 
 def enable_autonext():
     if app_client._client.firmware in (Firmware.STAX, Firmware.FLEX):
-        delay = 1/3
+        delay = 1 / 3
     else:
-        delay = 1/4
+        delay = 1 / 4
 
     # golden run has to be slower to make sure we take good snapshots
     # and not processing/loading screens
@@ -493,14 +498,16 @@ def process_data(aclient,
 
     # send types definition
     for key in types.keys():
-        with app_client.exchange_async_raw(cmd_builder.tip712_send_struct_def_struct_name(key)):
+        with app_client.exchange_async_raw(
+                cmd_builder.tip712_send_struct_def_struct_name(key)):
             pass
         for f in types[key]:
             (f["type"], f["enum"], f["typesize"], f["array_lvls"]) = \
              send_struct_def_field(f["type"], f["name"])
 
     if filters:
-        with app_client.exchange_async_raw(cmd_builder.tip712_filtering_activate()):
+        with app_client.exchange_async_raw(
+                cmd_builder.tip712_filtering_activate()):
             pass
         prepare_filtering(filters, message)
 
@@ -516,12 +523,13 @@ def process_data(aclient,
     #         cert_apdu = "0101010201021104000000021201001302000214010116040000000020104549503731325F46696C746572696E67300200053101083201213321024CCA8FAD496AA5040A00A7EB2F5CC3B85376D88BA147A7D7054A99C6405618873401013501041546304402204EA7B30F0EEFEF25FAB3ADDA6609E25296C41DD1C5969A92FAE6B600AAC2902E02206212054E123F5F965F787AE7EE565E243F21B11725626D3FF058522D6BDCD995"  # noqa: E501
     #     elif app_client._firmware == Firmware.FLEX:
     #         cert_apdu = "0101010201021104000000021201001302000214010116040000000020104549503731325F46696C746572696E67300200053101083201213321024CCA8FAD496AA5040A00A7EB2F5CC3B85376D88BA147A7D7054A99C6405618873401013501051546304402205FB5E970065A95C57F00FFA3964946251815527613724ED6745C37E303934BE702203CC9F4124B42806F0A7CA765CFAB5AADEB280C35AB8F809FC49ADC97D9B9CE15"  # noqa: E501
-        # pylint: enable=line-too-long
+    #     pylint: enable=line-too-long
 
-        # app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
+    #     app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
 
     # send domain implementation
-    with app_client.exchange_async_raw(cmd_builder.tip712_send_struct_impl_root_struct(domain_typename)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_send_struct_impl_root_struct(domain_typename)):
         enable_autonext()
     disable_autonext()
     if not send_struct_impl(types, domain, domain_typename):
@@ -534,7 +542,8 @@ def process_data(aclient,
             send_filtering_message_info(domain["name"], len(filtering_paths))
 
     # send message implementation
-    with app_client.exchange_async_raw(cmd_builder.tip712_send_struct_impl_root_struct(message_typename)):
+    with app_client.exchange_async_raw(
+            cmd_builder.tip712_send_struct_impl_root_struct(message_typename)):
         enable_autonext()
     disable_autonext()
     if not send_struct_impl(types, message, message_typename):

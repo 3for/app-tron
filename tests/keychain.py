@@ -20,7 +20,8 @@ _keys: dict[Key, SigningKey] = dict()
 # Open the corresponding PEM file and load its key in the global dict
 def _init_key(key: Key):
     global _keys
-    with open("%s/keychain/%s.pem" % (os.path.dirname(__file__), key.name.lower())) as pem_file:
+    with open("%s/keychain/%s.pem" %
+              (os.path.dirname(__file__), key.name.lower())) as pem_file:
         _keys[key] = SigningKey.from_pem(pem_file.read(), hashlib.sha256)
     assert (key in _keys) and (_keys[key] is not None)
 
