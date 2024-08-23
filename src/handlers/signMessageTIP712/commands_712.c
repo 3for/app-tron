@@ -68,11 +68,11 @@ void handle_tip712_return_code(bool success) {
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712StructDef(uint8_t p1,
-                           uint8_t p2,
-                           uint8_t *workBuffer,
-                           uint16_t dataLength,
-                           uint8_t ins) {
+int handleTIP712StructDef(uint8_t p1,
+                          uint8_t p2,
+                          uint8_t *workBuffer,
+                          uint16_t dataLength,
+                          uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
@@ -100,7 +100,7 @@ bool handleTIP712StructDef(uint8_t p1,
         }
     }
     handle_tip712_return_code(ret);
-    return ret;
+    return 0;
 }
 
 /**
@@ -109,11 +109,11 @@ bool handleTIP712StructDef(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712StructImpl(uint8_t p1,
-                            uint8_t p2,
-                            uint8_t *workBuffer,
-                            uint16_t dataLength,
-                            uint8_t ins) {
+int handleTIP712StructImpl(uint8_t p1,
+                           uint8_t p2,
+                           uint8_t *workBuffer,
+                           uint16_t dataLength,
+                           uint8_t ins) {
     UNUSED(ins);
     bool ret = false;
     bool reply_apdu = true;
@@ -148,7 +148,7 @@ bool handleTIP712StructImpl(uint8_t p1,
     if (reply_apdu) {
         handle_tip712_return_code(ret);
     }
-    return ret;
+    return 0;
 }
 
 /**
@@ -157,11 +157,11 @@ bool handleTIP712StructImpl(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712Filtering(uint8_t p1,
-                           uint8_t p2,
-                           uint8_t *workBuffer,
-                           uint16_t dataLength,
-                           uint8_t ins) {
+int handleTIP712Filtering(uint8_t p1,
+                          uint8_t p2,
+                          uint8_t *workBuffer,
+                          uint16_t dataLength,
+                          uint8_t ins) {
     UNUSED(p1);
     UNUSED(ins);
     bool ret = true;
@@ -217,7 +217,7 @@ bool handleTIP712Filtering(uint8_t p1,
     if (reply_apdu) {
         handle_tip712_return_code(ret);
     }
-    return ret;
+    return 0;
 }
 
 /**
@@ -226,7 +226,7 @@ bool handleTIP712Filtering(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     bool ret = false;
     UNUSED(p1);
     UNUSED(p2);
@@ -256,7 +256,7 @@ bool handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t data
     if (!ret) {
         handle_tip712_return_code(ret);
     }
-    return ret;
+    return 0;
 }
 
 #endif  // HAVE_TIP712_FULL_SUPPORT
