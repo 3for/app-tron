@@ -1,5 +1,4 @@
 # documentation about APDU format is available here:
-# https://github.com/LedgerHQ/app-ethereum/blob/develop/doc/ethapp.adoc
 
 import struct
 from enum import IntEnum
@@ -22,7 +21,7 @@ class TIP712FieldType(IntEnum):
 
 class InsType(IntEnum):
     GET_PUBLIC_ADDR = 0x02
-    GET_ETH2_PUBLIC_ADDR = 0x0e
+    GET_TRC2_PUBLIC_ADDR = 0x0e
     SIGN = 0x04
     PERSONAL_SIGN = 0x08
     PROVIDE_TRC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
@@ -263,9 +262,9 @@ class CommandBuilder:
         return self._serialize(InsType.GET_PUBLIC_ADDR, int(display),
                                int(chaincode), payload)
 
-    def get_eth2_public_addr(self, display: bool, bip32_path: str) -> bytes:
+    def get_trc2_public_addr(self, display: bool, bip32_path: str) -> bytes:
         payload = pack_derivation_path(bip32_path)
-        return self._serialize(InsType.GET_ETH2_PUBLIC_ADDR, int(display),
+        return self._serialize(InsType.GET_TRC2_PUBLIC_ADDR, int(display),
                                0x00, payload)
 
     def perform_privacy_operation(self, display: bool, bip32_path: str,

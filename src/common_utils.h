@@ -1,5 +1,5 @@
 /*******************************************************************************
- *   Ledger Ethereum App
+ *   Ledger Tron App
  *   (c) 2016-2019 Ledger
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,13 +57,6 @@ bool amountToString(const uint8_t *amount,
                     const char *ticker,
                     char *out_buffer,
                     size_t out_buffer_size);
-
-void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
-                             uint8_t out[static ADDRESS_SIZE_712]);
-
-void getEthAddressStringFromRawKey(const uint8_t raw_pubkey[static 65],
-                                   char out[static(ADDRESS_SIZE_712 * 2) + 1],
-                                   uint64_t chainId);
 
 bool getEthAddressStringFromBinary(uint8_t *address,
                                    char out[static(ADDRESS_SIZE_712 * 2) + 1],
