@@ -26,7 +26,7 @@
 
 #define WEI_TO_ETHER 18
 
-#define ADDRESS_LENGTH 20
+#define ADDRESS_SIZE_712 20
 #define INT128_LENGTH  16
 #define INT256_LENGTH  32
 
@@ -59,14 +59,14 @@ bool amountToString(const uint8_t *amount,
                     size_t out_buffer_size);
 
 void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
-                             uint8_t out[static ADDRESS_LENGTH]);
+                             uint8_t out[static ADDRESS_SIZE_712]);
 
 void getEthAddressStringFromRawKey(const uint8_t raw_pubkey[static 65],
-                                   char out[static(ADDRESS_LENGTH * 2) + 1],
+                                   char out[static(ADDRESS_SIZE_712 * 2) + 1],
                                    uint64_t chainId);
 
 bool getEthAddressStringFromBinary(uint8_t *address,
-                                   char out[static(ADDRESS_LENGTH * 2) + 1],
+                                   char out[static(ADDRESS_SIZE_712 * 2) + 1],
                                    uint64_t chainId);
 
 bool getEthDisplayableAddress(uint8_t *in, char *out, size_t out_len, uint64_t chainId);

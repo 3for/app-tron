@@ -246,7 +246,7 @@ static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) 
     if (!first) {
         return false;
     }
-    if (length != ADDRESS_LENGTH) {
+    if (length != ADDRESS_SIZE_712) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
@@ -454,7 +454,7 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
     token = &global_ctx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     switch (ui_ctx->amount.state) {
         case AMOUNT_JOIN_STATE_TOKEN:
-            if (memcmp(data, token->address, ADDRESS_LENGTH) != 0) {
+            if (memcmp(data, token->address, ADDRESS_SIZE_712) != 0) {
                 return false;
             }
             amount_join_set_token_received();
