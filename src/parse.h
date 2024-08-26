@@ -165,7 +165,7 @@ typedef struct tokenDefinition_t {
 
 typedef union extraInfo_t {
     tokenDefinition_t token;
-// Would have used HAVE_NFT_SUPPORT but it is only declared for the Ethereum app
+// Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
 // and not plugins
 #ifndef TARGET_NANOS
     nftInfo_t nft;
