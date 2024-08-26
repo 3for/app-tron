@@ -55,7 +55,7 @@ def build_trc20_calldata(to_address_hex: str, amount: Decimal):
 def recover_message(msg, vrs: tuple) -> bytes:
     if isinstance(msg, dict):  # TIP-712
         smsg = encode_typed_data(full_message=msg)
-    else:  # EIP-191
+    else:  # TIP-191
         smsg = encode_defunct(primitive=msg)
     addr = Account.recover_message(smsg, normalize_vrs(vrs))
     return bytes.fromhex(addr[2:])
