@@ -219,7 +219,7 @@ def send_struct_impl_field(value, field):
                 if "token" in filtering_paths[path].keys():
                     token = filtering_paths[path]["token"]
                 else:
-                    # Permit (ERC-2612)
+                    # Permit (TRC-2612)
                     token = 0xff
                 send_filtering_amount_join_value(token,
                                                  filtering_paths[path]["name"])
@@ -394,12 +394,12 @@ def provide_token_metadata(ticker: str,
     if sig is None:
         # Temporarily get a command with an empty signature to extract the payload and
         # compute the signature on it
-        tmp = cmd_builder.provide_erc20_token_information(
+        tmp = cmd_builder.provide_trc20_token_information(
             ticker, addr, decimals, chain_id, bytes())
         # skip APDU header & empty sig
         sig = keychain.sign_data(keychain.Key.CAL, tmp[6:])
     return app_client.exchange_raw(
-        cmd_builder.provide_erc20_token_information(ticker, addr, decimals,
+        cmd_builder.provide_trc20_token_information(ticker, addr, decimals,
                                                     chain_id, sig))
 
 

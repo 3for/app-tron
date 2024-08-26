@@ -25,7 +25,7 @@ class InsType(IntEnum):
     GET_ETH2_PUBLIC_ADDR = 0x0e
     SIGN = 0x04
     PERSONAL_SIGN = 0x08
-    PROVIDE_ERC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
+    PROVIDE_TRC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
     PROVIDE_NFT_INFORMATION = 0x14
     SET_PLUGIN = 0x16
     PERFORM_PRIVACY_OPERATION = 0x18
@@ -324,7 +324,7 @@ class CommandBuilder:
             p1 = P1Type.SIGN_SUBSQT_CHUNK
         return chunks
 
-    def provide_erc20_token_information(self, ticker: str, addr: bytes,
+    def provide_trc20_token_information(self, ticker: str, addr: bytes,
                                         decimals: int, chain_id: int,
                                         sig: bytes) -> bytes:
         payload = bytearray()
@@ -334,5 +334,5 @@ class CommandBuilder:
         payload += struct.pack(">I", decimals)
         payload += struct.pack(">I", chain_id)
         payload += sig
-        return self._serialize(InsType.PROVIDE_ERC20_TOKEN_INFORMATION, 0x00,
+        return self._serialize(InsType.PROVIDE_TRC20_TOKEN_INFORMATION, 0x00,
                                0x00, payload)

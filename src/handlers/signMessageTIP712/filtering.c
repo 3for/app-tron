@@ -398,7 +398,7 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
 
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
-        // Permit (ERC-2612)
+        // Permit (TRC-2612)
         int resolved_idx = get_asset_index_by_addr(tip712_context->contract_addr);
 
         if (resolved_idx == -1) {

@@ -168,15 +168,15 @@ bool getEthAddressStringFromBinary(uint8_t *address,
     } locals_union;
 
     uint8_t i;
-    bool eip1191 = false;
+    bool tip1191 = false;
     uint32_t offset = 0;
     switch (chainId) {
         case 30:
         case 31:
-            eip1191 = true;
+            tip1191 = true;
             break;
     }
-    if (eip1191) {
+    if (tip1191) {
         if (!u64_to_string(chainId, (char *) locals_union.tmp, sizeof(locals_union.tmp))) {
             return false;
         }

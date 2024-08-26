@@ -30,7 +30,7 @@ enum {
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
 #ifdef HAVE_TIP712_FULL_SUPPORT
-    SWITCH_EIP712_VERBOSE_TOKEN,
+    SWITCH_TIP712_VERBOSE_TOKEN,
 #endif
 };
 
@@ -39,7 +39,7 @@ enum {
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
 #ifdef HAVE_TIP712_FULL_SUPPORT
-    EIP712_VERBOSE_ID,
+    TIP712_VERBOSE_ID,
 #endif
     SETTINGS_SWITCHES_NB
 };
@@ -78,9 +78,9 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
 #ifdef HAVE_TIP712_FULL_SUPPORT
-        case SWITCH_EIP712_VERBOSE_TOKEN:
+        case SWITCH_TIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
-            switches[EIP712_VERBOSE_ID].initState =
+            switches[TIP712_VERBOSE_ID].initState =
                 (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
             break;
 #endif  // HAVE_TIP712_FULL_SUPPORT
@@ -128,11 +128,11 @@ void ui_idle(void) {
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
 #ifdef HAVE_TIP712_FULL_SUPPORT
-    switches[EIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
-    switches[EIP712_VERBOSE_ID].text = "Raw messages";
-    switches[EIP712_VERBOSE_ID].subText = "Display raw content from EIP712 messages.";
-    switches[EIP712_VERBOSE_ID].token = SWITCH_EIP712_VERBOSE_TOKEN;
-    switches[EIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
+    switches[TIP712_VERBOSE_ID].text = "Raw messages";
+    switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
+    switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
+    switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
 #endif  // HAVE_TIP712_FULL_SUPPORT
 
     nbgl_useCaseHomeAndSettings(APPNAME,

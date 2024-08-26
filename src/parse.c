@@ -953,7 +953,7 @@ static bool asset_info_is_set(int index) {
 }
 
 int get_asset_index_by_addr(const uint8_t *addr) {
-    // Works for ERC-20 & NFT tokens since both structs in the union have the
+    // Works for TRC-20 & NFT tokens since both structs in the union have the
     // contract address aligned
     for (int i = 0; i < MAX_ASSETS; i++) {
         extraInfo_t *asset = get_asset_info(i);
