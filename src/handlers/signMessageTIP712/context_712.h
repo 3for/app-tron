@@ -7,7 +7,7 @@
 #include "parse.h"
 
 typedef struct {
-    uint8_t contract_addr[ADDRESS_LENGTH];
+    uint8_t contract_addr[ADDRESS_SIZE_712];
     uint64_t chain_id;
     uint8_t schema_hash[224 / 8];
 } s_tip712_context;

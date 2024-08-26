@@ -125,7 +125,7 @@ void *encode_boolean(const bool *const value, uint8_t length) {
  * @return the encoded value
  */
 void *encode_address(const uint8_t *const value, uint8_t length) {
-    if (length != ADDRESS_LENGTH)  // sanity check
+    if (length != ADDRESS_SIZE_712)  // sanity check
     {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;

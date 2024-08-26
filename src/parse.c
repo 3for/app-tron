@@ -957,7 +957,7 @@ int get_asset_index_by_addr(const uint8_t *addr) {
     // contract address aligned
     for (int i = 0; i < MAX_ASSETS; i++) {
         extraInfo_t *asset = get_asset_info(i);
-        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
+        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_SIZE_712) == 0)) {
             PRINTF("Token found at index %d\n", i);
             return i;
         }
