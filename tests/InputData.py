@@ -481,7 +481,7 @@ def process_data(aclient,
     data_json = copy.deepcopy(data_json)
     app_client = aclient
     cmd_builder = cbuilder
-    domain_typename = "TIP712Domain"
+    domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
     types = data_json["types"]
     domain = data_json["domain"]

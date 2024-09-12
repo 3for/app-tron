@@ -25,7 +25,7 @@
             { "type": "uint256", "name": "trc20TokenAmount" },
             { "type": "uint256", "name": "nftId" }
         ],
-        "TIP712Domain": [
+        "EIP712Domain": [
             { "name": "name", "type": "string" },
             { "name": "version", "type": "string" },
             { "name": "chainId", "type": "uint256" },

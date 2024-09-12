@@ -25,15 +25,15 @@ ADVANCED_DATA_SETS = [
             },
             "message": {
                 "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-                "value_recv": 10000000000000000,
                 "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
                 "value_send": 24500000000000000000,
                 "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "value_recv": 10000000000000000,
                 "expires": 1714559400,
             },
             "primaryType": "Transfer",
             "types": {
-                "TIP712Domain": [{
+                "EIP712Domain": [{
                     "name": "name",
                     "type": "string"
                 }, {
@@ -52,10 +52,6 @@ ADVANCED_DATA_SETS = [
                         "type": "address"
                     },
                     {
-                        "name": "value_recv",
-                        "type": "uint256"
-                    },
-                    {
                         "name": "token_send",
                         "type": "address"
                     },
@@ -66,6 +62,10 @@ ADVANCED_DATA_SETS = [
                     {
                         "name": "token_recv",
                         "type": "address"
+                    },
+                    {
+                        "name": "value_recv",
+                        "type": "uint256"
                     },
                     {
                         "name": "expires",
@@ -122,7 +122,7 @@ ADVANCED_DATA_SETS = [
     DataSet(
         {
             "types": {
-                "TIP712Domain": [
+                "EIP712Domain": [
                     {
                         "name": "name",
                         "type": "string"
@@ -203,7 +203,7 @@ ADVANCED_DATA_SETS = [
     DataSet(
         {
             "types": {
-                "TIP712Domain": [
+                "EIP712Domain": [
                     {
                         "name": "name",
                         "type": "string"
