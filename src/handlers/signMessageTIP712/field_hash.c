@@ -161,7 +161,7 @@ static void field_hash_feed_parent(e_type field_type, const uint8_t *const hash)
 /**
  * Special domain fields handling
  *
- * Do something special for certain TIP712Domain fields
+ * Do something special for certain EIP712Domain fields
  *
  * @param[in] field_ptr pointer to the struct field definition
  * @param[in] data the field value

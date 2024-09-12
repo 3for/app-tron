@@ -33,7 +33,7 @@
    },
    "primaryType" : "Order",
    "types" : {
-      "TIP712Domain" : [
+      "EIP712Domain" : [
          {
             "name" : "name",
             "type" : "string"

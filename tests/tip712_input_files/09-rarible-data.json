@@ -50,7 +50,7 @@
             "type" : "bytes"
          }
       ],
-      "TIP712Domain" : [
+      "EIP712Domain" : [
          {
             "name" : "name",
             "type" : "string"

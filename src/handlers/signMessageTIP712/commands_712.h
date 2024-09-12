@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define DOMAIN_STRUCT_NAME "TIP712Domain"
+#define DOMAIN_STRUCT_NAME "EIP712Domain"
 
 int handleTIP712StructDef(uint8_t p1,
                           uint8_t p2,

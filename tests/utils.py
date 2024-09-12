@@ -58,21 +58,21 @@ def encode_typed_data(
         full_message_types = full_message["types"].copy()
         full_message_domain = full_message["domain"].copy()
 
-        # If TIP712Domain types were provided, check that they match the domain data
-        if "TIP712Domain" in full_message_types:
+        # If EIP712Domain types were provided, check that they match the domain data
+        if "EIP712Domain" in full_message_types:
             domain_data_keys = list(full_message_domain.keys())
             domain_types_keys = [
-                field["name"] for field in full_message_types["TIP712Domain"]
+                field["name"] for field in full_message_types["EIP712Domain"]
             ]
 
             if set(domain_data_keys) != (set(domain_types_keys)):
                 raise ValidationError(
                     "The fields provided in `domain` do not match the fields provided"
-                    " in `types.TIP712Domain`. The fields provided in `domain` were"
+                    " in `types.EIP712Domain`. The fields provided in `domain` were"
                     f" `{domain_data_keys}`, but the fields provided in "
-                    f"`types.TIP712Domain` were `{domain_types_keys}`.")
+                    f"`types.EIP712Domain` were `{domain_types_keys}`.")
 
-        full_message_types.pop("TIP712Domain", None)
+        full_message_types.pop("EIP712Domain", None)
 
         # If primaryType was provided, check that it matches the derived primaryType
         if "primaryType" in full_message:
@@ -140,10 +140,10 @@ def hash_domain(domain_data: Dict[str, Any]) -> bytes:
             raise ValueError(f"Invalid domain key: `{k}`")
 
     domain_types = {
-        "TIP712Domain": [
+        "EIP712Domain": [
             tip712_domain_map[k] for k in tip712_domain_map.keys()
             if k in domain_data
         ]
     }
 
-    return hash_struct("TIP712Domain", domain_types, domain_data)
+    return hash_struct("EIP712Domain", domain_types, domain_data)
