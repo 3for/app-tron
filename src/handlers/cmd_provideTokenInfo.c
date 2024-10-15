@@ -68,11 +68,12 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
 #endif
                                         (uint8_t *) (workBuffer + offset),
                                         dataLength);
-#ifndef HAVE_BYPASS_SIGNATURES
     if (error != CX_OK) {
+        PRINTF("Invalid token signature\n");
+#ifndef HAVE_BYPASS_SIGNATURES
         THROW(APDU_RESPONSE_INVALID_DATA);
-    }
 #endif
+    }
     G_io_apdu_buffer[0] = global_ctx.transactionContext.currentAssetIndex;
     validate_current_asset_info();
     U2BE_ENCODE(G_io_apdu_buffer, 1, APDU_RESPONSE_OK);
