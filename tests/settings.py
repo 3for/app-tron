@@ -45,17 +45,11 @@ def get_device_settings(firmware: Firmware) -> list:
             NonNanoSettingID.VERBOSE_TIP712,
         ]
 
-
-def get_setting_per_page(firmware: Firmware) -> int:
-    if firmware == Firmware.STAX:
-        return 3
-    return 2
-
-
+# Maintain the status quo, no need to be consistent with Ethereum.
 def get_setting_position(
         firmware: Firmware, setting: Union[NavInsID,
                                            SettingID]) -> tuple[int, int]:
-    settings_per_page = get_setting_per_page(firmware)
+    settings_per_page = 3 if firmware == Firmware.STAX else 2
     y_index = get_device_settings(firmware).index(
         NonNanoSettingID(setting)) % settings_per_page
     return 200, 150 * (y_index + 1)
@@ -63,7 +57,7 @@ def get_setting_position(
 
 def settings_toggle(firmware: Firmware, nav: Navigator,
                     to_toggle: list[SettingID]):
-    moves: list[Union[NavIns, NavInsID]] = list()
+    moves: list[Union[NavIns, NavInsID]] = []
     settings = get_device_settings(firmware)
     # Assume the app is on the home page
     if firmware.is_nano:
@@ -76,7 +70,7 @@ def settings_toggle(firmware: Firmware, nav: Navigator,
         moves += [NavInsID.BOTH_CLICK]  # Back
     else:
         moves += [NavInsID.USE_CASE_HOME_SETTINGS]
-        settings_per_page = get_setting_per_page(firmware)
+        settings_per_page = 3 if firmware == Firmware.STAX else 2
         for setting in settings:
             setting_idx = settings.index(setting)
             if (setting_idx > 0) and (setting_idx % settings_per_page) == 0:
