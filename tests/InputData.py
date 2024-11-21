@@ -12,7 +12,38 @@ from command_builder import CommandBuilder, TIP712FieldType
 import keychain
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
+from keychain import sign_data, Key
 
+class TrustedNameType(IntEnum):
+    ACCOUNT = 0x01
+    CONTRACT = 0x02
+    NFT = 0x03
+
+
+class TrustedNameSource(IntEnum):
+    LAB = 0x00
+    CAL = 0x01
+    ENS = 0x02
+    UD = 0x03
+    FN = 0x04
+    DNS = 0x05
+
+
+class TrustedNameTag(IntEnum):
+    STRUCT_TYPE = 0x01
+    STRUCT_VERSION = 0x02
+    NOT_VALID_AFTER = 0x10
+    CHALLENGE = 0x12
+    SIGNER_KEY_ID = 0x13
+    SIGNER_ALGO = 0x14
+    SIGNATURE = 0x15
+    NAME = 0x20
+    COIN_TYPE = 0x21
+    ADDRESS = 0x22
+    CHAIN_ID = 0x23
+    NAME_TYPE = 0x70
+    NAME_SOURCE = 0x71
+    NFT_ID = 0x72
 
 class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_GENUINE_CHECK = 0x01
@@ -25,14 +56,68 @@ class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_COIN_META = 0x08
     PUBKEY_USAGE_SEED_ID_AUTH = 0x09
 
+class FieldTag(IntEnum):
+    STRUCT_TYPE = 0x01
+    STRUCT_VERSION = 0x02
+    NOT_VALID_AFTER = 0x10
+    CHALLENGE = 0x12
+    SIGNER_KEY_ID = 0x13
+    SIGNER_ALGO = 0x14
+    DER_SIGNATURE = 0x15
+    TRUSTED_NAME = 0x20
+    COIN_TYPE = 0x21
+    ADDRESS = 0x22
+    CHAIN_ID = 0x23
+    TICKER = 0x24
+    BLOCKCHAIN_FAMILY = 0x51
+    NETWORK_NAME = 0x52
+    NETWORK_ICON_HASH = 0x53
+    TRUSTED_NAME_TYPE = 0x70
+    TRUSTED_NAME_SOURCE = 0x71
+    TRUSTED_NAME_NFT_ID = 0x72
+
+class StatusWord(IntEnum):
+    OK = 0x9000
+    ERROR_NO_INFO = 0x6a00
+    INVALID_DATA = 0x6a80
+    INSUFFICIENT_MEMORY = 0x6a84
+    INVALID_INS = 0x6d00
+    INVALID_P1_P2 = 0x6b00
+    CONDITION_NOT_SATISFIED = 0x6985
+    REF_DATA_NOT_FOUND = 0x6a88
+    EXCEPTION_OVERFLOW = 0x6807
+    NOT_IMPLEMENTED = 0x911c
 
 # global variables
 app_client = None
 cmd_builder: CommandBuilder = None
 filtering_paths: dict = {}
+filtering_tokens: list[dict] = []
 current_path: list[str] = list()
 sig_ctx: dict[str, Any] = {}
 
+
+def der_encode(value: int) -> bytes:
+    # max() to have minimum length of 1
+    value_bytes = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
+    if value >= 0x80:
+        value_bytes = (0x80 | len(value_bytes)).to_bytes(1, 'big') + value_bytes
+    return value_bytes
+
+def format_tlv(tag: int, value: Union[int, str, bytes]) -> bytes:
+    if isinstance(value, int):
+        # max() to have minimum length of 1
+        value = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
+    elif isinstance(value, str):
+        value = value.encode()
+
+    assert isinstance(value, bytes), f"Unhandled TLV formatting for type : {type(value)}"
+
+    tlv = bytearray()
+    tlv += der_encode(tag)
+    tlv += der_encode(len(value))
+    tlv += value
+    return tlv
 
 def default_handler():
     raise RuntimeError("Uninitialized handler")
@@ -201,35 +286,68 @@ encoding_functions[TIP712FieldType.STRING] = encode_string
 encoding_functions[TIP712FieldType.FIX_BYTES] = encode_bytes_fix
 encoding_functions[TIP712FieldType.DYN_BYTES] = encode_bytes_dyn
 
+def send_filtering_token(token_idx: int):
+    assert token_idx < len(filtering_tokens)
+    if len(filtering_tokens[token_idx]) > 0:
+        token = filtering_tokens[token_idx]
+        if not token["sent"]:
+            provide_token_metadata(token["ticker"],
+                                   bytes.fromhex(token["addr"][2:]),
+                                   token["decimals"],
+                                   token["chain_id"])
+            token["sent"] = True
+
+
+def send_filter(path: str, discarded: bool):
+    assert path in filtering_paths.keys()
+
+    if filtering_paths[path]["type"].startswith("amount_join_"):
+        print("here 305")
+        if "token" in filtering_paths[path].keys():
+            token_idx = filtering_paths[path]["token"]
+            send_filtering_token(token_idx)
+        else:
+            # Permit (ERC-2612)
+            send_filtering_token(0)
+            token_idx = 0xff
+        if filtering_paths[path]["type"].endswith("_token"):
+            send_filtering_amount_join_token(path, token_idx, discarded)
+        elif filtering_paths[path]["type"].endswith("_value"):
+            send_filtering_amount_join_value(path,
+                                             token_idx,
+                                             filtering_paths[path]["name"],
+                                             discarded)
+            
+    elif filtering_paths[path]["type"] == "datetime":
+        print("here 322")
+        send_filtering_datetime(path, filtering_paths[path]["name"], discarded)
+    elif filtering_paths[path]["type"] == "trusted_name":
+        print("here 325")
+        send_filtering_trusted_name(path,
+                                    filtering_paths[path]["name"],
+                                    filtering_paths[path]["tn_type"],
+                                    filtering_paths[path]["tn_source"],
+                                    discarded)
+        print("here 325 done")
+    elif filtering_paths[path]["type"] == "raw":
+        print("here 332")
+        print(path, filtering_paths[path]["name"], discarded)
+        send_filtering_raw(path, filtering_paths[path]["name"], discarded)
+    else:
+        print('assert fail')
+        assert False
 
 def send_struct_impl_field(value, field):
-    # Something wrong happened if this triggers
-    if isinstance(value, list) or (field["enum"] == TIP712FieldType.CUSTOM):
-        breakpoint()
+    assert not isinstance(value, list)
+    assert field["enum"] != TIP712FieldType.CUSTOM
 
     data = encoding_functions[field["enum"]](value, field["typesize"])
-
+    print("here 337")
     if filtering_paths:
         path = ".".join(current_path)
         if path in filtering_paths.keys():
-            if filtering_paths[path]["type"] == "amount_join_token":
-                send_filtering_amount_join_token(
-                    filtering_paths[path]["token"])
-            elif filtering_paths[path]["type"] == "amount_join_value":
-                if "token" in filtering_paths[path].keys():
-                    token = filtering_paths[path]["token"]
-                else:
-                    # Permit (TRC-2612)
-                    token = 0xff
-                send_filtering_amount_join_value(token,
-                                                 filtering_paths[path]["name"])
-            elif filtering_paths[path]["type"] == "datetime":
-                send_filtering_datetime(filtering_paths[path]["name"])
-            elif filtering_paths[path]["type"] == "raw":
-                send_filtering_raw(filtering_paths[path]["name"])
-            else:
-                assert False
-
+            send_filter(path, False)
+    print("here 342")
     with app_client.exchange_async_raw_chunks(
             cmd_builder.tip712_send_struct_impl_struct_field(bytearray(data))):
         enable_autonext()
@@ -242,14 +360,23 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
     if new_level:
         current_path.append(field["name"])
     if len(array_lvls) > 0 and lvls_left > 0:
+        print('here 355')
         with app_client.exchange_async_raw(
                 cmd_builder.tip712_send_struct_impl_array(len(data))):
             pass
+        if len(data) == 0:
+            for path in filtering_paths.keys():
+                dpath = ".".join(current_path) + ".[]"
+                if path.startswith(dpath):
+                    print('here 371')
+                    app_client.exchange_raw(cmd_builder.tip712_filtering_discarded_path(path))
+                    send_filter(path, True)
         idx = 0
         for subdata in data:
             current_path.append("[]")
             if not evaluate_field(structs, subdata, field, lvls_left - 1,
                                   False):
+                print('here false 370')
                 return False
             current_path.pop()
             idx += 1
@@ -260,10 +387,13 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
                       file=sys.stderr)
                 return False
     else:
+        print('here 380')
         if field["enum"] == TIP712FieldType.CUSTOM:
             if not send_struct_impl(structs, data, field["type"]):
+                print('here false 383')
                 return False
         else:
+            print('here 387')
             send_struct_impl_field(data, field)
     if new_level:
         current_path.pop()
@@ -274,11 +404,14 @@ def send_struct_impl(structs, data, structname):
     # Check if it is a struct we don't known
     if structname not in structs.keys():
         return False
-
+    # print(structs)
+    # print(data)
+    # print(structname)
     struct = structs[structname]
     for f in struct:
         if not evaluate_field(structs, data[f["name"]], f, len(
                 f["array_lvls"])):
+            print('here false 404')
             return False
     return True
 
@@ -310,62 +443,78 @@ def send_filtering_message_info(display_name: str, filters_count: int):
     disable_autonext()
 
 
-def send_filtering_amount_join_token(token_idx: int):
+def send_filtering_amount_join_token(path: str, token_idx: int, discarded: bool):
     global sig_ctx
 
-    path_str = ".".join(current_path)
-
     to_sign = start_signature_payload(sig_ctx, 11)
-    to_sign += path_str.encode()
+    to_sign += path.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_amount_join_token(token_idx, sig)):
+            cmd_builder.tip712_filtering_amount_join_token(token_idx, sig, discarded)):
         pass
 
 
-def send_filtering_amount_join_value(token_idx: int, display_name: str):
+def send_filtering_amount_join_value(path: str, token_idx: int, display_name: str, discarded: bool):
     global sig_ctx
 
-    path_str = ".".join(current_path)
-
     to_sign = start_signature_payload(sig_ctx, 22)
-    to_sign += path_str.encode()
+    to_sign += path.encode()
     to_sign += display_name.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
             cmd_builder.tip712_filtering_amount_join_value(
-                token_idx, display_name, sig)):
+                token_idx, display_name, sig, discarded)):
         pass
 
 
-def send_filtering_datetime(display_name: str):
+def send_filtering_datetime(path: str, display_name: str, discarded: bool):
     global sig_ctx
-
-    path_str = ".".join(current_path)
 
     to_sign = start_signature_payload(sig_ctx, 33)
-    to_sign += path_str.encode()
+    to_sign += path.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_datetime(display_name, sig)):
+            cmd_builder.tip712_filtering_datetime(display_name, sig, discarded)):
         pass
 
-
-# ledgerjs doesn't actually sign anything, and instead uses already pre-computed signatures
-def send_filtering_raw(display_name):
+def send_filtering_trusted_name(path: str,
+                                display_name: str,
+                                name_type: list[int],
+                                name_source: list[int],
+                                discarded: bool):
     global sig_ctx
 
-    path_str = ".".join(current_path)
+    to_sign = start_signature_payload(sig_ctx, 44)
+    to_sign += path.encode()
+    to_sign += display_name.encode()
+    for t in name_type:
+        to_sign.append(t)
+    for s in name_source:
+        to_sign.append(s)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    print('here 496')
+    with app_client.exchange_async_raw(
+        cmd_builder.tip712_filtering_trusted_name(display_name, name_type, name_source, sig, discarded)):
+        pass
+
+# ledgerjs doesn't actually sign anything, and instead uses already pre-computed signatures
+def send_filtering_raw(path: str, display_name: str, discarded: bool):
+    global sig_ctx
 
     to_sign = start_signature_payload(sig_ctx, 72)
-    to_sign += path_str.encode()
+    to_sign += path.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    # print(sig)
+    # msg = cmd_builder.tip712_filtering_raw(display_name, sig, discarded)
+    # print(msg)
+    # with app_client.exchange_async_raw(msg):
+    #     pass
     with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_raw(display_name, sig)):
+            cmd_builder.tip712_filtering_raw(display_name, sig, discarded)):
         pass
 
 
@@ -403,18 +552,21 @@ def provide_token_metadata(ticker: str,
                                                     chain_id, sig))
 
 
-def prepare_filtering(filtr_data, message):
+def prepare_filtering(filter_data, message):
     global filtering_paths
+    global filtering_tokens
 
-    if "fields" in filtr_data:
-        filtering_paths = filtr_data["fields"]
+    if "fields" in filter_data:
+        filtering_paths = filter_data["fields"]
     else:
         filtering_paths = {}
-    if "tokens" in filtr_data:
-        for token in filtr_data["tokens"]:
-            provide_token_metadata(token["ticker"],
-                                   bytes.fromhex(token["addr"][2:]),
-                                   token["decimals"], token["chain_id"])
+    if "tokens" in filter_data:
+        filtering_tokens = filter_data["tokens"]
+        for token in filtering_tokens:
+            if len(token) > 0:
+                token["sent"] = False
+    else:
+        filtering_tokens = []
 
 
 def handle_optional_domain_values(domain):
@@ -495,7 +647,7 @@ def process_data(aclient,
 
     if filters:
         init_signature_context(types, domain)
-
+    
     # send types definition
     for key in types.keys():
         with app_client.exchange_async_raw(
@@ -504,13 +656,13 @@ def process_data(aclient,
         for f in types[key]:
             (f["type"], f["enum"], f["typesize"], f["array_lvls"]) = \
              send_struct_def_field(f["type"], f["name"])
-
+    
     if filters:
         with app_client.exchange_async_raw(
                 cmd_builder.tip712_filtering_activate()):
             pass
         prepare_filtering(filters, message)
-
+    
     # if app_client._pki_client is None:
     #     print(f"Ledger-PKI Not supported on '{app_client._firmware.name}'")
     # else:
@@ -534,7 +686,6 @@ def process_data(aclient,
     disable_autonext()
     if not send_struct_impl(types, domain, domain_typename):
         return False
-
     if filters:
         if filters and "name" in filters:
             send_filtering_message_info(filters["name"], len(filtering_paths))
@@ -546,7 +697,70 @@ def process_data(aclient,
             cmd_builder.tip712_send_struct_impl_root_struct(message_typename)):
         enable_autonext()
     disable_autonext()
+    # return True
     if not send_struct_impl(types, message, message_typename):
+        print("Failed to send message implementation")
         return False
 
     return True
+
+def provide_trusted_name_common(app_client, cmd_builder, payload: bytes) -> RAPDU:
+    # if pki_client is None:
+    #     print(f"Ledger-PKI Not supported on '{firmware.name}'")
+    # else:
+    #     # pylint: disable=line-too-long
+    #     if firmware == Firmware.NANOSP:
+    #         cert_apdu = "01010102010210040102000011040000000212010013020002140101160400000000200b446f6d61696e5f4e616d6530020007310108320121332102b91fbec173e3ba4a714e014ebc827b6f899a9fa7f4ac769cde284317a00f4f653401013501031546304402201b5188f5af5cd4d40d2e5eee85609323ee129b789082d079644c89c0df9b6ce0022076c5d26bb5c8db8ab02771ecd577f63f68eaf1c90523173f161f9c12f6e978bd"  # noqa: E501
+    #     elif firmware == Firmware.NANOX:
+    #         cert_apdu = "01010102010211040000000212010013020002140101160400000000200B446F6D61696E5F4E616D6530020007310108320121332102B91FBEC173E3BA4A714E014EBC827B6F899A9FA7F4AC769CDE284317A00F4F653401013501021546304402202CD052029B756890F0C56713409C58C24785FEFFD1A997E9C840A7BDB176B512022059A30E04E491CD27BD1DA1B5CB810CF8E4EAE67F6406F054FDFC371F7EB9F2C4"  # noqa: E501
+    #     elif firmware == Firmware.STAX:
+    #         cert_apdu = "01010102010211040000000212010013020002140101160400000000200B446F6D61696E5F4E616D6530020007310108320121332102B91FBEC173E3BA4A714E014EBC827B6F899A9FA7F4AC769CDE284317A00F4F65340101350104154630440220741DB4E738749D4188436419B20B9AEF8F07581312A9B3C9BAA3F3E879690F6002204C4A3510569247777BC43DB830D129ACA8985B88552E2E234E14D8AA2863026B"  # noqa: E501
+    #     elif firmware == Firmware.FLEX:
+    #         cert_apdu = "01010102010211040000000212010013020002140101160400000000200B446F6D61696E5F4E616D6530020007310108320121332102B91FBEC173E3BA4A714E014EBC827B6F899A9FA7F4AC769CDE284317A00F4F65340101350105154730450221008B6BBCE1716C0A06F110C77FE181F8395D1692441459A106411463F01A45D4A7022044AB69037E6FA9D1D1A409E00B202C2D4451D464C8E5D4962D509FE63153FE93"  # noqa: E501
+    #     # pylint: enable=line-too-long
+
+    #     pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
+    payload += format_tlv(FieldTag.STRUCT_TYPE, 3)  # TrustedName
+    payload += format_tlv(FieldTag.SIGNER_KEY_ID, 0)  # test key
+    payload += format_tlv(FieldTag.SIGNER_ALGO, 1)  # secp256k1
+    payload += format_tlv(FieldTag.DER_SIGNATURE,
+                            sign_data(Key.TRUSTED_NAME, payload))
+    chunks = cmd_builder.provide_trusted_name(payload)
+    for chunk in chunks[:-1]:
+        app_client.exchange_raw(chunk)
+    return app_client.exchange_raw(chunks[-1])
+
+def provide_trusted_name_v1(app_client,
+                            cmd_builder,
+                            addr: bytes, name: str, challenge: int) -> RAPDU:
+    payload = format_tlv(FieldTag.STRUCT_VERSION, 1)
+    payload += format_tlv(FieldTag.CHALLENGE, challenge)
+    payload += format_tlv(FieldTag.COIN_TYPE, 0x3c)  # ETH in slip-44
+    payload += format_tlv(FieldTag.TRUSTED_NAME, name)
+    payload += format_tlv(FieldTag.ADDRESS, addr)
+    return provide_trusted_name_common(app_client, cmd_builder, payload)
+
+def provide_trusted_name_v2(app_client,
+                            cmd_builder,
+                            addr: bytes,
+                            name: str,
+                            name_type: TrustedNameType,
+                            name_source: TrustedNameSource,
+                            chain_id: int,
+                            nft_id: Optional[int] = None,
+                            challenge: Optional[int] = None,
+                            not_valid_after: Optional[tuple[int]] = None) -> RAPDU:
+    payload = format_tlv(FieldTag.STRUCT_VERSION, 2)
+    payload += format_tlv(FieldTag.TRUSTED_NAME, name)
+    payload += format_tlv(FieldTag.ADDRESS, addr)
+    payload += format_tlv(FieldTag.TRUSTED_NAME_TYPE, name_type)
+    payload += format_tlv(FieldTag.TRUSTED_NAME_SOURCE, name_source)
+    payload += format_tlv(FieldTag.CHAIN_ID, chain_id)
+    if nft_id is not None:
+        payload += format_tlv(FieldTag.TRUSTED_NAME_NFT_ID, nft_id)
+    if challenge is not None:
+        payload += format_tlv(FieldTag.CHALLENGE, challenge)
+    if not_valid_after is not None:
+        assert len(not_valid_after) == 3
+        payload += format_tlv(FieldTag.NOT_VALID_AFTER, struct.pack("BBB", *not_valid_after))
+    return provide_trusted_name_common(app_client, cmd_builder, payload)

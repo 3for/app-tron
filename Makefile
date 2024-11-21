@@ -55,6 +55,7 @@ ENABLE_NBGL_QRCODE = 1
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
 DEBUG ?= 0
+DEBUG = 1
 
 APP_SOURCE_PATH  += src
 
@@ -63,13 +64,23 @@ ifneq ($(TARGET_NAME),TARGET_NANOS)
 	DEFINES += HAVE_DYN_MEM_ALLOC
 endif
 
-CAL_TEST_KEY ?= 1
+TRUSTED_NAME_TEST_KEY = 1
+# ENS
+ifneq ($(TARGET_NAME),TARGET_NANOS)
+    DEFINES += HAVE_TRUSTED_NAME
+    TRUSTED_NAME_TEST_KEY ?= 0
+    ifneq ($(TRUSTED_NAME_TEST_KEY),0)
+        DEFINES += HAVE_TRUSTED_NAME_TEST_KEY
+    endif
+endif
+
+CAL_TEST_KEY = 1
 ifneq ($(CAL_TEST_KEY),0)
     # Key used in our test framework
     DEFINES += HAVE_CAL_TEST_KEY
 endif
 
-DEFINES += CHAINID_COINNAME=\"$(TICKER)\" CHAIN_ID=1151668124
+DEFINES += APP_TICKER=\"$(TICKER)\" APP_CHAIN_ID=1151668124
 
 .PHONY: proto
 proto:

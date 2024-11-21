@@ -80,6 +80,7 @@ void ui_191_switch_to_question(void);
 
 void ui_712_start(void);
 void ui_712_switch_to_message(void);
+void ui_712_start_unfiltered(void);
 
 void feed_display(void);
 void skip_rest_of_message(void);
@@ -88,3 +89,6 @@ void continue_displaying_message(void);
 
 void ui_712_switch_to_sign(void);
 void ui_typed_message_review_choice(bool confirm);
+
+// void ui_warning_blind_signing(void);
+void ui_error_blind_signing(void);

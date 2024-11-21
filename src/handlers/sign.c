@@ -123,6 +123,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 break;
             default:
                 // Error if any other contract
+                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return io_send_sw(E_INCORRECT_DATA);
         }
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
@@ -172,6 +173,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
+            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             return io_send_sw(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
 #ifdef HAVE_SWAP
@@ -256,6 +258,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     G_io_apdu_buffer[100] = '\0';
                     toAddress[0] = '\0';
                     if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
+                        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                         return io_send_sw(E_INCORRECT_DATA);
                     }
                     // call has value
@@ -359,6 +362,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!setExchangeContractDetail(txContent.contractType,
                                            (char *) G_io_apdu_buffer + 100,
                                            sizeof(G_io_apdu_buffer) - 100)) {
+                                            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return io_send_sw(E_INCORRECT_DATA);
             }
 
@@ -529,6 +533,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return io_send_sw(E_INCORRECT_DATA);
             }
 
@@ -536,6 +541,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case INVALID_CONTRACT:
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;
         default:
@@ -546,6 +552,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return io_send_sw(E_INCORRECT_DATA);
             }
 

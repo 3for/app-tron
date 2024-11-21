@@ -1,5 +1,7 @@
 #include "os.h"
 #include "cx.h"
+#include "bip32.h"
+// #include "bip32_utils.h"
 #include <stdbool.h>
 #include "core/Contract.pb.h"
 #include "common_utils.h"
@@ -263,6 +265,7 @@ void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
 
+extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
 extern uint8_t appState;

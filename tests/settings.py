@@ -13,6 +13,8 @@ class NanoSettingID(SettingID):
     FLOW_2 = auto()
     FLOW_3 = auto()
     FLOW_4 = auto()
+    # BLIND_SIGNING = auto()
+    VERBOSE_ENS = auto()
     VERBOSE_TIP712 = auto()
 
 
@@ -20,6 +22,8 @@ class NonNanoSettingID(SettingID):
     TX_DATA_ID = auto()
     CSTM_CONTRACTS_ID = auto()
     HASH_TX_ID = auto()
+    # BLIND_SIGNING = auto()
+    VERBOSE_ENS = auto()
     VERBOSE_TIP712 = auto()
 
 
@@ -35,6 +39,8 @@ def get_device_settings(firmware: Firmware) -> list:
             NanoSettingID.FLOW_2,
             NanoSettingID.FLOW_3,
             NanoSettingID.FLOW_4,
+            # NanoSettingID.BLIND_SIGNING,
+            NanoSettingID.VERBOSE_ENS,
             NanoSettingID.VERBOSE_TIP712,
         ]
     else:
@@ -42,6 +48,8 @@ def get_device_settings(firmware: Firmware) -> list:
             NonNanoSettingID.TX_DATA_ID,
             NonNanoSettingID.CSTM_CONTRACTS_ID,
             NonNanoSettingID.HASH_TX_ID,
+            # NonNanoSettingID.BLIND_SIGNING,
+            NonNanoSettingID.VERBOSE_ENS,
             NonNanoSettingID.VERBOSE_TIP712,
         ]
 

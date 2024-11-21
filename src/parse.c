@@ -799,6 +799,7 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
     transaction.custom_data.arg = &content->dataBytes;
 
     if (!pb_decode(&stream, protocol_Transaction_raw_fields, &transaction)) {
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         return USTREAM_FAULT;
     }
 
@@ -883,8 +884,10 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 ret = account_permission_update_contract(content, &tx_stream);
                 break;
             default:
+            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return USTREAM_FAULT;
         }
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         return ret ? USTREAM_PROCESSING : USTREAM_FAULT;
     }
 
