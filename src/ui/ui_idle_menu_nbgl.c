@@ -29,6 +29,10 @@ enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
+    // BLIND_SIGNING_TOKEN,
+#ifdef HAVE_TRUSTED_NAME
+    SWITCH_TRUSTED_NAME_VERBOSE_TOKEN,
+ #endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     SWITCH_TIP712_VERBOSE_TOKEN,
 #endif
@@ -38,6 +42,10 @@ enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
+    // BLIND_SIGNING_ID,
+#ifdef HAVE_TRUSTED_NAME
+    TRUSTED_NAME_VERBOSE_ID,
+ #endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     TIP712_VERBOSE_ID,
 #endif
@@ -77,6 +85,18 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
                 (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
+        // case BLIND_SIGNING_TOKEN:
+        //     SETTING_TOGGLE(S_BLIND_ALLOWED);
+        //     switches[BLIND_SIGNING_ID].initState = 
+        //         (HAS_SETTING(S_BLIND_ALLOWED)) ? ON_STATE : OFF_STATE;
+        //     break;
+#ifdef HAVE_TRUSTED_NAME
+        case SWITCH_TRUSTED_NAME_VERBOSE_TOKEN:
+            SETTING_TOGGLE(S_TRUSTED_NAME);
+            switches[TIP712_VERBOSE_ID].initState =
+                (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
+            break;
+#endif  // HAVE_TRUSTED_NAME
 #ifdef HAVE_TIP712_FULL_SUPPORT
         case SWITCH_TIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
@@ -127,6 +147,20 @@ void ui_idle(void) {
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
+    // switches[BLIND_SIGNING_ID].initState = HAS_SETTING(S_BLIND_ALLOWED) ? ON_STATE : OFF_STATE;
+    // switches[BLIND_SIGNING_ID].text = "Blind signing";
+    // switches[BLIND_SIGNING_ID].subText = "Enable transaction blind signing.";
+    // switches[BLIND_SIGNING_ID].token = BLIND_SIGNING_TOKEN;
+    // switches[BLIND_SIGNING_ID].tuneId = TUNE_TAP_CASUAL;
+
+#ifdef HAVE_TRUSTED_NAME
+    switches[TRUSTED_NAME_VERBOSE_ID].initState = HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
+    switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
+    switches[TRUSTED_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
+    switches[TRUSTED_NAME_VERBOSE_ID].token = TRUSTED_NAME_VERBOSE_TOKEN;
+    switches[TRUSTED_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+#endif  // HAVE_TRUSTED_NAME
+
 #ifdef HAVE_TIP712_FULL_SUPPORT
     switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
@@ -144,4 +178,22 @@ void ui_idle(void) {
                                 NULL,
                                 onQuitCallback);
 }
+
+static void ui_error_blind_signing_choice(bool confirm) {
+    if (confirm) {
+        ui_settings();
+    } else {
+        ui_idle();
+    }
+}
+
+void ui_error_blind_signing(void) {
+    nbgl_useCaseChoice(&C_Warning_64px,
+                       "This transaction cannot be clear-signed",
+                       "Enable blind signing in the settings to sign this transaction.",
+                       "Go to settings",
+                       "Reject transaction",
+                       ui_error_blind_signing_choice);
+}
+
 #endif  // HAVE_NBGL

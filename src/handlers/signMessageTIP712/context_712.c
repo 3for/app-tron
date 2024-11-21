@@ -53,6 +53,7 @@ bool tip712_context_init(void) {
     // Since they are optional, they might not be provided by the JSON data
     explicit_bzero(tip712_context->contract_addr, sizeof(tip712_context->contract_addr));
     tip712_context->chain_id = 0;
+    tip712_context->go_home_on_failure = true;
 
     struct_state = NOT_INITIALIZED;
 

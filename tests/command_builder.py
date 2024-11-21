@@ -4,7 +4,6 @@ import struct
 from enum import IntEnum
 from typing import Optional
 from ragger.bip import pack_derivation_path
-
 from enum import IntEnum, auto
 
 
@@ -33,7 +32,7 @@ class InsType(IntEnum):
     TIP712_SEND_FILTERING = 0x1e
     TIP712_SIGN = 0x0c
     GET_CHALLENGE = 0x20
-    PROVIDE_DOMAIN_NAME = 0x22
+    PROVIDE_TRUSTED_NAME = 0x22
     EXTERNAL_PLUGIN_SETUP = 0x12
 
 
@@ -56,7 +55,8 @@ class P2Type(IntEnum):
     FILTERING_TOKEN_ADDR_CHECK = 0xfd
     FILTERING_AMOUNT_FIELD = 0xfe
     FILTERING_RAW = 0xff
-
+    FILTERING_DISCARDED_PATH = 0x01
+    FILTERING_TRUSTED_NAME = 0xfb
 
 class CommandBuilder:
     _CLA: int = 0xE0
@@ -160,6 +160,15 @@ class CommandBuilder:
         data += sig
         return data
 
+    def tip712_filtering_discarded_path(self, path: str):
+        data = bytearray()
+        data.append(len(path))
+        data += path.encode()
+        return self._serialize(InsType.TIP712_SEND_FILTERING,
+                               P1Type.COMPLETE_SEND,
+                               P2Type.FILTERING_DISCARDED_PATH,
+                               data)
+
     def tip712_filtering_message_info(self, name: str, filters_count: int,
                                       sig: bytes) -> bytes:
         data = bytearray()
@@ -173,17 +182,17 @@ class CommandBuilder:
                                P2Type.FILTERING_MESSAGE_INFO, data)
 
     def tip712_filtering_amount_join_token(self, token_idx: int,
-                                           sig: bytes) -> bytes:
+                                           sig: bytes, discarded: bool) -> bytes:
         data = bytearray()
         data.append(token_idx)
         data.append(len(sig))
         data += sig
         return self._serialize(InsType.TIP712_SEND_FILTERING,
-                               P1Type.COMPLETE_SEND,
+                               int(discarded),
                                P2Type.FILTERING_TOKEN_ADDR_CHECK, data)
 
     def tip712_filtering_amount_join_value(self, token_idx: int, name: str,
-                                           sig: bytes) -> bytes:
+                                           sig: bytes, discarded: bool) -> bytes:
         data = bytearray()
         data.append(len(name))
         data += name.encode()
@@ -191,17 +200,41 @@ class CommandBuilder:
         data.append(len(sig))
         data += sig
         return self._serialize(InsType.TIP712_SEND_FILTERING,
-                               P1Type.COMPLETE_SEND,
+                               int(discarded),
                                P2Type.FILTERING_AMOUNT_FIELD, data)
 
-    def tip712_filtering_datetime(self, name: str, sig: bytes) -> bytes:
+    def tip712_filtering_datetime(self, name: str, sig: bytes, discarded: bool) -> bytes:
         return self._serialize(InsType.TIP712_SEND_FILTERING,
-                               P1Type.COMPLETE_SEND, P2Type.FILTERING_DATETIME,
+                               int(discarded),
+                               P2Type.FILTERING_DATETIME,
                                self._tip712_filtering_send_name(name, sig))
 
-    def tip712_filtering_raw(self, name: str, sig: bytes) -> bytes:
+    def tip712_filtering_trusted_name(self,
+                                      name: str,
+                                      name_types: list[int],
+                                      name_sources: list[int],
+                                      sig: bytes,
+                                      discarded: bool):
+        data = bytearray()
+        data.append(len(name))
+        data += name.encode()
+        data.append(len(name_types))
+        for t in name_types:
+            data.append(t)
+        data.append(len(name_sources))
+        for s in name_sources:
+            data.append(s)
+        data.append(len(sig))
+        data += sig
         return self._serialize(InsType.TIP712_SEND_FILTERING,
-                               P1Type.COMPLETE_SEND, P2Type.FILTERING_RAW,
+                               int(discarded),
+                               P2Type.FILTERING_TRUSTED_NAME,
+                               data)
+
+    def tip712_filtering_raw(self, name: str, sig: bytes, discarded: bool) -> bytes:
+        return self._serialize(InsType.TIP712_SEND_FILTERING,
+                               int(discarded),
+                               P2Type.FILTERING_RAW,
                                self._tip712_filtering_send_name(name, sig))
 
     def set_external_plugin(self, plugin_name: str, contract_address: bytes,
@@ -241,14 +274,14 @@ class CommandBuilder:
     def get_challenge(self) -> bytes:
         return self._serialize(InsType.GET_CHALLENGE, 0x00, 0x00)
 
-    def provide_domain_name(self, tlv_payload: bytes) -> list[bytes]:
+    def provide_trusted_name(self, tlv_payload: bytes) -> list[bytes]:
         chunks = list()
         payload = struct.pack(">H", len(tlv_payload))
         payload += tlv_payload
         p1 = 1
         while len(payload) > 0:
             chunks.append(
-                self._serialize(InsType.PROVIDE_DOMAIN_NAME, p1, 0x00,
+                self._serialize(InsType.PROVIDE_TRUSTED_NAME, p1, 0x00,
                                 payload[:0xff]))
             payload = payload[0xff:]
             p1 = 0

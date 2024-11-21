@@ -10,6 +10,7 @@ typedef struct {
     uint8_t contract_addr[ADDRESS_SIZE_712];
     uint64_t chain_id;
     uint8_t schema_hash[224 / 8];
+    bool go_home_on_failure;
 } s_tip712_context;
 
 extern s_tip712_context *tip712_context;

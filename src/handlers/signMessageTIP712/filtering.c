@@ -16,46 +16,62 @@
 #ifdef HAVE_LEDGER_PKI
 #include "os_pki.h"
 #endif
+#include "trusted_name.h"
 
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_AMOUNT_JOIN_TOKEN 11
 #define FILT_MAGIC_AMOUNT_JOIN_VALUE 22
 #define FILT_MAGIC_DATETIME          33
+#define FILT_MAGIC_TRUSTED_NAME      44
 #define FILT_MAGIC_RAW_FIELD         72
 
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
 
 /**
- * Reconstruct the field path and hash it
+ * Reconstruct the field path and hash it for the signature and the CRC
  *
  * @param[in] hash_ctx the hashing context
+ * @param[in] discarded if the filter targets a field that does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
  */
-static void hash_filtering_path(cx_hash_t *hash_ctx) {
+static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *path_crc) {
     const void *field_ptr;
     const char *key;
     uint8_t key_len;
 
-    for (uint8_t i = 0; i < path_get_depth_count(); ++i) {
-        if (i > 0) {
-            hash_byte('.', hash_ctx);
-        }
-        if ((field_ptr = path_get_nth_field(i + 1)) != NULL) {
-            if ((key = get_struct_field_keyname(field_ptr, &key_len)) != NULL) {
-                // field name
-                hash_nbytes((uint8_t *) key, key_len, hash_ctx);
+    if (discarded) {
+        key = ui_712_get_discarded_path(&key_len);
+        PRINTF("Runing at here %s: %d %.*H %d\n", __FILE__, __LINE__, key_len, key, key_len);
+        hash_nbytes((uint8_t *) key, key_len, hash_ctx);
+        *path_crc = cx_crc32_update(*path_crc, key, key_len);
+    } else {
+        for (uint8_t i = 0; i < path_get_depth_count(); ++i) {
+            if (i > 0) {
+                hash_byte('.', hash_ctx);
+                *path_crc = cx_crc32_update(*path_crc, ".", 1);
+            }
+            if ((field_ptr = path_get_nth_field(i + 1)) != NULL) {
+                if ((key = get_struct_field_keyname(field_ptr, &key_len)) != NULL) {
+                    // field name
+                    hash_nbytes((uint8_t *) key, key_len, hash_ctx);
+                    *path_crc = cx_crc32_update(*path_crc, key, key_len);
 
-                // array levels
-                if (struct_field_is_array(field_ptr)) {
-                    uint8_t lvl_count;
+                    // array levels
+                    if (struct_field_is_array(field_ptr)) {
+                        uint8_t lvl_count;
 
-                    get_struct_field_array_lvls_array(field_ptr, &lvl_count);
-                    for (int j = 0; j < lvl_count; ++j) {
-                        hash_nbytes((uint8_t *) ".[]", 3, hash_ctx);
+                        get_struct_field_array_lvls_array(field_ptr, &lvl_count);
+                        for (int j = 0; j < lvl_count; ++j) {
+                            hash_nbytes((uint8_t *) ".[]", 3, hash_ctx);
+                            *path_crc = cx_crc32_update(*path_crc, ".[]", 3);
+                        }
                     }
                 }
             }
         }
     }
+    // so it is only usable for the following filter
+    ui_712_set_discarded_path("", 0);
 }
 
 /**
@@ -131,10 +147,6 @@ static bool check_token_index(uint8_t idx) {
         PRINTF("Error: token index out of range (%u)\n", idx);
         return false;
     }
-    if (!global_ctx.transactionContext.assetSet[idx]) {
-        PRINTF("Error: token not set (%u)\n", idx);
-        return false;
-    }
     return true;
 }
 
@@ -177,7 +189,6 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -210,12 +221,12 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_MESSAGE_INFO)) {
         return false;
     }
+    
     hash_byte(filters_count, (cx_hash_t *) &hash_ctx);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
-
     // Handling
     ui_712_set_filters_count(filters_count);
     if (!HAS_SETTING(S_VERBOSE_TIP712)) {
@@ -227,13 +238,225 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
 }
 
 /**
- * Command to display a field as a date-time
+ * Check if given path matches the backed-up path
+ *
+ * A match is found as long as the given path starts with the backed-up path.
+ *
+ * @param[in] path given path
+ * @param[in] path_len length of the path
+ * @param[out] offset_ptr offset to where the comparison stopped
+ * @return whether a match was found or not
+ */
+static bool matches_backup_path(const char *path, uint8_t path_len, uint8_t *offset_ptr) {
+    const void *field_ptr;
+    const char *key;
+    uint8_t key_len;
+    uint8_t offset = 0;
+    uint8_t lvl_count;
+
+    for (uint8_t i = 0; i < path_backup_get_depth_count(); ++i) {
+        if (i > 0) {
+            if (((offset + 1) > path_len) || (memcmp(path + offset, ".", 1) != 0)) {
+                return false;
+            }
+            offset += 1;
+        }
+        if ((field_ptr = path_backup_get_nth_field(i + 1)) != NULL) {
+            if ((key = get_struct_field_keyname(field_ptr, &key_len)) != NULL) {
+                // field name
+                if (((offset + key_len) > path_len) || (memcmp(path + offset, key, key_len) != 0)) {
+                    return false;
+                }
+                offset += key_len;
+
+                // array levels
+                if (struct_field_is_array(field_ptr)) {
+                    get_struct_field_array_lvls_array(field_ptr, &lvl_count);
+                    for (int j = 0; j < lvl_count; ++j) {
+                        if (((offset + 3) > path_len) || (memcmp(path + offset, ".[]", 3) != 0)) {
+                            return false;
+                        }
+                        offset += 3;
+                    }
+                }
+            }
+        }
+    }
+    if (offset_ptr != NULL) {
+        *offset_ptr = offset;
+    }
+    return true;
+}
+
+/**
+ * Command to provide the filter path of a discarded filtered field
+ *
+ * Some filtered fields are discarded/never received because they are contained in an array
+ * that turns out to be empty.
  *
  * @param[in] payload the payload to parse
  * @param[in] length the payload length
  * @return whether it was successful or not
  */
-bool filtering_date_time(const uint8_t *payload, uint8_t length) {
+bool filtering_discarded_path(const uint8_t *payload, uint8_t length) {
+    uint8_t path_len;
+    const char *path;
+    uint8_t offset = 0;
+    uint8_t path_offset;
+
+    if ((offset + sizeof(path_len)) > length) {
+        return false;
+    }
+    path_len = payload[offset++];
+    if ((offset + path_len) > length) {
+        return false;
+    }
+    path = (char *) &payload[offset];
+    offset += path_len;
+    if (offset < path_len) {
+        return false;
+    }
+    if (!matches_backup_path(path, path_len, &path_offset)) {
+        return false;
+    }
+    if (!path_exists_in_backup(path + path_offset, path_len - path_offset)) {
+        return false;
+    }
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+    ui_712_set_discarded_path(path, path_len);
+    return true;
+}
+
+#ifdef HAVE_TRUSTED_NAME
+/**
+ * Command to display a field as a trusted name
+ *
+ * @param[in] payload the payload to parse
+ * @param[in] length the payload length
+ * @param[in] discarded if the filter targets a field that is does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
+ * @return whether it was successful or not
+ */
+bool filtering_trusted_name(const uint8_t *payload,
+                            uint8_t length,
+                            bool discarded,
+                            uint32_t *path_crc) {
+    uint8_t name_len;
+    const char *name;
+    uint8_t types_count;
+    e_name_type *types;
+    uint8_t sources_count;
+    e_name_source *sources;
+    uint8_t sig_len;
+    const uint8_t *sig;
+    uint8_t offset = 0;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    // Parsing
+    if ((offset + sizeof(name_len)) > length) {
+        return false;
+    }
+    name_len = payload[offset++];
+    if ((offset + name_len) > length) {
+        return false;
+    }
+    name = (char *) &payload[offset];
+    offset += name_len;
+    if ((offset + sizeof(types_count)) > length) {
+        return false;
+    }
+    types_count = payload[offset++];
+    if ((offset + types_count) > length) {
+        return false;
+    }
+    types = (e_name_type *) &payload[offset];
+    // sanity check
+    for (int i = 0; i < types_count; ++i) {
+        switch (types[i]) {
+            case TYPE_ACCOUNT:
+            case TYPE_CONTRACT:
+                break;
+            default:
+                return false;
+        }
+    }
+    offset += types_count;
+    if ((offset + sizeof(sources_count)) > length) {
+        return false;
+    }
+    sources_count = payload[offset++];
+    if ((offset + sources_count) > length) {
+        return false;
+    }
+    sources = (e_name_source *) &payload[offset];
+    // sanity check
+    for (int i = 0; i < sources_count; ++i) {
+        switch (sources[i]) {
+            case SOURCE_LAB:
+            case SOURCE_CAL:
+            case SOURCE_ENS:
+            case SOURCE_UD:
+            case SOURCE_FN:
+            case SOURCE_DNS:
+                break;
+            default:
+                return false;
+        }
+    }
+    offset += sources_count;
+    //
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    // Verification
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_TRUSTED_NAME)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
+    hash_nbytes(types, types_count, (cx_hash_t *) &hash_ctx);
+    hash_nbytes(sources, sources_count, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    // Handling
+    if (!check_typename("address")) {
+        return false;
+    }
+    if (name_len > 0) {  // don't substitute for an empty name
+        ui_712_set_title(name, name_len);
+    }
+    ui_712_flag_field(true, name_len > 0, false, false, true);
+    ui_712_set_trusted_name_requirements(types_count, types);
+    return true;
+}
+#endif  // HAVE_TRUSTED_NAME
+
+/**
+ * Command to display a field as a date-time
+ *
+ * @param[in] payload the payload to parse
+ * @param[in] length the payload length
+ * @param[in] discarded if the filter targets a field that is does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
+ * @return whether it was successful or not
+ */
+bool filtering_date_time(const uint8_t *payload,
+                         uint8_t length,
+                         bool discarded,
+                         uint32_t *path_crc) {
     uint8_t name_len;
     const char *name;
     uint8_t sig_len;
@@ -269,7 +492,7 @@ bool filtering_date_time(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_DATETIME)) {
         return false;
     }
-    hash_filtering_path((cx_hash_t *) &hash_ctx);
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
@@ -282,7 +505,7 @@ bool filtering_date_time(const uint8_t *payload, uint8_t length) {
     if (name_len > 0) {  // don't substitute for an empty name
         ui_712_set_title(name, name_len);
     }
-    ui_712_flag_field(true, name_len > 0, false, true);
+    ui_712_flag_field(true, name_len > 0, false, true, false);
     return true;
 }
 
@@ -291,9 +514,14 @@ bool filtering_date_time(const uint8_t *payload, uint8_t length) {
  *
  * @param[in] payload the payload to parse
  * @param[in] length the payload length
+ * @param[in] discarded if the filter targets a field that is does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
  * @return whether it was successful or not
  */
-bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
+bool filtering_amount_join_token(const uint8_t *payload,
+                                 uint8_t length,
+                                 bool discarded,
+                                 uint32_t *path_crc) {
     uint8_t token_idx;
     uint8_t sig_len;
     const uint8_t *sig;
@@ -323,7 +551,7 @@ bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_AMOUNT_JOIN_TOKEN)) {
         return false;
     }
-    hash_filtering_path((cx_hash_t *) &hash_ctx);
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
     hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
@@ -333,7 +561,7 @@ bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
     if (!check_typename("address") || !check_token_index(token_idx)) {
         return false;
     }
-    ui_712_flag_field(false, false, true, false);
+    ui_712_flag_field(false, false, true, false, false);
     ui_712_token_join_prepare_addr_check(token_idx);
     return true;
 }
@@ -343,9 +571,14 @@ bool filtering_amount_join_token(const uint8_t *payload, uint8_t length) {
  *
  * @param[in] payload the payload to parse
  * @param[in] length the payload length
+ * @param[in] discarded if the filter targets a field that is does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
  * @return whether it was successful or not
  */
-bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
+bool filtering_amount_join_value(const uint8_t *payload,
+                                 uint8_t length,
+                                 bool discarded,
+                                 uint32_t *path_crc) {
     uint8_t name_len;
     const char *name;
     uint8_t token_idx;
@@ -357,7 +590,6 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -389,13 +621,12 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_AMOUNT_JOIN_VALUE)) {
         return false;
     }
-    hash_filtering_path((cx_hash_t *) &hash_ctx);
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
-
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
         // Permit (TRC-2612)
@@ -413,7 +644,7 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
     if (!check_typename("uint") || !check_token_index(token_idx)) {
         return false;
     }
-    ui_712_flag_field(false, false, true, false);
+    ui_712_flag_field(false, false, true, false, false);
     ui_712_token_join_prepare_amount(token_idx, name, name_len);
     return true;
 }
@@ -423,9 +654,15 @@ bool filtering_amount_join_value(const uint8_t *payload, uint8_t length) {
  *
  * @param[in] payload the payload to parse
  * @param[in] length the payload length
+ * @param[in] discarded if the filter targets a field that is does not exist (within an empty array)
+ * @param[out] path_crc pointer to the CRC of the filter path
  * @return whether it was successful or not
  */
-bool filtering_raw_field(const uint8_t *payload, uint8_t length) {
+bool filtering_raw_field(const uint8_t *payload,
+                         uint8_t length,
+                         bool discarded,
+                         uint32_t *path_crc) {
+    PRINTF("Runing at here %d %d %.*H, %d, %d\n", __FILE__, __LINE__, length, payload, discarded, path_crc);
     uint8_t name_len;
     const char *name;
     uint8_t sig_len;
@@ -436,7 +673,7 @@ bool filtering_raw_field(const uint8_t *payload, uint8_t length) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -461,17 +698,25 @@ bool filtering_raw_field(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_RAW_FIELD)) {
         return false;
     }
-    hash_filtering_path((cx_hash_t *) &hash_ctx);
+    PRINTF("Runing at here %s: %d %d \n", __FILE__, __LINE__, discarded);
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    PRINTF("Runing at here %s: %d %d\n", __FILE__, __LINE__, *path_crc);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
+    PRINTF("Runing at here %s: %d %s\n", __FILE__, __LINE__, name);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
 
-    // Handling
-    if (name_len > 0) {  // don't substitute for an empty name
-        ui_712_set_title(name, name_len);
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+    if (!discarded) {
+        // Handling
+        if (name_len > 0) {  // don't substitute for an empty name
+            ui_712_set_title(name, name_len);
+            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+        }
+        ui_712_flag_field(true, name_len > 0, false, false, false);
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     }
-    ui_712_flag_field(true, name_len > 0, false, false);
     return true;
 }
 

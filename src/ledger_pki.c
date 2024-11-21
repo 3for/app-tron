@@ -67,6 +67,12 @@ int check_signature_with_pubkey(const char *tag,
     {
         PRINTF("[%s] ********** No certificate loaded. Using legacy path **********\n", tag);
         CX_CHECK(cx_ecfp_init_public_key_no_throw(CX_CURVE_256K1, PubKey, keyLen, &verif_key));
+        PRINTF("params %d %.*H %.*H %.*H\n", verif_key.curve, verif_key.W_len, verif_key.W, bufLen, buffer, sigLen, signature);
+                                                //  const cx_ecfp_public_key_t *pukey,
+                                                //  const uint8_t              *hash,
+                                                //  size_t                      hash_len,
+                                                //  const uint8_t              *sig,
+                                                //  size_t                      sig_len
         if (!cx_ecdsa_verify_no_throw(&verif_key, buffer, bufLen, signature, sigLen)) {
             PRINTF("%s: Invalid signature\n", tag);
 #ifndef HAVE_BYPASS_SIGNATURES

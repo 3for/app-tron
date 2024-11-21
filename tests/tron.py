@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import sys
 import base58
+import rlp
+import pickle
 
 from typing import Optional
 from contextlib import contextmanager
@@ -19,6 +21,7 @@ from ragger.bip import pack_derivation_path
 from ragger.error import ExceptionRAPDU
 from ragger.firmware import Firmware
 from conftest import MNEMONIC
+from web3 import Web3
 
 from InputData import PKIPubKeyUsage
 '''
@@ -26,6 +29,8 @@ Tron Protobuf
 '''
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}/proto")
 from core import Tron_pb2 as tron
+from core import Contract_pb2 as contract
+
 from google.protobuf.any_pb2 import Any
 from google.protobuf.internal.decoder import _DecodeVarint32
 
@@ -116,20 +121,6 @@ class Errors(IntEnum):
     LICENSING = 0x6f42
     HALTED = 0x6faa
     NOT_IMPLEMENTED = 0x911c
-
-
-class StatusWord(IntEnum):
-    OK = 0x9000
-    ERROR_NO_INFO = 0x6a00
-    INVALID_DATA = 0x6a80
-    INSUFFICIENT_MEMORY = 0x6a84
-    INVALID_INS = 0x6d00
-    INVALID_P1_P2 = 0x6b00
-    CONDITION_NOT_SATISFIED = 0x6985
-    REF_DATA_NOT_FOUND = 0x6a88
-    EXCEPTION_OVERFLOW = 0x6807
-    NOT_IMPLEMENTED = 0x911c
-
 
 class APDUOffsets(IntEnum):
     CLA = 0
@@ -240,7 +231,10 @@ class TronClient:
         tx.raw_data.ref_block_hash = bytes.fromhex("95DA42177DB00507")
         tx.raw_data.ref_block_bytes = bytes.fromhex("3DCE")
         if data:
-            tx.raw_data.custom_data = data
+            if data.__class__ is dict:
+                tx.raw_data.custom_data = pickle.dumps(data)
+            else:
+                tx.raw_data.custom_data = data
 
         c = tx.raw_data.contract.add()
         c.type = contractType
@@ -430,3 +424,34 @@ class TronClient:
         else:
             return self._client.exchange(CLA, InsType.SIGN, p1, 0x00,
                                          messages[-1])
+
+    def sign_for_trusted_name(self,
+             bip32_path: str,
+             tx_params: dict,
+             snap_path: str,
+             text: str):
+        # tx = Web3().eth.account.create().sign_transaction(tx_params).rawTransaction
+        tx = self.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    self.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    self.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name="1002000".encode()),
+            tx_params)
+        return self.sign(bip32_path, tx, text=text, snappath=snap_path)
+        prefix = bytes()
+        suffix = []
+        if tx[0] in [0x01, 0x02]:
+            prefix = tx[:1]
+            tx = tx[len(prefix):]
+        else:  # legacy
+            if "chainId" in tx_params:
+                suffix = [int(tx_params["chainId"]), bytes(), bytes()]
+        print(tx)
+        decoded = rlp.decode(tx)[:-3]  # remove already computed signature
+        tx = prefix + rlp.encode(decoded + suffix)
+        chunks = cmd_builder.sign(bip32_path, tx, suffix)
+        return self.exchange_async_raw_chunks(chunks)

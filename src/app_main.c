@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <string.h>
-
+#include <assert.h>
 #include "os.h"
 #include "cx.h"
 #include "os_io_seproxyhal.h"
@@ -42,6 +42,7 @@ uint16_t apdu_response_code;
 // The settings, stored in NVRAM.
 const internal_storage_t N_storage_real;
 
+tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
 
@@ -56,6 +57,26 @@ void reset_app_context() {
     memset((uint8_t *) &global_ctx, 0, sizeof(global_ctx));
 }
 
+uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle) {
+    uint16_t err = 0;
+    if (reset) {
+        reset_app_context();
+    }
+    U2BE_ENCODE(G_io_apdu_buffer, tx, sw);
+    tx += 2;
+    err = io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+    if (idle) {
+        // Display back the original UX
+        ui_idle();
+    }
+    return err;
+}
+
+
+void handle_return_code(uint16_t response_code) {
+    io_seproxyhal_send_status(response_code, 0, false, false);
+}
+
 static void nv_app_state_init(void) {
     if (!HAS_SETTING(S_INITIALIZED)) {
         SETTING_TOGGLE(S_INITIALIZED);
@@ -64,8 +85,8 @@ static void nv_app_state_init(void) {
 
 void init_coin_config(chain_config_t *coin_config) {
     memset(coin_config, 0, sizeof(chain_config_t));
-    strcpy(coin_config->coinName, CHAINID_COINNAME);
-    coin_config->chainId = CHAIN_ID;
+    strcpy(coin_config->coinName, APP_TICKER);
+    coin_config->chainId = APP_CHAIN_ID;
 }
 
 // App main loop
@@ -113,7 +134,7 @@ void app_main(void) {
                     continue;
                 }
 
-                PRINTF("=> CLA=%02X | INS=%02X | P1=%02X | P2=%02X | Lc=%02X | CData=%.*H\n",
+                PRINTF("=> CLA=%02X | INS=%02X | P1=%02X | P2=%02X | LC=%02X | CData=%.*H\n",
                        cmd.cla,
                        cmd.ins,
                        cmd.p1,
@@ -121,25 +142,34 @@ void app_main(void) {
                        cmd.lc,
                        cmd.lc,
                        cmd.data);
-
+                // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 // Dispatch structured APDU command to handler
                 if (apdu_dispatcher(&cmd) < 0) {
                     CLOSE_TRY;
                     return;
                 }
+                // int ret = apdu_dispatcher(&cmd);
+                // PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, ret);
+                // if (ret < 0) {
+                //     CLOSE_TRY;
+                //     return;
+                // }
             }
+            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             CATCH(EXCEPTION_IO_RESET) {
                 CLOSE_TRY;
                 THROW(EXCEPTION_IO_RESET);
             }
+            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             CATCH_OTHER(e) {
                 io_send_sw(e);
             }
+            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             FINALLY {
             }
         }
         END_TRY;
     }
-
+    // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     return;
 }
