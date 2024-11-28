@@ -220,14 +220,17 @@ static bool handle_not_valid_after(const s_tlv_data *data,
                                    s_trusted_name_info *trusted_name_info,
                                    s_sig_ctx *sig_ctx) {
     const uint8_t app_version[] = {MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION};
-    int i = -1;
-
+    
     (void) trusted_name_info;
     (void) sig_ctx;
     if (data->length != ARRAYLEN(app_version)) {
         return false;
     }
-    for (int i = 0; i < (int) ARRAYLEN(app_version) && data->value[i] <= app_version[i]; ++i) {
+    int i = 0;
+    for (; i < (int) ARRAYLEN(app_version); ++i) {
+        if (data->value[i] > app_version[i])
+            break;
+
         PRINTF("Runing at here %s: %d %d %d %d\n", __FILE__, __LINE__, data->value[i], app_version[i], i);
         if (data->value[i] < app_version[i]) {
             PRINTF("Expired trusted name : %u.%u.%u < %u.%u.%u\n",

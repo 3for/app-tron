@@ -160,8 +160,10 @@ bool ui_712_redraw_generic_step(void) {
     if (!ui_ctx->shown) {  // Initialize if it is not already
         if ((ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) && !HAS_SETTING(S_SIGN_BY_HASH) &&
             !HAS_SETTING(S_VERBOSE_TIP712)) {
-            // Both settings not enabled => Error
+            // Both settings not enabled => Error.
+            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             ui_error_blind_signing();
+            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             tip712_context->go_home_on_failure = false;
             if(tip712_context != NULL) {

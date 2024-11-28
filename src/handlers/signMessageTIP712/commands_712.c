@@ -283,6 +283,7 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     bool ret = false;
     UNUSED(p1);
     UNUSED(p2);
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
@@ -293,12 +294,14 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
                        sizeof(global_ctx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
     } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
                0) {
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
 #ifndef SCREEN_SIZE_WALLET
         if (!HAS_SETTING(S_VERBOSE_TIP712) &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
@@ -307,12 +310,17 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
 #endif
         ret = true;
         ui_712_end_sign();
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     }
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (!ret) {
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         apdu_reply(false);
         return apdu_response_code;
     }
-
+    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+    
+    // handle_return_code(APDU_NO_RESPONSE);
     return APDU_NO_RESPONSE;
 }
 

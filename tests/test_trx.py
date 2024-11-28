@@ -53,6 +53,9 @@ skip_flow: bool = False
 
 def autonext(firmware, navigator, default_screenshot_path: Path):
     global autonext_idx
+    print('skip_flow: ', skip_flow)
+    print('autonext_idx: ', autonext_idx)
+    print('unfiltered_flow: ', unfiltered_flow)
     moves = []
     if firmware.is_nano:
         moves = [NavInsID.RIGHT_CLICK]
@@ -73,6 +76,7 @@ def autonext(firmware, navigator, default_screenshot_path: Path):
                 ]
             else:
                 moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
+    print('moves: ', moves)
     if snapshots_dirname is not None:
         navigator.navigate_and_compare(
             default_screenshot_path,
@@ -90,7 +94,8 @@ def autonext(firmware, navigator, default_screenshot_path: Path):
 def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
                       client: TronClient, builder: CommandBuilder,
                       json_data: dict, filters, verbose: bool,
-                      golden_run: bool):
+                      golden_run: bool,
+                      extra_left: bool = False):
     global autonext_idx
     global unfiltered_flow
     global skip_flow
@@ -122,10 +127,18 @@ def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
                 # need to skip the message hash
                 if not verbose and filters is None:
                     moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+                print('verbose: ', verbose)
+                print('filters: ', filters)
+                print('firmware: ', firmware)
+                # if verbose and filters is None and firmware == Firmware.FLEX:
+                #     moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+            if extra_left:
+                moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
             moves += [NavInsID.USE_CASE_REVIEW_CONFIRM]
         if snapshots_dirname is not None:
             # Could break (time-out) if given a JSON that requires less moves
             # TODO: Maybe take list of moves as input instead of trying to guess them ?
+            print('moves2: ', moves)
             navigator.navigate_and_compare(default_screenshot_path,
                                            snapshots_dirname,
                                            moves,
@@ -170,7 +183,7 @@ def input_files() -> list[str]:
         if fnmatch.fnmatch(file, "*-data.json"):
             files.append(file.path)
     return sorted(files)
-    # return ['/app/tests/tip712_input_files/00-simple_mail-data.json']
+    # return ['/app/tests/tip712_input_files/01-addresses_array_mail-data.json']
 
 
 @pytest.fixture(name="input_file", params=input_files())
@@ -920,8 +933,8 @@ class TestTRX():
                             verbose: bool, filtering: bool, test_name: str):
 
         global unfiltered_flow
-        global snapshots_dirname
-        snapshots_dirname = 'test_trx_tip712_new'
+        # global snapshots_dirname
+        # snapshots_dirname = 'test_trx_tip712_new'
         settings_to_toggle: list[SettingID] = []
         client = TronClient(backend, firmware, navigator)
         
@@ -929,6 +942,7 @@ class TestTRX():
             pytest.skip("Not supported on LNS")
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
+        print('test_path: ', test_path)
         cmd_builder = CommandBuilder()
 
         filters = None
@@ -958,14 +972,17 @@ class TestTRX():
 
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
+            extra_left = test_path.endswith('01-addresses_array_mail') and verbose and filters is None
             vrs = tip712_new_common(firmware, navigator,
                                     default_screenshot_path, client,
-                                    cmd_builder, data, filters, verbose, False)
+                                    cmd_builder, data, filters, verbose, False,
+                                    extra_left = extra_left)
             recovered_addr = recover_message(data, vrs)
 
         assert recovered_addr == get_wallet_addr(client)
         if len(settings_to_toggle) > 0:
             settings_toggle(firmware, navigator, settings_to_toggle)
+        # assert 0
 
     def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
@@ -1130,7 +1147,15 @@ class TestTRX():
         InputData.disable_autonext()  # so the timer stops firing
         assert e.value.status == InputData.StatusWord.INVALID_DATA
 
-        navigator.navigate([NavInsID.BOTH_CLICK], screen_change_before_first_instruction=True)
+        if firmware.is_nano:
+            navigator.navigate([NavInsID.BOTH_CLICK], screen_change_before_first_instruction=True)
+        elif firmware == Firmware.STAX:
+            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))], screen_change_before_first_instruction=True)
+        elif firmware == Firmware.FLEX:
+            navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))], screen_change_before_first_instruction=True)
+                           
+        # navigator.navigate([NavInsID.BOTH_CLICK if firmware.is_nano else NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT)],
+        #                    screen_change_before_first_instruction=True)
         settings_toggle(firmware, navigator, [setting_id])
 
     def test_trx_tip712_skip(self, firmware: Firmware,
@@ -1148,7 +1173,7 @@ class TestTRX():
     
         unfiltered_flow = True
         skip_flow = True
-        settings_toggle(firmware, navigator, [SettingID.BLIND_SIGNING])
+
         with open(input_files()[0], encoding="utf-8") as file:
             data = json.load(file)
         
