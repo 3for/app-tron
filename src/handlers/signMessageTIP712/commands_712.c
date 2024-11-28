@@ -210,8 +210,8 @@ int handleTIP712Filtering(uint8_t p1,
     if (tip712_context == NULL) {
         // apdu_reply(false);
         // return APDU_RESPONSE_CONDITION_NOT_SATISFIED;
-        handle_tip712_return_code(false);
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        handle_tip712_return_code(false);
     }
     if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
         handle_tip712_return_code(true);
