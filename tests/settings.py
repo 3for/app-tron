@@ -89,4 +89,5 @@ def settings_toggle(firmware: Firmware, nav: Navigator,
                            get_setting_position(firmware, setting))
                 ]
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
+    print(moves)
     nav.navigate(moves, screen_change_before_first_instruction=False)

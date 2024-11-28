@@ -78,7 +78,7 @@ def test_trusted_name_v1(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
         # if firmware.is_nano:
         #     end_text = "Accept"
         # else:
@@ -125,7 +125,7 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
                              "to": bytes(addr),
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
         # if firmware.is_nano:
         #     end_text = "Accept"
         # else:
@@ -159,7 +159,7 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": 5
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
         # if firmware.is_nano:
         #     end_text = "Accept"
         # else:
@@ -193,7 +193,7 @@ def test_trusted_name_v1_unknown_chain(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": 9
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
         # if firmware.is_nano:
         #     end_text = "Accept"
         # else:
@@ -272,7 +272,7 @@ def test_trusted_name_v2(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
         # if firmware.is_nano:
         #     end_text = "Accept"
         # else:
@@ -310,7 +310,7 @@ def test_trusted_name_v2_wrong_chainid(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID + 1,
-                         }, test_name, end_text)#:
+                         }, test_name, end_text, warning_approve=True)#:
 
 
         # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)

@@ -62,6 +62,9 @@ static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_DATA_ALLOWED,
     S_CUSTOM_CONTRACT,
     S_SIGN_BY_HASH,
+#ifdef HAVE_TRUSTED_NAME
+    S_TRUSTED_NAME,
+ #endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     S_VERBOSE_TIP712,
 #endif
@@ -94,7 +97,7 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
         case SWITCH_TRUSTED_NAME_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_TRUSTED_NAME);
             switches[TIP712_VERBOSE_ID].initState =
-                (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
+                (HAS_SETTING(S_TRUSTED_NAME)) ? ON_STATE : OFF_STATE;
             break;
 #endif  // HAVE_TRUSTED_NAME
 #ifdef HAVE_TIP712_FULL_SUPPORT
@@ -157,7 +160,7 @@ void ui_idle(void) {
     switches[TRUSTED_NAME_VERBOSE_ID].initState = HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
     switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
     switches[TRUSTED_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
-    switches[TRUSTED_NAME_VERBOSE_ID].token = TRUSTED_NAME_VERBOSE_TOKEN;
+    switches[TRUSTED_NAME_VERBOSE_ID].token = SWITCH_TRUSTED_NAME_VERBOSE_TOKEN;
     switches[TRUSTED_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
 #endif  // HAVE_TRUSTED_NAME
 
@@ -180,11 +183,12 @@ void ui_idle(void) {
 }
 
 static void ui_error_blind_signing_choice(bool confirm) {
-    if (confirm) {
-        ui_settings();
-    } else {
+    // if (confirm) {
+    //     ui_settings();
+    // } else {
+        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         ui_idle();
-    }
+    // }
 }
 
 void ui_error_blind_signing(void) {
@@ -195,5 +199,13 @@ void ui_error_blind_signing(void) {
                        "Reject transaction",
                        ui_error_blind_signing_choice);
 }
+
+// void ui_settings(void) {
+//     const char *appname = NULL;
+//     const char *tagline = NULL;
+
+//     get_appname_and_tagline(&appname, &tagline);
+//     prepare_and_display_home(appname, tagline, 0);
+// }
 
 #endif  // HAVE_NBGL

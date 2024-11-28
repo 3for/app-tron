@@ -608,7 +608,7 @@ def enable_autonext():
     # golden run has to be slower to make sure we take good snapshots
     # and not processing/loading screens
     if is_golden_run:
-        delay *= 3
+        delay *= 2
 
     signal.setitimer(signal.ITIMER_REAL, delay, delay)
 

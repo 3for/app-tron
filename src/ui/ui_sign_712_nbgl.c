@@ -30,6 +30,7 @@ static void message_progress(bool confirm) {
             pairs[0].item = buf;
             pair_idx = 1;
         }
+    }
     if (confirm) {
         if (ui_712_next_field() == TIP712_NO_MORE_FIELD) {
             ui_712_switch_to_sign();
@@ -89,7 +90,7 @@ void ui_712_start_unfiltered(void) {
     ui_712_start_common(true);
     nbgl_useCaseReviewStreamingBlindSigningStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
                                                  &C_Review_64px,
-                                                 TEXT_REVIEW_EIP712,
+                                                 TEXT_REVIEW_TIP712,
                                                  NULL,
                                                  message_update);
 }
@@ -113,7 +114,7 @@ void ui_712_switch_to_sign(void) {
         pair_idx = 0;
         nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, review_skip);
     } else {
-        nbgl_useCaseReviewStreamingFinish(filtered ? TEXT_SIGN_EIP712 : TEXT_BLIND_SIGN_EIP712,
+        nbgl_useCaseReviewStreamingFinish(filtered ? TEXT_SIGN_TIP712 : TEXT_BLIND_SIGN_TIP712,
                                           ui_typed_message_review_choice);
     }
 }

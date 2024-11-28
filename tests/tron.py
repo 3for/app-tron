@@ -429,7 +429,8 @@ class TronClient:
              bip32_path: str,
              tx_params: dict,
              snap_path: str,
-             text: str):
+             text: str,
+             warning_approve: bool = False):
         # tx = Web3().eth.account.create().sign_transaction(tx_params).rawTransaction
         tx = self.packContract(
             tron.Transaction.Contract.TransferAssetContract,
@@ -441,7 +442,7 @@ class TronClient:
                 amount=1000000,
                 asset_name="1002000".encode()),
             tx_params)
-        return self.sign(bip32_path, tx, text=text, snappath=snap_path)
+        return self.sign(bip32_path, tx, text=text, snappath=snap_path, warning_approve=warning_approve)
         prefix = bytes()
         suffix = []
         if tx[0] in [0x01, 0x02]:
