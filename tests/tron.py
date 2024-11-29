@@ -431,7 +431,6 @@ class TronClient:
              snap_path: str,
              text: str,
              warning_approve: bool = False):
-        # tx = Web3().eth.account.create().sign_transaction(tx_params).rawTransaction
         tx = self.packContract(
             tron.Transaction.Contract.TransferAssetContract,
             contract.TransferAssetContract(
@@ -443,16 +442,3 @@ class TronClient:
                 asset_name="1002000".encode()),
             tx_params)
         return self.sign(bip32_path, tx, text=text, snappath=snap_path, warning_approve=warning_approve)
-        prefix = bytes()
-        suffix = []
-        if tx[0] in [0x01, 0x02]:
-            prefix = tx[:1]
-            tx = tx[len(prefix):]
-        else:  # legacy
-            if "chainId" in tx_params:
-                suffix = [int(tx_params["chainId"]), bytes(), bytes()]
-        print(tx)
-        decoded = rlp.decode(tx)[:-3]  # remove already computed signature
-        tx = prefix + rlp.encode(decoded + suffix)
-        chunks = cmd_builder.sign(bip32_path, tx, suffix)
-        return self.exchange_async_raw_chunks(chunks)

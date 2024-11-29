@@ -40,6 +40,7 @@ int apdu_dispatcher(const command_t *cmd) {
     if (cmd->cla != CLA) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
+
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
         if ((cmd->ins != INS_GET_PUBLIC_KEY) && (cmd->ins != INS_SIGN)) {
@@ -48,6 +49,7 @@ int apdu_dispatcher(const command_t *cmd) {
         }
     }
 #endif  // HAVE_SWAP
+
     // #ifndef HAVE_LEDGER_PKI
     //     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
     //         // Ledger-PKI APDU not yet caught by the running OS.
@@ -56,7 +58,7 @@ int apdu_dispatcher(const command_t *cmd) {
     //         return io_send_sw(E_NOT_IMPLEMENTED);
     //     }
     // #endif  // HAVE_LEDGER_PKI
-    // PRINTF("Runing at here %s: %d: %x\n", __FILE__, __LINE__, apdu_response_code);
+
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
             // Request Public Key

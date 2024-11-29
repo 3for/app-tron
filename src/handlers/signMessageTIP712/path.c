@@ -391,7 +391,6 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
     if ((path_struct->root_struct = get_structn(struct_name, name_length)) == NULL) {
         return false;
     }
-    PRINTF("Runing at here %s: %d: %x\n", __FILE__, __LINE__, apdu_response_code);
     if (path_struct->root_struct == NULL) {
         PRINTF("Struct name not found (");
         for (int i = 0; i < name_length; ++i) {

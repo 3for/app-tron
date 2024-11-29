@@ -41,7 +41,6 @@ static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
 
     if (discarded) {
         key = ui_712_get_discarded_path(&key_len);
-        PRINTF("Runing at here %s: %d %.*H %d\n", __FILE__, __LINE__, key_len, key, key_len);
         hash_nbytes((uint8_t *) key, key_len, hash_ctx);
         *path_crc = cx_crc32_update(*path_crc, key, key_len);
     } else {
@@ -221,7 +220,7 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_MESSAGE_INFO)) {
         return false;
     }
-    
+
     hash_byte(filters_count, (cx_hash_t *) &hash_ctx);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
@@ -322,7 +321,6 @@ bool filtering_discarded_path(const uint8_t *payload, uint8_t length) {
     if (!path_exists_in_backup(path + path_offset, path_len - path_offset)) {
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     ui_712_set_discarded_path(path, path_len);
     return true;
 }
@@ -590,6 +588,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
+
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -627,6 +626,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
+
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
         // Permit (TRC-2612)
@@ -662,7 +662,6 @@ bool filtering_raw_field(const uint8_t *payload,
                          uint8_t length,
                          bool discarded,
                          uint32_t *path_crc) {
-    PRINTF("Runing at here %d %d %.*H, %d, %d\n", __FILE__, __LINE__, length, payload, discarded, path_crc);
     uint8_t name_len;
     const char *name;
     uint8_t sig_len;
@@ -673,7 +672,6 @@ bool filtering_raw_field(const uint8_t *payload,
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -698,24 +696,18 @@ bool filtering_raw_field(const uint8_t *payload,
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_RAW_FIELD)) {
         return false;
     }
-    PRINTF("Runing at here %s: %d %d \n", __FILE__, __LINE__, discarded);
     hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
-    PRINTF("Runing at here %s: %d %d\n", __FILE__, __LINE__, *path_crc);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    PRINTF("Runing at here %s: %d %s\n", __FILE__, __LINE__, name);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
 
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (!discarded) {
         // Handling
         if (name_len > 0) {  // don't substitute for an empty name
             ui_712_set_title(name, name_len);
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         }
         ui_712_flag_field(true, name_len > 0, false, false, false);
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     }
     return true;
 }

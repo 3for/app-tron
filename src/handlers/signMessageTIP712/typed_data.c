@@ -428,7 +428,6 @@ const uint8_t *get_structn(const char *const name, const uint8_t length) {
     struct_ptr = get_structs_array(&structs_count);
     while (structs_count-- > 0) {
         struct_name = get_struct_name(struct_ptr, &name_length);
-        PRINTF("Runing at here %s: %d: %s %s\n", __FILE__, __LINE__, name, struct_name);
         if ((length == name_length) && (memcmp(name, struct_name, length) == 0)) {
             return struct_ptr;
         }
@@ -467,7 +466,7 @@ bool set_struct_name(uint8_t length, const uint8_t *const name) {
         return false;
     }
     *length_ptr = length;
-PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+
     // copy name
     if ((name_ptr = mem_alloc(sizeof(char) * length)) == NULL) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;

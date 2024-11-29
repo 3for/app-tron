@@ -302,7 +302,6 @@ def send_filter(path: str, discarded: bool):
     assert path in filtering_paths.keys()
 
     if filtering_paths[path]["type"].startswith("amount_join_"):
-        print("here 305")
         if "token" in filtering_paths[path].keys():
             token_idx = filtering_paths[path]["token"]
             send_filtering_token(token_idx)
@@ -317,24 +316,19 @@ def send_filter(path: str, discarded: bool):
                                              token_idx,
                                              filtering_paths[path]["name"],
                                              discarded)
-            
+
     elif filtering_paths[path]["type"] == "datetime":
-        print("here 322")
         send_filtering_datetime(path, filtering_paths[path]["name"], discarded)
     elif filtering_paths[path]["type"] == "trusted_name":
-        print("here 325")
         send_filtering_trusted_name(path,
                                     filtering_paths[path]["name"],
                                     filtering_paths[path]["tn_type"],
                                     filtering_paths[path]["tn_source"],
                                     discarded)
-        print("here 325 done")
     elif filtering_paths[path]["type"] == "raw":
-        print("here 332")
         print(path, filtering_paths[path]["name"], discarded)
         send_filtering_raw(path, filtering_paths[path]["name"], discarded)
     else:
-        print('assert fail')
         assert False
 
 def send_struct_impl_field(value, field):
@@ -342,12 +336,10 @@ def send_struct_impl_field(value, field):
     assert field["enum"] != TIP712FieldType.CUSTOM
 
     data = encoding_functions[field["enum"]](value, field["typesize"])
-    print("here 337")
     if filtering_paths:
         path = ".".join(current_path)
         if path in filtering_paths.keys():
             send_filter(path, False)
-    print("here 342")
     with app_client.exchange_async_raw_chunks(
             cmd_builder.tip712_send_struct_impl_struct_field(bytearray(data))):
         enable_autonext()
@@ -360,7 +352,6 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
     if new_level:
         current_path.append(field["name"])
     if len(array_lvls) > 0 and lvls_left > 0:
-        print('here 355')
         with app_client.exchange_async_raw(
                 cmd_builder.tip712_send_struct_impl_array(len(data))):
             pass
@@ -368,7 +359,6 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
             for path in filtering_paths.keys():
                 dpath = ".".join(current_path) + ".[]"
                 if path.startswith(dpath):
-                    print('here 371')
                     app_client.exchange_raw(cmd_builder.tip712_filtering_discarded_path(path))
                     send_filter(path, True)
         idx = 0
@@ -376,7 +366,6 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
             current_path.append("[]")
             if not evaluate_field(structs, subdata, field, lvls_left - 1,
                                   False):
-                print('here false 370')
                 return False
             current_path.pop()
             idx += 1
@@ -387,13 +376,10 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
                       file=sys.stderr)
                 return False
     else:
-        print('here 380')
         if field["enum"] == TIP712FieldType.CUSTOM:
             if not send_struct_impl(structs, data, field["type"]):
-                print('here false 383')
                 return False
         else:
-            print('here 387')
             send_struct_impl_field(data, field)
     if new_level:
         current_path.pop()
@@ -404,14 +390,11 @@ def send_struct_impl(structs, data, structname):
     # Check if it is a struct we don't known
     if structname not in structs.keys():
         return False
-    # print(structs)
-    # print(data)
-    # print(structname)
+
     struct = structs[structname]
     for f in struct:
         if not evaluate_field(structs, data[f["name"]], f, len(
                 f["array_lvls"])):
-            print('here false 404')
             return False
     return True
 
@@ -495,7 +478,6 @@ def send_filtering_trusted_name(path: str,
     for s in name_source:
         to_sign.append(s)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    print('here 496')
     with app_client.exchange_async_raw(
         cmd_builder.tip712_filtering_trusted_name(display_name, name_type, name_source, sig, discarded)):
         pass
@@ -508,11 +490,6 @@ def send_filtering_raw(path: str, display_name: str, discarded: bool):
     to_sign += path.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    # print(sig)
-    # msg = cmd_builder.tip712_filtering_raw(display_name, sig, discarded)
-    # print(msg)
-    # with app_client.exchange_async_raw(msg):
-    #     pass
     with app_client.exchange_async_raw(
             cmd_builder.tip712_filtering_raw(display_name, sig, discarded)):
         pass
@@ -647,7 +624,7 @@ def process_data(aclient,
 
     if filters:
         init_signature_context(types, domain)
-    
+
     # send types definition
     for key in types.keys():
         with app_client.exchange_async_raw(
@@ -656,13 +633,13 @@ def process_data(aclient,
         for f in types[key]:
             (f["type"], f["enum"], f["typesize"], f["array_lvls"]) = \
              send_struct_def_field(f["type"], f["name"])
-    
+
     if filters:
         with app_client.exchange_async_raw(
                 cmd_builder.tip712_filtering_activate()):
             pass
         prepare_filtering(filters, message)
-    
+
     # if app_client._pki_client is None:
     #     print(f"Ledger-PKI Not supported on '{app_client._firmware.name}'")
     # else:
@@ -686,6 +663,7 @@ def process_data(aclient,
     disable_autonext()
     if not send_struct_impl(types, domain, domain_typename):
         return False
+
     if filters:
         if filters and "name" in filters:
             send_filtering_message_info(filters["name"], len(filtering_paths))
@@ -697,7 +675,6 @@ def process_data(aclient,
             cmd_builder.tip712_send_struct_impl_root_struct(message_typename)):
         enable_autonext()
     disable_autonext()
-    # return True
     if not send_struct_impl(types, message, message_typename):
         print("Failed to send message implementation")
         return False

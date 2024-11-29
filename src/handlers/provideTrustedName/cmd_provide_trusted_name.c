@@ -5,12 +5,9 @@
 #include <string.h>
 #include <ctype.h>
 #include "common_utils.h"  // ARRAY_SIZE
-// #include "apdu_constants.h"
 #include "trusted_name.h"
 #include "challenge.h"
 #include "mem_utils.h"
-// #include "hash_bytes.h"
-// #include "network.h"
 #include "public_keys.h"
 #include "app_errors.h"
 #include "parse.h"
@@ -220,7 +217,7 @@ static bool handle_not_valid_after(const s_tlv_data *data,
                                    s_trusted_name_info *trusted_name_info,
                                    s_sig_ctx *sig_ctx) {
     const uint8_t app_version[] = {MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION};
-    
+
     (void) trusted_name_info;
     (void) sig_ctx;
     if (data->length != ARRAYLEN(app_version)) {
@@ -231,7 +228,6 @@ static bool handle_not_valid_after(const s_tlv_data *data,
         if (data->value[i] > app_version[i])
             break;
 
-        PRINTF("Runing at here %s: %d %d %d %d\n", __FILE__, __LINE__, data->value[i], app_version[i], i);
         if (data->value[i] < app_version[i]) {
             PRINTF("Expired trusted name : %u.%u.%u < %u.%u.%u\n",
                    data->value[0],
@@ -242,7 +238,7 @@ static bool handle_not_valid_after(const s_tlv_data *data,
                    app_version[2]);
             return false;
         }
-    }  //???
+    }
     return true;
 }
 
@@ -616,9 +612,7 @@ static bool handle_tlv_data(s_tlv_handler *handlers,
     t_tlv_handler *fptr;
 
     // check if a handler exists for this tag
-    // PRINTF("Runing at here %s: %d %d\n", __FILE__, __LINE__, handler_count );
     for (int idx = 0; idx < handler_count; ++idx) {
-        // PRINTF("Runing at here %s: %d %d %d\n", __FILE__, __LINE__, handlers[idx].tag, data->tag );
         if (handlers[idx].tag == data->tag) {
             trusted_name_info->rcv_flags |= RCV_FLAG(handlers[idx].rcv_bit);
             fptr = PIC(handlers[idx].func);
@@ -629,7 +623,6 @@ static bool handle_tlv_data(s_tlv_handler *handlers,
             break;
         }
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     return true;
 }
 
@@ -650,7 +643,6 @@ static bool verify_struct(const s_trusted_name_info *trusted_name_info) {
                      RCV_FLAG(SIGNER_KEY_ID_RCV_BIT) | RCV_FLAG(SIGNER_ALGO_RCV_BIT) |
                      RCV_FLAG(SIGNATURE_RCV_BIT) | RCV_FLAG(TRUSTED_NAME_RCV_BIT) |
                      RCV_FLAG(ADDRESS_RCV_BIT);
-    PRINTF("Runing at here %s: %d %d \n", __FILE__, __LINE__, trusted_name_info->struct_version);
     switch (trusted_name_info->struct_version) {
         case 1:
             required_flags |= RCV_FLAG(CHALLENGE_RCV_BIT) | RCV_FLAG(COIN_TYPE_RCV_BIT);
@@ -691,7 +683,6 @@ static bool verify_struct(const s_trusted_name_info *trusted_name_info) {
                    trusted_name_info->struct_version);
             return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     return true;
 }
 
@@ -801,14 +792,11 @@ static bool parse_tlv(const s_tlv_payload *payload,
     for (size_t i = 0; i < ARRAYLEN(handlers); ++i) handlers[i].rcv_bit = i;
     cx_sha256_init(&sig_ctx->hash_ctx);
     // handle TLV payload
-    // PRINTF("Runing at here %s: %d %d\n", __FILE__, __LINE__, offset < payload->size);
     while (offset < payload->size) {
-        // PRINTF("Runing at here %s: %d %d\n", __FILE__, __LINE__, step);
         switch (step) {
             case TLV_TAG:
                 tag_start_off = offset;
                 if (!get_der_value_as_uint8(payload, &offset, &data.tag)) {
-                    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                     return false;
                 }
                 step = TLV_LENGTH;
@@ -816,7 +804,6 @@ static bool parse_tlv(const s_tlv_payload *payload,
 
             case TLV_LENGTH:
                 if (!get_der_value_as_uint8(payload, &offset, &data.length)) {
-                    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                     return false;
                 }
                 step = TLV_VALUE;
@@ -833,7 +820,6 @@ static bool parse_tlv(const s_tlv_payload *payload,
                                      &data,
                                      trusted_name_info,
                                      sig_ctx)) {
-                                        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                     return false;
                 }
                 offset += data.length;
@@ -846,7 +832,6 @@ static bool parse_tlv(const s_tlv_payload *payload,
                 break;
 
             default:
-                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 return false;
         }
     }
@@ -854,7 +839,6 @@ static bool parse_tlv(const s_tlv_payload *payload,
         PRINTF("Error: unexpected data at the end of the TLV payload!\n");
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     return verify_struct(trusted_name_info);
 }
 
@@ -925,14 +909,11 @@ uint16_t handle_provide_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data
     if (p1 == P1_FIRST_CHUNK) {
         if (!handle_first_chunk(&data, &length, &g_tlv_payload, &sw)) {
             handle_return_code(sw);
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             return 0;
-            // return sw;
         }
     } else {
         // check if a payload is already in memory
         if (g_tlv_payload.buf == NULL) {
-            // return APDU_RESPONSE_INVALID_P1_P2;
             handle_return_code(APDU_RESPONSE_INVALID_P1_P2);
             return 0;
         }
@@ -941,8 +922,6 @@ uint16_t handle_provide_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data
     if ((g_tlv_payload.size + length) > g_tlv_payload.expected_size) {
         free_payload(&g_tlv_payload);
         PRINTF("TLV payload size mismatch!\n");
-        // return APDU_RESPONSE_INVALID_DATA;
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         handle_return_code(APDU_RESPONSE_INVALID_DATA);
         return 0;
     }
@@ -953,17 +932,11 @@ uint16_t handle_provide_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data
     // everything has been received
     if (g_tlv_payload.size == g_tlv_payload.expected_size) {
         g_trusted_name_info.name = g_trusted_name;
-        bool ret1 = !parse_tlv(&g_tlv_payload, &g_trusted_name_info, &sig_ctx);
-        bool ret2 = !verify_signature(&sig_ctx);
-        PRINTF("Runing at here %s: %d %d %d\n", __FILE__, __LINE__, ret1, ret2);
-        if (ret1 || ret2) {
-        // if (!parse_tlv(&g_tlv_payload, &g_trusted_name_info, &sig_ctx) ||
-        //     !verify_signature(&sig_ctx)) {
+        if (!parse_tlv(&g_tlv_payload, &g_trusted_name_info, &sig_ctx) ||
+            !verify_signature(&sig_ctx)) {
             free_payload(&g_tlv_payload);
             roll_challenge();  // prevent brute-force guesses
             g_trusted_name_info.rcv_flags = 0;
-            // return APDU_RESPONSE_INVALID_DATA;
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             handle_return_code(APDU_RESPONSE_INVALID_DATA);
             return 0;
         }

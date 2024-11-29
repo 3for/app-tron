@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <string.h>
-#include <assert.h>
+
 #include "os.h"
 #include "cx.h"
 #include "os_io_seproxyhal.h"
@@ -142,35 +142,25 @@ void app_main(void) {
                        cmd.lc,
                        cmd.lc,
                        cmd.data);
-                // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+
                 // Dispatch structured APDU command to handler
-                // if (apdu_dispatcher(&cmd) < 0) {
-                //     CLOSE_TRY;
-                //     return;
-                // }
-                int ret = apdu_dispatcher(&cmd);
-                PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, ret);
-                if (ret < 0) {
+                if (apdu_dispatcher(&cmd) < 0) {
                     CLOSE_TRY;
                     return;
                 }
             }
-            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             CATCH(EXCEPTION_IO_RESET) {
                 CLOSE_TRY;
                 THROW(EXCEPTION_IO_RESET);
             }
-            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             CATCH_OTHER(e) {
-                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 io_send_sw(e);
             }
-            // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             FINALLY {
             }
         }
         END_TRY;
     }
-    // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
+
     return;
 }

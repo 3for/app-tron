@@ -244,7 +244,6 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     field_type = struct_field_type(field_ptr);
     // first packet for this frame
     if (first) {
@@ -252,7 +251,6 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
             return false;
         }
         if (data_length < 2) {
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             return false;
         }
@@ -260,25 +258,20 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         data = field_hash_prepare(field_ptr, data, &data_length);
     }
     if (data_length > fh->remaining_size) {
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     fh->remaining_size -= data_length;
     // if a dynamic type -> continue progressive hash
     if (IS_DYN(field_type)) {
         hash_nbytes(data, data_length, (cx_hash_t *) &global_sha3);
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (!ui_712_feed_to_display(field_ptr, data, data_length, first, fh->remaining_size == 0)) {
         return false;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (fh->remaining_size == 0) {
         if (partial)  // only makes sense if marked as complete
         {
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             return false;
         }
@@ -288,7 +281,6 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
     } else {
         if (!partial || !IS_DYN(field_type))  // only makes sense if marked as partial
         {
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             return false;
         }

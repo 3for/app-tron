@@ -51,9 +51,6 @@ skip_flow: bool = False
 
 def autonext(firmware, navigator, default_screenshot_path: Path):
     global autonext_idx
-    print('skip_flow: ', skip_flow)
-    print('autonext_idx: ', autonext_idx)
-    print('unfiltered_flow: ', unfiltered_flow)
     moves = []
     if firmware.is_nano:
         moves = [NavInsID.RIGHT_CLICK]
@@ -74,7 +71,6 @@ def autonext(firmware, navigator, default_screenshot_path: Path):
                 ]
             else:
                 moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
-    print('moves: ', moves)
     if snapshots_dirname is not None:
         navigator.navigate_and_compare(
             default_screenshot_path,
@@ -105,11 +101,7 @@ def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
         client, builder, json_data, filters,
         partial(autonext, firmware, navigator, default_screenshot_path),
         golden_run)
-    # InputData.process_data(
-    #     client, builder, json_data, filters,
-    #     partial(autonext, firmware, navigator, default_screenshot_path),
-    #     golden_run)
-    # return
+
     with client.exchange_async_raw(
             builder.tip712_sign_new(client.getAccount(0)['path'])):
         moves = []
@@ -125,18 +117,12 @@ def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
                 # need to skip the message hash
                 if not verbose and filters is None:
                     moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
-                print('verbose: ', verbose)
-                print('filters: ', filters)
-                print('firmware: ', firmware)
-                # if verbose and filters is None and firmware == Firmware.FLEX:
-                #     moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
             if extra_left:
                 moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
             moves += [NavInsID.USE_CASE_REVIEW_CONFIRM]
         if snapshots_dirname is not None:
             # Could break (time-out) if given a JSON that requires less moves
             # TODO: Maybe take list of moves as input instead of trying to guess them ?
-            print('moves2: ', moves)
             navigator.navigate_and_compare(default_screenshot_path,
                                            snapshots_dirname,
                                            moves,
@@ -188,6 +174,7 @@ def input_files() -> list[str]:
 def input_file_fixture(request) -> str:
     return Path(request.param)
 
+
 @pytest.fixture(name="verbose", params=[True, False])
 def verbose_fixture(request) -> bool:
     return request.param
@@ -197,6 +184,7 @@ def verbose_fixture(request) -> bool:
 def filtering_fixture(request) -> bool:
     return request.param
 
+
 @pytest.fixture(name="data_set", params=ADVANCED_DATA_SETS)
 def data_set_fixture(request) -> DataSet:
     return request.param
@@ -205,6 +193,7 @@ def data_set_fixture(request) -> DataSet:
 @pytest.fixture(name="tokens", params=TOKENS)
 def tokens_fixture(request) -> list[dict]:
     return request.param
+
 
 @pytest.fixture(name="trusted_name", params=TRUSTED_NAMES)
 def trusted_name_fixture(request) -> tuple:
@@ -905,12 +894,11 @@ class TestTRX():
         # snapshots_dirname = 'test_trx_tip712_new'
         settings_to_toggle: list[SettingID] = []
         client = TronClient(backend, firmware, navigator)
-        
+
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
-        print('test_path: ', test_path)
         cmd_builder = CommandBuilder()
 
         filters = None
@@ -928,7 +916,7 @@ class TestTRX():
             settings_to_toggle.append(setting_id)
         else:
             pass
-        
+
         if verbose:
             setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
             settings_to_toggle.append(setting_id)
@@ -950,7 +938,7 @@ class TestTRX():
         assert recovered_addr == get_wallet_addr(client)
         if len(settings_to_toggle) > 0:
             settings_toggle(firmware, navigator, settings_to_toggle)
-        # assert 0
+
 
     def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
@@ -982,11 +970,11 @@ class TestTRX():
                                               test_name: str,
                                               golden_run: bool):
         global snapshots_dirname
-    
+
         client = TronClient(backend, firmware, navigator)
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-    
+
         snapshots_dirname = test_name
         from dataset import filtering_empty_array_test_data
         cmd_builder = CommandBuilder()
@@ -999,7 +987,7 @@ class TestTRX():
                                 filtering_empty_array_test_data['filters'],
                                 False,
                                 golden_run)
-    
+
         # verify signature
         addr = recover_message(filtering_empty_array_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
@@ -1012,14 +1000,14 @@ class TestTRX():
                                                tokens: list[dict],
                                                golden_run: bool):
         global snapshots_dirname
-    
+
         test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
         snapshots_dirname = test_name
-    
+
         client = TronClient(backend, firmware, navigator)
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-    
+
         from dataset import advanced_missing_token_test_data
         advanced_missing_token_test_data['filters']['tokens'] = tokens
         cmd_builder = CommandBuilder()
@@ -1032,12 +1020,12 @@ class TestTRX():
                                 advanced_missing_token_test_data['filters'],
                                 False,
                                 golden_run)
-    
+
         # verify signature
         addr = recover_message(advanced_missing_token_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
-    
-    
+
+
     def test_trx_tip712_advanced_trusted_name(self,
                                               firmware: Firmware,
                                               backend: BackendInterface,
@@ -1048,17 +1036,15 @@ class TestTRX():
                                               filt_tn_types: list[InputData.TrustedNameType],
                                               golden_run: bool):
         global snapshots_dirname
-        # setting_id = NanoSettingID.FLOW_4 if firmware.is_nano else NonNanoSettingID.HASH_TX_ID
-        # settings_toggle(firmware, navigator, [setting_id])
         test_name += "_%s_with" % (str(trusted_name[0]).split(".")[-1].lower())
         for t in filt_tn_types:
             test_name += "_%s" % (str(t).split(".")[-1].lower())
         snapshots_dirname = test_name
-    
+
         client = TronClient(backend, firmware, navigator)
         if firmware == Firmware.NANOS:
             pytest.skip("Not supported on LNS")
-    
+
         cmd_builder = CommandBuilder()
         if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
             challenge = ResponseParser.challenge(client.exchange_raw(cmd_builder.get_challenge()).data)
@@ -1086,12 +1072,12 @@ class TestTRX():
                                 advanced_trusted_name_test_data['filters'],
                                 False,
                                 golden_run)
-    
-        # # verify signature
+
+        # verify signature
         addr = recover_message(advanced_trusted_name_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
-    
-    
+
+
     def test_trx_tip712_bs_not_activated_error(self, firmware: Firmware,
                                                backend: BackendInterface,
                                                navigator: Navigator,
@@ -1121,9 +1107,6 @@ class TestTRX():
             navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))], screen_change_before_first_instruction=True)
         elif firmware == Firmware.FLEX:
             navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))], screen_change_before_first_instruction=True)
-                           
-        # navigator.navigate([NavInsID.BOTH_CLICK if firmware.is_nano else NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT)],
-        #                    screen_change_before_first_instruction=True)
         settings_toggle(firmware, navigator, [setting_id])
 
     def test_trx_tip712_skip(self, firmware: Firmware,
@@ -1134,17 +1117,17 @@ class TestTRX():
                              golden_run: bool):
         global unfiltered_flow
         global skip_flow
-    
+
         client = TronClient(backend, firmware, navigator)
         if firmware.is_nano:
             pytest.skip("Not supported on Nano devices")
-    
+
         unfiltered_flow = True
         skip_flow = True
 
         with open(input_files()[0], encoding="utf-8") as file:
             data = json.load(file)
-        
+
         cmd_builder = CommandBuilder()
         vrs = tip712_new_common(firmware,
                                 navigator,
@@ -1155,7 +1138,7 @@ class TestTRX():
                                 None,
                                 False,
                                 golden_run)
-    
+
         # verify signature
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
