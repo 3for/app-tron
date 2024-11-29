@@ -42,31 +42,10 @@ static void switch_settings_verbose_trusted_name(void);
 #endif  // HAVE_TRUSTED_NAME
 static void display_settings(const ux_flow_step_t* const);
 static void switch_settings_contract_data();
-// static void switch_settings_blind_signing(void);
 static void switch_settings_custom_contracts();
 static void switch_settings_truncate_address();
 static void switch_settings_sign_by_hash();
 static char settings_param_value[40];
-
-// UX_STEP_CB(
-//     ux_settings_flow_blind_signing_step,
-// #ifdef TARGET_NANOS
-//     bnnn_paging,
-// #else
-//     bnnn,
-// #endif
-//     switch_settings_blind_signing(),
-//     {
-// #ifdef TARGET_NANOS
-//       .title = "Blind signing",
-//       .text =
-// #else
-//       "Blind signing",
-//       "Enables transaction",
-//       "blind signing",
-// #endif
-//       SETTING_BLIND_SIGNING_STATE
-//     });
 
 
 #if defined(TARGET_NANOS)
@@ -162,7 +141,6 @@ UX_DEF(ux_settings_flow,
        &ux_settings_flow_2_step,
        &ux_settings_flow_3_step,
        &ux_settings_flow_4_step,
-    //    &ux_settings_flow_blind_signing_step,
 #ifdef HAVE_TRUSTED_NAME
        &ux_settings_flow_verbose_trusted_name_step,
 #endif  // HAVE_TRUSTED_NAME
@@ -180,7 +158,6 @@ static void display_settings(const ux_flow_step_t* const start_step) {
     strlcpy(settings_param_value + 28,
             (HAS_SETTING(S_SIGN_BY_HASH) ? "Allowed" : "NOT Allowed"),
             sizeof(settings_param_value) - 28);
-    // strlcpy(SETTING_BLIND_SIGNING_STATE, BOOL_TO_STATE_STR(HAS_SETTING(S_BLIND_ALLOWED)), BUF_INCREMENT);
 #ifdef HAVE_TIP712_FULL_SUPPORT
     strlcpy(SETTING_VERBOSE_TIP712_STATE,
             BOOL_TO_STATE_STR(HAS_SETTING(S_VERBOSE_TIP712)),
@@ -227,12 +204,6 @@ static void switch_settings_verbose_trusted_name(void) {
     display_settings(&ux_settings_flow_verbose_trusted_name_step);
  }
 #endif  // HAVE_TRUSTED_NAME
-
-// static void switch_settings_blind_signing(void) {
-//     SETTING_TOGGLE(S_BLIND_ALLOWED);
-//     // display_settings(&ux_settings_flow_blind_signing_step);
-//     display_settings(&ux_settings_flow_4_step); // blind signing
-// }
 
 UX_STEP_NOCB(ux_idle_flow_1_step,
              pnn,
@@ -297,35 +268,11 @@ UX_STEP_CB(
       "enabled in Settings",
     });
 #endif
-// UX_STEP_NOCB(
-//     ux_warning_blind_signing_warn_step,
-//     pbb,
-//     {
-//       &C_icon_warning,
-//       "Blind",
-//       "signing",
-//     });
-// UX_STEP_INIT(
-//    ux_warning_blind_signing_jump_step,
-//    NULL,
-//    NULL,
-//    {
-//      start_signature_flow();
-//    }
-// );
 
 void ui_error_blind_signing(void) {
     ux_flow_init(0, ux_error_blind_signing_flow, NULL);
 }
 
-// void ui_warning_blind_signing(void) {
-//     ux_flow_init(0, ux_warning_blind_signing_flow, NULL);
-// }
-
 UX_FLOW(ux_error_blind_signing_flow, &ux_error_blind_signing_step);
 
-// UX_FLOW(ux_error_blind_signing_flow, &ux_settings_flow_4_step);
-// UX_FLOW(ux_warning_blind_signing_flow,
-//         &ux_warning_blind_signing_warn_step,
-//         &ux_warning_blind_signing_jump_step);
 #endif  // HAVE_BAGL

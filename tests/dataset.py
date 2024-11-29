@@ -407,7 +407,7 @@ advanced_missing_token_test_data = {
                 "value_to": web3.Web3.to_wei(15.47, "ether"),
             }
     },
-    
+
     'filters': {
             "name": "Token not in CAL test",
             "tokens": None,
@@ -461,7 +461,7 @@ advanced_trusted_name_test_data = {
                 "enable": True,
             }
     },
-    
+
     'filters': {
             "name": "Trusted name test",
             "fields": {

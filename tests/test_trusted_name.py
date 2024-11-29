@@ -9,7 +9,7 @@ from ragger.navigator import Navigator
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 import response_parser as ResponseParser
-from tron import TronClient 
+from tron import TronClient
 from InputData import StatusWord, TrustedNameType, TrustedNameSource
 from settings import NanoSettingID, NonNanoSettingID, settings_toggle
 from command_builder import CommandBuilder
@@ -21,7 +21,6 @@ NAME = "ledger.eth"
 ADDR = bytes.fromhex("0011223344556677889900112233445566778899")
 KEY_ID = 1
 ALGO_ID = 1
-# app_client.getAccount(0)['path'] = "m/44'/60'/0'/0/0"
 NONCE = 21
 GAS_PRICE = 13
 GAS_LIMIT = 21000
@@ -58,7 +57,7 @@ def test_trusted_name_v1(firmware: Firmware,
     challenge = common(firmware, app_client, cmd_builder)
 
     if verbose:
-        settings_toggle(firmware, navigator, 
+        settings_toggle(firmware, navigator,
                         [NanoSettingID.VERBOSE_ENS if firmware.is_nano else NonNanoSettingID.VERBOSE_ENS])
         test_name += "_verbose"
 
@@ -78,13 +77,7 @@ def test_trusted_name_v1(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text, warning_approve=True)#:
-        # if firmware.is_nano:
-        #     end_text = "Accept"
-        # else:
-        #     end_text = "Sign"
-
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
+                         }, test_name, end_text, warning_approve=True)
 
 
 def test_trusted_name_v1_wrong_challenge(firmware: Firmware, backend: BackendInterface):
@@ -125,13 +118,7 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
                              "to": bytes(addr),
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text, warning_approve=True)#:
-        # if firmware.is_nano:
-        #     end_text = "Accept"
-        # else:
-        #     end_text = "Sign"
-
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
+                         }, test_name, end_text, warning_approve=True)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -145,7 +132,7 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
     challenge = common(firmware, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME, challenge)
- 
+
     end_text = None
     if firmware.is_nano:
         end_text = "Sign"
@@ -159,13 +146,8 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": 5
-                         }, test_name, end_text, warning_approve=True)#:
-        # if firmware.is_nano:
-        #     end_text = "Accept"
-        # else:
-        #     end_text = "Sign"
+                         }, test_name, end_text, warning_approve=True)
 
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
 
 @pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1_unknown_chain(firmware: Firmware,
@@ -193,13 +175,7 @@ def test_trusted_name_v1_unknown_chain(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": 9
-                         }, test_name, end_text, warning_approve=True)#:
-        # if firmware.is_nano:
-        #     end_text = "Accept"
-        # else:
-        #     end_text = "Sign"
-
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
+                         }, test_name, end_text, warning_approve=True)
 
 
 def test_trusted_name_v1_name_too_long(firmware: Firmware, backend: BackendInterface):
@@ -263,7 +239,7 @@ def test_trusted_name_v2(firmware: Firmware,
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
-    
+
     app_client.sign_for_trusted_name(app_client.getAccount(0)['path'],
                          {
                              "nonce": NONCE,
@@ -272,13 +248,7 @@ def test_trusted_name_v2(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID
-                         }, test_name, end_text, warning_approve=True)#:
-        # if firmware.is_nano:
-        #     end_text = "Accept"
-        # else:
-        #     end_text = "Sign"
-
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
+                         }, test_name, end_text, warning_approve=True)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -290,7 +260,6 @@ def test_trusted_name_v2_wrong_chainid(firmware: Firmware,
     app_client = TronClient(backend, firmware, navigator)
     cmd_builder = CommandBuilder()
     challenge = common(firmware, app_client, cmd_builder)
-    # path = Path(currentframe().f_code.co_name)
     InputData.provide_trusted_name_v2(app_client, cmd_builder, ADDR,
                                        NAME,
                                        TrustedNameType.ACCOUNT,
@@ -310,10 +279,7 @@ def test_trusted_name_v2_wrong_chainid(firmware: Firmware,
                              "to": ADDR,
                              "value": Web3.to_wei(AMOUNT, "ether"),
                              "chainId": CHAIN_ID + 1,
-                         }, test_name, end_text, warning_approve=True)#:
-
-
-        # scenario_navigator.review_approve(test_name=test_name, custom_screen_text=end_text)
+                         }, test_name, end_text, warning_approve=True)
 
 
 def test_trusted_name_v2_missing_challenge(firmware: Firmware, backend: BackendInterface):

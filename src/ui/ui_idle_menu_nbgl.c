@@ -29,7 +29,6 @@ enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
-    // BLIND_SIGNING_TOKEN,
 #ifdef HAVE_TRUSTED_NAME
     SWITCH_TRUSTED_NAME_VERBOSE_TOKEN,
  #endif
@@ -42,7 +41,6 @@ enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
-    // BLIND_SIGNING_ID,
 #ifdef HAVE_TRUSTED_NAME
     TRUSTED_NAME_VERBOSE_ID,
  #endif
@@ -88,11 +86,6 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
                 (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
-        // case BLIND_SIGNING_TOKEN:
-        //     SETTING_TOGGLE(S_BLIND_ALLOWED);
-        //     switches[BLIND_SIGNING_ID].initState = 
-        //         (HAS_SETTING(S_BLIND_ALLOWED)) ? ON_STATE : OFF_STATE;
-        //     break;
 #ifdef HAVE_TRUSTED_NAME
         case SWITCH_TRUSTED_NAME_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_TRUSTED_NAME);
@@ -150,12 +143,6 @@ void ui_idle(void) {
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
-    // switches[BLIND_SIGNING_ID].initState = HAS_SETTING(S_BLIND_ALLOWED) ? ON_STATE : OFF_STATE;
-    // switches[BLIND_SIGNING_ID].text = "Blind signing";
-    // switches[BLIND_SIGNING_ID].subText = "Enable transaction blind signing.";
-    // switches[BLIND_SIGNING_ID].token = BLIND_SIGNING_TOKEN;
-    // switches[BLIND_SIGNING_ID].tuneId = TUNE_TAP_CASUAL;
-
 #ifdef HAVE_TRUSTED_NAME
     switches[TRUSTED_NAME_VERBOSE_ID].initState = HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
     switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
@@ -186,7 +173,6 @@ static void ui_error_blind_signing_choice(bool confirm) {
     // if (confirm) {
     //     ui_settings();
     // } else {
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         ui_idle();
     // }
 }

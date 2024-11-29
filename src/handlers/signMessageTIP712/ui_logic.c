@@ -153,7 +153,7 @@ void ui_712_set_value(const char *str, size_t length) {
 
 /**
  * Redraw the dynamic UI step that shows TIP712 information
- * 
+ *
  * @return whether it was successful or not
  */
 bool ui_712_redraw_generic_step(void) {
@@ -161,9 +161,7 @@ bool ui_712_redraw_generic_step(void) {
         if ((ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) && !HAS_SETTING(S_SIGN_BY_HASH) &&
             !HAS_SETTING(S_VERBOSE_TIP712)) {
             // Both settings not enabled => Error.
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             ui_error_blind_signing();
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             tip712_context->go_home_on_failure = false;
             if(tip712_context != NULL) {
@@ -442,7 +440,7 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_amount_join(void) {
     const tokenDefinition_t *token = NULL;
- 
+
     if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
@@ -610,7 +608,6 @@ bool ui_712_feed_to_display(const void *field_ptr,
 
     // Value
     if (ui_712_field_shown()) {
-            PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, struct_field_type(field_ptr));
         switch (struct_field_type(field_ptr)) {
             case TYPE_SOL_STRING:
                 ui_712_format_str(data, length, last);
@@ -646,7 +643,6 @@ bool ui_712_feed_to_display(const void *field_ptr,
                 return false;
         }
     }
-// PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (ui_ctx->field_flags & UI_712_AMOUNT_JOIN) {
         if (!update_amount_join(data, length)) {
             return false;
@@ -673,7 +669,6 @@ bool ui_712_feed_to_display(const void *field_ptr,
             }
         }
     #endif
-    // PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
         if (!ui_712_redraw_generic_step()) return false;

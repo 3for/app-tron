@@ -35,8 +35,6 @@ static uint64_t readUint64BE(uint8_t *buffer) {
 }
 
 void readu128BE(uint8_t *buffer, uint128_t *target) {
-    // UPPER_P(target) = readUint64BE(buffer);
-    // LOWER_P(target) = readUint64BE(buffer + 8);
     UPPER_P(target) = read_u64_be(buffer, 0);
     LOWER_P(target) = read_u64_be(buffer + 8, 0);
 }

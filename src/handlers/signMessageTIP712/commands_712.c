@@ -60,13 +60,9 @@ static void apdu_reply(bool success) {
         if (tip712_context != NULL) {
             home = tip712_context->go_home_on_failure;
         }
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         tip712_context_deinit();
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         if (home) {
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
             ui_idle();
-            PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         }
     }
 }
@@ -105,7 +101,6 @@ int handleTIP712StructDef(uint8_t p1,
     if (tip712_context == NULL) {
         ret = tip712_context_init();
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (struct_state == DEFINED) {
         ret = false;
     }
@@ -114,7 +109,6 @@ int handleTIP712StructDef(uint8_t p1,
         switch (p2) {
             case P2_DEF_NAME:
                 ret = set_struct_name(dataLength, workBuffer);
-                PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
                 break;
             case P2_DEF_FIELD:
                 ret = set_struct_field(dataLength, workBuffer);
@@ -125,10 +119,7 @@ int handleTIP712StructDef(uint8_t p1,
                 ret = false;
         }
     }
-    PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, ret);
     handle_tip712_return_code(ret);
-    PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, apdu_response_code);
-    // return apdu_response_code;
     return 0;
 }
 
@@ -148,13 +139,11 @@ int handleTIP712StructImpl(uint8_t p1,
     bool reply_apdu = true;
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
-        PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, ret);
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
                 // set root type
                 ret = path_set_root((char *) workBuffer, dataLength);
-                PRINTF("Runing at here %s: %d: %d: %x\n", __FILE__, __LINE__, ret, apdu_response_code);
                 if (ret) {
 #ifdef SCREEN_SIZE_WALLET
                     if (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC) {
@@ -165,7 +154,6 @@ int handleTIP712StructImpl(uint8_t p1,
                              reply_apdu = false;
                         }
                     }
-                    PRINTF("Runing at here %s: %d: %d\n", __FILE__, __LINE__, ret);
                     ui_712_field_flags_reset();
                 }
                 break;
@@ -184,8 +172,6 @@ int handleTIP712StructImpl(uint8_t p1,
     }
     if (reply_apdu) {
         handle_tip712_return_code(ret);
-        // apdu_reply(ret);
-        // return apdu_response_code;
     }
     return APDU_NO_RESPONSE;
 }
@@ -208,14 +194,13 @@ int handleTIP712Filtering(uint8_t p1,
     uint32_t path_crc = 0;
 
     if (tip712_context == NULL) {
-        // apdu_reply(false);
-        // return APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         handle_tip712_return_code(false);
+        return 0;
     }
     if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
         handle_tip712_return_code(true);
-        return true;
+        return 0;
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
@@ -265,11 +250,8 @@ int handleTIP712Filtering(uint8_t p1,
         }
     }
     if (reply_apdu) {
-        // apdu_reply(ret);
-        // return apdu_response_code;
         handle_tip712_return_code(ret);
     }
-    // return APDU_NO_RESPONSE;
     return 0;
 }
 
@@ -283,7 +265,6 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     bool ret = false;
     UNUSED(p1);
     UNUSED(p2);
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
@@ -294,14 +275,12 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
                        sizeof(global_ctx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
     } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
                0) {
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
 #ifndef SCREEN_SIZE_WALLET
         if (!HAS_SETTING(S_VERBOSE_TIP712) &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
@@ -310,17 +289,12 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
 #endif
         ret = true;
         ui_712_end_sign();
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     if (!ret) {
-        PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
         apdu_reply(false);
         return apdu_response_code;
     }
-    PRINTF("Runing at here %s: %d\n", __FILE__, __LINE__);
     
-    // handle_return_code(APDU_NO_RESPONSE);
     return APDU_NO_RESPONSE;
 }
 

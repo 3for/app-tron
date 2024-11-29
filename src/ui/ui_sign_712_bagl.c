@@ -3,8 +3,6 @@
 #include "ui_logic.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
-// #include "common_ui.h"
-// #include "ui_flow.h"  // ux_warning_blind_signing_warn_step
 
 enum { UI_712_POS_REVIEW, UI_712_POS_END };
 static uint8_t ui_pos;
