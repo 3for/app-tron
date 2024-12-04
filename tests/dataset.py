@@ -3,6 +3,7 @@ import web3
 import pytest
 import InputData as InputData
 
+
 class DataSet():
     data: dict
     filters: dict
@@ -291,197 +292,269 @@ ADVANCED_DATA_SETS = [
 
 filtering_empty_array_test_data = {
     'data': {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Person": [
-                    {"name": "name", "type": "string"},
-                    {"name": "addr", "type": "address"},
-                ],
-                "Message": [
-                    {"name": "title", "type": "string"},
-                    {"name": "to", "type": "Person[]"},
-                ],
-                "Root": [
-                    {"name": "text", "type": "string"},
-                    {"name": "subtext", "type": "string[]"},
-                    {"name": "msg_list1", "type": "Message[]"},
-                    {"name": "msg_list2", "type": "Message[]"},
-                ],
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 1151668124,
-            },
-            "message": {
-                "text": "This is a test",
-                "subtext": [],
-                "msg_list1": [
-                    {
-                        "title": "This is a test",
-                        "to": [],
-                    }
-                ],
-                "msg_list2": [],
-            }
+        "types": {
+            "EIP712Domain": [
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
+            ],
+            "Person": [
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "addr",
+                    "type": "address"
+                },
+            ],
+            "Message": [
+                {
+                    "name": "title",
+                    "type": "string"
+                },
+                {
+                    "name": "to",
+                    "type": "Person[]"
+                },
+            ],
+            "Root": [
+                {
+                    "name": "text",
+                    "type": "string"
+                },
+                {
+                    "name": "subtext",
+                    "type": "string[]"
+                },
+                {
+                    "name": "msg_list1",
+                    "type": "Message[]"
+                },
+                {
+                    "name": "msg_list2",
+                    "type": "Message[]"
+                },
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 1151668124,
+        },
+        "message": {
+            "text": "This is a test",
+            "subtext": [],
+            "msg_list1": [{
+                "title": "This is a test",
+                "to": [],
+            }],
+            "msg_list2": [],
+        }
     },
     'filters': {
-            "name": "Empty array filtering",
-            "fields": {
-                "text": {
-                    "type": "raw",
-                    "name": "Text",
-                },
-                "subtext.[]": {
-                    "type": "raw",
-                    "name": "Sub-Text",
-                },
-                "msg_list1.[].to.[].addr": {
-                    "type": "raw",
-                    "name": "(1) Recipient addr",
-                },
-                "msg_list2.[].to.[].addr": {
-                    "type": "raw",
-                    "name": "(2) Recipient addr",
-                },
-            }
+        "name": "Empty array filtering",
+        "fields": {
+            "text": {
+                "type": "raw",
+                "name": "Text",
+            },
+            "subtext.[]": {
+                "type": "raw",
+                "name": "Sub-Text",
+            },
+            "msg_list1.[].to.[].addr": {
+                "type": "raw",
+                "name": "(1) Recipient addr",
+            },
+            "msg_list2.[].to.[].addr": {
+                "type": "raw",
+                "name": "(2) Recipient addr",
+            },
+        }
     }
 }
 
-
-TOKENS = [
-    [
-        {
-            "addr": "0x1111111111111111111111111111111111111111",
-            "ticker": "SRC",
-            "decimals": 18,
-            "chain_id": 1151668124,
-        },
-        {},
-    ],
-    [
-        {},
-        {
-            "addr": "0x2222222222222222222222222222222222222222",
-            "ticker": "DST",
-            "decimals": 18,
-            "chain_id": 1151668124,
-        },
-    ]
-]
+TOKENS = [[
+    {
+        "addr": "0x1111111111111111111111111111111111111111",
+        "ticker": "SRC",
+        "decimals": 18,
+        "chain_id": 1151668124,
+    },
+    {},
+],
+          [
+              {},
+              {
+                  "addr": "0x2222222222222222222222222222222222222222",
+                  "ticker": "DST",
+                  "decimals": 18,
+                  "chain_id": 1151668124,
+              },
+          ]]
 
 advanced_missing_token_test_data = {
     'data': {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Root": [
-                    {"name": "token_from", "type": "address"},
-                    {"name": "value_from", "type": "uint256"},
-                    {"name": "token_to", "type": "address"},
-                    {"name": "value_to", "type": "uint256"},
-                ]
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 1,
-            },
-            "message": {
-                "token_from": "0x1111111111111111111111111111111111111111",
-                "value_from": web3.Web3.to_wei(3.65, "ether"),
-                "token_to": "0x2222222222222222222222222222222222222222",
-                "value_to": web3.Web3.to_wei(15.47, "ether"),
-            }
+        "types": {
+            "EIP712Domain": [
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
+            ],
+            "Root": [
+                {
+                    "name": "token_from",
+                    "type": "address"
+                },
+                {
+                    "name": "value_from",
+                    "type": "uint256"
+                },
+                {
+                    "name": "token_to",
+                    "type": "address"
+                },
+                {
+                    "name": "value_to",
+                    "type": "uint256"
+                },
+            ]
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 1,
+        },
+        "message": {
+            "token_from": "0x1111111111111111111111111111111111111111",
+            "value_from": web3.Web3.to_wei(3.65, "ether"),
+            "token_to": "0x2222222222222222222222222222222222222222",
+            "value_to": web3.Web3.to_wei(15.47, "ether"),
+        }
     },
-
     'filters': {
-            "name": "Token not in CAL test",
-            "tokens": None,
-            "fields": {
-                "token_from": {
-                    "type": "amount_join_token",
-                    "token": 0,
-                },
-                "value_from": {
-                    "type": "amount_join_value",
-                    "name": "From",
-                    "token": 0,
-                },
-                "token_to": {
-                    "type": "amount_join_token",
-                    "token": 1,
-                },
-                "value_to": {
-                    "type": "amount_join_value",
-                    "name": "To",
-                    "token": 1,
-                },
-            }
+        "name": "Token not in CAL test",
+        "tokens": None,
+        "fields": {
+            "token_from": {
+                "type": "amount_join_token",
+                "token": 0,
+            },
+            "value_from": {
+                "type": "amount_join_value",
+                "name": "From",
+                "token": 0,
+            },
+            "token_to": {
+                "type": "amount_join_token",
+                "token": 1,
+            },
+            "value_to": {
+                "type": "amount_join_value",
+                "name": "To",
+                "token": 1,
+            },
+        }
     }
 }
 
-
 advanced_trusted_name_test_data = {
     'data': {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Root": [
-                    {"name": "validator", "type": "address"},
-                    {"name": "enable", "type": "bool"},
-                ]
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 1151668124,
-            },
-            "message": {
-                "validator": "0x1111111111111111111111111111111111111111",
-                "enable": True,
-            }
+        "types": {
+            "EIP712Domain": [
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
+            ],
+            "Root": [
+                {
+                    "name": "validator",
+                    "type": "address"
+                },
+                {
+                    "name": "enable",
+                    "type": "bool"
+                },
+            ]
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 1151668124,
+        },
+        "message": {
+            "validator": "0x1111111111111111111111111111111111111111",
+            "enable": True,
+        }
     },
-
     'filters': {
-            "name": "Trusted name test",
-            "fields": {
-                "validator": {
-                    "type": "trusted_name",
-                    "name": "Validator",
-                    "tn_type": None,
-                    "tn_source": [InputData.TrustedNameSource.CAL],
-                },
-                "enable": {
-                    "type": "raw",
-                    "name": "State",
-                },
-            }
+        "name": "Trusted name test",
+        "fields": {
+            "validator": {
+                "type": "trusted_name",
+                "name": "Validator",
+                "tn_type": None,
+                "tn_source": [InputData.TrustedNameSource.CAL],
+            },
+            "enable": {
+                "type": "raw",
+                "name": "State",
+            },
+        }
     }
 }
 
 TRUSTED_NAMES = [
-    (InputData.TrustedNameType.CONTRACT, InputData.TrustedNameSource.CAL, "Validator contract"),
-    (InputData.TrustedNameType.ACCOUNT, InputData.TrustedNameSource.ENS, "validator.eth"),
+    (InputData.TrustedNameType.CONTRACT, InputData.TrustedNameSource.CAL,
+     "Validator contract"),
+    (InputData.TrustedNameType.ACCOUNT, InputData.TrustedNameSource.ENS,
+     "validator.eth"),
 ]
 
 FILT_TN_TYPES = [

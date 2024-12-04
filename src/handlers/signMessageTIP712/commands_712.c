@@ -37,7 +37,6 @@
 #define P2_FILT_AMOUNT_JOIN_VALUE 0xFE
 #define P2_FILT_RAW_FIELD         0xFF
 
-
 extern uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle);
 
 /**
@@ -151,7 +150,7 @@ int handleTIP712StructImpl(uint8_t p1,
                     if (HAS_SETTING(S_VERBOSE_TIP712)) {
 #endif
                         if ((ret = ui_712_review_struct(path_get_root()))) {
-                             reply_apdu = false;
+                            reply_apdu = false;
                         }
                     }
                     ui_712_field_flags_reset();
@@ -294,7 +293,7 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         apdu_reply(false);
         return apdu_response_code;
     }
-    
+
     return APDU_NO_RESPONSE;
 }
 

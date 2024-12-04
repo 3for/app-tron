@@ -27,8 +27,8 @@
 #define WEI_TO_ETHER 18
 
 #define ADDRESS_SIZE_712 20
-#define INT128_LENGTH  16
-#define INT256_LENGTH  32
+#define INT128_LENGTH    16
+#define INT256_LENGTH    32
 
 #define KECCAK256_HASH_BYTESIZE 32
 

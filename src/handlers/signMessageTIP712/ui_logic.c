@@ -164,7 +164,7 @@ bool ui_712_redraw_generic_step(void) {
             ui_error_blind_signing();
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             tip712_context->go_home_on_failure = false;
-            if(tip712_context != NULL) {
+            if (tip712_context != NULL) {
                 tip712_context->go_home_on_failure = false;
             }
             return false;
@@ -662,13 +662,13 @@ bool ui_712_feed_to_display(const void *field_ptr,
         }
     }
 
-    #ifdef HAVE_TRUSTED_NAME
-        if (ui_ctx->field_flags & UI_712_TRUSTED_NAME) {
-            if (!ui_712_format_trusted_name(data, length)) {
-                return false;
-            }
+#ifdef HAVE_TRUSTED_NAME
+    if (ui_ctx->field_flags & UI_712_TRUSTED_NAME) {
+        if (!ui_712_format_trusted_name(data, length)) {
+            return false;
         }
-    #endif
+    }
+#endif
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
         if (!ui_712_redraw_generic_step()) return false;
@@ -884,7 +884,6 @@ bool ui_712_show_raw_key(const void *field_ptr) {
  * @return if the path was pushed or not (in case it was already present)
  */
 bool ui_712_push_new_filter_path(uint32_t path_crc) {
-
     // check if already present
     for (int i = 0; i < ui_ctx->filters_received; ++i) {
         if (ui_ctx->filters_crc[i] == path_crc) {

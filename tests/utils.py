@@ -18,6 +18,7 @@ from eth_keys.datatypes import PublicKey
 from eth_keys.datatypes import Signature
 
 
+
 def normalize_vrs(vrs: tuple) -> tuple:
     vrs_l = list()
     for elem in vrs:

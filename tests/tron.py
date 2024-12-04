@@ -122,6 +122,7 @@ class Errors(IntEnum):
     HALTED = 0x6faa
     NOT_IMPLEMENTED = 0x911c
 
+
 class APDUOffsets(IntEnum):
     CLA = 0
     INS = 1
@@ -426,19 +427,21 @@ class TronClient:
                                          messages[-1])
 
     def sign_for_trusted_name(self,
-             bip32_path: str,
-             tx_params: dict,
-             snap_path: str,
-             text: str,
-             warning_approve: bool = False):
+                              bip32_path: str,
+                              tx_params: dict,
+                              snap_path: str,
+                              text: str,
+                              warning_approve: bool = False):
         tx = self.packContract(
             tron.Transaction.Contract.TransferAssetContract,
             contract.TransferAssetContract(
-                owner_address=bytes.fromhex(
-                    self.getAccount(0)['addressHex']),
+                owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
                 to_address=bytes.fromhex(
                     self.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 amount=1000000,
-                asset_name="1002000".encode()),
-            tx_params)
-        return self.sign(bip32_path, tx, text=text, snappath=snap_path, warning_approve=warning_approve)
+                asset_name="1002000".encode()), tx_params)
+        return self.sign(bip32_path,
+                         tx,
+                         text=text,
+                         snappath=snap_path,
+                         warning_approve=warning_approve)

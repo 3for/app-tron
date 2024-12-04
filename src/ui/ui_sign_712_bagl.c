@@ -119,7 +119,6 @@ UX_FLOW(ux_712_flow,
         &ux_712_step_approve,
         &ux_712_step_reject);
 
-
 UX_FLOW(ux_712_flow_unfiltered,
         &ux_712_step_review,
         &ux_712_step_dynamic,
