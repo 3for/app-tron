@@ -50,6 +50,8 @@ app_state_t appState;
 
 const chain_config_t *chainConfig;
 
+extern void roll_challenge(void);
+
 void reset_app_context() {
     appState = APP_STATE_IDLE;
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
@@ -71,7 +73,6 @@ uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool id
     }
     return err;
 }
-
 
 void handle_return_code(uint16_t response_code) {
     io_seproxyhal_send_status(response_code, 0, false, false);
@@ -110,6 +111,11 @@ void app_main(void) {
         ui_idle();
     }
 #endif  // HAVE_SWAP
+
+#ifdef HAVE_TRUSTED_NAME
+    // to prevent it from having a fixed value at boot
+    roll_challenge();
+#endif  // HAVE_TRUSTED_NAME
 
     // Reset context
     explicit_bzero(&txContent, sizeof(txContent));

@@ -37,8 +37,8 @@
 
 #define INS_PROVIDE_TRC20_TOKEN_INFORMATION 0xCA  // 0x0A in eth
 
-#define INS_ENS_GET_CHALLENGE               0x20
-#define INS_ENS_PROVIDE_INFO                0x22
+#define INS_ENS_GET_CHALLENGE 0x20
+#define INS_ENS_PROVIDE_INFO  0x22
 
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00

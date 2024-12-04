@@ -23,7 +23,6 @@
 #include "uint256.h"
 #include "common_utils.h"
 
-
 void readu128BE(uint8_t *buffer, uint128_t *target) {
     UPPER_P(target) = read_u64_be(buffer, 0);
     LOWER_P(target) = read_u64_be(buffer + 8, 0);

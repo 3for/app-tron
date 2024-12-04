@@ -49,6 +49,7 @@ def get_device_settings(firmware: Firmware) -> list:
             NonNanoSettingID.VERBOSE_TIP712,
         ]
 
+
 # Maintain the status quo, no need to be consistent with Ethereum.
 def get_setting_position(
         firmware: Firmware, setting: Union[NavInsID,

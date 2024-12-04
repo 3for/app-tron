@@ -49,6 +49,7 @@ WALLET_ADDR: Optional[bytes] = None
 unfiltered_flow: bool = False
 skip_flow: bool = False
 
+
 def autonext(firmware, navigator, default_screenshot_path: Path):
     global autonext_idx
     moves = []
@@ -85,9 +86,15 @@ def autonext(firmware, navigator, default_screenshot_path: Path):
                            screen_change_after_last_instruction=False)
     autonext_idx += len(moves)
 
-def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
-                      client: TronClient, builder: CommandBuilder,
-                      json_data: dict, filters, verbose: bool,
+
+def tip712_new_common(firmware,
+                      navigator,
+                      default_screenshot_path: Path,
+                      client: TronClient,
+                      builder: CommandBuilder,
+                      json_data: dict,
+                      filters,
+                      verbose: bool,
                       golden_run: bool,
                       extra_left: bool = False):
     global autonext_idx
@@ -141,6 +148,7 @@ def tip712_new_common(firmware, navigator, default_screenshot_path: Path,
 
     return ResponseParser.signature(client._client.last_async_response.data)
 
+
 def get_wallet_addr(client: TronClient) -> bytes:
     cmd_builder = CommandBuilder()
     global WALLET_ADDR
@@ -156,6 +164,7 @@ def get_wallet_addr(client: TronClient) -> bytes:
         _, WALLET_ADDR, _ = ResponseParser.pk_addr(
             client._client.last_async_response.data)
     return WALLET_ADDR[1:]
+
 
 def tip712_json_path() -> str:
     return f"{os.path.dirname(__file__)}/tip712_input_files"
@@ -203,6 +212,7 @@ def trusted_name_fixture(request) -> tuple:
 @pytest.fixture(name="filt_tn_types", params=FILT_TN_TYPES)
 def filt_tn_types_fixture(request) -> list[InputData.TrustedNameType]:
     return request.param
+
 
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
@@ -928,17 +938,23 @@ class TestTRX():
 
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
-            extra_left = test_path.endswith('01-addresses_array_mail') and verbose and filters is None
-            vrs = tip712_new_common(firmware, navigator,
-                                    default_screenshot_path, client,
-                                    cmd_builder, data, filters, verbose, False,
-                                    extra_left = extra_left)
+            extra_left = test_path.endswith(
+                '01-addresses_array_mail') and verbose and filters is None
+            vrs = tip712_new_common(firmware,
+                                    navigator,
+                                    default_screenshot_path,
+                                    client,
+                                    cmd_builder,
+                                    data,
+                                    filters,
+                                    verbose,
+                                    False,
+                                    extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
 
         assert recovered_addr == get_wallet_addr(client)
         if len(settings_to_toggle) > 0:
             settings_toggle(firmware, navigator, settings_to_toggle)
-
 
     def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
@@ -978,27 +994,20 @@ class TestTRX():
         snapshots_dirname = test_name
         from dataset import filtering_empty_array_test_data
         cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(firmware,
-                                navigator,
-                                default_screenshot_path,
-                                client,
-                                cmd_builder,
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
                                 filtering_empty_array_test_data['data'],
                                 filtering_empty_array_test_data['filters'],
-                                False,
-                                golden_run)
+                                False, golden_run)
 
         # verify signature
         addr = recover_message(filtering_empty_array_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_advanced_missing_token(self, firmware: Firmware,
-                                               backend: BackendInterface,
-                                               navigator: Navigator,
-                                               default_screenshot_path: Path,
-                                               test_name: str,
-                                               tokens: list[dict],
-                                               golden_run: bool):
+    def test_trx_tip712_advanced_missing_token(
+            self, firmware: Firmware, backend: BackendInterface,
+            navigator: Navigator, default_screenshot_path: Path,
+            test_name: str, tokens: list[dict], golden_run: bool):
         global snapshots_dirname
 
         test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
@@ -1011,30 +1020,21 @@ class TestTRX():
         from dataset import advanced_missing_token_test_data
         advanced_missing_token_test_data['filters']['tokens'] = tokens
         cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(firmware,
-                                navigator,
-                                default_screenshot_path,
-                                client,
-                                cmd_builder,
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
                                 advanced_missing_token_test_data['data'],
                                 advanced_missing_token_test_data['filters'],
-                                False,
-                                golden_run)
+                                False, golden_run)
 
         # verify signature
         addr = recover_message(advanced_missing_token_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
 
-
-    def test_trx_tip712_advanced_trusted_name(self,
-                                              firmware: Firmware,
-                                              backend: BackendInterface,
-                                              navigator: Navigator,
-                                              default_screenshot_path: Path,
-                                              test_name: str,
-                                              trusted_name: tuple,
-                                              filt_tn_types: list[InputData.TrustedNameType],
-                                              golden_run: bool):
+    def test_trx_tip712_advanced_trusted_name(
+            self, firmware: Firmware, backend: BackendInterface,
+            navigator: Navigator, default_screenshot_path: Path,
+            test_name: str, trusted_name: tuple,
+            filt_tn_types: list[InputData.TrustedNameType], golden_run: bool):
         global snapshots_dirname
         test_name += "_%s_with" % (str(trusted_name[0]).split(".")[-1].lower())
         for t in filt_tn_types:
@@ -1047,36 +1047,35 @@ class TestTRX():
 
         cmd_builder = CommandBuilder()
         if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
-            challenge = ResponseParser.challenge(client.exchange_raw(cmd_builder.get_challenge()).data)
+            challenge = ResponseParser.challenge(
+                client.exchange_raw(cmd_builder.get_challenge()).data)
         else:
             challenge = None
 
         from dataset import advanced_trusted_name_test_data
-        advanced_trusted_name_test_data['filters']['fields']['validator']['tn_type'] = filt_tn_types
-        print(advanced_trusted_name_test_data)
-        InputData.provide_trusted_name_v2(client,
-                                          cmd_builder,
-                                          bytes.fromhex(advanced_trusted_name_test_data['data']["message"]["validator"][2:]),
-                                        trusted_name[2],
-                                        trusted_name[0],
-                                        trusted_name[1],
-                                        advanced_trusted_name_test_data['data']["domain"]["chainId"],
-                                        challenge=challenge)
+        advanced_trusted_name_test_data['filters']['fields']['validator'][
+            'tn_type'] = filt_tn_types
 
-        vrs = tip712_new_common(firmware,
-                                navigator,
-                                default_screenshot_path,
-                                client,
-                                cmd_builder,
+        InputData.provide_trusted_name_v2(
+            client,
+            cmd_builder,
+            bytes.fromhex(advanced_trusted_name_test_data['data']["message"]
+                          ["validator"][2:]),
+            trusted_name[2],
+            trusted_name[0],
+            trusted_name[1],
+            advanced_trusted_name_test_data['data']["domain"]["chainId"],
+            challenge=challenge)
+
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
                                 advanced_trusted_name_test_data['data'],
                                 advanced_trusted_name_test_data['filters'],
-                                False,
-                                golden_run)
+                                False, golden_run)
 
         # verify signature
         addr = recover_message(advanced_trusted_name_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
-
 
     def test_trx_tip712_bs_not_activated_error(self, firmware: Firmware,
                                                backend: BackendInterface,
@@ -1089,31 +1088,26 @@ class TestTRX():
         settings_toggle(firmware, navigator, [setting_id])
         cmd_builder = CommandBuilder()
         with pytest.raises(ExceptionRAPDU) as e:
-            tip712_new_common(firmware,
-                              navigator,
-                              default_screenshot_path,
-                              client,
-                              cmd_builder,
-                              ADVANCED_DATA_SETS[0].data,
-                              None,
-                              False,
-                              False)
+            tip712_new_common(firmware, navigator, default_screenshot_path,
+                              client, cmd_builder, ADVANCED_DATA_SETS[0].data,
+                              None, False, False)
         InputData.disable_autonext()  # so the timer stops firing
         assert e.value.status == InputData.StatusWord.INVALID_DATA
 
         if firmware.is_nano:
-            navigator.navigate([NavInsID.BOTH_CLICK], screen_change_before_first_instruction=True)
+            navigator.navigate([NavInsID.BOTH_CLICK],
+                               screen_change_before_first_instruction=True)
         elif firmware == Firmware.STAX:
-            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))], screen_change_before_first_instruction=True)
+            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))],
+                               screen_change_before_first_instruction=True)
         elif firmware == Firmware.FLEX:
-            navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))], screen_change_before_first_instruction=True)
+            navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))],
+                               screen_change_before_first_instruction=True)
         settings_toggle(firmware, navigator, [setting_id])
 
     def test_trx_tip712_skip(self, firmware: Firmware,
-                             backend: BackendInterface,
-                             navigator: Navigator,
-                             default_screenshot_path: Path,
-                             test_name: str,
+                             backend: BackendInterface, navigator: Navigator,
+                             default_screenshot_path: Path, test_name: str,
                              golden_run: bool):
         global unfiltered_flow
         global skip_flow
@@ -1129,14 +1123,8 @@ class TestTRX():
             data = json.load(file)
 
         cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(firmware,
-                                navigator,
-                                default_screenshot_path,
-                                client,
-                                cmd_builder,
-                                data,
-                                None,
-                                False,
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder, data, None, False,
                                 golden_run)
 
         # verify signature

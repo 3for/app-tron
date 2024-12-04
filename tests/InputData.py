@@ -14,6 +14,7 @@ from ragger.firmware import Firmware
 from ragger.utils import RAPDU
 from keychain import sign_data, Key
 
+
 class TrustedNameType(IntEnum):
     ACCOUNT = 0x01
     CONTRACT = 0x02
@@ -45,6 +46,7 @@ class TrustedNameTag(IntEnum):
     NAME_SOURCE = 0x71
     NFT_ID = 0x72
 
+
 class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_GENUINE_CHECK = 0x01
     PUBKEY_USAGE_EXCHANGE_PAYLOAD = 0x02
@@ -55,6 +57,7 @@ class PKIPubKeyUsage(IntEnum):
     PUBKEY_USAGE_PLUGIN_METADATA = 0x07
     PUBKEY_USAGE_COIN_META = 0x08
     PUBKEY_USAGE_SEED_ID_AUTH = 0x09
+
 
 class FieldTag(IntEnum):
     STRUCT_TYPE = 0x01
@@ -76,6 +79,7 @@ class FieldTag(IntEnum):
     TRUSTED_NAME_SOURCE = 0x71
     TRUSTED_NAME_NFT_ID = 0x72
 
+
 class StatusWord(IntEnum):
     OK = 0x9000
     ERROR_NO_INFO = 0x6a00
@@ -87,6 +91,7 @@ class StatusWord(IntEnum):
     REF_DATA_NOT_FOUND = 0x6a88
     EXCEPTION_OVERFLOW = 0x6807
     NOT_IMPLEMENTED = 0x911c
+
 
 # global variables
 app_client = None
@@ -101,8 +106,10 @@ def der_encode(value: int) -> bytes:
     # max() to have minimum length of 1
     value_bytes = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
     if value >= 0x80:
-        value_bytes = (0x80 | len(value_bytes)).to_bytes(1, 'big') + value_bytes
+        value_bytes = (0x80 | len(value_bytes)).to_bytes(1,
+                                                         'big') + value_bytes
     return value_bytes
+
 
 def format_tlv(tag: int, value: Union[int, str, bytes]) -> bytes:
     if isinstance(value, int):
@@ -111,13 +118,15 @@ def format_tlv(tag: int, value: Union[int, str, bytes]) -> bytes:
     elif isinstance(value, str):
         value = value.encode()
 
-    assert isinstance(value, bytes), f"Unhandled TLV formatting for type : {type(value)}"
+    assert isinstance(
+        value, bytes), f"Unhandled TLV formatting for type : {type(value)}"
 
     tlv = bytearray()
     tlv += der_encode(tag)
     tlv += der_encode(len(value))
     tlv += value
     return tlv
+
 
 def default_handler():
     raise RuntimeError("Uninitialized handler")
@@ -286,6 +295,7 @@ encoding_functions[TIP712FieldType.STRING] = encode_string
 encoding_functions[TIP712FieldType.FIX_BYTES] = encode_bytes_fix
 encoding_functions[TIP712FieldType.DYN_BYTES] = encode_bytes_dyn
 
+
 def send_filtering_token(token_idx: int):
     assert token_idx < len(filtering_tokens)
     if len(filtering_tokens[token_idx]) > 0:
@@ -293,8 +303,7 @@ def send_filtering_token(token_idx: int):
         if not token["sent"]:
             provide_token_metadata(token["ticker"],
                                    bytes.fromhex(token["addr"][2:]),
-                                   token["decimals"],
-                                   token["chain_id"])
+                                   token["decimals"], token["chain_id"])
             token["sent"] = True
 
 
@@ -312,16 +321,14 @@ def send_filter(path: str, discarded: bool):
         if filtering_paths[path]["type"].endswith("_token"):
             send_filtering_amount_join_token(path, token_idx, discarded)
         elif filtering_paths[path]["type"].endswith("_value"):
-            send_filtering_amount_join_value(path,
-                                             token_idx,
+            send_filtering_amount_join_value(path, token_idx,
                                              filtering_paths[path]["name"],
                                              discarded)
 
     elif filtering_paths[path]["type"] == "datetime":
         send_filtering_datetime(path, filtering_paths[path]["name"], discarded)
     elif filtering_paths[path]["type"] == "trusted_name":
-        send_filtering_trusted_name(path,
-                                    filtering_paths[path]["name"],
+        send_filtering_trusted_name(path, filtering_paths[path]["name"],
                                     filtering_paths[path]["tn_type"],
                                     filtering_paths[path]["tn_source"],
                                     discarded)
@@ -330,6 +337,7 @@ def send_filter(path: str, discarded: bool):
         send_filtering_raw(path, filtering_paths[path]["name"], discarded)
     else:
         assert False
+
 
 def send_struct_impl_field(value, field):
     assert not isinstance(value, list)
@@ -359,7 +367,8 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
             for path in filtering_paths.keys():
                 dpath = ".".join(current_path) + ".[]"
                 if path.startswith(dpath):
-                    app_client.exchange_raw(cmd_builder.tip712_filtering_discarded_path(path))
+                    app_client.exchange_raw(
+                        cmd_builder.tip712_filtering_discarded_path(path))
                     send_filter(path, True)
         idx = 0
         for subdata in data:
@@ -426,7 +435,8 @@ def send_filtering_message_info(display_name: str, filters_count: int):
     disable_autonext()
 
 
-def send_filtering_amount_join_token(path: str, token_idx: int, discarded: bool):
+def send_filtering_amount_join_token(path: str, token_idx: int,
+                                     discarded: bool):
     global sig_ctx
 
     to_sign = start_signature_payload(sig_ctx, 11)
@@ -434,11 +444,13 @@ def send_filtering_amount_join_token(path: str, token_idx: int, discarded: bool)
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_amount_join_token(token_idx, sig, discarded)):
+            cmd_builder.tip712_filtering_amount_join_token(
+                token_idx, sig, discarded)):
         pass
 
 
-def send_filtering_amount_join_value(path: str, token_idx: int, display_name: str, discarded: bool):
+def send_filtering_amount_join_value(path: str, token_idx: int,
+                                     display_name: str, discarded: bool):
     global sig_ctx
 
     to_sign = start_signature_payload(sig_ctx, 22)
@@ -460,13 +472,13 @@ def send_filtering_datetime(path: str, display_name: str, discarded: bool):
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_datetime(display_name, sig, discarded)):
+            cmd_builder.tip712_filtering_datetime(display_name, sig,
+                                                  discarded)):
         pass
 
-def send_filtering_trusted_name(path: str,
-                                display_name: str,
-                                name_type: list[int],
-                                name_source: list[int],
+
+def send_filtering_trusted_name(path: str, display_name: str,
+                                name_type: list[int], name_source: list[int],
                                 discarded: bool):
     global sig_ctx
 
@@ -479,8 +491,11 @@ def send_filtering_trusted_name(path: str,
         to_sign.append(s)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.exchange_async_raw(
-        cmd_builder.tip712_filtering_trusted_name(display_name, name_type, name_source, sig, discarded)):
+            cmd_builder.tip712_filtering_trusted_name(display_name, name_type,
+                                                      name_source, sig,
+                                                      discarded)):
         pass
+
 
 # ledgerjs doesn't actually sign anything, and instead uses already pre-computed signatures
 def send_filtering_raw(path: str, display_name: str, discarded: bool):
@@ -681,7 +696,9 @@ def process_data(aclient,
 
     return True
 
-def provide_trusted_name_common(app_client, cmd_builder, payload: bytes) -> RAPDU:
+
+def provide_trusted_name_common(app_client, cmd_builder,
+                                payload: bytes) -> RAPDU:
     # if pki_client is None:
     #     print(f"Ledger-PKI Not supported on '{firmware.name}'")
     # else:
@@ -701,15 +718,15 @@ def provide_trusted_name_common(app_client, cmd_builder, payload: bytes) -> RAPD
     payload += format_tlv(FieldTag.SIGNER_KEY_ID, 0)  # test key
     payload += format_tlv(FieldTag.SIGNER_ALGO, 1)  # secp256k1
     payload += format_tlv(FieldTag.DER_SIGNATURE,
-                            sign_data(Key.TRUSTED_NAME, payload))
+                          sign_data(Key.TRUSTED_NAME, payload))
     chunks = cmd_builder.provide_trusted_name(payload)
     for chunk in chunks[:-1]:
         app_client.exchange_raw(chunk)
     return app_client.exchange_raw(chunks[-1])
 
-def provide_trusted_name_v1(app_client,
-                            cmd_builder,
-                            addr: bytes, name: str, challenge: int) -> RAPDU:
+
+def provide_trusted_name_v1(app_client, cmd_builder, addr: bytes, name: str,
+                            challenge: int) -> RAPDU:
     payload = format_tlv(FieldTag.STRUCT_VERSION, 1)
     payload += format_tlv(FieldTag.CHALLENGE, challenge)
     payload += format_tlv(FieldTag.COIN_TYPE, 0x3c)  # ETH in slip-44
@@ -717,16 +734,18 @@ def provide_trusted_name_v1(app_client,
     payload += format_tlv(FieldTag.ADDRESS, addr)
     return provide_trusted_name_common(app_client, cmd_builder, payload)
 
-def provide_trusted_name_v2(app_client,
-                            cmd_builder,
-                            addr: bytes,
-                            name: str,
-                            name_type: TrustedNameType,
-                            name_source: TrustedNameSource,
-                            chain_id: int,
-                            nft_id: Optional[int] = None,
-                            challenge: Optional[int] = None,
-                            not_valid_after: Optional[tuple[int]] = None) -> RAPDU:
+
+def provide_trusted_name_v2(
+        app_client,
+        cmd_builder,
+        addr: bytes,
+        name: str,
+        name_type: TrustedNameType,
+        name_source: TrustedNameSource,
+        chain_id: int,
+        nft_id: Optional[int] = None,
+        challenge: Optional[int] = None,
+        not_valid_after: Optional[tuple[int]] = None) -> RAPDU:
     payload = format_tlv(FieldTag.STRUCT_VERSION, 2)
     payload += format_tlv(FieldTag.TRUSTED_NAME, name)
     payload += format_tlv(FieldTag.ADDRESS, addr)
@@ -739,5 +758,6 @@ def provide_trusted_name_v2(app_client,
         payload += format_tlv(FieldTag.CHALLENGE, challenge)
     if not_valid_after is not None:
         assert len(not_valid_after) == 3
-        payload += format_tlv(FieldTag.NOT_VALID_AFTER, struct.pack("BBB", *not_valid_after))
+        payload += format_tlv(FieldTag.NOT_VALID_AFTER,
+                              struct.pack("BBB", *not_valid_after))
     return provide_trusted_name_common(app_client, cmd_builder, payload)

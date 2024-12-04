@@ -13,6 +13,7 @@ from eth_utils import keccak
 import hashlib
 import rlp
 
+
 def normalize_vrs(vrs: tuple) -> tuple:
     vrs_l = list()
     for elem in vrs:

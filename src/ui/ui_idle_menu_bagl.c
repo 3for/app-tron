@@ -47,7 +47,6 @@ static void switch_settings_truncate_address();
 static void switch_settings_sign_by_hash();
 static char settings_param_value[40];
 
-
 #if defined(TARGET_NANOS)
 
 UX_STEP_VALID(ux_settings_flow_1_step,
@@ -76,29 +75,21 @@ UX_STEP_VALID(ux_settings_flow_4_step,
 #else
 
 #ifdef HAVE_TRUSTED_NAME
-UX_STEP_CB(
-    ux_settings_flow_verbose_trusted_name_step,
-    bnnn,
-    switch_settings_verbose_trusted_name(),
-    {
-      "ENS addresses",
-      "Displays resolved",
-      "addresses from ENS",
-      SETTING_VERBOSE_TRUSTED_NAME_STATE
-    });
-#endif // HAVE_TRUSTED_NAME
+UX_STEP_CB(ux_settings_flow_verbose_trusted_name_step,
+           bnnn,
+           switch_settings_verbose_trusted_name(),
+           {"ENS addresses",
+            "Displays resolved",
+            "addresses from ENS",
+            SETTING_VERBOSE_TRUSTED_NAME_STATE});
+#endif  // HAVE_TRUSTED_NAME
 
 #ifdef HAVE_TIP712_FULL_SUPPORT
 UX_STEP_CB(
     ux_settings_flow_verbose_tip712_step,
     bnnn,
     switch_settings_verbose_tip712(),
-    {
-        "Raw messages",
-        "Displays raw content",
-        "from TIP712 messages",
-        SETTING_VERBOSE_TIP712_STATE
-    });
+    {"Raw messages", "Displays raw content", "from TIP712 messages", SETTING_VERBOSE_TIP712_STATE});
 #endif  // HAVE_TIP712_FULL_SUPPORT
 
 UX_STEP_VALID(ux_settings_flow_1_step,
@@ -202,7 +193,7 @@ static void switch_settings_verbose_tip712(void) {
 static void switch_settings_verbose_trusted_name(void) {
     SETTING_TOGGLE(S_TRUSTED_NAME);
     display_settings(&ux_settings_flow_verbose_trusted_name_step);
- }
+}
 #endif  // HAVE_TRUSTED_NAME
 
 UX_STEP_NOCB(ux_idle_flow_1_step,
@@ -249,24 +240,22 @@ void ui_idle(void) {
 }
 
 #ifdef TARGET_NANOS
-UX_STEP_CB(
-    ux_error_blind_signing_step,
-    bnnn_paging,
-    ui_idle(),
-    {
-      "Error",
-      "Blind signing must be enabled in Settings",
-    });
+UX_STEP_CB(ux_error_blind_signing_step,
+           bnnn_paging,
+           ui_idle(),
+           {
+               "Error",
+               "Blind signing must be enabled in Settings",
+           });
 #else
-UX_STEP_CB(
-    ux_error_blind_signing_step,
-    pnn,
-    ui_idle(),
-    {
-      &C_icon_crossmark,
-      "Blind signing must be",
-      "enabled in Settings",
-    });
+UX_STEP_CB(ux_error_blind_signing_step,
+           pnn,
+           ui_idle(),
+           {
+               &C_icon_crossmark,
+               "Blind signing must be",
+               "enabled in Settings",
+           });
 #endif
 
 void ui_error_blind_signing(void) {

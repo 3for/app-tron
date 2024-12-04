@@ -66,6 +66,6 @@
 #define APDU_RESPONSE_REF_DATA_NOT_FOUND      0x6a88
 #define APDU_RESPONSE_UNKNOWN                 0x6f00
 
-#define APDU_NO_RESPONSE                      0x0000
-#define APDU_RESPONSE_MODE_CHECK_FAILED       0x6001
+#define APDU_NO_RESPONSE                0x0000
+#define APDU_RESPONSE_MODE_CHECK_FAILED 0x6001
 #endif  // once

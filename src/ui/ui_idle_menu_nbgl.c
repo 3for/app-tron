@@ -31,7 +31,7 @@ enum {
     SWITCH_ALLOW_HASH_TX_TOKEN,
 #ifdef HAVE_TRUSTED_NAME
     SWITCH_TRUSTED_NAME_VERBOSE_TOKEN,
- #endif
+#endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     SWITCH_TIP712_VERBOSE_TOKEN,
 #endif
@@ -43,7 +43,7 @@ enum {
     HASH_TX_ID,
 #ifdef HAVE_TRUSTED_NAME
     TRUSTED_NAME_VERBOSE_ID,
- #endif
+#endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     TIP712_VERBOSE_ID,
 #endif
@@ -62,7 +62,7 @@ static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_SIGN_BY_HASH,
 #ifdef HAVE_TRUSTED_NAME
     S_TRUSTED_NAME,
- #endif
+#endif
 #ifdef HAVE_TIP712_FULL_SUPPORT
     S_VERBOSE_TIP712,
 #endif
@@ -144,7 +144,8 @@ void ui_idle(void) {
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
 #ifdef HAVE_TRUSTED_NAME
-    switches[TRUSTED_NAME_VERBOSE_ID].initState = HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
+    switches[TRUSTED_NAME_VERBOSE_ID].initState =
+        HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
     switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
     switches[TRUSTED_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
     switches[TRUSTED_NAME_VERBOSE_ID].token = SWITCH_TRUSTED_NAME_VERBOSE_TOKEN;
@@ -173,7 +174,7 @@ static void ui_error_blind_signing_choice(bool confirm) {
     // if (confirm) {
     //     ui_settings();
     // } else {
-        ui_idle();
+    ui_idle();
     // }
 }
 
