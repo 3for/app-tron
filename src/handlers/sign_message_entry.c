@@ -24,6 +24,7 @@ size_t unprocessed_length(void) {
     return G_io_apdu_buffer[OFFSET_LC] - processed_size_191;
 }
 
+#ifndef TARGET_NANOS
 /**
  * The user has decided to skip the rest of the message
  */
@@ -49,6 +50,7 @@ void question_switcher(void) {
     }
 }
 
+#endif
 /**
  * The user has decided to see the next chunk of the message
  */

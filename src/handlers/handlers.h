@@ -69,7 +69,9 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint8_t p2,
                                          uint8_t *workBuffer,
                                          uint16_t dataLength);
+#ifndef TARGET_NANOS
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,
                                        uint8_t dataLength);
+#endif
