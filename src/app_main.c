@@ -100,11 +100,14 @@ void app_main(void) {
     nv_app_state_init();
 
     io_init();
+
+#ifndef TARGET_NANOS
     chain_config_t config;
     if (chainConfig == NULL) {
         init_coin_config(&config);
         chainConfig = &config;
     }
+#endif  // TARGET_NANOS
 
 #ifdef HAVE_SWAP
     if (!G_called_from_swap) {

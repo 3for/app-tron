@@ -929,6 +929,7 @@ void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
     hash_nbytes(&byte, 1, hash_ctx);
 }
 
+#ifndef TARGET_NANOS
 void forget_known_assets(void) {
     memset(global_ctx.transactionContext.assetSet, false, MAX_ASSETS);
     global_ctx.transactionContext.currentAssetIndex = 0;
@@ -972,6 +973,7 @@ void validate_current_asset_info(void) {
     global_ctx.transactionContext.currentAssetIndex =
         (global_ctx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
 }
+#endif
 
 int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
     if (outl <= 2) {

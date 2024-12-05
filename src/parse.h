@@ -179,9 +179,11 @@ typedef struct transactionContext_t {
     uint8_t hash[HASH_SIZE];
     uint8_t signature[MAX_RAW_SIGNATURE];
     uint8_t signatureLength;
+#ifndef TARGET_NANOS
     union extraInfo_t extraInfo[MAX_ASSETS];
     bool assetSet[MAX_ASSETS];
     uint8_t currentAssetIndex;
+#endif
 } transactionContext_t;
 
 typedef struct txContent_t {

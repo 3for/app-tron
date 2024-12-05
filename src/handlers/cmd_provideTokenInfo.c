@@ -10,6 +10,7 @@
 #include "os_pki.h"
 #endif
 
+#ifndef TARGET_NANOS
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,
@@ -80,3 +81,5 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 3);
     return 0;
 }
+
+#endif
