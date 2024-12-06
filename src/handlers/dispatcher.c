@@ -80,10 +80,8 @@ int apdu_dispatcher(const command_t *cmd) {
             // Request Signature
             return handleECDHSecret(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-#ifndef TARGET_NANOS
         case INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY:
             return handleSignPersonalMessageFullDisplay(cmd->p1, cmd->p2, cmd->data, cmd->lc);
-#endif
 
         case INS_SIGN_PERSONAL_MESSAGE:
             return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);

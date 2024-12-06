@@ -29,7 +29,6 @@
 #include "parse.h"
 #include "ui_globals.h"
 
-#ifndef TARGET_NANOS
 states191_t states191;
 
 
@@ -136,5 +135,3 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
 
     return 0;
 }
-
-#endif
