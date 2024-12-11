@@ -1,3 +1,4 @@
+#ifdef HAVE_TIP712_FULL_SUPPORT
 #include <stdint.h>
 
 #include "public_keys.h"
@@ -80,3 +81,5 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 3);
     return 0;
 }
+
+#endif
