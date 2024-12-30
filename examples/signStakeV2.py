@@ -38,7 +38,7 @@ if args.path == None:
 donglePath = parse_bip32_path(args.path)
 
 # get pubKey
-apduMessage = "E0020000" + '{:02x}'.format(len(donglePath) +
+apduMessage = "E0020000" + '{:02x}'.format(int(len(donglePath) / 2) +
                                            1) + '{:02x}'.format(
                                                int(len(donglePath) / 4 /
                                                    2)) + donglePath
