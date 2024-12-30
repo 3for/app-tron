@@ -23,7 +23,7 @@ donglePath = parse_bip32_path(args.path)
 # txt = "E0020100" + '{:02x}'.format(len(donglePath) + 1) + '{:02x}'.format( int(len(donglePath) / 4 / 2)) + donglePath
 # No confirmation
 apduMessage = "E0020000" + '{:02x}'.format(int(
-    len(donglePath) / 2)) + '{:02x}'.format(int(
+    len(donglePath) / 2) + 1) + '{:02x}'.format(int(
         len(donglePath) / 4 / 2)) + donglePath
 apdu = bytearray.fromhex(apduMessage)
 
