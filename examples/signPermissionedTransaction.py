@@ -93,15 +93,15 @@ logger.debug('-= Tron Ledger =-')
 '''
 Tron Protobuf
 '''
-from api import api_pb2 as api
-from core import Contract_pb2 as contract
-from api.api_pb2_grpc import WalletStub
-from core import Tron_pb2 as tron
+from tron_sdk_py.proto.core import contract_pb2 as contract
+from tron_sdk_py.proto.api import api_pb2 as api
+from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from tron_sdk_py.proto.core import chain_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 
 # Start Channel and WalletStub
-channel = grpc.insecure_channel("grpc.trongrid.io:50051")
+channel = grpc.insecure_channel("grpc.nile.trongrid.io:50051")
 stub = WalletStub(channel)
 
 logger.debug('''
@@ -115,15 +115,17 @@ tx = stub.CreateTransaction2(
         to_address=bytes.fromhex(
             address_hex("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")),
         amount=100000))
-# use permission 2
-tx.transaction.raw_data.contract[0].Permission_id = 2
+print("tx info:", tx)
+if len(tx.transaction.raw_data.contract) > 0:
+    # use permission 2
+    tx.transaction.raw_data.contract[0].Permission_id = 2
 
-raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
+    raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
 
-tx.transaction.signature.extend([bytes(sign1[0:65])])
-r = stub.BroadcastTransaction(tx.transaction)
-
-if r.result == True:
-    print("Success")
-else:
-    print("Fail")
+    tx.transaction.signature.extend([bytes(sign1[0:65])])
+    r = stub.BroadcastTransaction(tx.transaction)
+    print("result:", r)
+    if r.result == True:
+        print("Success")
+    else:
+        print("Fail")
