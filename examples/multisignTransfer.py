@@ -7,7 +7,7 @@ sys.path.append("./examples/proto")
 from pprint import pprint
 import logging
 import time
-
+from pathlib import Path
 from ledgerblue.comm import getDongle
 import argparse
 from base import parse_bip32_path
@@ -51,6 +51,7 @@ def ledgerSign(PATH, tx, tokenSignature=[]):
     if len(tokenSignature) > 0:
         chunkList.extend(tokenSignature)
 
+    assert len(chunkList) > 0
     # P1 = P1_FIRST = 0x00
     if len(chunkList) > 1:
         result = dongle.exchange(
@@ -58,7 +59,7 @@ def ledgerSign(PATH, tx, tokenSignature=[]):
     else:
         result = dongle.exchange(
             apduMessage(0x04, 0x10, 0x00, PATH, chunkList[0]))
-
+    
     for i in range(1, len(chunkList) - 1 - len(tokenSignature)):
         # P1 = P1_MODE = 0x80
         result = dongle.exchange(
@@ -93,40 +94,45 @@ logger.debug('-= Tron Ledger =-')
 '''
 Tron Protobuf
 '''
-from api import api_pb2 as api
-from core import Contract_pb2 as contract
-from api.api_pb2_grpc import WalletStub
-from core import Tron_pb2 as tron
+from tron_sdk_py.proto.api import api_pb2 as api
+from tron_sdk_py.proto.core.contract_pb2 import TransferContract
+from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from tron_sdk_py.types import HEX, ADDR
+from tron_sdk_py.proto.api.api_pb2 import EmptyMessage # , AccountAddressMessage, BytesMessage
 from google.protobuf.any_pb2 import Any
 import grpc
 
 # Start Channel and WalletStub
-channel = grpc.insecure_channel("grpc.trongrid.io:50051")
+channel = grpc.insecure_channel("grpc.nile.trongrid.io:50051")
 stub = WalletStub(channel)
 
 logger.debug('''
    Tron MultiSign tests
 ''')
 
-tx = stub.CreateTransaction2(
-    contract.TransferContract(
-        owner_address=bytes.fromhex(
-            address_hex("TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH")),
-        to_address=bytes.fromhex(
-            address_hex("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")),
-        amount=100000))
-# use permission 2
-tx.transaction.raw_data.contract[0].Permission_id = 2
+print(stub.GetNowBlock2(EmptyMessage()))
 
-raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
-raw_tx, sign2 = ledgerSign(parse_bip32_path("44'/195'/1'/0/0"), tx.transaction)
+req = TransferContract()
+req.owner_address = ADDR("TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH")
+req.to_address = ADDR("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")
+req.amount = 100000
+tx = stub.CreateTransaction2(req)
+print("tx info:", tx)
+print("TXID:", HEX(tx.txid))
+if len(tx.transaction.raw_data.contract) > 0:
+    # use permission 2
+    tx.transaction.raw_data.contract[0].Permission_id = 2
 
-tx.transaction.signature.extend([bytes(sign1[0:65])])
-tx.transaction.signature.extend([bytes(sign2[0:65])])
+    raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
+    raw_tx, sign2 = ledgerSign(parse_bip32_path("44'/195'/1'/0/0"), tx.transaction)
 
-r = stub.BroadcastTransaction(tx.transaction)
+    tx.transaction.signature.extend([bytes(sign1[0:65])])
+    tx.transaction.signature.extend([bytes(sign2[0:65])])
 
-if r.result == True:
-    print("Success")
-else:
-    print("Fail")
+    r = stub.BroadcastTransaction(tx.transaction)
+
+    print("result:", r)
+    if r.result == True:
+        print("Success")
+    else:
+        print("Fail")
