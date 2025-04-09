@@ -184,8 +184,8 @@ def input_file_fixture(request) -> str:
     return Path(request.param)
 
 
-@pytest.fixture(name="verbose", params=[True, False])
-def verbose_fixture(request) -> bool:
+@pytest.fixture(name="verbose_raw", params=[True, False])
+def verbose_raw_fixture(request) -> bool:
     return request.param
 
 
@@ -897,7 +897,7 @@ class TestTRX():
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path, input_file: Path,
-                            verbose: bool, filtering: bool, test_name: str):
+                            verbose_raw: bool, filtering: bool, test_name: str):
 
         global unfiltered_flow
         # global snapshots_dirname
@@ -927,11 +927,11 @@ class TestTRX():
         else:
             pass
 
-        if verbose:
+        if verbose_raw:
             setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
             settings_to_toggle.append(setting_id)
 
-        if not filters or verbose:
+        if not filters or verbose_raw:
             unfiltered_flow = True
         if len(settings_to_toggle) > 0:
             settings_toggle(firmware, navigator, settings_to_toggle)
@@ -939,7 +939,7 @@ class TestTRX():
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
             extra_left = test_path.endswith(
-                '01-addresses_array_mail') and verbose and filters is None
+                '01-addresses_array_mail') and verbose_raw and filters is None
             vrs = tip712_new_common(firmware,
                                     navigator,
                                     default_screenshot_path,
