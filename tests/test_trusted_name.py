@@ -27,8 +27,8 @@ GAS_LIMIT = 21000
 AMOUNT = 1.22
 
 
-@pytest.fixture(name="verbose", params=[False, True])
-def verbose_fixture(request) -> bool:
+@pytest.fixture(name="verbose_ens", params=[False, True])
+def verbose_ens_fixture(request) -> bool:
     return request.param
 
 
@@ -50,12 +50,12 @@ def common(firmware: Firmware,
 def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
                          navigator: Navigator,
                          scenario_navigator: NavigateWithScenario,
-                         verbose: bool, test_name: str):
+                         verbose_ens: bool, test_name: str):
     app_client = TronClient(backend, firmware, navigator)
     cmd_builder = CommandBuilder()
     challenge = common(firmware, app_client, cmd_builder)
 
-    if verbose:
+    if verbose_ens:
         settings_toggle(firmware, navigator, [
             NanoSettingID.VERBOSE_ENS
             if firmware.is_nano else NonNanoSettingID.VERBOSE_ENS
