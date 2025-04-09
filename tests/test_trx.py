@@ -96,7 +96,7 @@ def tip712_new_common(firmware,
                       builder: CommandBuilder,
                       json_data: dict,
                       filters,
-                      verbose: bool,
+                      verbose_raw: bool,
                       golden_run: bool,
                       extra_left: bool = False):
     global autonext_idx
@@ -116,7 +116,7 @@ def tip712_new_common(firmware,
         moves = []
         if firmware.is_nano:
             # need to skip the message hash
-            if not verbose and filters is None:
+            if not verbose_raw and filters is None:
                 moves += [NavInsID.RIGHT_CLICK] * 2
             moves += [NavInsID.BOTH_CLICK]
         else:
@@ -124,7 +124,7 @@ def tip712_new_common(firmware,
                 # this move is necessary most of the times, but can't be 100% sure with the fields grouping
                 moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
                 # need to skip the message hash
-                if not verbose and filters is None:
+                if not verbose_raw and filters is None:
                     moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
             if extra_left:
                 moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
@@ -979,7 +979,7 @@ class TestTRX():
                                     cmd_builder,
                                     data,
                                     filters,
-                                    verbose,
+                                    verbose_raw,
                                     False,
                                     extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
