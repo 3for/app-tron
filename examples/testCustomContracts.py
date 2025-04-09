@@ -117,10 +117,10 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from api import api_pb2 as api
-from core import Contract_pb2 as contract
-from api.api_pb2_grpc import WalletStub
-from core import Tron_pb2 as tron
+from tron_sdk_py.proto.core import contract_pb2 as contract
+from tron_sdk_py.proto.api import api_pb2 as api
+from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from tron_sdk_py.proto.core import chain_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 
@@ -133,7 +133,7 @@ logger.debug('''
 ''')
 
 # check if device have custom contracts enable
-result = dongle.exchange(bytearray.fromhex("E0060000FF"))
+result = dongle.exchange(bytearray.fromhex("E006000000"))
 customAllowed = result[0] & 0x02
 if customAllowed == 0:
     print("Custom Contract not allowed, test should fail...")
@@ -208,6 +208,7 @@ tx = stub.TriggerContract(
             address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
         data=bytes.fromhex(data)))
 
+print("TriggerSmartContract tx info:", tx)
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 tx.transaction.signature.extend([bytes(result[0:65])])
 #r = stub.BroadcastTransaction(tx.transaction)

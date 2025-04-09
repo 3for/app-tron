@@ -7,7 +7,7 @@ sys.path.append("./examples/proto")
 from pprint import pprint
 import logging
 import time
-
+from pathlib import Path
 from ledgerblue.comm import getDongle
 import argparse
 from base import parse_bip32_path
@@ -47,7 +47,7 @@ def ledgerSign(PATH, tx, tokenSignature=[]):
     chunkList = list(chunks(raw_tx, 410))
     if len(tokenSignature) > 0:
         chunkList.extend(tokenSignature)
-
+    assert len(chunkList) > 0
     # P1 = P1_FIRST = 0x00
     if len(chunkList) > 1:
         result = dongle.exchange(
@@ -117,15 +117,15 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from api import api_pb2 as api
-from core import Contract_pb2 as contract
-from api.api_pb2_grpc import WalletStub
-from core import Tron_pb2 as tron
+from tron_sdk_py.proto.core import contract_pb2 as contract
+from tron_sdk_py.proto.api import api_pb2 as api
+from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from tron_sdk_py.proto.core import chain_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 
 # Start Channel and WalletStub
-channel = grpc.insecure_channel("grpc.trongrid.io:50051")
+channel = grpc.insecure_channel("grpc.nile.trongrid.io:50051")
 stub = WalletStub(channel)
 
 logger.debug('''
@@ -142,7 +142,7 @@ tx = stub.CreateTransaction2(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
         amount=1))
-
+print("tx info:", tx)
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
@@ -165,7 +165,8 @@ else:
 logger.debug('\n\nTransfer Contract with Data:')
 
 # check if device have data enable
-result = dongle.exchange(bytearray.fromhex("E0060000FF"))
+result = dongle.exchange(bytearray.fromhex("E006000000"))
+print("resutl:", result)
 dataAllowed = result[0] & 0x01
 if dataAllowed == 0:
     print("Data field not allowed, test should fail...")
