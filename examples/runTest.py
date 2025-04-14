@@ -57,7 +57,7 @@ def ledgerSign(PATH, tx, tokenSignature=[]):
             apduMessage(0x04, 0x10, 0x00, PATH, chunkList[0]))
 
     for i in range(1, len(chunkList) - 1 - len(tokenSignature)):
-        # P1 = P1_MODE = 0x80
+        # P1 = P1_MORE = 0x80
         result = dongle.exchange(
             apduMessage(0x04, 0x80, 0x00, None, chunkList[i]))
 

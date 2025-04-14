@@ -23,7 +23,7 @@ from ragger.firmware import Firmware
 from conftest import MNEMONIC
 from web3 import Web3
 
-from InputData import PKIPubKeyUsage
+from client.tip712.InputData import PKIPubKeyUsage
 '''
 Tron Protobuf
 '''

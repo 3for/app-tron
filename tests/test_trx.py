@@ -30,9 +30,9 @@ from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 
 from settings import NanoSettingID, NonNanoSettingID, settings_toggle, SettingID
-from command_builder import CommandBuilder
+from client.command_builder import CommandBuilder
 import response_parser as ResponseParser
-import InputData as InputData
+from client.tip712 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
 from utils import recover_message
 from web3 import Web3
