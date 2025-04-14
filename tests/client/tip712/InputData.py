@@ -8,7 +8,8 @@ from typing import Any, Callable, Optional, Union
 import struct
 from enum import IntEnum
 
-from command_builder import CommandBuilder, TIP712FieldType
+from client.command_builder import CommandBuilder
+from client.tip712 import TIP712FieldType
 import keychain
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
@@ -215,7 +216,7 @@ def send_struct_def_field(typename, keyname):
     (typename, array_lvls) = get_array_levels(typename)
     (typename, typesize) = get_typesize(typename)
 
-    if typename in parsing_type_functions.keys():
+    if typename in parsing_type_functions:
         (type_enum, typesize) = parsing_type_functions[typename](typesize)
     else:
         type_enum = TIP712FieldType.CUSTOM
@@ -630,7 +631,6 @@ def process_data(aclient,
     types = data_json["types"]
     domain = data_json["domain"]
     message = data_json["message"]
-
     if autonext:
         autonext_handler = autonext
         signal.signal(signal.SIGALRM, next_timeout)

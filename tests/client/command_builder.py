@@ -1,22 +1,10 @@
 # documentation about APDU format is available here:
 
 import struct
-from enum import IntEnum
 from typing import Optional
 from ragger.bip import pack_derivation_path
 from enum import IntEnum, auto
-
-
-class TIP712FieldType(IntEnum):
-    CUSTOM = 0,
-    INT = auto()
-    UINT = auto()
-    ADDRESS = auto()
-    BOOL = auto()
-    STRING = auto()
-    FIX_BYTES = auto()
-    DYN_BYTES = auto()
-
+from .tip712 import TIP712FieldType
 
 class InsType(IntEnum):
     GET_PUBLIC_ADDR = 0x02

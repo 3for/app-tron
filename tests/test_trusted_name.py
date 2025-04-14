@@ -10,10 +10,10 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 import response_parser as ResponseParser
 from tron import TronClient
-from InputData import StatusWord, TrustedNameType, TrustedNameSource
+from client.tip712.InputData import StatusWord, TrustedNameType, TrustedNameSource
 from settings import NanoSettingID, NonNanoSettingID, settings_toggle
-from command_builder import CommandBuilder
-import InputData as InputData
+from client.command_builder import CommandBuilder
+from client.tip712 import InputData as InputData
 
 # Values used across all tests
 CHAIN_ID = 1151668124

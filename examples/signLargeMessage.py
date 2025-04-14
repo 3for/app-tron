@@ -36,7 +36,7 @@ SIGN_MAGIC = b'\x19TRON Signed Message:\n'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help="BIP 32 path to sign with", default=None)
-parser.add_argument('--message', help="Message to sign", default='Hello Tron! ' * 32)
+parser.add_argument('--message', help="Message to sign", default='Hello Tron! ' * 64)
 parser.add_argument('--fulldisplay', help="Enable full display mode", default='disable')
 args = parser.parse_args()
 
@@ -67,7 +67,7 @@ while True:
         index = len(encodedTx)
         if index > 255-len(donglePath)/2 - 1:
             index = int(255-len(donglePath)/2) - 1
-        print(index)
+        # P1 = P1_FIRST = 0x00
         result = dongle.exchange(apduMessage(MSG_INS, 0x00, 0x00, donglePath, encodedTx[0:index].hex()))
     else:
         if index >= len(encodedTx):
@@ -76,6 +76,7 @@ while True:
         index += 255
         if index > len(encodedTx):
             index = len(encodedTx)
+        # P1 = P1_MORE = 0x80
         result = dongle.exchange(apduMessage(MSG_INS, 0x80, 0x00, None, encodedTx[last:index].hex()))
 
 # result = dongle.exchange(
