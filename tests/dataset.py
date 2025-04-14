@@ -1,7 +1,7 @@
 from ctypes import c_uint64
 import web3
 import pytest
-import InputData as InputData
+from client.tip712 import InputData as InputData
 
 
 class DataSet():
