@@ -21,63 +21,37 @@ ADVANCED_DATA_SETS = [
             "domain": {
                 "chainId": 1151668124,
                 "name": "Advanced test",
-                "verifyingContract":
-                "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+                "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
                 "version": "1"
             },
             "message": {
                 "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                "value_recv": 10000000000000000,
                 "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
                 "value_send": 24500000000000000000,
                 "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                "value_recv": 10000000000000000,
                 "expires": 1714559400,
             },
             "primaryType": "Transfer",
             "types": {
-                "EIP712Domain": [{
-                    "name": "name",
-                    "type": "string"
-                }, {
-                    "name": "version",
-                    "type": "string"
-                }, {
-                    "name": "chainId",
-                    "type": "uint256"
-                }, {
-                    "name": "verifyingContract",
-                    "type": "address"
-                }],
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"}
+                ],
                 "Transfer": [
-                    {
-                        "name": "with",
-                        "type": "address"
-                    },
-                    {
-                        "name": "token_send",
-                        "type": "address"
-                    },
-                    {
-                        "name": "value_send",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token_recv",
-                        "type": "address"
-                    },
-                    {
-                        "name": "value_recv",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "expires",
-                        "type": "uint64"
-                    },
+                    {"name": "with", "type": "address"},
+                    {"name": "value_recv", "type": "uint256"},
+                    {"name": "token_send", "type": "address"},
+                    {"name": "value_send", "type": "uint256"},
+                    {"name": "token_recv", "type": "address"},
+                    {"name": "expires", "type": "uint64"},
                 ]
             }
-        }, {
-            "name":
-            "Advanced Filtering",
+        },
+        {
+            "name": "Advanced Filtering",
             "tokens": [
                 {
                     "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
@@ -120,57 +94,30 @@ ADVANCED_DATA_SETS = [
                     "name": "Will Expire"
                 },
             }
-        }),
+        }
+    ),
     DataSet(
         {
             "types": {
                 "EIP712Domain": [
-                    {
-                        "name": "name",
-                        "type": "string"
-                    },
-                    {
-                        "name": "version",
-                        "type": "string"
-                    },
-                    {
-                        "name": "chainId",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "verifyingContract",
-                        "type": "address"
-                    },
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
                 ],
                 "Permit": [
-                    {
-                        "name": "owner",
-                        "type": "address"
-                    },
-                    {
-                        "name": "spender",
-                        "type": "address"
-                    },
-                    {
-                        "name": "value",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "nonce",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "deadline",
-                        "type": "uint256"
-                    },
+                    {"name": "owner", "type": "address"},
+                    {"name": "spender", "type": "address"},
+                    {"name": "value", "type": "uint256"},
+                    {"name": "nonce", "type": "uint256"},
+                    {"name": "deadline", "type": "uint256"},
                 ]
             },
             "primaryType": "Permit",
             "domain": {
                 "name": "ENS",
                 "version": "1",
-                "verifyingContract":
-                "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+                "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
                 "chainId": 1151668124,
             },
             "message": {
@@ -180,9 +127,9 @@ ADVANCED_DATA_SETS = [
                 "nonce": 0,
                 "deadline": 1719756000,
             }
-        }, {
-            "name":
-            "Permit filtering",
+        },
+        {
+            "name": "Permit filtering",
             "tokens": [
                 {
                     "addr": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
@@ -201,53 +148,30 @@ ADVANCED_DATA_SETS = [
                     "name": "Deadline",
                 },
             }
-        }, "_permit"),
+        },
+        "_permit"
+    ),
     DataSet(
         {
             "types": {
                 "EIP712Domain": [
-                    {
-                        "name": "name",
-                        "type": "string"
-                    },
-                    {
-                        "name": "version",
-                        "type": "string"
-                    },
-                    {
-                        "name": "chainId",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "verifyingContract",
-                        "type": "address"
-                    },
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
                 ],
                 "Root": [
-                    {
-                        "name": "token_big",
-                        "type": "address"
-                    },
-                    {
-                        "name": "value_big",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token_biggest",
-                        "type": "address"
-                    },
-                    {
-                        "name": "value_biggest",
-                        "type": "uint256"
-                    },
+                    {"name": "token_big", "type": "address"},
+                    {"name": "value_big", "type": "uint256"},
+                    {"name": "token_biggest", "type": "address"},
+                    {"name": "value_biggest", "type": "uint256"},
                 ]
             },
             "primaryType": "Root",
             "domain": {
                 "name": "test",
                 "version": "1",
-                "verifyingContract":
-                "0x0000000000000000000000000000000000000000",
+                "verifyingContract": "0x0000000000000000000000000000000000000000",
                 "chainId": 1151668124,
             },
             "message": {
@@ -256,9 +180,9 @@ ADVANCED_DATA_SETS = [
                 "token_biggest": "0x6b175474e89094c44da98b954eedeac495271d0f",
                 "value_biggest": int(web3.constants.MAX_INT, 0),
             }
-        }, {
-            "name":
-            "Unlimited test",
+        },
+        {
+            "name": "Unlimited test",
             "tokens": [
                 {
                     "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -287,7 +211,9 @@ ADVANCED_DATA_SETS = [
                     "token": 0,
                 },
             }
-        }, "_unlimited"),
+        },
+        "_unlimited"
+    ),
 ]
 
 filtering_empty_array_test_data = {
@@ -454,7 +380,7 @@ advanced_missing_token_test_data = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1,
+            "chainId": 1151668124,
         },
         "message": {
             "token_from": "0x1111111111111111111111111111111111111111",

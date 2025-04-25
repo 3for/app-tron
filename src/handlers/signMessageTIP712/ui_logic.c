@@ -444,7 +444,6 @@ static bool ui_712_format_amount_join(void) {
     if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
-
     if ((ui_ctx->amount.joins[ui_ctx->amount.idx].value_length == INT256_LENGTH) &&
         ismaxint(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
                  ui_ctx->amount.joins[ui_ctx->amount.idx].value_length)) {

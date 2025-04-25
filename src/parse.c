@@ -40,91 +40,6 @@ tokenDefinition_t *getKnownToken(txContent_t *context) {
     return NULL;
 }
 
-/**
- * Adjusts a numeric string by adding a decimal point at the specified position and trimming
- * trailing zeros.
- *
- * @param[in] src
- *   Pointer to the source numeric string.
- * @param[in] srcLength
- *   Length of the number as the number of actual characters (not the size of the buffer).
- * @param[out] target
- *   Pointer to the buffer where the adjusted string will be stored.
- * @param[in] targetLength
- *   Size of the target buffer.
- * @param[in] decimals
- *   Number of decimal places to shift.
- *
- * @return
- *   True if successful, false otherwise (e.g., if the target buffer is too small).
- */
-bool adjustDecimals(const char *src,
-                    uint32_t srcLength,
-                    char *target,
-                    uint32_t targetLength,
-                    uint8_t decimals) {
-    uint32_t startOffset;
-    uint32_t lastZeroOffset = 0;
-    uint32_t offset = 0;
-
-    if ((srcLength == 1) && (*src == '0')) {
-        if (targetLength < 2) {
-            return false;
-        }
-        target[offset++] = '0';
-        target[offset++] = '\0';
-        return true;
-    }
-    if (srcLength <= decimals) {
-        uint32_t delta = decimals - srcLength;
-        if (targetLength < srcLength + 1 + 2 + delta) {
-            return false;
-        }
-        target[offset++] = '0';
-        target[offset++] = '.';
-        for (uint32_t i = 0; i < delta; i++) {
-            target[offset++] = '0';
-        }
-        startOffset = offset;
-        for (uint32_t i = 0; i < srcLength; i++) {
-            target[offset++] = src[i];
-        }
-        target[offset] = '\0';
-    } else {
-        uint32_t sourceOffset = 0;
-        uint32_t delta = srcLength - decimals;
-        if (targetLength < srcLength + 1 + 1) {
-            return false;
-        }
-        while (offset < delta) {
-            target[offset++] = src[sourceOffset++];
-        }
-        if (decimals != 0) {
-            target[offset++] = '.';
-        }
-        startOffset = offset;
-        while (sourceOffset < srcLength) {
-            target[offset++] = src[sourceOffset++];
-        }
-        target[offset] = '\0';
-    }
-    for (uint32_t i = startOffset; i < offset; i++) {
-        if (target[i] == '0') {
-            if (lastZeroOffset == 0) {
-                lastZeroOffset = i;
-            }
-        } else {
-            lastZeroOffset = 0;
-        }
-    }
-    if (lastZeroOffset != 0) {
-        target[lastZeroOffset] = '\0';
-        if (target[lastZeroOffset - 1] == '.') {
-            target[lastZeroOffset - 1] = '\0';
-        }
-    }
-    return true;
-}
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun) {
     char tmp[20];
     char tmp2[25];
@@ -949,34 +864,30 @@ void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
 
 #ifndef TARGET_NANOS
 void forget_known_assets(void) {
-    memset(global_ctx.transactionContext.assetSet, false, MAX_ASSETS);
-    global_ctx.transactionContext.currentAssetIndex = 0;
+    memset(tmpCtx.transactionContext.assetSet, false, MAX_ASSETS);
+    tmpCtx.transactionContext.currentAssetIndex = 0;
 }
 
 static extraInfo_t *get_asset_info(int index) {
     if ((index < 0) || (index >= MAX_ASSETS)) {
         return NULL;
     }
-    return &global_ctx.transactionContext.extraInfo[index];
-}
-
-extraInfo_t *get_current_asset_info(void) {
-    return get_asset_info(global_ctx.transactionContext.currentAssetIndex);
+    return &tmpCtx.transactionContext.extraInfo[index];
 }
 
 static bool asset_info_is_set(int index) {
     if ((index < 0) || (index >= MAX_ASSETS)) {
         return false;
     }
-    return global_ctx.transactionContext.assetSet[index];
+    return tmpCtx.transactionContext.assetSet[index];
 }
 
 int get_asset_index_by_addr(const uint8_t *addr) {
-    // Works for TRC-20 & NFT tokens since both structs in the union have the
+    // Works for ERC-20 & NFT tokens since both structs in the union have the
     // contract address aligned
     for (int i = 0; i < MAX_ASSETS; i++) {
         extraInfo_t *asset = get_asset_info(i);
-        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_SIZE_712) == 0)) {
+        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
             PRINTF("Token found at index %d\n", i);
             return i;
         }
@@ -984,28 +895,19 @@ int get_asset_index_by_addr(const uint8_t *addr) {
     return -1;
 }
 
+extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
+    return get_asset_info(get_asset_index_by_addr(addr));
+}
+
+extraInfo_t *get_current_asset_info(void) {
+    return get_asset_info(tmpCtx.transactionContext.currentAssetIndex);
+}
+
 void validate_current_asset_info(void) {
     // mark it as set
-    global_ctx.transactionContext.assetSet[global_ctx.transactionContext.currentAssetIndex] = true;
+    tmpCtx.transactionContext.assetSet[tmpCtx.transactionContext.currentAssetIndex] = true;
     // increment index
-    global_ctx.transactionContext.currentAssetIndex =
-        (global_ctx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
+    tmpCtx.transactionContext.currentAssetIndex =
+        (tmpCtx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
 }
 #endif
-
-int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
-    if (outl <= 2) {
-        // Need at least '0x' and 1 digit
-        return -1;
-    }
-    if (strlcpy(out, "0x", outl) != 2) {
-        goto err;
-    }
-    if (format_hex(value, len, out + 2, outl - 2) < 0) {
-        goto err;
-    }
-    return 0;
-err:
-    *out = '\0';
-    return -1;
-}
