@@ -24,7 +24,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     tokenDefinition_t *token = &get_current_asset_info()->token;
     cx_err_t error = CX_INTERNAL_ERROR;
 
-    PRINTF("Provisioning currentAssetIndex %d\n", global_ctx.transactionContext.currentAssetIndex);
+    PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
 
     if (dataLength < 1) {
         THROW(APDU_RESPONSE_INVALID_DATA);
@@ -75,7 +75,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
         THROW(APDU_RESPONSE_INVALID_DATA);
 #endif
     }
-    G_io_apdu_buffer[0] = global_ctx.transactionContext.currentAssetIndex;
+    G_io_apdu_buffer[0] = tmpCtx.transactionContext.currentAssetIndex;
     validate_current_asset_info();
     U2BE_ENCODE(G_io_apdu_buffer, 1, APDU_RESPONSE_OK);
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 3);

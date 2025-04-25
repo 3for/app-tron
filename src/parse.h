@@ -257,11 +257,6 @@ bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txCont
 bool parseExchange(const uint8_t *data, size_t dataLength, txContent_t *context);
 
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun);
-bool adjustDecimals(const char *src,
-                    uint32_t srcLength,
-                    char *target,
-                    uint32_t targetLength,
-                    uint8_t decimals);
 
 void initTx(txContext_t *context, txContent_t *content);
 
@@ -284,5 +279,4 @@ void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);
 void validate_current_asset_info(void);
-int array_bytes_string(char *out, size_t outl, const void *value, size_t len);
 #endif

@@ -23,6 +23,23 @@
 #include "lcx_sha3.h"
 #include "parse.h"
 
+int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
+    if (outl <= 2) {
+        // Need at least '0x' and 1 digit
+        return -1;
+    }
+    if (strlcpy(out, "0x", outl) != 2) {
+        goto err;
+    }
+    if (format_hex(value, len, out + 2, outl - 2) < 0) {
+        goto err;
+    }
+    return 0;
+err:
+    *out = '\0';
+    return -1;
+}
+
 uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
     uint8_t i = 0;
     uint64_t res = 0;
@@ -65,7 +82,10 @@ bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size) {
     return true;
 }
 
-bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_t out_len) {
+bool uint256_to_decimal(const uint8_t *value,
+                        size_t value_len,
+                        char *out,
+                        size_t out_len) {
     if (value_len > INT256_LENGTH) {
         // value len is bigger than INT256_LENGTH ?!
         return false;
@@ -108,6 +128,73 @@ bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_
     return true;
 }
 
+bool adjustDecimals(const char *src,
+                    size_t srcLength,
+                    char *target,
+                    size_t targetLength,
+                    uint8_t decimals) {
+    uint32_t startOffset;
+    uint32_t lastZeroOffset = 0;
+    uint32_t offset = 0;
+    if ((srcLength == 1) && (*src == '0')) {
+        if (targetLength < 2) {
+            return false;
+        }
+        target[0] = '0';
+        target[1] = '\0';
+        return true;
+    }
+    if (srcLength <= decimals) {
+        uint32_t delta = decimals - srcLength;
+        if (targetLength < srcLength + 1 + 2 + delta) {
+            return false;
+        }
+        target[offset++] = '0';
+        target[offset++] = '.';
+        for (uint32_t i = 0; i < delta; i++) {
+            target[offset++] = '0';
+        }
+        startOffset = offset;
+        for (uint32_t i = 0; i < srcLength; i++) {
+            target[offset++] = src[i];
+        }
+        target[offset] = '\0';
+    } else {
+        uint32_t sourceOffset = 0;
+        uint32_t delta = srcLength - decimals;
+        if (targetLength < srcLength + 1 + 1) {
+            return false;
+        }
+        while (offset < delta) {
+            target[offset++] = src[sourceOffset++];
+        }
+        if (decimals != 0) {
+            target[offset++] = '.';
+        }
+        startOffset = offset;
+        while (sourceOffset < srcLength) {
+            target[offset++] = src[sourceOffset++];
+        }
+        target[offset] = '\0';
+    }
+    for (uint32_t i = startOffset; i < offset; i++) {
+        if (target[i] == '0') {
+            if (lastZeroOffset == 0) {
+                lastZeroOffset = i;
+            }
+        } else {
+            lastZeroOffset = 0;
+        }
+    }
+    if (lastZeroOffset != 0) {
+        target[lastZeroOffset] = '\0';
+        if (target[lastZeroOffset - 1] == '.') {
+            target[lastZeroOffset - 1] = '\0';
+        }
+    }
+    return true;
+}
+
 bool amountToString(const uint8_t *amount,
                     uint8_t amount_size,
                     uint8_t decimals,
@@ -116,7 +203,10 @@ bool amountToString(const uint8_t *amount,
                     size_t out_buffer_size) {
     char tmp_buffer[100] = {0};
 
-    if (uint256_to_decimal(amount, amount_size, tmp_buffer, sizeof(tmp_buffer)) == false) {
+    if (uint256_to_decimal(amount,
+                           amount_size,
+                           tmp_buffer,
+                           sizeof(tmp_buffer)) == false) {
         return false;
     }
 
@@ -143,8 +233,23 @@ bool amountToString(const uint8_t *amount,
     return true;
 }
 
+void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
+                             uint8_t out[static ADDRESS_LENGTH]) {
+    uint8_t hashAddress[CX_KECCAK_256_SIZE];
+    CX_ASSERT(cx_keccak_256_hash(raw_pubkey + 1, 64, hashAddress));
+    memmove(out, hashAddress + 12, ADDRESS_LENGTH);
+}
+
+void getEthAddressStringFromRawKey(const uint8_t raw_pubkey[static 65],
+                                   char out[static(ADDRESS_LENGTH * 2) + 1],
+                                   uint64_t chainId) {
+    uint8_t hashAddress[CX_KECCAK_256_SIZE];
+    CX_ASSERT(cx_keccak_256_hash(raw_pubkey + 1, 64, hashAddress));
+    getEthAddressStringFromBinary(hashAddress + 12, out, chainId);
+}
+
 bool getEthAddressStringFromBinary(uint8_t *address,
-                                   char out[static(ADDRESS_SIZE_712 * 2) + 1],
+                                   char out[static(ADDRESS_LENGTH * 2) + 1],
                                    uint64_t chainId) {
     // save some precious stack space
     union locals_union {
@@ -153,20 +258,24 @@ bool getEthAddressStringFromBinary(uint8_t *address,
     } locals_union;
 
     uint8_t i;
-    bool tip1191 = false;
+    bool eip1191 = false;
     uint32_t offset = 0;
     switch (chainId) {
         case 30:
         case 31:
-            tip1191 = true;
+            eip1191 = true;
             break;
     }
-    if (tip1191) {
-        if (!u64_to_string(chainId, (char *) locals_union.tmp, sizeof(locals_union.tmp))) {
+    if (eip1191) {
+        if (!u64_to_string(chainId,
+                           (char *) locals_union.tmp,
+                           sizeof(locals_union.tmp))) {
             return false;
         }
         offset = strnlen((char *) locals_union.tmp, sizeof(locals_union.tmp));
-        strlcat((char *) locals_union.tmp + offset, "0x", sizeof(locals_union.tmp) - offset);
+        strlcat((char *) locals_union.tmp + offset,
+                "0x",
+                sizeof(locals_union.tmp) - offset);
         offset = strnlen((char *) locals_union.tmp, sizeof(locals_union.tmp));
     }
     for (i = 0; i < 20; i++) {
@@ -174,7 +283,9 @@ bool getEthAddressStringFromBinary(uint8_t *address,
         locals_union.tmp[offset + 2 * i] = HEXDIGITS[(digit >> 4) & 0x0f];
         locals_union.tmp[offset + 2 * i + 1] = HEXDIGITS[digit & 0x0f];
     }
-    if (cx_keccak_256_hash(locals_union.tmp, offset + 40, locals_union.hashChecksum) != CX_OK) {
+    if (cx_keccak_256_hash(locals_union.tmp,
+                           offset + 40,
+                           locals_union.hashChecksum) != CX_OK) {
         return false;
     }
 
@@ -188,7 +299,8 @@ bool getEthAddressStringFromBinary(uint8_t *address,
         if (digit < 10) {
             out[i] = HEXDIGITS[digit];
         } else {
-            int v = (locals_union.hashChecksum[i / 2] >> (4 * (1 - i % 2))) & 0x0f;
+            int v =
+                (locals_union.hashChecksum[i / 2] >> (4 * (1 - i % 2))) & 0x0f;
             if (v >= 8) {
                 out[i] = HEXDIGITS[digit] - 'a' + 'A';
             } else {
@@ -196,7 +308,7 @@ bool getEthAddressStringFromBinary(uint8_t *address,
             }
         }
     }
-    out[ADDRESS_SIZE_712 * 2] = '\0';
+    out[ADDRESS_LENGTH * 2] = '\0';
 
     return true;
 }
@@ -204,7 +316,10 @@ bool getEthAddressStringFromBinary(uint8_t *address,
 /* Fills the `out` buffer with the lowercase string representation of the pubkey passed in as binary
 format by `in`. (eg: uint8_t*:0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB ->
 char*:"0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB\0" ).*/
-bool getEthDisplayableAddress(uint8_t *in, char *out, size_t out_len, uint64_t chainId) {
+bool getEthDisplayableAddress(uint8_t *in,
+                              char *out,
+                              size_t out_len,
+                              uint64_t chainId) {
     if (out_len < 43) {
         strlcpy(out, "ERROR", out_len);
         return false;
@@ -217,4 +332,23 @@ bool getEthDisplayableAddress(uint8_t *in, char *out, size_t out_len, uint64_t c
     }
 
     return true;
+}
+
+int allzeroes(const void *buf, size_t n) {
+    uint8_t *p = (uint8_t *) buf;
+    for (size_t i = 0; i < n; ++i) {
+        if (p[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int ismaxint(uint8_t *buf, int n) {
+    for (int i = 0; i < n; ++i) {
+        if (buf[i] != 0xff) {
+            return 0;
+        }
+    }
+    return 1;
 }
