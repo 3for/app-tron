@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import sys
 import base58
+import rlp
+import pickle
 
+from typing import Optional
 from contextlib import contextmanager
 from enum import IntEnum
 from pathlib import Path
@@ -15,12 +18,19 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from ragger.backend.interface import BackendInterface, RAPDU
 from ragger.navigator import NavInsID, NavIns
 from ragger.bip import pack_derivation_path
+from ragger.error import ExceptionRAPDU
+from ragger.firmware import Firmware
 from conftest import MNEMONIC
+from web3 import Web3
+
+from client.tip712.InputData import PKIPubKeyUsage
 '''
 Tron Protobuf
 '''
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}/proto")
 from core import Tron_pb2 as tron
+from core import Contract_pb2 as contract
+
 from google.protobuf.any_pb2 import Any
 from google.protobuf.internal.decoder import _DecodeVarint32
 
@@ -60,6 +70,7 @@ class InsType(IntEnum):
     SIGN_TXN_HASH = 0x05  #  Unsafe
     GET_APP_CONFIGURATION = 0x06  # Version and settings
     SIGN_PERSONAL_MESSAGE = 0x08
+    SIGN_PERSONAL_MESSAGE_FULL_DISPLAY = 0xC8
     GET_ECDH_SECRET = 0x0A
     SIGN_TIP_712_MESSAGE = 0x0C
 
@@ -109,6 +120,7 @@ class Errors(IntEnum):
     GP_AUTH_FAILED = 0x6300
     LICENSING = 0x6f42
     HALTED = 0x6faa
+    NOT_IMPLEMENTED = 0x911c
 
 
 class APDUOffsets(IntEnum):
@@ -118,6 +130,33 @@ class APDUOffsets(IntEnum):
     P2 = 3
     LC = 4
     CDATA = 5
+
+
+class PKIClient:
+    _CLA: int = 0xB0
+    _INS: int = 0x06
+
+    def __init__(self, client: BackendInterface) -> None:
+        self._client = client
+
+    def send_certificate(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
+        try:
+            response = self.send_raw(p1, payload)
+            assert response.status == Errors.OK
+        except ExceptionRAPDU as err:
+            if err.status == Errors.NOT_IMPLEMENTED:
+                print(
+                    "Ledger-PKI APDU not yet implemented. Legacy path will be used"
+                )
+
+    def send_raw(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
+        header = bytearray()
+        header.append(self._CLA)
+        header.append(self._INS)
+        header.append(p1)
+        header.append(0x00)
+        header.append(len(payload))
+        return self._client.exchange_raw(header + payload)
 
 
 class TronClient:
@@ -133,6 +172,10 @@ class TronClient:
         self._navigator = navigator
         self.accounts = [None, None]
         self.hardware = True
+        self._pki_client: Optional[PKIClient] = None
+        # if self._firmware != Firmware.NANOS:
+        #     # LedgerPKI not supported on Nanos
+        #     self._pki_client = PKIClient(self._client)
 
         # Init account with default address to compare with ledger
         for i in range(2):
@@ -154,6 +197,17 @@ class TronClient:
                 "dh":
                 diffieHellman,
             }
+
+    def exchange_async_raw(self, payload: bytes):
+        return self._client.exchange_async_raw(payload)
+
+    def exchange_raw(self, payload: bytes):
+        return self._client.exchange_raw(payload)
+
+    def exchange_async_raw_chunks(self, chunks):
+        for chunk in chunks[:-1]:
+            self.exchange_raw(chunk)
+        return self.exchange_async_raw(chunks[-1])
 
     def address_hex(self, address):
         return base58.b58decode_check(address).hex().upper()
@@ -178,14 +232,15 @@ class TronClient:
         tx.raw_data.ref_block_hash = bytes.fromhex("95DA42177DB00507")
         tx.raw_data.ref_block_bytes = bytes.fromhex("3DCE")
         if data:
-            tx.raw_data.custom_data = data
+            if data.__class__ is dict:
+                tx.raw_data.custom_data = pickle.dumps(data)
+            else:
+                tx.raw_data.custom_data = data
 
         c = tx.raw_data.contract.add()
         c.type = contractType
         param = Any()
-        print("ZYD param:", param)
         param.Pack(newContract, deterministic=True)
-        print("ZYD param after packed:", param)
 
         c.parameter.CopyFrom(param)
 
@@ -365,3 +420,23 @@ class TronClient:
         else:
             return self._client.exchange(CLA, InsType.SIGN, p1, 0x00,
                                          messages[-1])
+
+    def sign_for_trusted_name(self,
+                              bip32_path: str,
+                              tx_params: dict,
+                              snap_path: str,
+                              text: str,
+                              warning_approve: bool = False):
+        tx = self.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    self.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name="1002000".encode()), tx_params)
+        return self.sign(bip32_path,
+                         tx,
+                         text=text,
+                         snappath=snap_path,
+                         warning_approve=warning_approve)
