@@ -27,7 +27,6 @@ def configuration(backend: BackendInterface, navigator, firmware):
                 NavIns(NavInsID.USE_CASE_SETTINGS_NEXT),
                 # Allow sign by hash
                 NavIns(NavInsID.TOUCH, (200, 150)),
-
                 # Go back to main menu.
                 NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT),
             ]
@@ -59,14 +58,9 @@ def configuration(backend: BackendInterface, navigator, firmware):
                 NavInsID.RIGHT_CLICK,
                 NavInsID.RIGHT_CLICK,
                 NavInsID.BOTH_CLICK,
-            ]
-            if firmware.device != "nanos":
-                # Skip two step
-                instructions += [NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
-            instructions += [
                 # Go back to main menu
                 NavInsID.RIGHT_CLICK,
-                NavInsID.BOTH_CLICK
+                NavInsID.BOTH_CLICK,
             ]
 
         navigator.navigate(instructions,
