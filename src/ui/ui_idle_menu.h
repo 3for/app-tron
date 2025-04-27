@@ -16,5 +16,17 @@
  ********************************************************************************/
 
 #pragma once
+#include "os_io_seproxyhal.h"
+#include "ux.h"
 
 void ui_idle(void);
+
+#ifdef HAVE_BAGL
+
+extern const ux_flow_step_t* const ux_error_blind_signing_flow[];
+
+extern const ux_flow_step_t* const ux_warning_blind_signing_flow[];
+
+extern const ux_flow_step_t ux_warning_blind_signing_warn_step;
+
+#endif

@@ -59,11 +59,11 @@ apduMessage = "E0040000" + '{:02x}'.format(
     int(len(transactionBIG1) / 2)) + '{:02x}'.format(
         int(len(donglePath) / 4 / 2)) + donglePath + transactionBIG1
 result1 = dongle.exchange(bytearray.fromhex(apduMessage))
-# P1 = P1_MODE = 0x80
+# P1 = P1_MORE = 0x80
 apduMessage = "E0048000" + '{:02x}'.format(int(
     len(transactionBIG2) / 2)) + transactionBIG2
 result2 = dongle.exchange(bytearray.fromhex(apduMessage))
-# P1 = P1_MODE = 0x80
+# P1 = P1_MORE = 0x80
 apduMessage = "E0048000" + '{:02x}'.format(int(
     len(transactionBIG3) / 2)) + transactionBIG3
 result3 = dongle.exchange(bytearray.fromhex(apduMessage))

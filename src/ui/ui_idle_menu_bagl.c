@@ -20,7 +20,26 @@
 #include "ui_idle_menu.h"
 #include "ux.h"
 #include "settings.h"
+#include "parse.h"
+#include "ui_globals.h"
 
+#define ENABLED_STR   "Enabled"
+#define DISABLED_STR  "Disabled"
+#define BUF_INCREMENT (MAX(strlen(ENABLED_STR), strlen(DISABLED_STR)) + 1)
+
+#define SETTING_BLIND_SIGNING_STATE        (strings.common.fullAmount + (BUF_INCREMENT * 0))
+#define SETTING_VERBOSE_TRUSTED_NAME_STATE (strings.common.fullAmount + (BUF_INCREMENT * 1))
+#define SETTING_VERBOSE_TIP712_STATE       (strings.common.fullAmount + (BUF_INCREMENT * 2))
+
+#define BOOL_TO_STATE_STR(b) (b ? ENABLED_STR : DISABLED_STR)
+
+#ifdef HAVE_TIP712_FULL_SUPPORT
+static void switch_settings_verbose_tip712(void);
+#endif  // HAVE_TIP712_FULL_SUPPORT
+
+#ifdef HAVE_TRUSTED_NAME
+static void switch_settings_verbose_trusted_name(void);
+#endif  // HAVE_TRUSTED_NAME
 static void display_settings(const ux_flow_step_t* const);
 static void switch_settings_contract_data();
 static void switch_settings_custom_contracts();
@@ -54,6 +73,24 @@ UX_STEP_VALID(ux_settings_flow_4_step,
               {.title = "Sign by Hash", .text = settings_param_value + 28});
 
 #else
+
+#ifdef HAVE_TRUSTED_NAME
+UX_STEP_CB(ux_settings_flow_verbose_trusted_name_step,
+           bnnn,
+           switch_settings_verbose_trusted_name(),
+           {"ENS addresses",
+            "Displays resolved",
+            "addresses from ENS",
+            SETTING_VERBOSE_TRUSTED_NAME_STATE});
+#endif  // HAVE_TRUSTED_NAME
+
+#ifdef HAVE_TIP712_FULL_SUPPORT
+UX_STEP_CB(
+    ux_settings_flow_verbose_tip712_step,
+    bnnn,
+    switch_settings_verbose_tip712(),
+    {"Raw messages", "Displays raw content", "from TIP712 messages", SETTING_VERBOSE_TIP712_STATE});
+#endif  // HAVE_TIP712_FULL_SUPPORT
 
 UX_STEP_VALID(ux_settings_flow_1_step,
               bnnn,
@@ -95,6 +132,12 @@ UX_DEF(ux_settings_flow,
        &ux_settings_flow_2_step,
        &ux_settings_flow_3_step,
        &ux_settings_flow_4_step,
+#ifdef HAVE_TRUSTED_NAME
+       &ux_settings_flow_verbose_trusted_name_step,
+#endif  // HAVE_TRUSTED_NAME
+#ifdef HAVE_TIP712_FULL_SUPPORT
+       &ux_settings_flow_verbose_tip712_step,
+#endif  // HAVE_TIP712_FULL_SUPPORT
        &ux_settings_flow_5_step);
 
 static void display_settings(const ux_flow_step_t* const start_step) {
@@ -106,6 +149,16 @@ static void display_settings(const ux_flow_step_t* const start_step) {
     strlcpy(settings_param_value + 28,
             (HAS_SETTING(S_SIGN_BY_HASH) ? "Allowed" : "NOT Allowed"),
             sizeof(settings_param_value) - 28);
+#ifdef HAVE_TIP712_FULL_SUPPORT
+    strlcpy(SETTING_VERBOSE_TIP712_STATE,
+            BOOL_TO_STATE_STR(HAS_SETTING(S_VERBOSE_TIP712)),
+            BUF_INCREMENT);
+#endif  // HAVE_TIP712_FULL_SUPPORT
+#ifdef HAVE_TRUSTED_NAME
+    strlcpy(SETTING_VERBOSE_TRUSTED_NAME_STATE,
+            BOOL_TO_STATE_STR(HAS_SETTING(S_TRUSTED_NAME)),
+            BUF_INCREMENT);
+#endif  // HAVE_TRUSTED_NAME
     ux_flow_init(0, ux_settings_flow, start_step);
 }
 
@@ -129,7 +182,20 @@ static void switch_settings_sign_by_hash() {
     display_settings(&ux_settings_flow_4_step);
 }
 
-//////////////////////////////////////////////////////////////////////
+#ifdef HAVE_TIP712_FULL_SUPPORT
+static void switch_settings_verbose_tip712(void) {
+    SETTING_TOGGLE(S_VERBOSE_TIP712);
+    display_settings(&ux_settings_flow_verbose_tip712_step);
+}
+#endif  // HAVE_TIP712_FULL_SUPPORT
+
+#ifdef HAVE_TRUSTED_NAME
+static void switch_settings_verbose_trusted_name(void) {
+    SETTING_TOGGLE(S_TRUSTED_NAME);
+    display_settings(&ux_settings_flow_verbose_trusted_name_step);
+}
+#endif  // HAVE_TRUSTED_NAME
+
 UX_STEP_NOCB(ux_idle_flow_1_step,
              pnn,
              {
@@ -172,4 +238,30 @@ void ui_idle(void) {
     }
     ux_flow_init(0, ux_idle_flow, NULL);
 }
+
+#ifdef TARGET_NANOS
+UX_STEP_CB(ux_error_blind_signing_step,
+           bnnn_paging,
+           ui_idle(),
+           {
+               "Error",
+               "Blind signing must be enabled in Settings",
+           });
+#else
+UX_STEP_CB(ux_error_blind_signing_step,
+           pnn,
+           ui_idle(),
+           {
+               &C_icon_crossmark,
+               "Blind signing must be",
+               "enabled in Settings",
+           });
+#endif
+
+void ui_error_blind_signing(void) {
+    ux_flow_init(0, ux_error_blind_signing_flow, NULL);
+}
+
+UX_FLOW(ux_error_blind_signing_flow, &ux_error_blind_signing_step);
+
 #endif  // HAVE_BAGL

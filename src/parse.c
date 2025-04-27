@@ -24,6 +24,7 @@
 #include "settings.h"
 #include "tokens.h"
 #include "app_errors.h"
+#include "ui_globals.h"
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
@@ -39,73 +40,6 @@ tokenDefinition_t *getKnownToken(txContent_t *context) {
     return NULL;
 }
 
-bool adjustDecimals(const char *src,
-                    uint32_t srcLength,
-                    char *target,
-                    uint32_t targetLength,
-                    uint8_t decimals) {
-    uint32_t startOffset;
-    uint32_t lastZeroOffset = 0;
-    uint32_t offset = 0;
-
-    if ((srcLength == 1) && (*src == '0')) {
-        if (targetLength < 2) {
-            return false;
-        }
-        target[offset++] = '0';
-        target[offset++] = '\0';
-        return true;
-    }
-    if (srcLength <= decimals) {
-        uint32_t delta = decimals - srcLength;
-        if (targetLength < srcLength + 1 + 2 + delta) {
-            return false;
-        }
-        target[offset++] = '0';
-        target[offset++] = '.';
-        for (uint32_t i = 0; i < delta; i++) {
-            target[offset++] = '0';
-        }
-        startOffset = offset;
-        for (uint32_t i = 0; i < srcLength; i++) {
-            target[offset++] = src[i];
-        }
-        target[offset] = '\0';
-    } else {
-        uint32_t sourceOffset = 0;
-        uint32_t delta = srcLength - decimals;
-        if (targetLength < srcLength + 1 + 1) {
-            return false;
-        }
-        while (offset < delta) {
-            target[offset++] = src[sourceOffset++];
-        }
-        if (decimals != 0) {
-            target[offset++] = '.';
-        }
-        startOffset = offset;
-        while (sourceOffset < srcLength) {
-            target[offset++] = src[sourceOffset++];
-        }
-        target[offset] = '\0';
-    }
-    for (uint32_t i = startOffset; i < offset; i++) {
-        if (target[i] == '0') {
-            if (lastZeroOffset == 0) {
-                lastZeroOffset = i;
-            }
-        } else {
-            lastZeroOffset = 0;
-        }
-    }
-    if (lastZeroOffset != 0) {
-        target[lastZeroOffset] = '\0';
-        if (target[lastZeroOffset - 1] == '.') {
-            target[lastZeroOffset - 1] = '\0';
-        }
-    }
-    return true;
-}
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun) {
     char tmp[20];
     char tmp2[25];
@@ -906,3 +840,74 @@ err:
     *out = '\0';
     return -1;
 }
+
+/**
+ * Continue given progressive hash on given bytes
+ *
+ * @param[in] bytes_ptr pointer to bytes
+ * @param[in] n number of bytes to hash
+ * @param[in] hash_ctx pointer to the hashing context
+ */
+void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx) {
+    CX_ASSERT(cx_hash_no_throw(hash_ctx, 0, bytes_ptr, n, NULL, 0));
+}
+
+/**
+ * Continue given progressive hash on given byte
+ *
+ * @param[in] byte byte to hash
+ * @param[in] hash_ctx pointer to the hashing context
+ */
+void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
+    hash_nbytes(&byte, 1, hash_ctx);
+}
+
+#ifndef TARGET_NANOS
+void forget_known_assets(void) {
+    memset(tmpCtx.transactionContext.assetSet, false, MAX_ASSETS);
+    tmpCtx.transactionContext.currentAssetIndex = 0;
+}
+
+static extraInfo_t *get_asset_info(int index) {
+    if ((index < 0) || (index >= MAX_ASSETS)) {
+        return NULL;
+    }
+    return &tmpCtx.transactionContext.extraInfo[index];
+}
+
+static bool asset_info_is_set(int index) {
+    if ((index < 0) || (index >= MAX_ASSETS)) {
+        return false;
+    }
+    return tmpCtx.transactionContext.assetSet[index];
+}
+
+int get_asset_index_by_addr(const uint8_t *addr) {
+    // Works for ERC-20 & NFT tokens since both structs in the union have the
+    // contract address aligned
+    for (int i = 0; i < MAX_ASSETS; i++) {
+        extraInfo_t *asset = get_asset_info(i);
+        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
+            PRINTF("Token found at index %d\n", i);
+            return i;
+        }
+    }
+    return -1;
+}
+
+extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
+    return get_asset_info(get_asset_index_by_addr(addr));
+}
+
+extraInfo_t *get_current_asset_info(void) {
+    return get_asset_info(tmpCtx.transactionContext.currentAssetIndex);
+}
+
+void validate_current_asset_info(void) {
+    // mark it as set
+    tmpCtx.transactionContext.assetSet[tmpCtx.transactionContext.currentAssetIndex] = true;
+    // increment index
+    tmpCtx.transactionContext.currentAssetIndex =
+        (tmpCtx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
+}
+#endif

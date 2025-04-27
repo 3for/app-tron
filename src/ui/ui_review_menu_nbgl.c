@@ -67,7 +67,7 @@ static void dataWarningChoice(bool reject);
 static void customContractWarningChoice(bool reject);
 static void reviewChoice(bool confirm);
 static void rejectConfirmation(void);
-static void rejectChoice(void);
+void rejectChoice(void);
 
 static void dataWarningChoice(bool accept) {
     if (accept) {
@@ -163,7 +163,7 @@ static void rejectConfirmation(void) {
     nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
 }
 
-static void rejectChoice(void) {
+void rejectChoice(void) {
     nbgl_useCaseConfirm("Reject transaction?",
                         NULL,
                         "Yes, Reject",
@@ -321,12 +321,12 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             break;
         case APPROVAL_SIGN_TIP72_TRANSACTION:
             txInfos.fields[0].item = "Domain hash";
-            txInfos.fields[0].value = format_hash(messageSigningContext712.domainHash,
+            txInfos.fields[0].value = format_hash(global_ctx.messageSigningContext712.domainHash,
                                                   strings.tmp.tmp,
                                                   sizeof(strings.tmp.tmp),
                                                   0);
             txInfos.fields[1].item = "Message hash";
-            txInfos.fields[1].value = format_hash(messageSigningContext712.messageHash,
+            txInfos.fields[1].value = format_hash(global_ctx.messageSigningContext712.messageHash,
                                                   strings.tmp.tmp,
                                                   sizeof(strings.tmp.tmp),
                                                   70);

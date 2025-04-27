@@ -23,6 +23,11 @@
 #include "ui_idle_menu.h"
 #include "app_errors.h"
 
+#ifdef HAVE_NBGL
+#include "nbgl_use_case.h"
+#include "ui_logic.h"
+#endif
+
 volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
@@ -32,14 +37,53 @@ char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
 int8_t votes_count;
-transactionContext_t transactionContext;
-publicKeyContext_t publicKeyContext;
-messageSigningContext712_t messageSigningContext712;
+tmpCtx_t global_ctx;
+cx_sha3_t global_sha3;
 strings_t strings;
 
-bool ui_callback_address_ok(bool display_menu) {
-    helper_send_response_pubkey(&publicKeyContext);
+extern void reset_app_context();
 
+/**
+ * Reset the UI buffer
+ *
+ * Simply sets its first byte to a NULL character
+ */
+void reset_ui_191_buffer(void) {
+    UI_191_BUFFER[0] = '\0';
+}
+
+/**
+ * Get used space from UI buffer
+ *
+ * @return size in bytes
+ */
+size_t ui_191_buffer_length(void) {
+    return strlen(UI_191_BUFFER);
+}
+
+/**
+ * Get remaining space from UI buffer
+ *
+ * @return size in bytes
+ */
+size_t remaining_ui_191_buffer_length(void) {
+    // -1 for the ending NULL byte
+    return (sizeof(UI_191_BUFFER) - 1) - ui_191_buffer_length();
+}
+
+/**
+ * Get free space from UI buffer
+ *
+ * @return pointer to the free space
+ */
+char *remaining_ui_191_buffer(void) {
+    return &UI_191_BUFFER[ui_191_buffer_length()];
+}
+
+bool ui_callback_address_ok(bool display_menu) {
+    helper_send_response_pubkey(&global_ctx.publicKeyContext);
+
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -51,15 +95,16 @@ bool ui_callback_address_ok(bool display_menu) {
 bool ui_callback_signMessage_ok(bool display_menu) {
     bool ret = true;
 
-    if (signTransaction(&transactionContext) != 0) {
+    if (signTransaction(&global_ctx.transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         ret = false;
     } else {
-        io_send_response_pointer(transactionContext.signature,
-                                 transactionContext.signatureLength,
+        io_send_response_pointer(global_ctx.transactionContext.signature,
+                                 global_ctx.transactionContext.signatureLength,
                                  E_OK);
     }
 
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -69,6 +114,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 }
 
 bool ui_callback_tx_cancel(bool display_menu) {
+    reset_app_context();
     io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
 
     if (display_menu) {
@@ -82,15 +128,16 @@ bool ui_callback_tx_cancel(bool display_menu) {
 bool ui_callback_tx_ok(bool display_menu) {
     bool ret = true;
 
-    if (signTransaction(&transactionContext) != 0) {
+    if (signTransaction(&global_ctx.transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         ret = false;
     } else {
-        io_send_response_pointer(transactionContext.signature,
-                                 transactionContext.signatureLength,
+        io_send_response_pointer(global_ctx.transactionContext.signature,
+                                 global_ctx.transactionContext.signatureLength,
                                  E_OK);
     }
 
+    reset_app_context();
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -106,8 +153,8 @@ bool ui_callback_ecdh_ok(bool display_menu) {
 
     // Get private key
     err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
-                                        transactionContext.bip32_path.indices,
-                                        transactionContext.bip32_path.length,
+                                        global_ctx.transactionContext.bip32_path.indices,
+                                        global_ctx.transactionContext.bip32_path.length,
                                         &privateKey,
                                         NULL);
     if (err != CX_OK) {
@@ -116,7 +163,7 @@ bool ui_callback_ecdh_ok(bool display_menu) {
 
     err = cx_ecdh_no_throw(&privateKey,
                            CX_ECDH_POINT,
-                           transactionContext.signature,
+                           global_ctx.transactionContext.signature,
                            65,
                            G_io_apdu_buffer,
                            sizeof(G_io_apdu_buffer));
@@ -132,6 +179,7 @@ end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));
 
+    reset_app_context();
     if (err == CX_OK) {
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
     } else {
@@ -201,8 +249,8 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
 
     if (cx_hash_no_throw((cx_hash_t *) &sha3,
                          0,
-                         messageSigningContext712.domainHash,
-                         sizeof(messageSigningContext712.domainHash),
+                         global_ctx.messageSigningContext712.domainHash,
+                         sizeof(global_ctx.messageSigningContext712.domainHash),
                          NULL,
                          0) != CX_OK) {
         return false;
@@ -210,19 +258,20 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
 
     if (cx_hash_no_throw((cx_hash_t *) &sha3,
                          CX_LAST,
-                         messageSigningContext712.messageHash,
-                         sizeof(messageSigningContext712.messageHash),
+                         global_ctx.messageSigningContext712.messageHash,
+                         sizeof(global_ctx.messageSigningContext712.messageHash),
                          hash,
                          sizeof(hash)) != CX_OK) {
         return false;
     }
+
     PRINTF("TIP712 hash to sign %.*H\n", 32, hash);
 
     io_seproxyhal_io_heartbeat();
     // Get private key
     err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
-                                        messageSigningContext712.bip32Path,
-                                        messageSigningContext712.pathLength,
+                                        global_ctx.messageSigningContext712.bip32Path,
+                                        global_ctx.messageSigningContext712.pathLength,
                                         &privateKey,
                                         NULL);
     if (err != CX_OK) {
@@ -248,11 +297,11 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
         G_io_apdu_buffer[64]++;
     }
     tx = 65;
-
 end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));
 
+    reset_app_context();
     if (err == CX_OK) {
         // Send back the response, do not restart the event loop
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
@@ -275,6 +324,7 @@ end:
 bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
     G_io_apdu_buffer[0] = 0x69;
     G_io_apdu_buffer[1] = 0x85;
+    reset_app_context();
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     if (display_menu) {

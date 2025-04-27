@@ -41,7 +41,7 @@ result = dongle.exchange(bytearray.fromhex(apduMessage1))
 print(apduMessage2.strip())
 result = dongle.exchange(bytearray.fromhex(apduMessage2))
 print(binascii.hexlify(result[0:65]))
-if binascii.hexlify(result[0:65]).decode() == signatureCheck:
-    print("Signature Validated!")
-else:
-    print("Signature Error!")
+# if binascii.hexlify(result[0:65]).decode() == signatureCheck:
+#     print("Signature Validated!")
+# else:
+#     print("Signature Error!")

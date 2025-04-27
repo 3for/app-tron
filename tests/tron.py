@@ -183,7 +183,9 @@ class TronClient:
         c = tx.raw_data.contract.add()
         c.type = contractType
         param = Any()
+        print("ZYD param:", param)
         param.Pack(newContract, deterministic=True)
+        print("ZYD param after packed:", param)
 
         c.parameter.CopyFrom(param)
 

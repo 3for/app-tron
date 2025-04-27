@@ -34,6 +34,8 @@
 #include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
+extern void reset_app_context();
+
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
 #ifdef HAVE_BAGL
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
@@ -54,12 +56,6 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
-static void convertUint256BE(uint8_t *data, uint32_t length, uint256_t *target) {
-    uint8_t tmp[32] = {0};
-    memcpy(tmp + 32 - length, data, length);
-    readu256BE(tmp, target);
-}
-
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -70,7 +66,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+        if (appState != APP_STATE_IDLE) {
+            reset_app_context();
+        }
+        appState = APP_STATE_SIGNING;
+        off_t ret =
+            read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
         if (ret < 0) {
             return io_send_sw(E_INCORRECT_BIP32_PATH);
         }
@@ -126,6 +127,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         }
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
         return io_send_sw(E_INCORRECT_P1_P2);
+    }
+
+    if (p1 == P1_MORE && appState != APP_STATE_SIGNING) {
+        PRINTF("Signature not initialized\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
 
     // Context must be initialized first
@@ -184,7 +190,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                CX_LAST,
                                workBuffer,
                                0,
-                               transactionContext.hash,
+                               global_ctx.transactionContext.hash,
                                32));
 
     if (txContent.permission_id > 0) {
@@ -520,7 +526,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash
-            format_hex(transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
@@ -537,7 +543,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash
-            format_hex(transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);

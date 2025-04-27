@@ -6,23 +6,212 @@ import pytest
 import sys
 import struct
 import re
-import binascii
+import json
+import fnmatch
+import os
+
+from functools import partial
+
+from typing import Optional
+
 from ragger.error import ExceptionRAPDU
 from contextlib import contextmanager
 from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
-from tron import TronClient, Errors, CLA, InsType
+from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
 from ragger.bip import pack_derivation_path
 from utils import check_tx_signature, check_hash_signature
 from eth_keys import KeyAPI
+
+from ragger.backend import BackendInterface
+from ragger.firmware import Firmware
+from ragger.navigator import Navigator, NavInsID, NavIns
+
+from settings import NanoSettingID, NonNanoSettingID, settings_toggle, SettingID
+from client.command_builder import CommandBuilder
+import response_parser as ResponseParser
+from client.tip712 import InputData as InputData
+from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
+from utils import recover_message
+from web3 import Web3
 '''
 Tron Protobuf
 '''
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}/proto")
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
+
+autonext_idx: int
+snapshots_dirname: Optional[str] = None
+WALLET_ADDR: Optional[bytes] = None
+unfiltered_flow: bool = False
+skip_flow: bool = False
+
+
+def autonext(firmware, navigator, default_screenshot_path: Path):
+    global autonext_idx
+    moves = []
+    if firmware.is_nano:
+        moves = [NavInsID.RIGHT_CLICK]
+    else:
+        if autonext_idx == 0 and unfiltered_flow:
+            moves = [NavInsID.USE_CASE_CHOICE_REJECT]
+        else:
+            if autonext_idx == 2 and skip_flow:
+                InputData.disable_autonext()  # so the timer stops firing
+                if firmware == Firmware.STAX:
+                    skip_btn_pos = (355, 44)
+                else:  # FLEX
+                    skip_btn_pos = (420, 49)
+                moves = [
+                    # Ragger does not handle the skip button
+                    NavIns(NavInsID.TOUCH, skip_btn_pos),
+                    NavInsID.USE_CASE_CHOICE_CONFIRM,
+                ]
+            else:
+                moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
+    if snapshots_dirname is not None:
+        navigator.navigate_and_compare(
+            default_screenshot_path,
+            snapshots_dirname,
+            moves,
+            screen_change_before_first_instruction=False,
+            screen_change_after_last_instruction=False,
+            snap_start_idx=autonext_idx)
+    else:
+        navigator.navigate(moves,
+                           screen_change_before_first_instruction=False,
+                           screen_change_after_last_instruction=False)
+    autonext_idx += len(moves)
+
+
+def tip712_new_common(firmware,
+                      navigator,
+                      default_screenshot_path: Path,
+                      client: TronClient,
+                      builder: CommandBuilder,
+                      json_data: dict,
+                      filters,
+                      verbose_raw: bool,
+                      golden_run: bool,
+                      extra_left: bool = False):
+    global autonext_idx
+    global unfiltered_flow
+    global skip_flow
+    global snapshots_dirname
+
+    autonext_idx = 0
+    default_screenshot_path = Path(__file__).parent.resolve()
+    assert InputData.process_data(
+        client, builder, json_data, filters,
+        partial(autonext, firmware, navigator, default_screenshot_path),
+        golden_run)
+
+    with client.exchange_async_raw(
+            builder.tip712_sign_new(client.getAccount(0)['path'])):
+        moves = []
+        if firmware.is_nano:
+            # need to skip the message hash
+            if not verbose_raw and filters is None:
+                moves += [NavInsID.RIGHT_CLICK] * 2
+            moves += [NavInsID.BOTH_CLICK]
+        else:
+            if not skip_flow:
+                # this move is necessary most of the times, but can't be 100% sure with the fields grouping
+                moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+                # need to skip the message hash
+                if not verbose_raw and filters is None:
+                    moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+            if extra_left:
+                moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+            moves += [NavInsID.USE_CASE_REVIEW_CONFIRM]
+        if snapshots_dirname is not None:
+            # Could break (time-out) if given a JSON that requires less moves
+            # TODO: Maybe take list of moves as input instead of trying to guess them ?
+            navigator.navigate_and_compare(default_screenshot_path,
+                                           snapshots_dirname,
+                                           moves,
+                                           snap_start_idx=autonext_idx)
+        else:
+            # Do them one-by-one to prevent an unnecessary move from timing-out and failing the test
+            for move in moves:
+                navigator.navigate(
+                    [move],
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=False)
+    # reset values
+    unfiltered_flow = False
+    skip_flow = False
+    snapshots_dirname = None
+
+    return ResponseParser.signature(client._client.last_async_response.data)
+
+
+def get_wallet_addr(client: TronClient) -> bytes:
+    cmd_builder = CommandBuilder()
+    global WALLET_ADDR
+    # don't ask again if we already have it
+    if WALLET_ADDR is None:
+        with client.exchange_async_raw(
+                cmd_builder.get_public_addr(
+                    display=False,
+                    chaincode=False,
+                    bip32_path=client.getAccount(0)['path'],
+                    chain_id=None)):
+            pass
+        _, WALLET_ADDR, _ = ResponseParser.pk_addr(
+            client._client.last_async_response.data)
+    return WALLET_ADDR[1:]
+
+
+def tip712_json_path() -> str:
+    return f"{os.path.dirname(__file__)}/tip712_input_files"
+
+
+def input_files() -> list[str]:
+    files = []
+    for file in os.scandir(tip712_json_path()):
+        if fnmatch.fnmatch(file, "*-data.json"):
+            files.append(file.path)
+    return sorted(files)
+    # return ['/app/tests/tip712_input_files/01-addresses_array_mail-data.json']
+
+
+@pytest.fixture(name="input_file", params=input_files())
+def input_file_fixture(request) -> str:
+    return Path(request.param)
+
+
+@pytest.fixture(name="verbose_raw", params=[True, False])
+def verbose_raw_fixture(request) -> bool:
+    return request.param
+
+
+@pytest.fixture(name="filtering", params=[False, True])
+def filtering_fixture(request) -> bool:
+    return request.param
+
+
+@pytest.fixture(name="data_set", params=ADVANCED_DATA_SETS)
+def data_set_fixture(request) -> DataSet:
+    return request.param
+
+
+@pytest.fixture(name="tokens", params=TOKENS)
+def tokens_fixture(request) -> list[dict]:
+    return request.param
+
+
+@pytest.fixture(name="trusted_name", params=TRUSTED_NAMES)
+def trusted_name_fixture(request) -> tuple:
+    return request.param
+
+
+@pytest.fixture(name="filt_tn_types", params=FILT_TN_TYPES)
+def filt_tn_types_fixture(request) -> list[InputData.TrustedNameType]:
+    return request.param
 
 
 @pytest.mark.usefixtures('configuration')
@@ -656,3 +845,288 @@ class TestTRX():
                 owner_address=bytes.fromhex(
                     client.getAccount(0)['addressHex'])))
         self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_sign_personal_message(self, backend, firmware, navigator):
+        if firmware.device == 'nanos':
+            pytest.skip("Not supported on LNS")
+        client = TronClient(backend, firmware, navigator)
+        # Magic define
+        SIGN_MAGIC = b'\x19TRON Signed Message:\n'
+        message = ''
+        for i in range(6):
+            message += 'CryptoChain-TronSR Ledger Transactions Tests %d. ' % i
+        message = message.encode()
+        data = pack_derivation_path(client.getAccount(0)['path'])
+        data += struct.pack(">I", len(message)) + message
+
+        chunk_cnt = (len(data) + MAX_APDU_LEN - 1) // MAX_APDU_LEN
+        index = 0
+
+        def gen_apdu(data, index):
+            data_chunk = data[index * MAX_APDU_LEN:(index + 1) * MAX_APDU_LEN]
+            return bytearray([
+                CLA, InsType.SIGN_PERSONAL_MESSAGE_FULL_DISPLAY,
+                0x00 if index == 0 else 0x80, 0x00
+            ]) + data_chunk
+
+        for _ in range(chunk_cnt - 1):
+            apdu = gen_apdu(data, index)
+            backend.exchange(apdu[0], apdu[1], apdu[2], apdu[3], apdu[4:])
+            index += 1
+        else:
+            apdu = gen_apdu(data, index)
+            with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3],
+                                        apdu[4:]):
+                if firmware.is_nano:
+                    text = "message"
+                else:
+                    text = "Hold to sign"
+                client.navigate(Path(currentframe().f_code.co_name), text)
+
+        resp = backend.last_async_response
+
+        signedMessage = SIGN_MAGIC + str(len(message)).encode() + message
+        keccak_hash = keccak.new(digest_bits=256)
+        keccak_hash.update(signedMessage)
+        hash_to_sign = keccak_hash.digest()
+        print(hash_to_sign)
+
+        assert check_hash_signature(hash_to_sign, resp.data[0:65],
+                                    client.getAccount(0)['publicKey'][2:])
+
+    def test_trx_tip712_new(self, firmware: Firmware,
+                            backend: BackendInterface, navigator: Navigator,
+                            default_screenshot_path: Path, input_file: Path,
+                            verbose_raw: bool, filtering: bool, test_name: str):
+
+        global unfiltered_flow
+        # global snapshots_dirname
+        # snapshots_dirname = 'test_trx_tip712_new'
+        settings_to_toggle: list[SettingID] = []
+        client = TronClient(backend, firmware, navigator)
+
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+
+        test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
+        cmd_builder = CommandBuilder()
+
+        filters = None
+        if filtering:
+            try:
+                filterfile = Path(f"{test_path}-filter.json")
+                with open(filterfile, encoding="utf-8") as f:
+                    filters = json.load(f)
+            except (IOError, json.decoder.JSONDecodeError) as e:
+                pytest.skip(f"{filterfile.name}: {e.strerror}")
+
+            # Due to this option(FLOW_4 or HASH_TX_ID) has been enabled in conftest.py
+            # So it is different with ethereum
+            setting_id = NanoSettingID.FLOW_4 if firmware.is_nano else NonNanoSettingID.HASH_TX_ID
+            settings_to_toggle.append(setting_id)
+        else:
+            pass
+
+        if verbose_raw:
+            setting_id = NanoSettingID.VERBOSE_TIP712 if firmware.is_nano else NonNanoSettingID.VERBOSE_TIP712
+            settings_to_toggle.append(setting_id)
+
+        if not filters or verbose_raw:
+            unfiltered_flow = True
+        if len(settings_to_toggle) > 0:
+            settings_toggle(firmware, navigator, settings_to_toggle)
+
+        with open(input_file, encoding="utf-8") as file:
+            data = json.load(file)
+            extra_left = test_path.endswith(
+                '01-addresses_array_mail') and verbose_raw and filters is None
+            vrs = tip712_new_common(firmware,
+                                    navigator,
+                                    default_screenshot_path,
+                                    client,
+                                    cmd_builder,
+                                    data,
+                                    filters,
+                                    verbose_raw,
+                                    False,
+                                    extra_left=extra_left)
+            recovered_addr = recover_message(data, vrs)
+
+        assert recovered_addr == get_wallet_addr(client)
+        if len(settings_to_toggle) > 0:
+            settings_toggle(firmware, navigator, settings_to_toggle)
+
+    def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
+                                           backend: BackendInterface,
+                                           navigator: Navigator,
+                                           default_screenshot_path: Path,
+                                           test_name: str, data_set: DataSet,
+                                           golden_run: bool):
+        global snapshots_dirname
+
+        client = TronClient(backend, firmware, navigator)
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+        cmd_builder = CommandBuilder()
+        snapshots_dirname = test_name + data_set.suffix
+
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder, data_set.data,
+                                data_set.filters, False, golden_run)
+        recovered_addr = recover_message(data_set.data, vrs)
+        assert client.getAccount(
+            0)['addressHex'][2:] == recovered_addr.hex().upper()
+
+        assert recovered_addr == get_wallet_addr(client)
+
+    def test_trx_tip712_filtering_empty_array(self, firmware: Firmware,
+                                              backend: BackendInterface,
+                                              navigator: Navigator,
+                                              default_screenshot_path: Path,
+                                              test_name: str,
+                                              golden_run: bool):
+        global snapshots_dirname
+
+        client = TronClient(backend, firmware, navigator)
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+
+        snapshots_dirname = test_name
+        from dataset import filtering_empty_array_test_data
+        cmd_builder = CommandBuilder()
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
+                                filtering_empty_array_test_data['data'],
+                                filtering_empty_array_test_data['filters'],
+                                False, golden_run)
+
+        # verify signature
+        addr = recover_message(filtering_empty_array_test_data['data'], vrs)
+        assert addr == get_wallet_addr(client)
+
+    def test_trx_tip712_advanced_missing_token(
+            self, firmware: Firmware, backend: BackendInterface,
+            navigator: Navigator, default_screenshot_path: Path,
+            test_name: str, tokens: list[dict], golden_run: bool):
+        global snapshots_dirname
+
+        test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
+        snapshots_dirname = test_name
+
+        client = TronClient(backend, firmware, navigator)
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+
+        from dataset import advanced_missing_token_test_data
+        advanced_missing_token_test_data['filters']['tokens'] = tokens
+        cmd_builder = CommandBuilder()
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
+                                advanced_missing_token_test_data['data'],
+                                advanced_missing_token_test_data['filters'],
+                                False, golden_run)
+
+        # verify signature
+        addr = recover_message(advanced_missing_token_test_data['data'], vrs)
+        assert addr == get_wallet_addr(client)
+
+    def test_trx_tip712_advanced_trusted_name(
+            self, firmware: Firmware, backend: BackendInterface,
+            navigator: Navigator, default_screenshot_path: Path,
+            test_name: str, trusted_name: tuple,
+            filt_tn_types: list[InputData.TrustedNameType], golden_run: bool):
+        global snapshots_dirname
+        test_name += "_%s_with" % (str(trusted_name[0]).split(".")[-1].lower())
+        for t in filt_tn_types:
+            test_name += "_%s" % (str(t).split(".")[-1].lower())
+        snapshots_dirname = test_name
+
+        client = TronClient(backend, firmware, navigator)
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+
+        cmd_builder = CommandBuilder()
+        if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
+            challenge = ResponseParser.challenge(
+                client.exchange_raw(cmd_builder.get_challenge()).data)
+        else:
+            challenge = None
+
+        from dataset import advanced_trusted_name_test_data
+        advanced_trusted_name_test_data['filters']['fields']['validator'][
+            'tn_type'] = filt_tn_types
+
+        InputData.provide_trusted_name_v2(
+            client,
+            cmd_builder,
+            bytes.fromhex(advanced_trusted_name_test_data['data']["message"]
+                          ["validator"][2:]),
+            trusted_name[2],
+            trusted_name[0],
+            trusted_name[1],
+            advanced_trusted_name_test_data['data']["domain"]["chainId"],
+            challenge=challenge)
+
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder,
+                                advanced_trusted_name_test_data['data'],
+                                advanced_trusted_name_test_data['filters'],
+                                False, golden_run)
+
+        # verify signature
+        addr = recover_message(advanced_trusted_name_test_data['data'], vrs)
+        assert addr == get_wallet_addr(client)
+
+    def test_trx_tip712_bs_not_activated_error(self, firmware: Firmware,
+                                               backend: BackendInterface,
+                                               navigator: Navigator,
+                                               default_screenshot_path: Path):
+        client = TronClient(backend, firmware, navigator)
+        if firmware == Firmware.NANOS:
+            pytest.skip("Not supported on LNS")
+        setting_id = NanoSettingID.FLOW_4 if firmware.is_nano else NonNanoSettingID.HASH_TX_ID
+        settings_toggle(firmware, navigator, [setting_id])
+        cmd_builder = CommandBuilder()
+        with pytest.raises(ExceptionRAPDU) as e:
+            tip712_new_common(firmware, navigator, default_screenshot_path,
+                              client, cmd_builder, ADVANCED_DATA_SETS[0].data,
+                              None, False, False)
+        InputData.disable_autonext()  # so the timer stops firing
+        assert e.value.status == InputData.StatusWord.INVALID_DATA
+
+        if firmware.is_nano:
+            navigator.navigate([NavInsID.BOTH_CLICK],
+                               screen_change_before_first_instruction=True)
+        elif firmware == Firmware.STAX:
+            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))],
+                               screen_change_before_first_instruction=True)
+        elif firmware == Firmware.FLEX:
+            navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))],
+                               screen_change_before_first_instruction=True)
+        settings_toggle(firmware, navigator, [setting_id])
+
+    def test_trx_tip712_skip(self, firmware: Firmware,
+                             backend: BackendInterface, navigator: Navigator,
+                             default_screenshot_path: Path, test_name: str,
+                             golden_run: bool):
+        global unfiltered_flow
+        global skip_flow
+
+        client = TronClient(backend, firmware, navigator)
+        if firmware.is_nano:
+            pytest.skip("Not supported on Nano devices")
+
+        unfiltered_flow = True
+        skip_flow = True
+
+        with open(input_files()[0], encoding="utf-8") as file:
+            data = json.load(file)
+
+        cmd_builder = CommandBuilder()
+        vrs = tip712_new_common(firmware, navigator, default_screenshot_path,
+                                client, cmd_builder, data, None, False,
+                                golden_run)
+
+        # verify signature
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)

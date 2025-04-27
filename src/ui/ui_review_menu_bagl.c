@@ -762,14 +762,14 @@ UX_DEF(ux_sign_flow,
 void prepare_domain_hash_v0() {
     bytes_to_string(strings.tmp.tmp,
                     sizeof(strings.tmp.tmp),
-                    messageSigningContext712.domainHash,
+                    global_ctx.messageSigningContext712.domainHash,
                     32);
 }
 
 void prepare_message_hash_v0() {
     bytes_to_string(strings.tmp.tmp,
                     sizeof(strings.tmp.tmp),
-                    messageSigningContext712.messageHash,
+                    global_ctx.messageSigningContext712.messageHash,
                     32);
 }
 

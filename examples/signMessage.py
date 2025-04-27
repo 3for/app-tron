@@ -35,8 +35,8 @@ def apduMessage(INS, P1, P2, PATH, MESSAGE):
 SIGN_MAGIC = b'\x19TRON Signed Message:\n'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', help="BIP 32 path to sign with")
-parser.add_argument('--message', help="Message to sign", required=True)
+parser.add_argument('--path', help="BIP 32 path to sign with", default=None)
+parser.add_argument('--message', help="Message to sign", default='Hello Tron!')
 args = parser.parse_args()
 
 args.message = args.message.encode()

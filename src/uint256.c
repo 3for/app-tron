@@ -19,20 +19,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "read.h"
 #include "uint256.h"
-
-static const char HEXDIGITS[] = "0123456789abcdef";
-
-static uint64_t readUint64BE(uint8_t *buffer) {
-    return (((uint64_t) buffer[0]) << 56) | (((uint64_t) buffer[1]) << 48) |
-           (((uint64_t) buffer[2]) << 40) | (((uint64_t) buffer[3]) << 32) |
-           (((uint64_t) buffer[4]) << 24) | (((uint64_t) buffer[5]) << 16) |
-           (((uint64_t) buffer[6]) << 8) | (((uint64_t) buffer[7]));
-}
+#include "common_utils.h"
 
 void readu128BE(uint8_t *buffer, uint128_t *target) {
-    UPPER_P(target) = readUint64BE(buffer);
-    LOWER_P(target) = readUint64BE(buffer + 8);
+    UPPER_P(target) = read_u64_be(buffer, 0);
+    LOWER_P(target) = read_u64_be(buffer + 8, 0);
 }
 
 void readu256BE(uint8_t *buffer, uint256_t *target) {
@@ -48,12 +41,12 @@ bool zero256(uint256_t *number) {
     return (zero128(&LOWER_P(number)) && zero128(&UPPER_P(number)));
 }
 
-void copy128(uint128_t *target, uint128_t *number) {
+void copy128(uint128_t *target, const uint128_t *number) {
     UPPER_P(target) = UPPER_P(number);
     LOWER_P(target) = LOWER_P(number);
 }
 
-void copy256(uint256_t *target, uint256_t *number) {
+void copy256(uint256_t *target, const uint256_t *number) {
     copy128(&UPPER_P(target), &UPPER_P(number));
     copy128(&LOWER_P(target), &LOWER_P(number));
 }
@@ -198,7 +191,7 @@ uint32_t bits256(uint256_t *number) {
     return result;
 }
 
-bool equal128(uint128_t *number1, uint128_t *number2) {
+bool equal128(const uint128_t *number1, uint128_t *number2) {
     return (UPPER_P(number1) == UPPER_P(number2)) && (LOWER_P(number1) == LOWER_P(number2));
 }
 
@@ -207,14 +200,14 @@ bool equal256(uint256_t *number1, uint256_t *number2) {
             equal128(&LOWER_P(number1), &LOWER_P(number2)));
 }
 
-bool gt128(uint128_t *number1, uint128_t *number2) {
+bool gt128(const uint128_t *number1, const uint128_t *number2) {
     if (UPPER_P(number1) == UPPER_P(number2)) {
         return (LOWER_P(number1) > LOWER_P(number2));
     }
     return (UPPER_P(number1) > UPPER_P(number2));
 }
 
-bool gt256(uint256_t *number1, uint256_t *number2) {
+bool gt256(const uint256_t *number1, uint256_t *number2) {
     if (equal128(&UPPER_P(number1), &UPPER_P(number2))) {
         return gt128(&LOWER_P(number1), &LOWER_P(number2));
     }
@@ -489,7 +482,7 @@ static void reverseString(char *str, uint32_t length) {
     }
 }
 
-bool tostring128(uint128_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
+bool tostring128(const uint128_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
     uint128_t rDiv;
     uint128_t rMod;
     uint128_t base;
@@ -513,7 +506,7 @@ bool tostring128(uint128_t *number, uint32_t baseParam, char *out, uint32_t outL
     return true;
 }
 
-bool tostring256(uint256_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
+bool tostring256(const uint256_t *number, uint32_t baseParam, char *out, uint32_t outLength) {
     uint256_t rDiv;
     uint256_t rMod;
     uint256_t base;
@@ -536,4 +529,131 @@ bool tostring256(uint256_t *number, uint32_t baseParam, char *out, uint32_t outL
     out[offset] = '\0';
     reverseString(out, offset);
     return true;
+}
+
+/**
+ * Format a uint256_t into a string as a signed integer
+ *
+ * @param[in] number the number to format
+ * @param[in] base the radix used in formatting
+ * @param[out] out the output buffer
+ * @param[in] out_length the length of the output buffer
+ * @return whether the formatting was successful or not
+ */
+bool tostring256_signed(const uint256_t *const number,
+                        uint32_t base,
+                        char *const out,
+                        uint32_t out_length) {
+    uint256_t max_unsigned_val;
+    uint256_t max_signed_val;
+    uint256_t one_val;
+    uint256_t two_val;
+    uint256_t tmp;
+
+    // showing negative numbers only really makes sense in base 10
+    if (base == 10) {
+        explicit_bzero(&one_val, sizeof(one_val));
+        LOWER(LOWER(one_val)) = 1;
+        explicit_bzero(&two_val, sizeof(two_val));
+        LOWER(LOWER(two_val)) = 2;
+
+        memset(&max_unsigned_val, 0xFF, sizeof(max_unsigned_val));
+        divmod256(&max_unsigned_val, &two_val, &max_signed_val, &tmp);
+        if (gt256(number, &max_signed_val))  // negative value
+        {
+            sub256(&max_unsigned_val, number, &tmp);
+            add256(&tmp, &one_val, &tmp);
+            out[0] = '-';
+            return tostring256(&tmp, base, out + 1, out_length - 1);
+        }
+    }
+    return tostring256(number, base, out, out_length);  // positive value
+}
+
+void convertUint64BEto128(const uint8_t *const data, uint32_t length, uint128_t *const target) {
+    uint8_t tmp[INT128_LENGTH];
+    int64_t value;
+
+    value = u64_from_BE(data, length);
+    memset(tmp, ((value < 0) ? 0xff : 0), sizeof(tmp) - length);
+    memmove(tmp + sizeof(tmp) - length, data, length);
+    readu128BE(tmp, target);
+}
+
+void convertUint256BE(const uint8_t *const data, uint32_t length, uint256_t *const target) {
+    uint8_t tmp[INT256_LENGTH];
+
+    memset(tmp, 0, sizeof(tmp) - length);
+    memmove(tmp + sizeof(tmp) - length, data, length);
+    readu256BE(tmp, target);
+}
+
+void sub256(const uint256_t *const number1,
+            const uint256_t *const number2,
+            uint256_t *const target) {
+    uint128_t tmp;
+    sub128(&UPPER_P(number1), &UPPER_P(number2), &UPPER_P(target));
+    sub128(&LOWER_P(number1), &LOWER_P(number2), &tmp);
+    if (gt128(&tmp, &LOWER_P(number1))) {
+        uint128_t one;
+        UPPER(one) = 0;
+        LOWER(one) = 1;
+        sub128(&UPPER_P(target), &one, &UPPER_P(target));
+    }
+    sub128(&LOWER_P(number1), &LOWER_P(number2), &LOWER_P(target));
+}
+
+void convertUint128BE(const uint8_t *const data, uint32_t length, uint128_t *const target) {
+    uint8_t tmp[INT128_LENGTH];
+
+    memset(tmp, 0, sizeof(tmp) - length);
+    memmove(tmp + sizeof(tmp) - length, data, length);
+    readu128BE(tmp, target);
+}
+
+/**
+ * Format a uint128_t into a string as a signed integer
+ *
+ * @param[in] number the number to format
+ * @param[in] base the radix used in formatting
+ * @param[out] out the output buffer
+ * @param[in] out_length the length of the output buffer
+ * @return whether the formatting was successful or not
+ */
+bool tostring128_signed(const uint128_t *const number,
+                        uint32_t base,
+                        char *const out,
+                        uint32_t out_length) {
+    uint128_t max_unsigned_val;
+    uint128_t max_signed_val;
+    uint128_t one_val;
+    uint128_t two_val;
+    uint128_t tmp;
+
+    // showing negative numbers only really makes sense in base 10
+    if (base == 10) {
+        explicit_bzero(&one_val, sizeof(one_val));
+        LOWER(one_val) = 1;
+        explicit_bzero(&two_val, sizeof(two_val));
+        LOWER(two_val) = 2;
+
+        memset(&max_unsigned_val, 0xFF, sizeof(max_unsigned_val));
+        divmod128(&max_unsigned_val, &two_val, &max_signed_val, &tmp);
+        if (gt128(number, &max_signed_val))  // negative value
+        {
+            sub128(&max_unsigned_val, number, &tmp);
+            add128(&tmp, &one_val, &tmp);
+            out[0] = '-';
+            return tostring128(&tmp, base, out + 1, out_length - 1);
+        }
+    }
+    return tostring128(number, base, out, out_length);  // positive value
+}
+
+void sub128(const uint128_t *const number1,
+            const uint128_t *const number2,
+            uint128_t *const target) {
+    UPPER_P(target) = UPPER_P(number1) - UPPER_P(number2) -
+                      ((LOWER_P(number1) - LOWER_P(number2)) > LOWER_P(number1));
+    LOWER_P(target) = LOWER_P(number1) - LOWER_P(number2);
 }

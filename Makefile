@@ -57,6 +57,8 @@ DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
 
+DEFINES += APP_TICKER=\"$(TICKER)\" APP_CHAIN_ID=1151668124
+
 .PHONY: proto
 proto:
 	$(MAKE) -C proto

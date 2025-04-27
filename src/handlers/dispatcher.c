@@ -20,6 +20,16 @@
 
 #include "handlers.h"
 #include "app_errors.h"
+#include "parse.h"
+
+#ifdef HAVE_TIP712_FULL_SUPPORT
+#include "commands_712.h"
+#endif
+
+#ifdef HAVE_TRUSTED_NAME
+#include "trusted_name.h"
+#include "challenge.h"
+#endif
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -39,6 +49,15 @@ int apdu_dispatcher(const command_t *cmd) {
         }
     }
 #endif  // HAVE_SWAP
+
+    // #ifndef HAVE_LEDGER_PKI
+    //     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
+    //         // Ledger-PKI APDU not yet caught by the running OS.
+    //         // Command code not supported
+    //         PRINTF("Ledger-PKI not yet supported!\n");
+    //         return io_send_sw(E_NOT_IMPLEMENTED);
+    //     }
+    // #endif  // HAVE_LEDGER_PKI
 
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
@@ -61,12 +80,42 @@ int apdu_dispatcher(const command_t *cmd) {
             // Request Signature
             return handleECDHSecret(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
+        case INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY:
+            return handleSignPersonalMessageFullDisplay(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
         case INS_SIGN_PERSONAL_MESSAGE:
             return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_TIP_712_MESSAGE:
-            return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            switch (cmd->p2) {
+                case P2_TIP712_LEGACY_IMPLEM:
+                    return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#ifdef HAVE_TIP712_FULL_SUPPORT
+                case P2_TIP712_FULL_IMPLEM:
+                    return handleTIP712Sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#endif  // HAVE_TIP712_FULL_SUPPORT
+            }
+#ifdef HAVE_TIP712_FULL_SUPPORT
+        case INS_TIP712_STRUCT_DEF:
+            return handleTIP712StructDef(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
 
+        case INS_TIP712_STRUCT_IMPL:
+            return handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+
+        case INS_TIP712_FILTERING:
+            return handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+
+        case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
+            return handleProvideTrc20TokenInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#endif  // HAVE_TIP712_FULL_SUPPORT
+
+#ifdef HAVE_TRUSTED_NAME
+        case INS_ENS_GET_CHALLENGE:
+            return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_ENS_PROVIDE_INFO:
+            return handle_provide_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#endif  // HAVE_TRUSTED_NAME
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);
     }

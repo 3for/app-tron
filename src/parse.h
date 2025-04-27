@@ -1,7 +1,10 @@
 #include "os.h"
 #include "cx.h"
+#include "bip32.h"
+// #include "bip32_utils.h"
 #include <stdbool.h>
 #include "core/Contract.pb.h"
+#include "common_utils.h"
 
 #ifndef PARSE_H
 #define PARSE_H
@@ -30,6 +33,10 @@
 #define SHARED_CTX_FIELD_1_SIZE 256
 #endif
 #define SHARED_CTX_FIELD_2_SIZE 40
+
+#define SHARED_BUFFER_SIZE SHARED_CTX_FIELD_1_SIZE
+
+#define MAX_ASSETS 5
 
 typedef union {
     protocol_TransferContract transfer_contract;
@@ -103,6 +110,20 @@ typedef enum contractType_e {
     INVALID_CONTRACT = 255
 } contractType_e;
 
+enum { OFFSET_CLA = 0, OFFSET_INS, OFFSET_P1, OFFSET_P2, OFFSET_LC, OFFSET_CDATA };
+typedef enum {
+    APP_STATE_IDLE,
+    APP_STATE_SIGNING_MESSAGE,
+    APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
+    APP_STATE_SIGNING
+} app_state_t;
+
+typedef enum { STATE_191_HASH_DISPLAY = 0, STATE_191_HASH_ONLY } sign_message_state;
+typedef struct states191_t {
+    sign_message_state sign_state : 1;
+    bool ui_started : 1;
+} states191_t;
+
 typedef struct stage_t {
     uint16_t total;
     uint16_t count;
@@ -125,11 +146,44 @@ typedef struct {
     uint8_t length;
 } bip32_path_t;
 
+#define COLLECTION_NAME_MAX_LEN 70
+
+typedef struct nftInfo_t {
+    uint8_t contractAddress[ADDRESS_SIZE_712];  // must be first item
+    char collectionName[COLLECTION_NAME_MAX_LEN + 1];
+} nftInfo_t;
+
+// TOKENS
+
+#define MAX_TICKER_LEN 11  // 10 characters + '\0'
+
+typedef struct tokenDefinition_t {
+    uint8_t address[ADDRESS_SIZE];  // must be first item
+    char ticker[MAX_TICKER_LEN];
+    uint8_t decimals;
+} tokenDefinition_t;
+
+// UNION
+
+typedef union extraInfo_t {
+    tokenDefinition_t token;
+// Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
+// and not plugins
+#ifndef TARGET_NANOS
+    nftInfo_t nft;
+#endif
+} extraInfo_t;
+
 typedef struct transactionContext_t {
     bip32_path_t bip32_path;
     uint8_t hash[HASH_SIZE];
     uint8_t signature[MAX_RAW_SIGNATURE];
     uint8_t signatureLength;
+#ifndef TARGET_NANOS
+    union extraInfo_t extraInfo[MAX_ASSETS];
+    bool assetSet[MAX_ASSETS];
+    uint8_t currentAssetIndex;
+#endif
 } transactionContext_t;
 
 typedef struct txContent_t {
@@ -158,6 +212,19 @@ typedef struct messageSigningContext712_t {
     uint8_t messageHash[32];
 } messageSigningContext712_t;
 
+// typedef struct messageSigningContext_t {
+//     bip32_path_t bip32;
+//     uint8_t hash[HASH_SIZE];
+//     uint32_t remainingLength;
+// } messageSigningContext_t;
+
+typedef union {
+    transactionContext_t transactionContext;
+    publicKeyContext_t publicKeyContext;
+    messageSigningContext712_t messageSigningContext712;
+    // messageSigningContext_t messageSigningContext;
+} tmpCtx_t;
+
 typedef struct txStringProperties_t {
     char fullAddress[43];
     char fullAmount[79];  // 2^256 is 78 digits long
@@ -176,6 +243,13 @@ typedef union {
     strDataTmp_t tmp;
 } strings_t;
 
+typedef struct chain_config_s {
+    char coinName[10];  // ticker
+    uint64_t chainId;
+} chain_config_t;
+
+extern const chain_config_t *chainConfig;
+
 bool setContractType(contractType_e type, char *out, size_t outlen);
 bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen);
 
@@ -183,19 +257,26 @@ bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txCont
 bool parseExchange(const uint8_t *data, size_t dataLength, txContent_t *context);
 
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun);
-bool adjustDecimals(const char *src,
-                    uint32_t srcLength,
-                    char *target,
-                    uint32_t targetLength,
-                    uint8_t decimals);
 
 void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
 
+extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
+extern uint8_t appState;
+extern states191_t states191;
+extern uint8_t processed_size_191;
+extern uint16_t apdu_response_code;
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 
+void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx);
+void hash_byte(uint8_t byte, cx_hash_t *hash_ctx);
+
+void forget_known_assets(void);
+extraInfo_t *get_current_asset_info(void);
+int get_asset_index_by_addr(const uint8_t *addr);
+void validate_current_asset_info(void);
 #endif

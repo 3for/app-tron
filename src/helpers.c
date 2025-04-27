@@ -22,7 +22,7 @@
 #include "helpers.h"
 #include "app_errors.h"
 
-extern publicKeyContext_t publicKeyContext;
+extern tmpCtx_t global_ctx;
 
 void getAddressFromPublicKey(const uint8_t *publicKey, uint8_t address[static ADDRESS_SIZE]) {
     uint8_t hashAddress[HASH_SIZE];
@@ -136,18 +136,44 @@ off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) 
     return 1 + 4 * path_length;
 }
 
-int initPublicKeyContext(bip32_path_t *bip32_path, char *address58) {
+off_t read_bip32_path_712(const uint8_t *buffer,
+                          uint16_t length,
+                          messageSigningContext712_t *ctx_712) {
+    if (length < 1) {
+        return -1;
+    }
+    unsigned int path_length = *buffer++;
+
+    if (path_length < 1 || path_length > MAX_BIP32_PATH) {
+        PRINTF("Invalid path\n");
+        return -1;
+    }
+
+    if (length < 1 + 4 * path_length) {
+        return -1;
+    }
+    ctx_712->pathLength = path_length;
+    for (unsigned int i = 0; i < path_length; i++) {
+        ctx_712->bip32Path[i] = U4BE(buffer, 0);
+        buffer += 4;
+    }
+    return 1 + 4 * path_length;
+}
+
+int initPublicKeyContext(bip32_path_t *bip32_path,
+                         char *address58,
+                         publicKeyContext_t *public_key_ctx) {
     if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
                                     bip32_path->indices,
                                     bip32_path->length,
-                                    publicKeyContext.publicKey,
-                                    publicKeyContext.chainCode,
+                                    public_key_ctx->publicKey,
+                                    public_key_ctx->chainCode,
                                     CX_SHA512) != CX_OK) {
         return -1;
     }
 
     // Get base58 address from public key
-    getBase58FromPublicKey(publicKeyContext.publicKey, address58, false);
+    getBase58FromPublicKey(public_key_ctx->publicKey, address58, false);
 
     return 0;
 }

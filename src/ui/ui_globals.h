@@ -41,10 +41,11 @@ extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];
 extern int8_t votes_count;
-extern transactionContext_t transactionContext;
-extern publicKeyContext_t publicKeyContext;
-extern messageSigningContext712_t messageSigningContext712;
+extern tmpCtx_t global_ctx;
+extern cx_sha3_t global_sha3;
 extern strings_t strings;
+
+static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
 bool ui_callback_tx_ok(bool display_menu);
 bool ui_callback_tx_cancel(bool display_menu);
@@ -53,3 +54,30 @@ bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
 bool ui_callback_signMessage712_v0_cancel(bool display_menu);
 bool ui_callback_signMessage712_v0_ok(bool display_menu);
+
+#define UI_191_BUFFER strings.tmp.tmp
+
+void reset_ui_191_buffer(void);
+size_t ui_191_buffer_length(void);
+size_t remaining_ui_191_buffer_length(void);
+char *remaining_ui_191_buffer(void);
+
+void ui_191_start(void);
+void ui_191_switch_to_message(void);
+void ui_191_switch_to_message_end(void);
+void ui_191_switch_to_sign(void);
+void ui_191_switch_to_question(void);
+
+void ui_712_start(void);
+void ui_712_switch_to_message(void);
+void ui_712_start_unfiltered(void);
+
+void feed_display(void);
+void skip_rest_of_message(void);
+void question_switcher(void);
+void continue_displaying_message(void);
+
+void ui_712_switch_to_sign(void);
+void ui_typed_message_review_choice(bool confirm);
+
+void ui_error_blind_signing(void);
