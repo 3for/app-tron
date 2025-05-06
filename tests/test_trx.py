@@ -897,10 +897,10 @@ class TestTRX():
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path, input_file: Path,
-                            verbose_raw: bool, filtering: bool, test_name: str):
+                            verbose_raw: bool, filtering: bool, test_name: str, golden_run: bool):
 
         global unfiltered_flow
-        # global snapshots_dirname
+        global snapshots_dirname
         # snapshots_dirname = 'test_trx_tip712_new'
         settings_to_toggle: list[SettingID] = []
         client = TronClient(backend, firmware, navigator)
@@ -910,6 +910,11 @@ class TestTRX():
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
+
+        print("ZYD input_file:", input_file)
+        test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
+        snapshots_dirname = test_name
+        print("ZYD snaphsots_dirname:", snapshots_dirname)
 
         filters = None
         if filtering:
@@ -948,7 +953,7 @@ class TestTRX():
                                     data,
                                     filters,
                                     verbose_raw,
-                                    False,
+                                    golden_run,
                                     extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
 
