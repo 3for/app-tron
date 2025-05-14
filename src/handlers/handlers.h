@@ -46,6 +46,7 @@
 #define P1_SIGN  0x10
 #define P1_FIRST 0x00
 #define P1_MORE  0x80
+#define P1_FIRST_CHUNK          0x01
 #define P1_LAST  0x90
 
 #define P1_TRC10_NAME 0xA0

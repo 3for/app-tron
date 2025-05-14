@@ -50,14 +50,14 @@ int apdu_dispatcher(const command_t *cmd) {
     }
 #endif  // HAVE_SWAP
 
-    // #ifndef HAVE_LEDGER_PKI
-    //     if (cmd->ins == INS_GET_APP_CONFIGURATION) {
-    //         // Ledger-PKI APDU not yet caught by the running OS.
-    //         // Command code not supported
-    //         PRINTF("Ledger-PKI not yet supported!\n");
-    //         return io_send_sw(E_NOT_IMPLEMENTED);
-    //     }
-    // #endif  // HAVE_LEDGER_PKI
+#ifndef HAVE_LEDGER_PKI
+    if ((cmd->cla == 0xB0) && (cmd->ins == 0x06)) {
+        // Ledger-PKI APDU not yet caught by the running OS.
+        // Command code not supported
+        PRINTF("Ledger-PKI not yet supported!\n");
+        return APDU_RESPONSE_CMD_CODE_NOT_SUPPORTED;
+    }
+#endif  // HAVE_LEDGER_PKI
 
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
@@ -114,7 +114,7 @@ int apdu_dispatcher(const command_t *cmd) {
             return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_ENS_PROVIDE_INFO:
-            return handle_provide_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            return handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 #endif  // HAVE_TRUSTED_NAME
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);
