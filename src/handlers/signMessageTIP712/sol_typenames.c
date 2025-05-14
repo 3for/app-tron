@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "sol_typenames.h"
+#include "mem.h"
 #include "os_pic.h"
 #include "typed_data.h"
 #include "common_utils.h"  // ARRAY_SIZE

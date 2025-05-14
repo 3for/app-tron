@@ -272,9 +272,6 @@ extern uint16_t apdu_response_code;
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 
-void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx);
-void hash_byte(uint8_t byte, cx_hash_t *hash_ctx);
-
 void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);

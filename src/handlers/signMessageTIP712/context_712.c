@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "context_712.h"
 #include "mem_utils.h"
+#include "mem.h"
 #include "sol_typenames.h"
 #include "path.h"
 #include "field_hash.h"

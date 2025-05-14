@@ -4,12 +4,14 @@
 #include "field_hash.h"
 #include "encode_field.h"
 #include "path.h"
+#include "mem.h"
 #include "mem_utils.h"
 #include "ui_logic.h"
 #include "context_712.h"   // contract_addr
 #include "common_utils.h"  // u64_from_BE
 #include "typed_data.h"
 #include "commands_712.h"
+#include "hash_bytes.h"
 #include "app_errors.h"
 #include "parse.h"
 #include "ui_globals.h"

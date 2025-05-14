@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "encode_field.h"
-#include "mem_utils.h"
+#include "mem.h"
 #include "parse.h"
 #include "app_errors.h"
 

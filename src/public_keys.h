@@ -17,6 +17,11 @@
 
 #pragma once
 #include <stdint.h>
+#ifdef HAVE_LEDGER_PKI
+//typedef uint32_t bolos_err_t; //fix error: unknown type name 'bolos_err_t'
+#include "os_types.h" //fix warning: redefinition of typedef 'bolos_err_t'
+#include "os_pki.h"
+#endif
 
 static const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[] = {
 #if defined(HAVE_CAL_TEST_KEY)
