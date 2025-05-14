@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "path.h"
+#include "mem.h"
 #include "context_712.h"
 #include "commands_712.h"
 #include "type_hash.h"

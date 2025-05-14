@@ -4,8 +4,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include "mem_utils.h"
+#include "mem.h"
 #include "type_hash.h"
 #include "format_hash_field_type.h"
+#include "hash_bytes.h"
 #include "typed_data.h"
 #include "ui_globals.h"
 #include "app_errors.h"
@@ -177,7 +179,7 @@ bool type_hash(const char *const struct_name, const uint8_t struct_name_length, 
     cx_err_t error = CX_INTERNAL_ERROR;
 
     if ((struct_ptr = get_structn(struct_name, struct_name_length)) == NULL) {
-        PRINTF("Error: could not find EIP-712 struct \"");
+        PRINTF("Error: could not find TIP-712 struct \"");
         for (int i = 0; i < struct_name_length; ++i) PRINTF("%c", struct_name[i]);
         PRINTF("\" for type_hash\n");
         return false;

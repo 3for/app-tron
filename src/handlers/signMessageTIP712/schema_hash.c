@@ -1,6 +1,7 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
 
 #include "schema_hash.h"
+#include "hash_bytes.h"
 #include "typed_data.h"
 #include "format_hash_field_type.h"
 #include "context_712.h"

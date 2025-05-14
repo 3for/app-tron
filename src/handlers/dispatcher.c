@@ -29,6 +29,7 @@
 #ifdef HAVE_TRUSTED_NAME
 #include "trusted_name.h"
 #include "challenge.h"
+#include "cmd_trusted_name.h"
 #endif
 
 #ifdef HAVE_SWAP

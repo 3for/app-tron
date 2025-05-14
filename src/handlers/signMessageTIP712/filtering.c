@@ -1,6 +1,7 @@
 #ifdef HAVE_TIP712_FULL_SUPPORT
 
 #include "filtering.h"
+#include "hash_bytes.h"
 #include "public_keys.h"
 #include "context_712.h"
 #include "commands_712.h"
