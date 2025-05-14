@@ -53,24 +53,32 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
                          verbose_ens: bool, test_name: str):
     app_client = TronClient(backend, firmware, navigator)
     cmd_builder = CommandBuilder()
+    print("test_trusted_name_v1 ZYD 0000")
     challenge = common(firmware, app_client, cmd_builder)
+    print("test_trusted_name_v1 ZYD 1111")
 
     if verbose_ens:
+        print("test_trusted_name_v1 ZYD 2222")
         settings_toggle(firmware, navigator, [
             NanoSettingID.VERBOSE_ENS
             if firmware.is_nano else NonNanoSettingID.VERBOSE_ENS
         ])
         test_name += "_verbose"
 
+    print("test_trusted_name_v1 ZYD 3333")
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
 
+    print("test_trusted_name_v1 ZYD 4444")
     end_text = None
     if firmware.is_nano:
+        print("test_trusted_name_v1 ZYD 5555")
         end_text = "Sign"
     else:
+        print("test_trusted_name_v1 ZYD 6666")
         end_text = "Hold to sign"
 
+    print("test_trusted_name_v1 ZYD 7777")
     app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
         "nonce": NONCE,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),

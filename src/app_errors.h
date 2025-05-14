@@ -57,6 +57,7 @@
 #define E_HALTED                              0x6faa
 
 #define APDU_RESPONSE_OK                      0x9000
+#define APDU_RESPONSE_CMD_CODE_NOT_SUPPORTED  0x911c
 #define APDU_RESPONSE_ERROR_NO_INFO           0x6a00
 #define APDU_RESPONSE_INVALID_DATA            0x6a80
 #define APDU_RESPONSE_INSUFFICIENT_MEMORY     0x6a84
