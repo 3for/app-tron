@@ -2,20 +2,12 @@
 
 #include <ctype.h>
 #include "trusted_name.h"
-#include "network.h"  // chain_is_ethereum_compatible
 #include "utils.h"    // SET_BIT
 #include "read.h"
 #include "challenge.h"
 #include "hash_bytes.h"
 #include "public_keys.h"
-//#include "proxy_info.h"
-#include <stdint.h>
-#include <stdbool.h>
-#include "cx.h"
-#include "tlv.h"
-#include "common_utils.h"  // ADDRESS_LENGTH
-//#include "calldata.h"      // CALLDATA_SELECTOR_SIZE
-#include "signature.h"
+#include "proxy_info.h"
 
 typedef enum { STRUCT_TYPE_TRUSTED_NAME = 0x03 } e_struct_type;
 
@@ -93,9 +85,10 @@ static bool matching_trusted_name(const s_trusted_name_info *trusted_name,
             if (!matching_type(TN_TYPE_ACCOUNT, type_count, types)) {
                 return false;
             }
-            if (!chain_is_ethereum_compatible(chain_id)) {
+            //TODO. Always true for Tron now.
+            /*if (!chain_is_ethereum_compatible(chain_id)) {
                 return false;
-            }
+            }*/
             break;
         case 2:
             if (!matching_type(trusted_name->name_type, type_count, types)) {
