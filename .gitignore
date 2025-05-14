@@ -25,3 +25,5 @@ tests/snapshots-tmp
 # Virtual env for sideload (macOS and Windows)
 ledger/
 
+# Mac file
+.DS_Store
