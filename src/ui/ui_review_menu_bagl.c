@@ -25,7 +25,7 @@
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 #include "trusted_name.h"
-
+#include "ui_trusted_name_bagl.h"
 //////////////////////////////////////////////////////////////////////
 UX_STEP_NOCB(ux_approval_tx_data_warning_step,
              pnn,
@@ -145,6 +145,27 @@ UX_DEF(ux_approval_tx_data_warning_flow,
        &ux_approval_tx_2_step,
        &ux_approval_tx_3_step,
        &ux_approval_from_address_step,
+       &ux_approval_tx_4_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_tx_trusted_name_flow,
+       &ux_approval_tx_1_step,
+       &ux_approval_tx_2_step,
+       &ux_approval_tx_3_step,
+       &ux_approval_from_address_step,
+       &ux_trusted_name_step,
+       &ux_approval_tx_4_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_tx_data_warning_trusted_name_flow,
+       &ux_approval_tx_1_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_tx_2_step,
+       &ux_approval_tx_3_step,
+       &ux_approval_from_address_step,
+       &ux_trusted_name_step,
        &ux_approval_tx_4_step,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
@@ -921,12 +942,20 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     bool trusted_name_match = get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
     PRINTF("###111 ZYD trusted_name_match:%d\n", trusted_name_match);
     switch (state) {
-        case APPROVAL_TRANSFER:
-            ux_flow_init(
-                0,
-                ((data_warning == true) ? ux_approval_tx_data_warning_flow : ux_approval_tx_flow),
-                NULL);
+        case APPROVAL_TRANSFER: {
+            if (trusted_name_match) {
+                ux_flow_init(
+                    0,
+                    ((data_warning == true) ? ux_approval_tx_data_warning_trusted_name_flow : ux_approval_tx_trusted_name_flow),
+                    NULL);
+            } else {
+                ux_flow_init(
+                    0,
+                    ((data_warning == true) ? ux_approval_tx_data_warning_flow : ux_approval_tx_flow),
+                    NULL);
+            }
             break;
+        }
         case APPROVAL_SIMPLE_TRANSACTION:
             ux_flow_init(
                 0,
