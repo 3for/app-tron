@@ -436,8 +436,7 @@ class TronClient:
             tron.Transaction.Contract.TransferAssetContract,
             contract.TransferAssetContract(
                 owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
-                to_address=bytes.fromhex(
-                    self.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                to_address=bytes.fromhex(("41" + tx_params["to"].hex())),
                 amount=1000000,
                 asset_name="1002000".encode()))
         return self.sign(bip32_path,
