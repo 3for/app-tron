@@ -1039,9 +1039,9 @@ class TestTRX():
             test_name: str, trusted_name: tuple,
             filt_tn_types: list[InputData.TrustedNameType], golden_run: bool):
         global snapshots_dirname
-        test_name += "_%s_with" % (str(trusted_name[0]).split(".")[-1].lower())
+        test_name += f"_{trusted_name[0].name.lower()}_with"
         for t in filt_tn_types:
-            test_name += "_%s" % (str(t).split(".")[-1].lower())
+            test_name += f"_{t.name.lower()}"
         snapshots_dirname = test_name
 
         client = TronClient(backend, firmware, navigator)
