@@ -10,6 +10,9 @@
 #include "app_errors.h"
 #include "handlers.h"
 
+//TODO. refactor later
+extern void handle_return_code(uint16_t apdu_response_code);
+
 static bool handle_tlv_payload(const uint8_t *payload, uint16_t size, bool to_free) {
     s_trusted_name_ctx ctx = {0};
     bool parsing_ret;
@@ -36,8 +39,13 @@ static bool handle_tlv_payload(const uint8_t *payload, uint16_t size, bool to_fr
 uint16_t handle_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_t length) {
     UNUSED(p2);
     if (!tlv_from_apdu(p1 == P1_FIRST_CHUNK, length, data, &handle_tlv_payload)) {
-        return APDU_RESPONSE_INVALID_DATA;
+        //TODO. refactor later
+        //return APDU_RESPONSE_INVALID_DATA;
+        handle_return_code(APDU_RESPONSE_INVALID_DATA);
+        return 0;
     }
+    handle_return_code(APDU_RESPONSE_OK);
+    //TODO. refactor later
     return APDU_RESPONSE_OK;
 }
 
