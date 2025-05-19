@@ -818,10 +818,10 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
             default:
                 return USTREAM_FAULT;
         }
-        return ret ? USTREAM_FINISHED : USTREAM_FAULT;
+        return ret ? USTREAM_PROCESSING : USTREAM_FAULT;
     }
 
-    return USTREAM_FINISHED;
+    return USTREAM_PROCESSING;
 }
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len) {
