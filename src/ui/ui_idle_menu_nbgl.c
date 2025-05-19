@@ -170,6 +170,7 @@ void ui_idle(void) {
 }
 
 static void ui_error_blind_signing_choice(bool confirm) {
+    UNUSED(confirm);
     // if (confirm) {
     //     ui_settings();
     // } else {
