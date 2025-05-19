@@ -940,7 +940,7 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     e_name_type type = TN_TYPE_ACCOUNT;
     e_name_source source = TN_SOURCE_ENS;
     bool trusted_name_match = get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
-    PRINTF("###111 ZYD trusted_name_match:%d\n", trusted_name_match);
+    PRINTF("### trusted_name_match:%d\n", trusted_name_match);
     switch (state) {
         case APPROVAL_TRANSFER: {
             if (trusted_name_match) {
