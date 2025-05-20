@@ -897,7 +897,9 @@ class TestTRX():
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path, input_file: Path,
-                            verbose_raw: bool, filtering: bool, test_name: str, golden_run: bool):
+                            verbose_raw: bool, filtering: bool, 
+                            #golden_run: bool,
+                            test_name: str):
 
         global unfiltered_flow
         global snapshots_dirname
@@ -911,8 +913,8 @@ class TestTRX():
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
-        test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
-        snapshots_dirname = test_name
+        #test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
+        #snapshots_dirname = test_name
 
         filters = None
         if filtering:
@@ -951,7 +953,8 @@ class TestTRX():
                                     data,
                                     filters,
                                     verbose_raw,
-                                    golden_run,
+                                    #golden_run,
+                                    False,
                                     extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
 
