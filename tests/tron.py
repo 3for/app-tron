@@ -438,7 +438,7 @@ class TronClient:
                 owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
                 to_address=bytes.fromhex(("41" + tx_params["to"].hex())),
                 amount=1000000,
-                asset_name="1002000".encode()))
+                asset_name="1002000".encode()), tx_params)
         return self.sign(bip32_path,
                          tx,
                          text=text,

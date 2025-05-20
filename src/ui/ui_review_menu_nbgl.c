@@ -26,6 +26,7 @@
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 #include "ui_idle_menu.h"
+#include "trusted_name.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER 2
@@ -182,14 +183,24 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 
     pairList.pairs = (nbgl_layoutTagValue_t *) txInfos.fields;
 
+    uint64_t chain_id = chainConfig->chainId;
+    e_name_type type = TN_TYPE_ACCOUNT;
+    e_name_source source = TN_SOURCE_ENS;
+    bool trusted_name_match = get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
+    PRINTF("### trusted_name_match:%d\n", trusted_name_match);
     switch (state) {
         case APPROVAL_TRANSFER:
             txInfos.fields[0].item = stringLabelTxAmount;
             txInfos.fields[0].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[1].item = "Token";
             txInfos.fields[1].value = fullContract;
-            txInfos.fields[2].item = TRC20ActionSendAllow;
-            txInfos.fields[2].value = toAddress;
+            if (trusted_name_match) {
+                txInfos.fields[2].item = "To (Domain)";
+                txInfos.fields[2].value = g_trusted_name;
+            } else {
+                txInfos.fields[2].item = TRC20ActionSendAllow;
+                txInfos.fields[2].value = toAddress;
+            }
             txInfos.fields[3].item = stringLabelSenderAddress;
             txInfos.fields[3].value = fromAddress;
             txInfos.flowTitle = "Review Transaction";
