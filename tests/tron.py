@@ -269,7 +269,20 @@ class TronClient:
         else:
             path_name = ""
             screen_change_before_first_instruction = True
-            
+            if warning_approve:
+                # Use custom touch coordinates to account for warning approve
+                # button position.
+                instructions = [
+                    NavIns(
+                        NavInsID.TOUCH,
+                        (200, 445 if self._firmware.device.startswith("flex")
+                         else 545)),
+                ]
+                self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
+                                                     str(snappath) + "/part1",
+                                                     instructions)
+                path_name = "/part2"
+                screen_change_before_first_instruction = False
             self._navigator.navigate_until_text_and_compare(
                 NavInsID.SWIPE_CENTER_TO_LEFT, [
                     NavInsID.USE_CASE_REVIEW_CONFIRM,
@@ -420,7 +433,7 @@ class TronClient:
                 owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
                 to_address=bytes.fromhex(("41" + tx_params["to"].hex())),
                 amount=1000000,
-                asset_name="1002000".encode()))
+                asset_name="1002000".encode()), tx_params)
         return self.sign(bip32_path,
                          tx,
                          text=text,
