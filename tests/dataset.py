@@ -466,7 +466,7 @@ advanced_trusted_name_test_data = {
                 "type": "trusted_name",
                 "name": "Validator",
                 "tn_type": None,
-                "tn_source": [InputData.TrustedNameSource.CAL],
+                "tn_source": [InputData.TrustedNameSource.CAL, InputData.TrustedNameSource.ENS],
             },
             "enable": {
                 "type": "raw",
