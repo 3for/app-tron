@@ -6,13 +6,20 @@
 #include "ledger_assert.h"
 #include "ui_globals.h"
 #include "ui_nbgl.h"
+#include "utils.h"
+#include "ui_idle_menu.h"
 
 static nbgl_contentTagValue_t pairs[7];
 static nbgl_contentTagValueList_t pairs_list;
 static uint8_t pair_idx;
 static size_t buf_idx;
-static bool filtered;
 static bool review_skipped;
+nbgl_callback_t skip_callback = NULL;
+
+// Global Warning struct for NBGL review flows
+nbgl_warning_t warning;
+
+extern void reset_app_context();
 
 static void message_progress(bool confirm) {
     char *buf;
@@ -40,16 +47,19 @@ static void message_progress(bool confirm) {
     }
 }
 
+#ifdef SCREEN_SIZE_WALLET
 static void review_skip(void) {
     review_skipped = true;
     message_progress(true);
 }
+#endif  // SCREEN_SIZE_WALLET
 
 static void message_update(bool confirm) {
     char *buf;
     size_t buf_size;
     size_t buf_off;
     bool flag;
+    bool skippable;
 
     buf = get_ui_pairs_buffer(&buf_size);
     if (confirm) {
@@ -63,11 +73,12 @@ static void message_update(bool confirm) {
             pairs[pair_idx].value = memmove(buf + buf_idx, strings.tmp.tmp, buf_off);
             buf_idx += buf_off;
             pair_idx += 1;
+            skippable = warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN);
             pairs_list.nbPairs =
-                nbgl_useCaseGetNbTagValuesInPageExt(pair_idx, &pairs_list, 0, !filtered, &flag);
+                nbgl_useCaseGetNbTagValuesInPageExt(pair_idx, &pairs_list, 0, skippable, &flag);
         }
         if (!review_skipped && ((pair_idx == ARRAYLEN(pairs)) || (pairs_list.nbPairs < pair_idx))) {
-            nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, review_skip);
+            nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, skip_callback);
         } else {
             message_progress(true);
         }
@@ -76,32 +87,50 @@ static void message_update(bool confirm) {
     }
 }
 
-static void ui_712_start_common(bool has_filtering) {
+static void ui_712_start_common(void) {
     explicit_bzero(&pairs, sizeof(pairs));
     explicit_bzero(&pairs_list, sizeof(pairs_list));
     pairs_list.pairs = pairs;
     pair_idx = 0;
     buf_idx = 0;
-    filtered = has_filtering;
     review_skipped = false;
+#ifdef SCREEN_SIZE_WALLET
+    skip_callback = review_skip;
+#endif  // SCREEN_SIZE_WALLET
+    if (appState != APP_STATE_IDLE) {
+        reset_app_context();
+    }
+    appState = APP_STATE_SIGNING_TIP712;
+    explicit_bzero(&warning, sizeof(nbgl_warning_t));
 }
 
 void ui_712_start_unfiltered(void) {
-    ui_712_start_common(true);
-    nbgl_useCaseReviewStreamingBlindSigningStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
-                                                 &C_Review_64px,
-                                                 TEXT_REVIEW_TIP712,
-                                                 NULL,
-                                                 message_update);
+    ui_712_start_common();
+    warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
+    nbgl_useCaseAdvancedReviewStreamingStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
+                                             &ICON_APP_REVIEW,
+                                             "Review typed message",
+                                             NULL,
+                                             &warning,
+                                             message_update);
 }
 
 void ui_712_start(void) {
-    ui_712_start_common(true);
-    nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE,
-                                     &C_Review_64px,
-                                     TEXT_REVIEW_TIP712,
-                                     NULL,
-                                     message_update);
+    ui_712_start_common();
+    if (warning.predefinedSet == 0) {
+        nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE,
+                                         &ICON_APP_REVIEW,
+                                         "Review typed message",
+                                         NULL,
+                                         message_update);
+    } else {
+        nbgl_useCaseAdvancedReviewStreamingStart(TYPE_MESSAGE,
+                                                 &ICON_APP_REVIEW,
+                                                 "Review typed message",
+                                                 NULL,
+                                                 &warning,
+                                                 message_update);
+    }
 }
 
 void ui_712_switch_to_message(void) {
@@ -112,10 +141,18 @@ void ui_712_switch_to_sign(void) {
     if (!review_skipped && (pair_idx > 0)) {
         pairs_list.nbPairs = pair_idx;
         pair_idx = 0;
-        nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, review_skip);
+        nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, skip_callback);
     } else {
-        nbgl_useCaseReviewStreamingFinish(filtered ? TEXT_SIGN_TIP712 : TEXT_BLIND_SIGN_TIP712,
-                                          ui_typed_message_review_choice);
+#ifdef SCREEN_SIZE_WALLET
+        if ((warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN))) {
+            snprintf(g_stax_shared_buffer, sizeof(g_stax_shared_buffer), "Accept risk and sign typed message?");
+        } else {
+            snprintf(g_stax_shared_buffer, sizeof(g_stax_shared_buffer), "Sign typed message?");
+        }
+#else
+        snprintf(g_stax_shared_buffer, sizeof(g_stax_shared_buffer), "Sign message");
+#endif
+        nbgl_useCaseReviewStreamingFinish(g_stax_shared_buffer, ui_typed_message_review_choice);
     }
 }
 
