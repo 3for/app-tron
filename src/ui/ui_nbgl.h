@@ -11,4 +11,15 @@
 #define BLIND_SIGN(msg)        "Accept risk and sign " msg "?"
 #define TEXT_BLIND_SIGN_TIP712 BLIND_SIGN(TEXT_TYPED_MESSAGE)
 void ui_settings(void);
+
+#ifdef SCREEN_SIZE_WALLET
+#define ICON_APP_WARNING C_Warning_64px
+#define ICON_APP_REVIEW  C_Review_64px
+#else
+#define ICON_APP_WARNING C_icon_warning
+#define ICON_APP_REVIEW  C_icon_certificate
+#endif
+
+extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
+
 #endif
