@@ -36,6 +36,7 @@ from client.tip712 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
 from utils import recover_message
 from web3 import Web3
+from ledgered.devices import Device
 '''
 Tron Protobuf
 '''
@@ -113,34 +114,22 @@ def tip712_new_common(firmware,
             builder.tip712_sign_new(client.getAccount(0)['path'])):
         moves = []
         if firmware.is_nano:
-            # need to skip the message hash
-            if not verbose_raw and filters is None:
-                moves += [NavInsID.RIGHT_CLICK] * 2
-            moves += [NavInsID.BOTH_CLICK]
+            nav_ins = NavInsID.RIGHT_CLICK
+            val_ins = NavInsID.BOTH_CLICK
+            text = "Sign message"
         else:
-            if not skip_flow:
-                # this move is necessary most of the times, but can't be 100% sure with the fields grouping
-                moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
-                # need to skip the message hash
-                if not verbose_raw and filters is None:
-                    moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
-            if extra_left:
-                moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
-            moves += [NavInsID.USE_CASE_REVIEW_CONFIRM]
+            nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
+            val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
+            text = "Hold to sign"
         if snapshots_dirname is not None:
-            # Could break (time-out) if given a JSON that requires less moves
-            # TODO: Maybe take list of moves as input instead of trying to guess them ?
-            navigator.navigate_and_compare(default_screenshot_path,
-                                           snapshots_dirname,
-                                           moves,
-                                           snap_start_idx=autonext_idx)
+            navigator.navigate_until_text_and_compare(nav_ins,
+                                                      [val_ins],
+                                                      text,
+                                                      default_screenshot_path,
+                                                      snapshots_dirname,
+                                                      snap_start_idx=autonext_idx)
         else:
-            # Do them one-by-one to prevent an unnecessary move from timing-out and failing the test
-            for move in moves:
-                navigator.navigate(
-                    [move],
-                    screen_change_before_first_instruction=False,
-                    screen_change_after_last_instruction=False)
+            navigator.navigate_until_text(nav_ins, [val_ins], text)
     # reset values
     unfiltered_flow = False
     skip_flow = False
@@ -898,7 +887,7 @@ class TestTRX():
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path, input_file: Path,
                             verbose_raw: bool, filtering: bool, 
-                            #golden_run: bool,
+                            golden_run: bool,
                             test_name: str):
 
         global unfiltered_flow
@@ -913,8 +902,8 @@ class TestTRX():
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
-        #test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
-        #snapshots_dirname = test_name
+        test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
+        snapshots_dirname = test_name
 
         filters = None
         if filtering:
@@ -953,8 +942,8 @@ class TestTRX():
                                     data,
                                     filters,
                                     verbose_raw,
-                                    #golden_run,
-                                    False,
+                                    golden_run,
+                                    #False,
                                     extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
 
