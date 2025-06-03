@@ -3,6 +3,8 @@ import pytest
 from ragger.conftest import configuration
 from ragger.backend import SpeculosBackend, BackendInterface
 from ragger.navigator import NavInsID, NavIns
+from pathlib import Path
+import re
 
 ###########################
 ### CONFIGURATION START ###
@@ -86,6 +88,13 @@ def configuration(backend: BackendInterface, navigator, firmware):
         navigator.navigate(instructions,
                            screen_change_before_first_instruction=False)
 
+@pytest.fixture(name="app_version")
+def app_version_fixture(request) -> tuple[int, int, int]:
+    with open(Path(__file__).parent.parent / "VERSION", encoding="utf-8") as f:
+        parsed = {}
+        first_line = f.readline().strip()
+        parsed = [int(part) for part in first_line.split('.')]
+    return (parsed[0], parsed[1], parsed[2])
 
 #########################
 ### CONFIGURATION END ###
