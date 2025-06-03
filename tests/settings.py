@@ -8,6 +8,7 @@ from ragger.navigator import Navigator, NavInsID, NavIns
 class SettingID(Enum):
     DATA_ALLOWED = auto()
     CUSTOM_CONTRACT = auto()
+    TRUNCATE_ADDRESS = auto()
     SIGN_BY_HASH = auto()
     VERBOSE_TIP712 = auto()
     TRUSTED_NAME = auto()
@@ -39,6 +40,7 @@ def get_device_settings(device: Device) -> list[SettingID]:
         return [
             SettingID.DATA_ALLOWED,
             SettingID.CUSTOM_CONTRACT,
+            SettingID.TRUNCATE_ADDRESS,
             SettingID.SIGN_BY_HASH,
             SettingID.VERBOSE_TIP712,
             SettingID.TRUSTED_NAME,
@@ -59,6 +61,7 @@ def get_settings_moves(device: Device,
     settings = get_device_settings(device)
     # Assume the app is on the 1st page of Settings
     if device.is_nano:
+        moves += [NavInsID.RIGHT_CLICK] # For "settings" is ux_idle_flow_3_step in BAGL.
         moves += [NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
         for setting in settings:
             if setting in to_toggle:

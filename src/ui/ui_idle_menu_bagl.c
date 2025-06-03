@@ -132,12 +132,12 @@ UX_DEF(ux_settings_flow,
        &ux_settings_flow_2_step,
        &ux_settings_flow_3_step,
        &ux_settings_flow_4_step,
+#ifdef HAVE_TIP712_FULL_SUPPORT  //change to match order with S_VERBOSE_TIP712 and S_TRUSTED_NAME
+       &ux_settings_flow_verbose_tip712_step,
+#endif  // HAVE_TIP712_FULL_SUPPORT
 #ifdef HAVE_TRUSTED_NAME
        &ux_settings_flow_verbose_trusted_name_step,
 #endif  // HAVE_TRUSTED_NAME
-#ifdef HAVE_TIP712_FULL_SUPPORT
-       &ux_settings_flow_verbose_tip712_step,
-#endif  // HAVE_TIP712_FULL_SUPPORT
        &ux_settings_flow_5_step);
 
 static void display_settings(const ux_flow_step_t* const start_step) {

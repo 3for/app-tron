@@ -32,9 +32,6 @@ def test_settings(device: Device,
                   setting: List[SettingID]):
     """Check the settings"""
 
-    if device.is_nano and SettingID.DATA_ALLOWED in setting:
-        pytest.skip("Skipping W3C on Nano")
-
     moves = get_settings_moves(device, setting)
     default_screenshot_path = Path(__file__).parent.resolve()
     navigator.navigate_and_compare(default_screenshot_path,
