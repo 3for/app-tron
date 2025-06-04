@@ -11,7 +11,7 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 import response_parser as ResponseParser
 from tron import TronClient
 from client.tip712.InputData import StatusWord, TrustedNameType, TrustedNameSource
-from settings import NanoSettingID, NonNanoSettingID, settings_toggle
+from settings import SettingID, settings_toggle
 from client.command_builder import CommandBuilder
 from client.tip712 import InputData as InputData
 
@@ -52,13 +52,13 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
                          scenario_navigator: NavigateWithScenario,
                          verbose_ens: bool, test_name: str):
     app_client = TronClient(backend, firmware, navigator)
+    device = backend.device
     cmd_builder = CommandBuilder()
     challenge = common(firmware, app_client, cmd_builder)
 
     if verbose_ens:
-        settings_toggle(firmware, navigator, [
-            NanoSettingID.VERBOSE_ENS
-            if firmware.is_nano else NonNanoSettingID.VERBOSE_ENS
+        settings_toggle(device, navigator, [
+            SettingID.TRUSTED_NAME
         ])
         test_name += "_verbose"
 
