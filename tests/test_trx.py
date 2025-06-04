@@ -37,6 +37,7 @@ from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_
 from utils import recover_message
 from web3 import Web3
 from ledgered.devices import Device
+from ragger.firmware.touch.positions import POSITIONS
 '''
 Tron Protobuf
 '''
