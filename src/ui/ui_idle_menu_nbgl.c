@@ -59,11 +59,11 @@ static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_DATA_ALLOWED,
     S_CUSTOM_CONTRACT,
     S_SIGN_BY_HASH,
+#ifdef HAVE_TIP712_FULL_SUPPORT // change to match above token order
+    S_VERBOSE_TIP712,
+#endif
 #ifdef HAVE_TRUSTED_NAME
     S_TRUSTED_NAME,
-#endif
-#ifdef HAVE_TIP712_FULL_SUPPORT
-    S_VERBOSE_TIP712,
 #endif
 };
 static nbgl_layoutSwitch_t switches[NB_SETTINGS_SWITCHES] = {0};
