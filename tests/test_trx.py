@@ -243,7 +243,6 @@ class TestTRX():
         assert (minor == int(version[0][1]))
         assert (patch == int(version[0][2]))
 
-    @contextmanager
     def test_trx_send(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
