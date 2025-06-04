@@ -70,11 +70,12 @@ UX_STEP_INIT(
 );
 UX_STEP_CB(
     ux_712_step_approve,
-    pb,
+    pbb,
     _approve_cb(),
     {
       &C_icon_validate_14,
       "Approve",
+      "and sign", // the same text info with ux_712_step_approve_risky(the last sign screen)
     });
 UX_STEP_CB(
     ux_712_step_approve_risky,
