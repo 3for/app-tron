@@ -99,7 +99,7 @@ app_client = None
 cmd_builder: CommandBuilder = None
 filtering_paths: dict = {}
 filtering_tokens: list[dict] = []
-current_path: list[str] = list()
+current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
 
 
@@ -374,8 +374,7 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
         idx = 0
         for subdata in data:
             current_path.append("[]")
-            if not evaluate_field(structs, subdata, field, lvls_left - 1,
-                                  False):
+            if not evaluate_field(structs, subdata, field, lvls_left - 1, False):
                 return False
             current_path.pop()
             idx += 1
@@ -403,8 +402,7 @@ def send_struct_impl(structs, data, structname):
 
     struct = structs[structname]
     for f in struct:
-        if not evaluate_field(structs, data[f["name"]], f, len(
-                f["array_lvls"])):
+        if not evaluate_field(structs, data[f["name"]], f, len(f["array_lvls"])):
             return False
     return True
 
@@ -624,7 +622,9 @@ def process_data(aclient,
     global cmd_builder
     global autonext_handler
     global is_golden_run
+    global current_path
 
+    current_path = [] # init to be empty
     # deepcopy because this function modifies the dict
     data_json = copy.deepcopy(data_json)
     app_client = aclient
