@@ -29,7 +29,7 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 
     // Add info to buffer
     uint8_t resp[4] = {0};
-    resp[0] = N_settings & 0x0f;
+    resp[0] = N_settings & 0x7f; // More than 4 settings now, the highest bit is reserved for S_INITIALIZED
     resp[1] = MAJOR_VERSION;
     resp[2] = MINOR_VERSION;
     resp[3] = PATCH_VERSION;
