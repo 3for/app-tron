@@ -43,6 +43,7 @@ def apduMessage(INS, P1, P2, PATH, MESSAGE):
 
 def ledgerSign(PATH, tx, tokenSignature=[]):
     raw_tx = tx.raw_data.SerializeToString().hex()
+    print(raw_tx)
     # Sign in chunks
     chunkList = list(chunks(raw_tx, 410))
     if len(tokenSignature) > 0:
@@ -131,7 +132,7 @@ stub = WalletStub(channel)
 logger.debug('''
    Tron Transactions tests
 ''')
-
+""" 
 ############
 # Send TRX #
 ############
@@ -156,8 +157,8 @@ else:
     sys.exit(0)
 
 # Broadcast Example
-#tx.transaction.signature.extend([bytes(result[0:65])])
-#r = stub.BroadcastTransaction(tx.transaction)
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ######################
 # Send TRX with DATA #
@@ -192,6 +193,10 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
 ####################
 # Send TRC10 Token #
 ####################
@@ -199,7 +204,7 @@ logger.debug('\n\nTransfer Asset Contract:')
 
 tx = stub.TransferAsset2(
     contract.TransferAssetContract(
-        asset_name="1000166".encode(),
+        asset_name="1005466".encode(),
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
         amount=1))
@@ -216,7 +221,13 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
-#######################################
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction) """
+
+### Can't emulate the tokenSignature valid in Nile testnet.
+### Omit this case.
+""" #######################################
 # Send TRC10 Token with Name/Decimals #
 #######################################
 logger.debug('\n\nTransfer Asset Contract with Name/Decimals:')
@@ -242,27 +253,22 @@ if (validSignature):
     logger.debug('- Valid: {}'.format(validSignature))
 else:
     logger.error('- Valid: {}'.format(validSignature))
-    sys.exit(0)
+    sys.exit(0) """
 
-#########################
+""" #########################
 # TRC10 Exchange Create #
 #########################
 logger.debug('\n\nExchange Create Contract:')
 
-tx = tron.Transaction()
-newContract = contract.ExchangeCreateContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    first_token_id="_".encode(),
-    first_token_balance=10000000000,
-    second_token_id="1000166".encode(),
-    second_token_balance=10000000)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ExchangeCreateContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.ExchangeCreate(
+    contract.ExchangeCreateContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        first_token_id="_".encode(),
+        first_token_balance=1000000,
+        second_token_id="1005466".encode(),
+        second_token_balance=1000000))
 
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -273,6 +279,10 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ########################################
 # TRC10 Exchange Create with Token Name#
@@ -316,23 +326,14 @@ else:
 #########################
 logger.debug('\n\nExchange Inject Contract:')
 
-tx = tron.Transaction()
-newContract = contract.ExchangeInjectContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                              exchange_id=6,
-                                              token_id="1000166".encode(),
-                                              quant=10000000)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ExchangeInjectContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.ExchangeInject(
+    contract.ExchangeInjectContract(owner_address=bytes.fromhex(
+        accounts[1]['addressHex']),
+        exchange_id=91,
+        token_id="1005466".encode(),
+        quant=1000000))
 
-# Exchange 6 CCT <-> TRX
-exchangeSignature = [
-    "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
-]
-raw_tx, result = ledgerSign(accounts[1]['path'], tx, exchangeSignature)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -343,29 +344,24 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ###########################
 # TRC10 Exchange Withdraw #
 ###########################
 logger.debug('\n\nExchange Withdraw Contract:')
 
-tx = tron.Transaction()
-newContract = contract.ExchangeWithdrawContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                                exchange_id=6,
-                                                token_id="1000166".encode(),
-                                                quant=1000000)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ExchangeWithdrawContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.ExchangeWithdraw(
+    contract.ExchangeWithdrawContract(owner_address=bytes.fromhex(
+        accounts[1]['addressHex']),
+        exchange_id=91,
+        token_id="1005466".encode(),
+        quant=200000))
 
-# Exchange 6 CCT <-> TRX
-exchangeSignature = [
-    "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
-]
-raw_tx, result = ledgerSign(accounts[1]['path'], tx, exchangeSignature)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -376,30 +372,25 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction) """
 
 ##############################
 # TRC10 Exchange Transaction #
 ##############################
 logger.debug('\n\nExchange Transaction Contract:')
 
-tx = tron.Transaction()
-newContract = contract.ExchangeTransactionContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                                   exchange_id=6,
-                                                   token_id="1000166".encode(),
-                                                   quant=10000,
-                                                   expected=100)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ExchangeTransactionContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.ExchangeTransaction(
+    contract.ExchangeTransactionContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        exchange_id=91,
+        token_id="1005466".encode(),
+        quant=10000,
+        expected=100))
 
-# Exchange 6 CCT <-> TRX
-exchangeSignature = [
-    "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
-]
-raw_tx, result = ledgerSign(accounts[1]['path'], tx, exchangeSignature)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -410,6 +401,10 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction) """
 
 ################
 # Vote Witness #
