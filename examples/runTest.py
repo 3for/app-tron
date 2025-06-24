@@ -375,7 +375,7 @@ else:
 
 # Broadcast
 tx.transaction.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx.transaction) """
+r = stub.BroadcastTransaction(tx.transaction)
 
 ##############################
 # TRC10 Exchange Transaction #
