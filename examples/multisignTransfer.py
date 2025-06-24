@@ -113,7 +113,7 @@ logger.debug('''
 print(stub.GetNowBlock2(EmptyMessage()))
 
 req = TransferContract()
-req.owner_address = ADDR("TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH")
+req.owner_address = ADDR("THrZxZgDH9ZuhLZq6HP61LZJJc7cYbifwZ")
 req.to_address = ADDR("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")
 req.amount = 100000
 tx = stub.CreateTransaction2(req)
