@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 import sys
 
+# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
+# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
+# `python3 multisignTransfer.py`
 sys.path.append("./examples/proto")
 
 from pprint import pprint
@@ -95,7 +98,7 @@ logger.debug('-= Tron Ledger =-')
 Tron Protobuf
 '''
 from tron_sdk_py.proto.api import api_pb2 as api
-from tron_sdk_py.proto.core.contract_pb2 import TransferContract
+from tron_sdk_py.proto.core.contract.balance_contract_pb2 import TransferContract
 from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
 from tron_sdk_py.types import HEX, ADDR
 from tron_sdk_py.proto.api.api_pb2 import EmptyMessage # , AccountAddressMessage, BytesMessage

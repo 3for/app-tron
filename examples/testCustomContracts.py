@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 import sys
 
+# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
+# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
+# `python3 testCustomContracts.py`
 sys.path.append("./examples/proto")
 
 from pprint import pprint
