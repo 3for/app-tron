@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 import sys
 
+# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
+# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
+# `python3 runTest.py`
 sys.path.append("./examples/proto")
 
 from pprint import pprint
@@ -118,10 +121,10 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core import contract_pb2 as contract
+from tron_sdk_py.proto.core.contract import balance_contract_pb2 as contract
 from tron_sdk_py.proto.api import api_pb2 as api
 from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
-from tron_sdk_py.proto.core import chain_pb2 as tron
+from tron_sdk_py.proto.core import Tron_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 
@@ -132,7 +135,7 @@ stub = WalletStub(channel)
 logger.debug('''
    Tron Transactions tests
 ''')
-""" 
+
 ############
 # Send TRX #
 ############
@@ -159,7 +162,7 @@ else:
 # Broadcast Example
 tx.transaction.signature.extend([bytes(result[0:65])])
 r = stub.BroadcastTransaction(tx.transaction)
-
+""" 
 ######################
 # Send TRX with DATA #
 ######################
@@ -406,6 +409,33 @@ else:
 tx.transaction.signature.extend([bytes(result[0:65])])
 r = stub.BroadcastTransaction(tx.transaction) """
 
+#####################
+# Freeze Balance BW #
+#####################
+logger.debug('\n\nFreeze Contract bandwidth:')
+
+tx = stub.FreezeBalanceV2(
+    contract.FreezeBalanceV2Contract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        frozen_balance=100000000,
+        resource=contract.BANDWIDTH))
+
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
+validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
+                                                  accounts[1]['publicKey'][2:])
+logger.debug('- RAW: {}'.format(raw_tx))
+logger.debug('- txID: {}'.format(txID))
+logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
+if (validSignature):
+    logger.debug('- Valid: {}'.format(validSignature))
+else:
+    logger.error('- Valid: {}'.format(validSignature))
+    sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
 ################
 # Vote Witness #
 ################
@@ -457,34 +487,6 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
-#####################
-# Freeze Balance BW #
-#####################
-logger.debug('\n\nFreeze Contract bandwidth:')
-
-tx = tron.Transaction()
-newContract = contract.FreezeBalanceContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                             frozen_balance=10000000000,
-                                             frozen_duration=3,
-                                             resource=contract.BANDWIDTH)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.FreezeBalanceContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
-validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
-                                                  accounts[1]['publicKey'][2:])
-logger.debug('- RAW: {}'.format(raw_tx))
-logger.debug('- txID: {}'.format(txID))
-logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
-if (validSignature):
-    logger.debug('- Valid: {}'.format(validSignature))
-else:
-    logger.error('- Valid: {}'.format(validSignature))
-    sys.exit(0)
 
 #################################
 # Freeze Balance Delegate Energy#
