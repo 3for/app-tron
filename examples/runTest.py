@@ -46,7 +46,8 @@ def apduMessage(INS, P1, P2, PATH, MESSAGE):
 
 def ledgerSign(PATH, tx, tokenSignature=[]):
     raw_tx = tx.raw_data.SerializeToString().hex()
-    print(raw_tx)
+    print("tx info: " + raw_tx)
+    print("tx len: " + str(len(raw_tx)))
     # Sign in chunks
     chunkList = list(chunks(raw_tx, 410))
     if len(tokenSignature) > 0:
@@ -121,7 +122,14 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core.contract import balance_contract_pb2 as contract
+from tron_sdk_py.proto.core.contract import balance_contract_pb2 as balance_contract
+from tron_sdk_py.proto.core.contract import asset_issue_contract_pb2 as asset_issue_contract
+from tron_sdk_py.proto.core.contract import exchange_contract_pb2 as exchange_contract
+from tron_sdk_py.proto.core.contract import witness_contract_pb2 as witness_contract
+from tron_sdk_py.proto.core.contract import proposal_contract_pb2 as proposal_contract
+from tron_sdk_py.proto.core.contract import account_contract_pb2 as account_contract
+from tron_sdk_py.proto.core.contract import smart_contract_pb2 as smart_contract
+from tron_sdk_py.proto.core.contract import common_pb2 as common
 from tron_sdk_py.proto.api import api_pb2 as api
 from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
 from tron_sdk_py.proto.core import Tron_pb2 as tron
@@ -136,13 +144,13 @@ logger.debug('''
    Tron Transactions tests
 ''')
 
-############
+""" ############
 # Send TRX #
 ############
 logger.debug('\n\nTransfer Contract:')
 
 tx = stub.CreateTransaction2(
-    contract.TransferContract(
+    balance_contract.TransferContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
         amount=1))
@@ -162,7 +170,7 @@ else:
 # Broadcast Example
 tx.transaction.signature.extend([bytes(result[0:65])])
 r = stub.BroadcastTransaction(tx.transaction)
-""" 
+
 ######################
 # Send TRX with DATA #
 ######################
@@ -177,7 +185,7 @@ if dataAllowed == 0:
     sys.exit(0)
 
 tx = stub.CreateTransaction2(
-    contract.TransferContract(
+    balance_contract.TransferContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
         amount=1))
@@ -206,7 +214,7 @@ r = stub.BroadcastTransaction(tx.transaction)
 logger.debug('\n\nTransfer Asset Contract:')
 
 tx = stub.TransferAsset2(
-    contract.TransferAssetContract(
+    asset_issue_contract.TransferAssetContract(
         asset_name="1005466".encode(),
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
@@ -236,7 +244,7 @@ r = stub.BroadcastTransaction(tx.transaction) """
 logger.debug('\n\nTransfer Asset Contract with Name/Decimals:')
 
 tx = stub.TransferAsset2(
-    contract.TransferAssetContract(
+    asset_issue_contract.TransferAssetContract(
         asset_name="1002000".encode(),
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         to_address=bytes.fromhex(accounts[0]['addressHex']),
@@ -264,7 +272,7 @@ else:
 logger.debug('\n\nExchange Create Contract:')
 
 tx = stub.ExchangeCreate(
-    contract.ExchangeCreateContract(
+    exchange_contract.ExchangeCreateContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         first_token_id="_".encode(),
         first_token_balance=1000000,
@@ -293,7 +301,7 @@ r = stub.BroadcastTransaction(tx.transaction)
 logger.debug('\n\nExchange Create Contract with token name:')
 
 tx = tron.Transaction()
-newContract = contract.ExchangeCreateContract(
+newContract = exchange_contract.ExchangeCreateContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
     first_token_id="_".encode(),
     first_token_balance=10000000000,
@@ -330,7 +338,7 @@ else:
 logger.debug('\n\nExchange Inject Contract:')
 
 tx = stub.ExchangeInject(
-    contract.ExchangeInjectContract(owner_address=bytes.fromhex(
+    exchange_contract.ExchangeInjectContract(owner_address=bytes.fromhex(
         accounts[1]['addressHex']),
         exchange_id=91,
         token_id="1005466".encode(),
@@ -358,7 +366,7 @@ r = stub.BroadcastTransaction(tx.transaction)
 logger.debug('\n\nExchange Withdraw Contract:')
 
 tx = stub.ExchangeWithdraw(
-    contract.ExchangeWithdrawContract(owner_address=bytes.fromhex(
+    exchange_contract.ExchangeWithdrawContract(owner_address=bytes.fromhex(
         accounts[1]['addressHex']),
         exchange_id=91,
         token_id="1005466".encode(),
@@ -386,7 +394,7 @@ r = stub.BroadcastTransaction(tx.transaction)
 logger.debug('\n\nExchange Transaction Contract:')
 
 tx = stub.ExchangeTransaction(
-    contract.ExchangeTransactionContract(
+    exchange_contract.ExchangeTransactionContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         exchange_id=91,
         token_id="1005466".encode(),
@@ -407,7 +415,7 @@ else:
 
 # Broadcast
 tx.transaction.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx.transaction) """
+r = stub.BroadcastTransaction(tx.transaction)
 
 #####################
 # Freeze Balance BW #
@@ -415,10 +423,10 @@ r = stub.BroadcastTransaction(tx.transaction) """
 logger.debug('\n\nFreeze Contract bandwidth:')
 
 tx = stub.FreezeBalanceV2(
-    contract.FreezeBalanceV2Contract(
+    balance_contract.FreezeBalanceV2Contract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         frozen_balance=100000000,
-        resource=contract.BANDWIDTH))
+        resource=common.BANDWIDTH))
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
@@ -434,47 +442,33 @@ else:
 
 # Broadcast
 tx.transaction.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx.transaction)
+r = stub.BroadcastTransaction(tx.transaction) """
 
 ################
 # Vote Witness #
 ################
-logger.debug('\n\nVote Witness Contract:')
+logger.debug('\n\nVote Witness Contract, make sure to use the right SRs:')
 
-tx = tron.Transaction()
-newContract = contract.VoteWitnessContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']))
-tx.raw_data.ref_block_bytes = b'0000'
-tx.raw_data.timestamp = 110101010101
-# Vote list
-v1 = newContract.votes.add()
-v1.vote_address = bytes.fromhex(
-    address_hex("TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"))
-v1.vote_count = 1
-v2 = newContract.votes.add()
-v2.vote_address = bytes.fromhex(
-    address_hex("TE7hnUtWRRBz3SkFrX8JESWUmEvxxAhoPt"))
-v2.vote_count = 1
-v3 = newContract.votes.add()
-v3.vote_address = bytes.fromhex(
-    address_hex("TTcYhypP8m4phDhN6oRexz2174zAerjEWP"))
-v3.vote_count = 1000
-v4 = newContract.votes.add()
-v4.vote_address = bytes.fromhex(
-    address_hex("TY65QiDt4hLTMpf3WRzcX357BnmdxT2sw9"))
-v4.vote_count = 1000
-v5 = newContract.votes.add()
-v5.vote_address = bytes.fromhex(
-    address_hex("TSNbzxac4WhxN91XvaUfPTKP2jNT18mP6T"))
-v5.vote_count = 1000
-# End vote list
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.VoteWitnessContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.VoteWitnessAccount(
+    witness_contract.VoteWitnessContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        votes=[
+            witness_contract.VoteWitnessContract.Vote(
+                vote_address = bytes.fromhex(address_hex("TEp1ru7opCexkbFM9ChK6DFfL2XFSfUo2N")),
+                vote_count = 1
+            ),
+            witness_contract.VoteWitnessContract.Vote(
+                vote_address = bytes.fromhex(address_hex("TFFLWM7tmKiwGtbh2mcz2rBssoFjHjSShG")),
+                vote_count = 1
+            ),
+            witness_contract.VoteWitnessContract.Vote(
+                vote_address = bytes.fromhex(address_hex("TPffmvjxEcvZefQqS7QYvL1Der3uiguikE")),
+                vote_count = 1
+            ),
+        ]
+        ))
 
-print(tx.raw_data.SerializeToString().hex())
+print(tx)
 raw_tx, result = ledgerSign(accounts[1]['path'], tx)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
@@ -487,6 +481,9 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
+# Broadcast
+tx.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx)
 
 #################################
 # Freeze Balance Delegate Energy#
@@ -494,11 +491,11 @@ else:
 logger.debug('\n\nFreeze Contract delegate energy:')
 
 tx = tron.Transaction()
-newContract = contract.FreezeBalanceContract(
+newContract = balance_contract.FreezeBalanceContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
     frozen_balance=10000000000,
     frozen_duration=3,
-    resource=contract.ENERGY,
+    resource=common.ENERGY,
     receiver_address=bytes.fromhex(accounts[0]['addressHex']),
 )
 c = tx.raw_data.contract.add()
@@ -525,9 +522,9 @@ else:
 logger.debug('\n\nUnfreeze Contract bandwidth:')
 
 tx = tron.Transaction()
-newContract = contract.UnfreezeBalanceContract(owner_address=bytes.fromhex(
+newContract = balance_contract.UnfreezeBalanceContract(owner_address=bytes.fromhex(
     accounts[1]['addressHex']),
-                                               resource=contract.BANDWIDTH)
+                                               resource=common.BANDWIDTH)
 c = tx.raw_data.contract.add()
 c.type = tron.Transaction.Contract.UnfreezeBalanceContract
 param = Any()
@@ -552,9 +549,9 @@ else:
 logger.debug('\n\nUnfreeze Contract delegate energy:')
 
 tx = tron.Transaction()
-newContract = contract.UnfreezeBalanceContract(
+newContract = balance_contract.UnfreezeBalanceContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    resource=contract.ENERGY,
+    resource=common.ENERGY,
     receiver_address=bytes.fromhex(accounts[0]['addressHex']),
 )
 c = tx.raw_data.contract.add()
@@ -582,7 +579,7 @@ else:
 logger.debug('\n\nWidthdraw Balance:')
 
 tx = tron.Transaction()
-newContract = contract.WithdrawBalanceContract(
+newContract = balance_contract.WithdrawBalanceContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']))
 c = tx.raw_data.contract.add()
 c.type = tron.Transaction.Contract.WithdrawBalanceContract
@@ -609,7 +606,7 @@ else:
 logger.debug('\n\Proposal Create Contract:')
 
 tx = tron.Transaction()
-newContract = contract.ProposalCreateContract(owner_address=bytes.fromhex(
+newContract = proposal_contract.ProposalCreateContract(owner_address=bytes.fromhex(
     accounts[1]['addressHex']), )
 newContract.parameters[1] = 10000000
 c = tx.raw_data.contract.add()
@@ -638,7 +635,7 @@ logger.debug('\n\Proposal Approve Contract:')
 
 tx = tron.Transaction()
 
-newContract = contract.ProposalApproveContract(owner_address=bytes.fromhex(
+newContract = proposal_contract.ProposalApproveContract(owner_address=bytes.fromhex(
     accounts[1]['addressHex']),
                                                proposal_id=10,
                                                is_add_approval=True)
@@ -669,7 +666,7 @@ logger.debug('\n\Proposal Delete Contract:')
 
 tx = tron.Transaction()
 
-newContract = contract.ProposalDeleteContract(
+newContract = proposal_contract.ProposalDeleteContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
     proposal_id=10,
 )
@@ -699,7 +696,7 @@ logger.debug('\n\Account Update Contract:')
 
 tx = tron.Transaction()
 
-newContract = contract.AccountUpdateContract(
+newContract = account_contract.AccountUpdateContract(
     account_name=b'CryptoChainTest',
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
 )
@@ -729,7 +726,7 @@ logger.debug('\n\SmartContract Trigger TRC20 Transfer:')
 
 tx = tron.Transaction()
 
-newContract = contract.TriggerSmartContract(
+newContract = smart_contract.TriggerSmartContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
     contract_address=bytes.fromhex(
         address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
@@ -764,7 +761,7 @@ logger.debug('\n\SmartContract Trigger TRC20 Approve Transfer:')
 
 tx = tron.Transaction()
 
-newContract = contract.TriggerSmartContract(
+newContract = smart_contract.TriggerSmartContract(
     owner_address=bytes.fromhex(accounts[1]['addressHex']),
     contract_address=bytes.fromhex(
         address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
