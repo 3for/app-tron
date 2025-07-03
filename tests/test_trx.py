@@ -415,6 +415,17 @@ class TestTRX():
         ]
         self.sign_and_validate(client, firmware, 0, tx, exchangeSignature)
 
+    def test_trx_create_witness(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        print(client.getAccount(0)['addressHex'])
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                url="http://sr-1t.com".encode()
+                ))
+        self.sign_and_validate(client, firmware, 0, tx)
     def test_trx_vote_witness(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(

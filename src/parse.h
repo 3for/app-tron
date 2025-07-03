@@ -27,6 +27,7 @@
 #define MAX_TOKEN_LENGTH         67
 
 #define NETWORK_STRING_MAX_SIZE 16
+#define MAX_URL_SIZE             256
 #ifdef TARGET_NANOS
 #define SHARED_CTX_FIELD_1_SIZE 100
 #else
@@ -43,6 +44,7 @@ typedef union {
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
     protocol_VoteWitnessContract vote_witness_contract;
+    protocol_WitnessCreateContract witness_create_contract;
     protocol_ProposalCreateContract proposal_create_contract;
     protocol_ExchangeCreateContract exchange_create_contract;
     protocol_ExchangeInjectContract exchange_inject_contract;
@@ -195,6 +197,7 @@ typedef struct txContent_t {
     uint8_t contractAddress[ADDRESS_SIZE];
     uint8_t TRC20Amount[32];
     uint8_t decimals[2];
+    uint8_t url[MAX_URL_SIZE];
     char tokenNames[2][MAX_TOKEN_LENGTH];
     uint8_t tokenNamesLength[2];
     uint8_t resource;
