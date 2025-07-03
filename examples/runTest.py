@@ -144,7 +144,7 @@ logger.debug('''
    Tron Transactions tests
 ''')
 
-""" ############
+############
 # Send TRX #
 ############
 logger.debug('\n\nTransfer Contract:')
@@ -649,7 +649,7 @@ else:
 
 # Broadcast
 tx.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx) """
+r = stub.BroadcastTransaction(tx)
 
 ###################
 # Proposal Create #
@@ -659,8 +659,11 @@ logger.debug('\n\Proposal Create Contract:')
 
 tx = stub.ProposalCreate(
     proposal_contract.ProposalCreateContract(
-        owner_address=bytes.fromhex(accounts[1]['addressHex']), 
-        parameters=[{"key": 0,"value": 100000},{"key": 1,"value": 2}],
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        parameters={
+            1: 100000,
+            2: 400000
+            },
         ))
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
@@ -685,20 +688,14 @@ r = stub.BroadcastTransaction(tx.transaction)
 # Delegate Only
 logger.debug('\n\Proposal Approve Contract:')
 
-tx = tron.Transaction()
+tx = stub.ProposalApprove(
+    proposal_contract.ProposalApproveContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        proposal_id=19819,
+        is_add_approval=True
+    ))
 
-newContract = proposal_contract.ProposalApproveContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                               proposal_id=10,
-                                               is_add_approval=True)
-
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ProposalApproveContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -709,6 +706,10 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ###################
 # Proposal Delete #
@@ -716,20 +717,13 @@ else:
 # Delegate Only
 logger.debug('\n\Proposal Delete Contract:')
 
-tx = tron.Transaction()
+tx = stub.ProposalDelete(
+    proposal_contract.ProposalDeleteContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        proposal_id=19819,
+    ))
 
-newContract = proposal_contract.ProposalDeleteContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    proposal_id=10,
-)
-
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ProposalDeleteContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -740,24 +734,21 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ##################
 # Account Update #
 ##################
 logger.debug('\n\Account Update Contract:')
 
-tx = tron.Transaction()
-
-newContract = account_contract.AccountUpdateContract(
-    account_name=b'CryptoChainTest',
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-)
-
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.AccountUpdateContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.UpdateAccount(
+    account_contract.AccountUpdateContract(
+        account_name=b'CryptoChainTest',
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+    ))
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
@@ -770,31 +761,26 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx)
 
 ##################
 # TRC20 Transfer #
 ##################
 logger.debug('\n\SmartContract Trigger TRC20 Transfer:')
 
-tx = tron.Transaction()
+tx = stub.TriggerContract(
+    smart_contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        contract_address=bytes.fromhex(
+            address_hex("TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf")),
+        data=bytes.fromhex(
+            "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
+        )))
 
-newContract = smart_contract.TriggerSmartContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    contract_address=bytes.fromhex(
-        address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
-    data=bytes.fromhex(
-        "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
-    ))
-
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.TriggerSmartContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-pprint(newContract)
-
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -805,31 +791,26 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ##################
 # TRC20 Approve  #
 ##################
 logger.debug('\n\SmartContract Trigger TRC20 Approve Transfer:')
 
-tx = tron.Transaction()
+tx = stub.TriggerContract(
+    smart_contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        contract_address=bytes.fromhex(
+            address_hex("TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf")),
+        data=bytes.fromhex(
+            "095ea7b3000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
+        )))
 
-newContract = smart_contract.TriggerSmartContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    contract_address=bytes.fromhex(
-        address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
-    data=bytes.fromhex(
-        "095ea7b3000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
-    ))
-
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.TriggerSmartContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-pprint(newContract)
-
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -840,3 +821,7 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
