@@ -33,6 +33,7 @@ char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to in
 char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 char addressSummary[40];
 char fullContract[MAX_TOKEN_LENGTH];
+char url[MAX_URL_SIZE];
 char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];

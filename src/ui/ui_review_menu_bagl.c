@@ -105,6 +105,28 @@ UX_DEF(ux_approval_st_data_warning_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
+UX_STEP_NOCB(ux_approval_tx_url_step,
+             bnnn_paging,
+             {
+                 .title = "Url",
+                 .text = url,
+             });
+
+UX_DEF(ux_approval_witnesscreate_flow,
+       &ux_approval_st_flow_1_step,
+       &ux_approval_from_address_step,
+       &ux_approval_tx_url_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_witnesscreate_data_warning_flow,
+       &ux_approval_st_flow_1_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_from_address_step,
+       &ux_approval_tx_url_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
 // TRANSFER
 //////////////////////////////////////////////////////////////////////
 UX_STEP_NOCB(ux_approval_tx_1_step,
@@ -960,6 +982,12 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
             ux_flow_init(
                 0,
                 ((data_warning == true) ? ux_approval_st_data_warning_flow : ux_approval_st_flow),
+                NULL);
+            break;
+        case APPROVAL_WITNESSCREATE_TRANSACTION:
+            ux_flow_init(
+                0,
+                ((data_warning == true) ? ux_approval_witnesscreate_data_warning_flow : ux_approval_witnesscreate_flow),
                 NULL);
             break;
         case APPROVAL_PERMISSION_UPDATE:
