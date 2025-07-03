@@ -37,6 +37,7 @@ static const char *stringLabelRecipientAddress = "To";
 static const char *stringLabelTxAmount = "Amount";
 static const char *stringLabelResource = "Resource";
 static const char *stringLabelHash = "Hash";
+static const char *stringLabelUrl = "Url";
 static const char *stringLabelGain = "Gain";
 
 // Enums and structs
@@ -221,6 +222,15 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelSenderAddress;
             txInfos.fields[1].value = fromAddress;
             pairList.nbPairs = 2;
+            break;
+        case APPROVAL_WITNESSCREATE_TRANSACTION:
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = fromAddress;
+            txInfos.fields[1].item = stringLabelUrl;
+            txInfos.fields[1].value = url;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nCreate Witness";
+            infoLongPress.text = "Sign transaction to\nCreate Witness";
             break;
         case APPROVAL_PERMISSION_UPDATE:
             txInfos.fields[0].item = stringLabelHash;

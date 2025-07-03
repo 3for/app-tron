@@ -37,6 +37,7 @@ extern char
 extern char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 extern char addressSummary[40];
 extern char fullContract[MAX_TOKEN_LENGTH];
+extern char url[MAX_URL_SIZE];
 extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];

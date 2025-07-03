@@ -442,7 +442,7 @@ else:
 
 # Broadcast
 tx.transaction.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx.transaction) """
+r = stub.BroadcastTransaction(tx.transaction)
 
 ################
 # Vote Witness #
@@ -485,26 +485,47 @@ else:
 tx.signature.extend([bytes(result[0:65])])
 r = stub.BroadcastTransaction(tx)
 
+#####################
+# Freeze Balance Energy #
+#####################
+logger.debug('\n\nFreeze Contract energy:')
+
+tx = stub.FreezeBalanceV2(
+    balance_contract.FreezeBalanceV2Contract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        frozen_balance=100000000,
+        resource=common.ENERGY))
+
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
+validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
+                                                  accounts[1]['publicKey'][2:])
+logger.debug('- RAW: {}'.format(raw_tx))
+logger.debug('- txID: {}'.format(txID))
+logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
+if (validSignature):
+    logger.debug('- Valid: {}'.format(validSignature))
+else:
+    logger.error('- Valid: {}'.format(validSignature))
+    sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
 #################################
 # Freeze Balance Delegate Energy#
 #################################
 logger.debug('\n\nFreeze Contract delegate energy:')
 
-tx = tron.Transaction()
-newContract = balance_contract.FreezeBalanceContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    frozen_balance=10000000000,
-    frozen_duration=3,
-    resource=common.ENERGY,
-    receiver_address=bytes.fromhex(accounts[0]['addressHex']),
-)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.FreezeBalanceContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.DelegateResource(
+    balance_contract.DelegateResourceContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        balance=30000000,
+        resource=common.ENERGY,
+        receiver_address=bytes.fromhex(accounts[0]['addressHex']),
+    ))
 
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -516,22 +537,22 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
-######################
-# Unfreeze Balance BW#
-######################
-logger.debug('\n\nUnfreeze Contract bandwidth:')
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
-tx = tron.Transaction()
-newContract = balance_contract.UnfreezeBalanceContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']),
-                                               resource=common.BANDWIDTH)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.UnfreezeBalanceContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+######################
+# Unfreeze Balance Energy#
+######################
+logger.debug('\n\nUnfreeze Contract energy:')
 
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+tx = stub.UnfreezeBalanceV2(
+    balance_contract.UnfreezeBalanceV2Contract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        unfreeze_balance=1000000,
+        resource=common.ENERGY))
+
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -542,24 +563,78 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ####################################
 # Unfreeze Balance Delegate Energy #
 ####################################
 logger.debug('\n\nUnfreeze Contract delegate energy:')
 
-tx = tron.Transaction()
-newContract = balance_contract.UnfreezeBalanceContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']),
-    resource=common.ENERGY,
-    receiver_address=bytes.fromhex(accounts[0]['addressHex']),
-)
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.UnfreezeBalanceContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.UnDelegateResource(
+    balance_contract.UnDelegateResourceContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        resource=common.ENERGY,
+        balance=10000000,
+        receiver_address=bytes.fromhex(accounts[0]['addressHex'])
+    ))
 
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
+validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
+                                                  accounts[1]['publicKey'][2:])
+logger.debug('- RAW: {}'.format(raw_tx))
+logger.debug('- txID: {}'.format(txID))
+logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
+if (validSignature):
+    logger.debug('- Valid: {}'.format(validSignature))
+else:
+    logger.error('- Valid: {}'.format(validSignature))
+    sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
+#####################
+# Widthdraw Balance # 
+#####################
+logger.debug('\n\nWidthdraw Balance:')
+
+tx = stub.WithdrawBalance2(
+    balance_contract.WithdrawBalanceContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex'])
+    ))
+
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
+validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
+                                                  accounts[1]['publicKey'][2:])
+logger.debug('- RAW: {}'.format(raw_tx))
+logger.debug('- txID: {}'.format(txID))
+logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
+if (validSignature):
+    logger.debug('- Valid: {}'.format(validSignature))
+else:
+    logger.error('- Valid: {}'.format(validSignature))
+    sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
+#####################
+# Apply SR Candidate # 
+#####################
+logger.debug('\n\nApply SR Candidate:')
+
+tx = stub.CreateWitness(
+    witness_contract.WitnessCreateContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']),
+        url="http://sr-1t.com".encode()
+    ))
+
+print(tx)
 raw_tx, result = ledgerSign(accounts[1]['path'], tx)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
@@ -572,32 +647,9 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
-#####################
-# Widthdraw Balance #
-#####################
-# Delegate Only
-logger.debug('\n\nWidthdraw Balance:')
-
-tx = tron.Transaction()
-newContract = balance_contract.WithdrawBalanceContract(
-    owner_address=bytes.fromhex(accounts[1]['addressHex']))
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.WithdrawBalanceContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
-
-raw_tx, result = ledgerSign(accounts[0]['path'], tx)
-validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
-                                                  accounts[0]['publicKey'][2:])
-logger.debug('- RAW: {}'.format(raw_tx))
-logger.debug('- txID: {}'.format(txID))
-logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
-if (validSignature):
-    logger.debug('- Valid: {}'.format(validSignature))
-else:
-    logger.error('- Valid: {}'.format(validSignature))
-    sys.exit(0)
+# Broadcast
+tx.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx) """
 
 ###################
 # Proposal Create #
@@ -605,17 +657,13 @@ else:
 # Delegate Only
 logger.debug('\n\Proposal Create Contract:')
 
-tx = tron.Transaction()
-newContract = proposal_contract.ProposalCreateContract(owner_address=bytes.fromhex(
-    accounts[1]['addressHex']), )
-newContract.parameters[1] = 10000000
-c = tx.raw_data.contract.add()
-c.type = tron.Transaction.Contract.ProposalCreateContract
-param = Any()
-param.Pack(newContract)
-c.parameter.CopyFrom(param)
+tx = stub.ProposalCreate(
+    proposal_contract.ProposalCreateContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex']), 
+        parameters=[{"key": 0,"value": 100000},{"key": 1,"value": 2}],
+        ))
 
-raw_tx, result = ledgerSign(accounts[1]['path'], tx)
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -626,6 +674,10 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ####################
 # Proposal Approve #

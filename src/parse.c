@@ -355,6 +355,62 @@ static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
+bool pb_decode_witness_create_contract_owner_address(pb_istream_t *stream,
+                                           const pb_field_t *field,
+                                           void **arg) {
+    UNUSED(field);
+
+    size_t left_url_size = stream->bytes_left;
+    if (left_url_size != ADDRESS_SIZE) {
+        return false;
+    }
+
+    txContent_t *content = *arg;
+    uint8_t buf[21];  // 21 bytes `owner_addres` + max 256 bytes `url`
+
+    // owner_address
+    if (!pb_read(stream, buf, ADDRESS_SIZE)) {
+        return false;
+    }
+    memmove(content->account, buf, ADDRESS_SIZE);
+
+    return true;
+}
+
+bool pb_decode_witness_create_contract_url(pb_istream_t *stream,
+                                           const pb_field_t *field,
+                                           void **arg) {
+    UNUSED(field);
+
+    size_t left_url_size = stream->bytes_left;
+    if (left_url_size > 256) {
+        return false;
+    }
+
+    txContent_t *content = *arg;
+    uint8_t buf[256];  // 21 bytes `owner_addres` + max 256 bytes `url`
+
+    // consume all left as url
+    if (!pb_read(stream, buf, left_url_size)) {
+        return false;
+    }
+    memmove(content->url, buf, left_url_size);
+
+    return true;
+}
+static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) {
+    msg.witness_create_contract.owner_address.funcs.decode = pb_decode_witness_create_contract_owner_address;
+    msg.witness_create_contract.owner_address.arg = content;
+    msg.witness_create_contract.url.funcs.decode = pb_decode_witness_create_contract_url;
+    msg.witness_create_contract.url.arg = content;
+
+    if (!pb_decode(stream, protocol_WitnessCreateContract_fields, &msg.witness_create_contract)) {
+        return false;
+    }
+
+    return true;
+}
+
 static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_FreezeBalanceContract_fields, &msg.freeze_balance_contract)) {
         return false;
@@ -814,6 +870,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
                 ret = account_permission_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
+                ret = witness_create_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;
