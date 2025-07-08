@@ -5,7 +5,6 @@ import sys
 # `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
 # `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
 # `python3 testCustomContracts.py`
-sys.path.append("./examples/proto")
 
 from pprint import pprint
 import logging
@@ -46,8 +45,9 @@ def apduMessage(INS, P1, P2, PATH, MESSAGE):
 
 def ledgerSign(PATH, tx, tokenSignature=[]):
     raw_tx = tx.raw_data.SerializeToString().hex()
+    print(len(raw_tx))
     # Sign in chunks
-    chunkList = list(chunks(raw_tx, 420))
+    chunkList = list(chunks(raw_tx, 430))
     if len(tokenSignature) > 0:
         chunkList.extend(tokenSignature)
 
@@ -120,15 +120,14 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core import contract_pb2 as contract
+from tron_sdk_py.proto.core.contract import smart_contract_pb2 as contract
 from tron_sdk_py.proto.api import api_pb2 as api
 from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
-from tron_sdk_py.proto.core import chain_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 
 # Start Channel and WalletStub
-channel = grpc.insecure_channel("grpc.trongrid.io:50051")
+channel = grpc.insecure_channel("grpc.nile.trongrid.io:50051")
 stub = WalletStub(channel)
 
 logger.debug('''
@@ -151,14 +150,13 @@ tx = stub.TriggerContract(
     contract.TriggerSmartContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         contract_address=bytes.fromhex(
-            address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+            address_hex("TJKh9Z9mbcGbEzMAYqzTLQjNbZHGKfKkFe")),
         call_value=1000000,
         data=bytes.fromhex(data)))
+#set tx fee_limit to avoid OUT_OF_ENERGY ERROR
+tx.transaction.raw_data.fee_limit=1000_000_000
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
-tx.transaction.signature.extend([bytes(result[0:65])])
-#r = stub.BroadcastTransaction(tx.transaction)
-
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -170,24 +168,28 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
+#broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+print(r)
+
 ######################
 # TWM Deposit Token  #
 ######################
-logger.debug('\n\SmartContract Trigger: Deposit BTT in TWM Contract')
+logger.debug('\n\SmartContract Trigger: Deposit TRN in TWM Contract')
 data = '{:08x}'.format(0xd0e30db0)
 tx = stub.TriggerContract(
     contract.TriggerSmartContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         contract_address=bytes.fromhex(
-            address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+            address_hex("TJKh9Z9mbcGbEzMAYqzTLQjNbZHGKfKkFe")),
         call_token_value=1000000,
-        token_id=1002000,
+        token_id=1005416,
         data=bytes.fromhex(data)))
+#set tx fee_limit to avoid OUT_OF_ENERGY ERROR
+tx.transaction.raw_data.fee_limit=1000_000_000
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
-tx.transaction.signature.extend([bytes(result[0:65])])
-#r = stub.BroadcastTransaction(tx.transaction)
-
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -198,6 +200,10 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+#broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
 ####################
 # TWM Withdraw TRX #
@@ -208,14 +214,13 @@ tx = stub.TriggerContract(
     contract.TriggerSmartContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         contract_address=bytes.fromhex(
-            address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+            address_hex("TJKh9Z9mbcGbEzMAYqzTLQjNbZHGKfKkFe")),
         data=bytes.fromhex(data)))
+#set tx fee_limit to avoid OUT_OF_ENERGY ERROR
+tx.transaction.raw_data.fee_limit=1000_000_000
 
 print("TriggerSmartContract tx info:", tx)
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
-tx.transaction.signature.extend([bytes(result[0:65])])
-#r = stub.BroadcastTransaction(tx.transaction)
-
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -227,26 +232,29 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
 
+#broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
 #######################
 # TWM Withdraw Token  #
 #######################
-logger.debug('\n\SmartContract Trigger: Withdraw BTT in TWM Contract')
+logger.debug('\n\SmartContract Trigger: Withdraw TRN in TWM Contract')
 data = '{:08x}{:064x}{:064x}'.format(
     0xa1afaf8e,
-    int(1002000),
+    int(1005416),
     int(1000000),
 )
 tx = stub.TriggerContract(
     contract.TriggerSmartContract(
         owner_address=bytes.fromhex(accounts[1]['addressHex']),
         contract_address=bytes.fromhex(
-            address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+            address_hex("TJKh9Z9mbcGbEzMAYqzTLQjNbZHGKfKkFe")),
         data=bytes.fromhex(data)))
+#set tx fee_limit to avoid OUT_OF_ENERGY ERROR
+tx.transaction.raw_data.fee_limit=1000_000_000
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
-tx.transaction.signature.extend([bytes(result[0:65])])
-#r = stub.BroadcastTransaction(tx.transaction)
-
 validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
                                                   accounts[1]['publicKey'][2:])
 logger.debug('- RAW: {}'.format(raw_tx))
@@ -257,3 +265,7 @@ if (validSignature):
 else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0)
+
+#broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
