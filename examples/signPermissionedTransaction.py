@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import sys
 
 # `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
 # `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
 # `python3 signPermissionedTransaction.py`
-sys.path.append("./examples/proto")
 
 from pprint import pprint
 import logging
@@ -96,11 +94,8 @@ logger.debug('-= Tron Ledger =-')
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core import contract_pb2 as contract
-from tron_sdk_py.proto.api import api_pb2 as api
+from tron_sdk_py.proto.core.contract import balance_contract_pb2 as balance_contract
 from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
-from tron_sdk_py.proto.core import chain_pb2 as tron
-from google.protobuf.any_pb2 import Any
 import grpc
 
 # Start Channel and WalletStub
@@ -112,9 +107,9 @@ logger.debug('''
 ''')
 
 tx = stub.CreateTransaction2(
-    contract.TransferContract(
+    balance_contract.TransferContract(
         owner_address=bytes.fromhex(
-            address_hex("TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH")),
+            address_hex("THrZxZgDH9ZuhLZq6HP61LZJJc7cYbifwZ")),
         to_address=bytes.fromhex(
             address_hex("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")),
         amount=100000))
@@ -123,7 +118,7 @@ if len(tx.transaction.raw_data.contract) > 0:
     # use permission 2
     tx.transaction.raw_data.contract[0].Permission_id = 2
 
-    raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
+    raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/1'/0/0"), tx.transaction)
 
     tx.transaction.signature.extend([bytes(sign1[0:65])])
     r = stub.BroadcastTransaction(tx.transaction)
