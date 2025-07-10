@@ -396,7 +396,7 @@ class TronClient:
         for signature in signatures:
             messages.append(bytearray.fromhex(signature))
 
-        # Send all the messages expect the last
+        # Send all the messages except the last
         for i, data in enumerate(messages[:-1]):
             if i == 0:
                 p1 = P1.FIRST
