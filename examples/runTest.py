@@ -234,7 +234,7 @@ else:
 
 # Broadcast
 tx.transaction.signature.extend([bytes(result[0:65])])
-r = stub.BroadcastTransaction(tx.transaction) """
+r = stub.BroadcastTransaction(tx.transaction)
 
 ### Can't emulate the tokenSignature valid in Nile testnet.
 ### Omit this case.
@@ -266,7 +266,7 @@ else:
     logger.error('- Valid: {}'.format(validSignature))
     sys.exit(0) """
 
-""" #########################
+#########################
 # TRC10 Exchange Create #
 #########################
 logger.debug('\n\nExchange Create Contract:')
@@ -579,6 +579,32 @@ tx = stub.UnDelegateResource(
         resource=common.ENERGY,
         balance=10000000,
         receiver_address=bytes.fromhex(accounts[0]['addressHex'])
+    ))
+
+raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
+validSignature, txID = validateSignature.validate(raw_tx, result[0:65],
+                                                  accounts[1]['publicKey'][2:])
+logger.debug('- RAW: {}'.format(raw_tx))
+logger.debug('- txID: {}'.format(txID))
+logger.debug('- Signature: {}'.format(binascii.hexlify(result[0:65])))
+if (validSignature):
+    logger.debug('- Valid: {}'.format(validSignature))
+else:
+    logger.error('- Valid: {}'.format(validSignature))
+    sys.exit(0)
+
+# Broadcast
+tx.transaction.signature.extend([bytes(result[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
+
+####################################
+# Withdraw Unfrozen Balance in Stake2.0 #
+####################################
+logger.debug('\n\nWithdraw unfrozen balance:')
+
+tx = stub.WithdrawExpireUnfreeze(
+    balance_contract.WithdrawExpireUnfreezeContract(
+        owner_address=bytes.fromhex(accounts[1]['addressHex'])
     ))
 
 raw_tx, result = ledgerSign(accounts[1]['path'], tx.transaction)
