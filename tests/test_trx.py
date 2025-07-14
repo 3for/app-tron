@@ -619,6 +619,47 @@ class TestTRX():
             ))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_account_permission_update(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountPermissionUpdateContract,
+            contract.AccountPermissionUpdateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                owner=tron.Permission(
+                    type=tron.Permission.Owner,
+                    permission_name="ownerA",
+                    threshold=1,
+                    keys=[
+                        tron.Key(
+                            address=bytes.fromhex(
+                                client.getAccount(0)['addressHex']),
+                            weight=1,
+                        ),
+                    ],
+                ),
+                actives=[
+                    tron.Permission(
+                        type=tron.Permission.Active,
+                        permission_name="activeA",
+                        threshold=2,
+                        operations=bytes.fromhex("7fff1fc0037e0000000000000000000000000000000000000000000000000000"),
+                        keys=[
+                            tron.Key(
+                                address=bytes.fromhex(
+                                    client.getAccount(0)['addressHex']),
+                                weight=1,
+                            ),
+                            tron.Key(
+                                address=bytes.fromhex(
+                                    client.getAccount(1)['addressHex']),
+                                weight=1,
+                            ),
+                        ],
+                    )],
+                ))
+        self.sign_and_validate(client, firmware, 0, tx)
+
     def test_trx_trc20_send(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
