@@ -36,10 +36,6 @@ def common(firmware: Firmware,
            app_client: TronClient,
            cmd_builder: CommandBuilder,
            get_challenge: bool = True) -> Optional[int]:
-
-    if firmware == Firmware.NANOS:
-        pytest.skip("Not supported on LNS")
-
     if get_challenge:
         challenge = app_client.exchange_raw(cmd_builder.get_challenge())
         return ResponseParser.challenge(challenge.data)

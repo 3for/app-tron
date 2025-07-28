@@ -47,33 +47,6 @@ static void switch_settings_truncate_address();
 static void switch_settings_sign_by_hash();
 static char settings_param_value[40];
 
-#if defined(TARGET_NANOS)
-
-UX_STEP_VALID(ux_settings_flow_1_step,
-              bnnn_paging,
-              switch_settings_contract_data(),
-              {
-                  .title = "Transactions Data",
-                  .text = settings_param_value,
-              });
-
-UX_STEP_VALID(ux_settings_flow_2_step,
-              bnnn_paging,
-              switch_settings_custom_contracts(),
-              {.title = "Custom Contracts", .text = settings_param_value + 12});
-
-UX_STEP_VALID(ux_settings_flow_3_step,
-              bnnn_paging,
-              switch_settings_truncate_address(),
-              {.title = "Truncate Address", .text = settings_param_value + 24});
-
-UX_STEP_VALID(ux_settings_flow_4_step,
-              bnnn_paging,
-              switch_settings_sign_by_hash(),
-              {.title = "Sign by Hash", .text = settings_param_value + 28});
-
-#else
-
 #ifdef HAVE_TRUSTED_NAME
 UX_STEP_CB(ux_settings_flow_verbose_trusted_name_step,
            bnnn,
@@ -116,8 +89,6 @@ UX_STEP_VALID(ux_settings_flow_4_step,
               bnnn,
               switch_settings_sign_by_hash(),
               {"Sign by Hash", "Allow hash-only", "transactions", settings_param_value + 28});
-
-#endif
 
 UX_STEP_VALID(ux_settings_flow_5_step,
               pb,
@@ -239,15 +210,6 @@ void ui_idle(void) {
     ux_flow_init(0, ux_idle_flow, NULL);
 }
 
-#ifdef TARGET_NANOS
-UX_STEP_CB(ux_error_blind_signing_step,
-           bnnn_paging,
-           ui_idle(),
-           {
-               "Error",
-               "Blind signing must be enabled in Settings",
-           });
-#else
 UX_STEP_CB(ux_error_blind_signing_step,
            pnn,
            ui_idle(),
@@ -256,7 +218,6 @@ UX_STEP_CB(ux_error_blind_signing_step,
                "Blind signing must be",
                "enabled in Settings",
            });
-#endif
 
 void ui_error_blind_signing(void) {
     ux_flow_init(0, ux_error_blind_signing_flow, NULL);

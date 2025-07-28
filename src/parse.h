@@ -28,11 +28,7 @@
 
 #define NETWORK_STRING_MAX_SIZE 16
 #define MAX_URL_SIZE             256
-#ifdef TARGET_NANOS
-#define SHARED_CTX_FIELD_1_SIZE 100
-#else
 #define SHARED_CTX_FIELD_1_SIZE 256
-#endif
 #define SHARED_CTX_FIELD_2_SIZE 40
 
 #define SHARED_BUFFER_SIZE SHARED_CTX_FIELD_1_SIZE
@@ -172,9 +168,7 @@ typedef union extraInfo_t {
     tokenDefinition_t token;
 // Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
 // and not plugins
-#ifndef TARGET_NANOS
     nftInfo_t nft;
-#endif
 } extraInfo_t;
 
 typedef struct transactionContext_t {
@@ -182,11 +176,9 @@ typedef struct transactionContext_t {
     uint8_t hash[HASH_SIZE];
     uint8_t signature[MAX_RAW_SIGNATURE];
     uint8_t signatureLength;
-#ifndef TARGET_NANOS
     union extraInfo_t extraInfo[MAX_ASSETS];
     bool assetSet[MAX_ASSETS];
     uint8_t currentAssetIndex;
-#endif
 } transactionContext_t;
 
 typedef struct txContent_t {

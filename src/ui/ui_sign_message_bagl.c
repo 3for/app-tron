@@ -45,20 +45,12 @@ UX_STEP_NOCB(ux_191_step_message,
              });
 UX_STEP_INIT(ux_191_step_dummy_pre, NULL, NULL, { dummy_pre_cb(); });
 UX_STEP_CB(ux_191_step_theres_more,
-#ifdef TARGET_NANOS
-           nn,
-#else
            nnn,
-#endif
            G_ux.stack[0].button_push_callback = NULL;  // disable button clicks
            skip_rest_of_message(),
            {
-#ifndef TARGET_NANOS
                "Press right to",
                "continue message",
-#else
-               "Press right to read",
-#endif
                "Double-press to skip"});
 UX_STEP_INIT(ux_191_step_dummy_post, NULL, NULL, { dummy_post_cb(); });
 UX_STEP_CB(ux_191_step_sign,
