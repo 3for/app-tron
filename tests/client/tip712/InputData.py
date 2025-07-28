@@ -595,9 +595,9 @@ def next_timeout(_signum: int, _frame):
 
 def enable_autonext():
     if app_client._client.firmware in (Firmware.STAX, Firmware.FLEX):
-        delay = 1 / 2
+        delay = 1*3 / 2
     else:
-        delay = 1 / 4
+        delay = 1*3 / 4
 
     # golden run has to be slower to make sure we take good snapshots
     # and not processing/loading screens

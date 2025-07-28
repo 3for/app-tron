@@ -42,7 +42,6 @@ VARIANT_VALUES = tron
 CURVE_APP_LOAD_PARAMS = secp256k1
 PATH_APP_LOAD_PARAMS = "44'/195'"  # purpose=coin(44) / coin_type=Tron(1)
 
-ICON_NANOS = icons/nanos_app_tron.gif
 ICON_NANOX = icons/nanox_app_tron.gif
 ICON_NANOSP = icons/nanox_app_tron.gif
 ICON_STAX = icons/stax_app_tron.gif
@@ -57,19 +56,16 @@ DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
 
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES	+= HAVE_TIP712_FULL_SUPPORT
-	DEFINES += HAVE_DYN_MEM_ALLOC
-endif
+DEFINES	+= HAVE_TIP712_FULL_SUPPORT
+DEFINES += HAVE_DYN_MEM_ALLOC
 
 # ENS
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES += HAVE_TRUSTED_NAME
-    TRUSTED_NAME_TEST_KEY ?= 0
-    ifneq ($(TRUSTED_NAME_TEST_KEY),0)
-        DEFINES += HAVE_TRUSTED_NAME_TEST_KEY
-    endif
+DEFINES += HAVE_TRUSTED_NAME
+TRUSTED_NAME_TEST_KEY ?= 0
+ifneq ($(TRUSTED_NAME_TEST_KEY),0)
+    DEFINES += HAVE_TRUSTED_NAME_TEST_KEY
 endif
+
 
 ifneq ($(CAL_TEST_KEY),0)
     # Key used in our test framework
