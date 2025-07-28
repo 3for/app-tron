@@ -66,13 +66,27 @@ ifneq ($(TRUSTED_NAME_TEST_KEY),0)
     DEFINES += HAVE_TRUSTED_NAME_TEST_KEY
 endif
 
+# Activate requested features
+# ---------------------------
+# Bypass the signature verification for provideTokenInfo calls
+BYPASS_SIGNATURES ?= 0
+ifneq ($(BYPASS_SIGNATURES),0)
+    DEFINES += HAVE_BYPASS_SIGNATURES
+endif
 
+# CryptoAssetsList key
+CAL_TEST_KEY ?= 0
 ifneq ($(CAL_TEST_KEY),0)
     # Key used in our test framework
     DEFINES += HAVE_CAL_TEST_KEY
 endif
+CAL_STAGING_KEY ?= 0
+ifneq ($(CAL_STAGING_KEY),0)
+    # Key used by the staging CAL
+    DEFINES += HAVE_CAL_STAGING_KEY
+endif
 
-DEFINES += APP_TICKER=\"$(TICKER)\" APP_CHAIN_ID=1151668124
+DEFINES += APP_TICKER=\"TRX\" APP_CHAIN_ID=1151668124
 
 .PHONY: proto
 proto:
@@ -91,3 +105,11 @@ SOURCE_FILES += $(NANOPB_DIR)/pb_encode.c $(NANOPB_DIR)/pb_decode.c $(NANOPB_DIR
 APP_SOURCE_PATH += proto
 
 include $(BOLOS_SDK)/Makefile.standard_app
+
+# CryptoAssetsList key
+ifneq (,$(filter $(DEFINES),HAVE_CAL_TEST_KEY))
+    ifneq (, $(filter $(DEFINES),HAVE_CAL_STAGING_KEY))
+        # Can't use both the staging and testing keys
+        $(error Multiple alternative CAL keys set at once)
+    endif
+endif
