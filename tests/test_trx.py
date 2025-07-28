@@ -916,8 +916,6 @@ class TestTRX():
         self.sign_and_validate(client, firmware, 0, tx)
 
     def test_trx_sign_personal_message(self, backend, firmware, navigator):
-        if firmware.device == 'nanos':
-            pytest.skip("Not supported on LNS")
         client = TronClient(backend, firmware, navigator)
         # Magic define
         SIGN_MAGIC = b'\x19TRON Signed Message:\n'
@@ -977,9 +975,6 @@ class TestTRX():
         client = TronClient(backend, firmware, navigator)
         device = backend.device
 
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
-
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
 
@@ -1038,8 +1033,6 @@ class TestTRX():
 
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
         cmd_builder = CommandBuilder()
         snapshots_dirname = test_name + data_set.suffix
 
@@ -1062,8 +1055,6 @@ class TestTRX():
 
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
 
         snapshots_dirname = test_name
         from dataset import filtering_empty_array_test_data
@@ -1089,8 +1080,6 @@ class TestTRX():
 
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
 
         from dataset import advanced_missing_token_test_data
         advanced_missing_token_test_data['filters']['tokens'] = tokens
@@ -1118,8 +1107,6 @@ class TestTRX():
 
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
 
         cmd_builder = CommandBuilder()
         if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
@@ -1159,8 +1146,7 @@ class TestTRX():
                                                default_screenshot_path: Path):
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        if firmware == Firmware.NANOS:
-            pytest.skip("Not supported on LNS")
+        
         setting_id = SettingID.SIGN_BY_HASH
         settings_toggle(device, navigator, [setting_id])
         cmd_builder = CommandBuilder()

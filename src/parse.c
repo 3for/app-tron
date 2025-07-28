@@ -900,7 +900,6 @@ err:
     return -1;
 }
 
-#ifndef TARGET_NANOS
 void forget_known_assets(void) {
     memset(tmpCtx.transactionContext.assetSet, false, MAX_ASSETS);
     tmpCtx.transactionContext.currentAssetIndex = 0;
@@ -948,4 +947,3 @@ void validate_current_asset_info(void) {
     tmpCtx.transactionContext.currentAssetIndex =
         (tmpCtx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
 }
-#endif
