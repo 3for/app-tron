@@ -1,5 +1,3 @@
-#if defined(HAVE_TIP712_FULL_SUPPORT) || defined(HAVE_GENERIC_TX_PARSER)
-
 #ifndef PROXY_INFO_H_
 #define PROXY_INFO_H_
 
@@ -38,5 +36,3 @@ const uint8_t *get_implem_contract(const uint64_t *chain_id,
                                    const uint8_t *selector);
 
 #endif  // PROXY_INFO_H_
-
-#endif

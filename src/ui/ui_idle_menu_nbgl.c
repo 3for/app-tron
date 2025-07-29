@@ -29,24 +29,17 @@ enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
-#ifdef HAVE_TIP712_FULL_SUPPORT
     SWITCH_TIP712_VERBOSE_TOKEN,
-#endif
-#ifdef HAVE_TRUSTED_NAME
     SWITCH_TRUSTED_NAME_VERBOSE_TOKEN,
-#endif
 };
 
 enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
-#ifdef HAVE_TIP712_FULL_SUPPORT //change to make same order for bagl and nbgl
+    //change to make same order for bagl and nbgl
     TIP712_VERBOSE_ID,
-#endif
-#ifdef HAVE_TRUSTED_NAME
     TRUSTED_NAME_VERBOSE_ID,
-#endif
     SETTINGS_SWITCHES_NB
 };
 
@@ -60,12 +53,9 @@ static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_DATA_ALLOWED,
     S_CUSTOM_CONTRACT,
     S_SIGN_BY_HASH,
-#ifdef HAVE_TIP712_FULL_SUPPORT // change to match above token order
+    // change to match above token order
     S_VERBOSE_TIP712,
-#endif
-#ifdef HAVE_TRUSTED_NAME
     S_TRUSTED_NAME,
-#endif
 };
 static nbgl_layoutSwitch_t switches[NB_SETTINGS_SWITCHES] = {0};
 
@@ -86,20 +76,16 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
                 (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
-#ifdef HAVE_TRUSTED_NAME
         case SWITCH_TRUSTED_NAME_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_TRUSTED_NAME);
             switches[TIP712_VERBOSE_ID].initState =
                 (HAS_SETTING(S_TRUSTED_NAME)) ? ON_STATE : OFF_STATE;
             break;
-#endif  // HAVE_TRUSTED_NAME
-#ifdef HAVE_TIP712_FULL_SUPPORT
         case SWITCH_TIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
             switches[TIP712_VERBOSE_ID].initState =
                 (HAS_SETTING(S_VERBOSE_TIP712)) ? ON_STATE : OFF_STATE;
             break;
-#endif  // HAVE_TIP712_FULL_SUPPORT
         default:
             PRINTF("Should not happen !");
             break;
@@ -143,22 +129,18 @@ void ui_idle(void) {
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
-#ifdef HAVE_TRUSTED_NAME
     switches[TRUSTED_NAME_VERBOSE_ID].initState =
         HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
     switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
     switches[TRUSTED_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
     switches[TRUSTED_NAME_VERBOSE_ID].token = SWITCH_TRUSTED_NAME_VERBOSE_TOKEN;
     switches[TRUSTED_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
-#endif  // HAVE_TRUSTED_NAME
 
-#ifdef HAVE_TIP712_FULL_SUPPORT
     switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
     switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
     switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
-#endif  // HAVE_TIP712_FULL_SUPPORT
 
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &APP_TRON_ICON,

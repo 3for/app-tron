@@ -1,4 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
 #include <stdint.h>
 
 #include "public_keys.h"
@@ -6,10 +5,7 @@
 #include "parse.h"
 #include "ui_globals.h"
 #include "app_errors.h"
-
-#ifdef HAVE_LEDGER_PKI
 #include "os_pki.h"
-#endif
 
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
@@ -64,9 +60,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
                                         sizeof(hash),
                                         LEDGER_SIGNATURE_PUBLIC_KEY,
                                         sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
-#ifdef HAVE_LEDGER_PKI
                                         CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
-#endif
                                         (uint8_t *) (workBuffer + offset),
                                         dataLength);
     if (error != CX_OK) {
@@ -81,5 +75,3 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 3);
     return 0;
 }
-
-#endif

@@ -1,8 +1,6 @@
 #ifndef TIP712_CTX_H_
 #define TIP712_CTX_H_
 
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdbool.h>
 #include "parse.h"
 
@@ -20,7 +18,5 @@ void tip712_context_deinit(void);
 
 typedef enum { NOT_INITIALIZED, INITIALIZED, DEFINED } e_struct_init;
 extern e_struct_init struct_state;
-
-#endif  // HAVE_TIP712_FULL_SUPPORT
 
 #endif  // TIP712_CTX_H_

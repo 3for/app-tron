@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <string.h>
 #include <stdint.h>
 #include "context_712.h"
@@ -75,5 +73,3 @@ void tip712_context_deinit(void) {
     tip712_context = NULL;
     reset_app_context();
 }
-
-#endif

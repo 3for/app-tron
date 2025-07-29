@@ -1,4 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
 #ifdef HAVE_NBGL
 #include <string.h>  // explicit_bzero
 #include "ui_logic.h"
@@ -173,4 +172,3 @@ void ui_typed_message_review_choice(bool confirm) {
 }
 
 #endif  // HAVE_NBGL
-#endif  // HAVE_TIP712_FULL_SUPPORT

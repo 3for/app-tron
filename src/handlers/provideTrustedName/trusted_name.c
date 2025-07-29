@@ -1,5 +1,3 @@
-#ifdef HAVE_TRUSTED_NAME
-
 #include <ctype.h>
 #include "trusted_name.h"
 #include "utils.h"    // SET_BIT
@@ -562,9 +560,7 @@ static bool verify_trusted_name_signature(const s_trusted_name_ctx *context) {
                                     sizeof(hash),
                                     pk,
                                     pk_size,
-#ifdef HAVE_LEDGER_PKI
                                     CERTIFICATE_PUBLIC_KEY_USAGE_TRUSTED_NAME,
-#endif
                                     (uint8_t *) (context->input_sig),
                                     context->input_sig_size) != CX_OK) {
         return false;
@@ -642,5 +638,3 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
            g_trusted_name_info.addr);
     return true;
 }
-
-#endif  // HAVE_TRUSTED_NAME

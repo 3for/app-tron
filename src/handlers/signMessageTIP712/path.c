@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdint.h>
 #include <string.h>
 #include "path.h"
@@ -783,5 +781,3 @@ bool path_init(void) {
 void path_deinit(void) {
     path_struct = NULL;
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT

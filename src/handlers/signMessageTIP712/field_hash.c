@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdlib.h>
 #include "field_hash.h"
 #include "encode_field.h"
@@ -290,5 +288,3 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
     }
     return true;
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT

@@ -26,10 +26,6 @@
 
 // --8<-- [start:common_utils]
 
-// Number of decimal places in 1 Ether (or similar cryptocurrency) when
-// represented in Wei.
-#define WEI_TO_ETHER 18
-
 // The standard length of an Ethereum address
 #define ADDRESS_LENGTH 20
 #define ADDRESS_SIZE_712 20
