@@ -1,5 +1,3 @@
-#ifdef HAVE_TRUSTED_NAME
-
 #include <os.h>
 #include <os_io.h>
 #include <cx.h>
@@ -46,5 +44,3 @@ uint16_t handle_get_challenge(uint8_t p1, uint8_t p2, const uint8_t *data, uint8
 
     return 0;
 }
-
-#endif  // HAVE_TRUSTED_NAME

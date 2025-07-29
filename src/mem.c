@@ -5,9 +5,6 @@
  * Especially useful when an unpredictable amount of data will be received and have to be stored
  * during the transaction but discarded right after.
  */
-
-#ifdef HAVE_DYN_MEM_ALLOC
-
 #include <stdint.h>
 #include "mem.h"
 #include "os_print.h"
@@ -113,5 +110,3 @@ void mem_rev_dealloc(size_t size) {
         mem_rev_idx -= size;
     }
 }
-
-#endif  // HAVE_DYN_MEM_ALLOC

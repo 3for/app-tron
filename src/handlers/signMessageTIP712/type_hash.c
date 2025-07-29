@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -213,5 +211,3 @@ bool type_hash(const char *const struct_name, const uint8_t struct_name_length, 
 end:
     return false;
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT
