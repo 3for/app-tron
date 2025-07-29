@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdlib.h>
 #include <string.h>
 #include "typed_data.h"
@@ -746,5 +744,3 @@ bool set_struct_field(uint8_t length, const uint8_t *const data) {
     }
     return true;
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT

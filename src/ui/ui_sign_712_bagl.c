@@ -1,4 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
 #ifdef HAVE_BAGL
 #include "ui_logic.h"
 #include "ui_globals.h"
@@ -159,4 +158,3 @@ void ui_712_switch_to_sign(void) {
 }
 
 #endif
-#endif  // HAVE_TIP712_FULL_SUPPORT

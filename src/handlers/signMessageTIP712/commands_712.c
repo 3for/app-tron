@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -218,11 +216,9 @@ int handleTIP712Filtering(uint8_t p1,
                 reply_apdu = false;
             }
             break;
-#ifdef HAVE_TRUSTED_NAME
         case P2_FILT_CONTRACT_NAME:
             ret = filtering_trusted_name(workBuffer, dataLength, p1 == 1, &path_crc);
             break;
-#endif
         case P2_FILT_DATE_TIME:
             ret = filtering_date_time(workBuffer, dataLength, p1 == 1, &path_crc);
             break;
@@ -296,5 +292,3 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
 
     return APDU_NO_RESPONSE;
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT

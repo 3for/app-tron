@@ -113,10 +113,8 @@ void app_main(void) {
     }
 #endif  // HAVE_SWAP
 
-#ifdef HAVE_TRUSTED_NAME
     // to prevent it from having a fixed value at boot
     roll_challenge();
-#endif  // HAVE_TRUSTED_NAME
 
     // Reset context
     explicit_bzero(&txContent, sizeof(txContent));

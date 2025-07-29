@@ -1,5 +1,4 @@
 #ifdef HAVE_BAGL
-#ifdef HAVE_TRUSTED_NAME
 
 #include "ui_trusted_name_bagl.h"
 #include "trusted_name.h"
@@ -15,5 +14,4 @@ UX_STEP_NOCB(
     });
 // clang-format on
 
-#endif  // HAVE_TRUSTED_NAME
 #endif  //HAVE_BAGL

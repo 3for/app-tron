@@ -1,5 +1,3 @@
-#ifdef HAVE_TIP712_FULL_SUPPORT
-
 #include <stdint.h>
 #include <string.h>
 #include "sol_typenames.h"
@@ -134,5 +132,3 @@ const char *get_struct_field_sol_typename(const uint8_t *field_ptr, uint8_t *con
     apdu_response_code = APDU_RESPONSE_INVALID_DATA;
     return NULL;  // Not found
 }
-
-#endif  // HAVE_TIP712_FULL_SUPPORT
