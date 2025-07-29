@@ -2,8 +2,7 @@
 // Adapted from:
 // https://github.com/LedgerHQ/ledgerjs/blob/master/packages/errors/src/index.ts
 
-#ifndef _ERRORS_H
-#define _ERRORS_H
+#pragma once
 
 #define E_OK 0x9000
 
@@ -44,4 +43,3 @@
 
 #define APDU_NO_RESPONSE                0x0000
 #define APDU_RESPONSE_MODE_CHECK_FAILED 0x6001
-#endif  // once

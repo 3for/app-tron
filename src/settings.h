@@ -1,5 +1,4 @@
-#ifndef SETTINGS_H
-#define SETTINGS_H
+#pragma once
 
 #include <stdint.h>
 
@@ -33,5 +32,3 @@ extern const internal_storage_t N_storage_real;
 #define S_TRUSTED_NAME     5
 
 #define S_INITIALIZED      7
-
-#endif
