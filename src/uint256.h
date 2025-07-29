@@ -1,6 +1,6 @@
 /*******************************************************************************
- *   Ledger Blue
- *   (c) 2016 Ledger
+ *   Ledger Tron App
+ *   (c) 2016-2019 Ledger
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,12 +17,11 @@
 
 // Adapted from https://github.com/calccrypto/uint256_t
 
+#pragma once
+
 #include <stdint.h>
 #include <stdbool.h>
-
-typedef struct uint128_t {
-    uint64_t elements[2];
-} uint128_t;
+#include "uint128.h"
 
 typedef struct uint256_t {
     uint128_t elements[2];
@@ -70,19 +69,4 @@ bool tostring256_signed(const uint256_t *const number,
                         uint32_t base,
                         char *const out,
                         uint32_t out_length);
-void convertUint64BEto128(const uint8_t *const data, uint32_t length, uint128_t *const target);
 void convertUint256BE(const uint8_t *const data, uint32_t length, uint256_t *const target);
-void sub256(const uint256_t *const number1,
-            const uint256_t *const number2,
-            uint256_t *const target);
-
-void convertUint128BE(const uint8_t *const data, uint32_t length, uint128_t *const target);
-
-bool tostring128_signed(const uint128_t *const number,
-                        uint32_t base,
-                        char *const out,
-                        uint32_t out_length);
-
-void sub128(const uint128_t *const number1,
-            const uint128_t *const number2,
-            uint128_t *const target);
