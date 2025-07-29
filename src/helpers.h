@@ -14,14 +14,12 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  ********************************************************************************/
+#pragma once
 
 #include "os.h"
 #include "cx.h"
 
 #include "parse.h"
-
-#ifndef HELPER_H
-#define HELPER_H
 
 void getAddressFromPublicKey(const uint8_t *publicKey, uint8_t address[static ADDRESS_SIZE]);
 
@@ -42,5 +40,3 @@ off_t read_bip32_path_712(const uint8_t *buffer,
 int initPublicKeyContext(bip32_path_t *bip32_path,
                          char *address58,
                          publicKeyContext_t *public_key_ctx);
-
-#endif
