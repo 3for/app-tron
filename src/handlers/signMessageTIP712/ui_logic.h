@@ -1,5 +1,4 @@
-#ifndef UI_LOGIC_712_H_
-#define UI_LOGIC_712_H_
+#pragma once
 
 #include <stdint.h>
 #include "ux.h"
@@ -56,5 +55,3 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
 #ifdef SCREEN_SIZE_WALLET
 char *get_ui_pairs_buffer(size_t *size);
 #endif
-
-#endif  // UI_LOGIC_712_H_

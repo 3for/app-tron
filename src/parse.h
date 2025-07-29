@@ -1,3 +1,5 @@
+#pragma once
+
 #include "os.h"
 #include "cx.h"
 #include "bip32.h"
@@ -5,9 +7,6 @@
 #include <stdbool.h>
 #include "core/Contract.pb.h"
 #include "common_utils.h"
-
-#ifndef PARSE_H
-#define PARSE_H
 
 #define MAX_BIP32_PATH 10
 
@@ -272,4 +271,3 @@ void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);
 void validate_current_asset_info(void);
-#endif

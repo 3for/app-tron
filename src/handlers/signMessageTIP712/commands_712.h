@@ -1,5 +1,4 @@
-#ifndef TIP712_H_
-#define TIP712_H_
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -23,5 +22,3 @@ int handleTIP712Filtering(uint8_t p1,
                           uint16_t dataLength,
                           uint8_t ins);
 void handle_tip712_return_code(bool success);
-
-#endif  // TIP712_H_
