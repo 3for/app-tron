@@ -5,7 +5,6 @@
 #include "challenge.h"
 #include "hash_bytes.h"
 #include "public_keys.h"
-#include "proxy_info.h"
 
 typedef enum { STRUCT_TYPE_TRUSTED_NAME = 0x03 } e_struct_type;
 
@@ -76,7 +75,7 @@ static bool matching_trusted_name(const s_trusted_name_info *trusted_name,
                                   const e_name_source *sources,
                                   const uint64_t *chain_id,
                                   const uint8_t *addr) {
-    const uint8_t *tmp;
+    //const uint8_t *tmp;
 
     switch (trusted_name->struct_version) {
         case 1:
@@ -99,11 +98,11 @@ static bool matching_trusted_name(const s_trusted_name_info *trusted_name,
                 return false;
             }
 
-            if (trusted_name->name_type == TN_TYPE_CONTRACT) {
+            /* if (trusted_name->name_type == TN_TYPE_CONTRACT) {
                 if ((tmp = get_implem_contract(chain_id, addr, NULL)) != NULL) {
                     addr = tmp;
                 }
-            }
+            } */ // TODO. Not support INS_PROVIDE_PROXY_INFO yet.
             break;
     }
     return memcmp(addr, trusted_name->addr, ADDRESS_LENGTH) == 0;
