@@ -47,17 +47,15 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
     cmd_builder = CommandBuilder()
     challenge = common(firmware, app_client, cmd_builder)
 
-    print("ZYD 111")
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
-    print("ZYD 222")
+
     end_text = None
     if firmware.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
 
-    print("ZYD 333")
     app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
         "nonce": NONCE,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
