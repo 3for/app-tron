@@ -71,7 +71,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         }
         appState = APP_STATE_SIGNING;
         off_t ret =
-            read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
+            read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
             return io_send_sw(E_INCORRECT_BIP32_PATH);
         }
@@ -190,7 +190,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                CX_LAST,
                                workBuffer,
                                0,
-                               global_ctx.transactionContext.hash,
+                               tmpCtx.transactionContext.hash,
                                32));
 
     if (txContent.permission_id > 0) {
@@ -526,7 +526,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash
-            format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            format_hex(tmpCtx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
@@ -553,7 +553,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash
-            format_hex(global_ctx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            format_hex(tmpCtx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
             // write contract type
             if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);

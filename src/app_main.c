@@ -56,7 +56,7 @@ void reset_app_context() {
     appState = APP_STATE_IDLE;
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));
-    memset((uint8_t *) &global_ctx, 0, sizeof(global_ctx));
+    memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));
 }
 
 uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle) {

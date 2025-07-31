@@ -52,7 +52,6 @@ extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];
 extern int8_t votes_count;
-extern tmpCtx_t global_ctx;
 extern cx_sha3_t global_sha3;
 extern strings_t strings;
 

@@ -264,17 +264,17 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
     // if the final hashes are still zero or if there are some unimplemented fields
-    else if (allzeroes(global_ctx.messageSigningContext712.domainHash,
-                       sizeof(global_ctx.messageSigningContext712.domainHash)) ||
-             allzeroes(global_ctx.messageSigningContext712.messageHash,
-                       sizeof(global_ctx.messageSigningContext712.messageHash)) ||
+    else if (allzeroes(tmpCtx.messageSigningContext712.domainHash,
+                       sizeof(tmpCtx.messageSigningContext712.domainHash)) ||
+             allzeroes(tmpCtx.messageSigningContext712.messageHash,
+                       sizeof(tmpCtx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(workBuffer, dataLength, &global_ctx.messageSigningContext712) !=
+    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) !=
                0) {
 #ifndef SCREEN_SIZE_WALLET
         if (!HAS_SETTING(S_VERBOSE_TIP712) &&
