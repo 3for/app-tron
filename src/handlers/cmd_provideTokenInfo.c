@@ -23,15 +23,15 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
 
     if (dataLength < 1) {
-        THROW(APDU_RESPONSE_INVALID_DATA);
+        return APDU_RESPONSE_INVALID_DATA;
     }
     tickerLength = workBuffer[offset++];
     dataLength--;
     if ((tickerLength + 1) > sizeof(token->ticker)) {
-        THROW(APDU_RESPONSE_INVALID_DATA);
+        return APDU_RESPONSE_INVALID_DATA;
     }
     if (dataLength < tickerLength + 20 + 4 + 4) {
-        THROW(APDU_RESPONSE_INVALID_DATA);
+        return APDU_RESPONSE_INVALID_DATA;
     }
 
     cx_hash_sha256(workBuffer + offset, tickerLength + 20 + 4 + 4, hash, 32);
@@ -50,7 +50,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     chain_id = U4BE(workBuffer, offset);
     if (chainConfig->chainId != chain_id) {
         UNSUPPORTED_CHAIN_ID_MSG(chain_id);
-        THROW(APDU_RESPONSE_INVALID_DATA);
+        return APDU_RESPONSE_INVALID_DATA;
     }
     offset += 4;
     dataLength -= 4;
@@ -66,7 +66,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if (error != CX_OK) {
         PRINTF("Invalid token signature\n");
 #ifndef HAVE_BYPASS_SIGNATURES
-        THROW(APDU_RESPONSE_INVALID_DATA);
+        return APDU_RESPONSE_INVALID_DATA;
 #endif
     }
     G_io_apdu_buffer[0] = tmpCtx.transactionContext.currentAssetIndex;
