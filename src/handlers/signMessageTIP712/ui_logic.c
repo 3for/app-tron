@@ -238,7 +238,7 @@ void ui_712_message_hash(void) {
     ui_712_set_title(title, strlen(title));
     array_bytes_string(strings.tmp.tmp,
                        sizeof(strings.tmp.tmp),
-                       global_ctx.messageSigningContext712.messageHash,
+                       tmpCtx.messageSigningContext712.messageHash,
                        KECCAK256_HASH_BYTESIZE);
     ui_ctx->end_reached = true;
     ui_712_redraw_generic_step();

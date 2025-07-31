@@ -40,7 +40,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
         appState = APP_STATE_SIGNING_MESSAGE;
 
         off_t ret =
-            read_bip32_path(workBuffer, dataLength, &global_ctx.transactionContext.bip32_path);
+            read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
             reset_app_context();
             return io_send_sw(E_INCORRECT_BIP32_PATH);
@@ -96,29 +96,29 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    CX_LAST,
                                    workBuffer,
                                    0,
-                                   global_ctx.transactionContext.hash,
+                                   tmpCtx.transactionContext.hash,
                                    32));
 #ifdef HAVE_BAGL
 #define HASH_LENGTH 4
-        format_hex(global_ctx.transactionContext.hash,
+        format_hex(tmpCtx.transactionContext.hash,
                    HASH_LENGTH / 2,
                    fullContract,
                    sizeof(fullContract));
         fullContract[HASH_LENGTH] = '.';
         fullContract[HASH_LENGTH + 1] = '.';
         fullContract[HASH_LENGTH + 2] = '.';
-        format_hex(global_ctx.transactionContext.hash + 32 - HASH_LENGTH / 2,
+        format_hex(tmpCtx.transactionContext.hash + 32 - HASH_LENGTH / 2,
                    HASH_LENGTH / 2,
                    fullContract + HASH_LENGTH + 3,
                    sizeof(fullContract) - (HASH_LENGTH + 3));
 #else
-        format_hex(global_ctx.transactionContext.hash,
-                   sizeof(global_ctx.transactionContext.hash),
+        format_hex(tmpCtx.transactionContext.hash,
+                   sizeof(tmpCtx.transactionContext.hash),
                    fullContract,
                    sizeof(fullContract));
 #endif
         publicKeyContext_t tmp_public_key_ctx;
-        if (initPublicKeyContext(&global_ctx.transactionContext.bip32_path,
+        if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                                  fromAddress,
                                  &tmp_public_key_ctx) != 0) {
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);

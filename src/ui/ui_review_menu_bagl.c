@@ -806,14 +806,14 @@ UX_DEF(ux_sign_flow,
 void prepare_domain_hash_v0() {
     bytes_to_string(strings.tmp.tmp,
                     sizeof(strings.tmp.tmp),
-                    global_ctx.messageSigningContext712.domainHash,
+                    tmpCtx.messageSigningContext712.domainHash,
                     32);
 }
 
 void prepare_message_hash_v0() {
     bytes_to_string(strings.tmp.tmp,
                     sizeof(strings.tmp.tmp),
-                    global_ctx.messageSigningContext712.messageHash,
+                    tmpCtx.messageSigningContext712.messageHash,
                     32);
 }
 
