@@ -334,12 +334,12 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             break;
         case APPROVAL_SIGN_TIP72_TRANSACTION:
             txInfos.fields[0].item = "Domain hash";
-            txInfos.fields[0].value = format_hash(global_ctx.messageSigningContext712.domainHash,
+            txInfos.fields[0].value = format_hash(tmpCtx.messageSigningContext712.domainHash,
                                                   strings.tmp.tmp,
                                                   sizeof(strings.tmp.tmp),
                                                   0);
             txInfos.fields[1].item = "Message hash";
-            txInfos.fields[1].value = format_hash(global_ctx.messageSigningContext712.messageHash,
+            txInfos.fields[1].value = format_hash(tmpCtx.messageSigningContext712.messageHash,
                                                   strings.tmp.tmp,
                                                   sizeof(strings.tmp.tmp),
                                                   70);

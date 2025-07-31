@@ -18,11 +18,9 @@
 #include "base58.h"
 #include "io.h"
 #include "crypto_helpers.h"
-
+#include "parse.h"
 #include "helpers.h"
 #include "app_errors.h"
-
-extern tmpCtx_t global_ctx;
 
 void getAddressFromPublicKey(const uint8_t *publicKey, uint8_t address[static ADDRESS_SIZE]) {
     uint8_t hashAddress[HASH_SIZE];
