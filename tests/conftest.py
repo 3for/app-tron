@@ -63,8 +63,8 @@ def configuration(backend: BackendInterface, navigator, firmware):
                 NavInsID.BOTH_CLICK,
             ]
             
-            # Skip two step
-            instructions += [NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
+            # Skip one step
+            instructions += [NavInsID.RIGHT_CLICK]
             instructions += [
                 # Go back to main menu
                 NavInsID.RIGHT_CLICK,

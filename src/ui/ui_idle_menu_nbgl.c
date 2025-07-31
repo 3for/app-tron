@@ -29,7 +29,6 @@ enum {
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
     SWITCH_ALLOW_HASH_TX_TOKEN,
     SWITCH_TIP712_VERBOSE_TOKEN,
-    SWITCH_TRUSTED_NAME_VERBOSE_TOKEN,
 };
 
 enum {
@@ -38,7 +37,6 @@ enum {
     HASH_TX_ID,
     //change to make same order for bagl and nbgl
     TIP712_VERBOSE_ID,
-    TRUSTED_NAME_VERBOSE_ID,
     SETTINGS_SWITCHES_NB
 };
 
@@ -54,7 +52,6 @@ static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_SIGN_BY_HASH,
     // change to match above token order
     S_VERBOSE_TIP712,
-    S_TRUSTED_NAME,
 };
 static nbgl_layoutSwitch_t switches[NB_SETTINGS_SWITCHES] = {0};
 
@@ -74,11 +71,6 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
             switches[CSTM_CONTRACTS_ID].initState =
                 (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
-            break;
-        case SWITCH_TRUSTED_NAME_VERBOSE_TOKEN:
-            SETTING_TOGGLE(S_TRUSTED_NAME);
-            switches[TIP712_VERBOSE_ID].initState =
-                (HAS_SETTING(S_TRUSTED_NAME)) ? ON_STATE : OFF_STATE;
             break;
         case SWITCH_TIP712_VERBOSE_TOKEN:
             SETTING_TOGGLE(S_VERBOSE_TIP712);
@@ -127,13 +119,6 @@ void ui_idle(void) {
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
-
-    switches[TRUSTED_NAME_VERBOSE_ID].initState =
-        HAS_SETTING(S_TRUSTED_NAME) ? ON_STATE : OFF_STATE;
-    switches[TRUSTED_NAME_VERBOSE_ID].text = "ENS addresses";
-    switches[TRUSTED_NAME_VERBOSE_ID].subText = "Display the resolved address of ENS domains.";
-    switches[TRUSTED_NAME_VERBOSE_ID].token = SWITCH_TRUSTED_NAME_VERBOSE_TOKEN;
-    switches[TRUSTED_NAME_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
 
     switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
