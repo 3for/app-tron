@@ -1,9 +1,8 @@
-#include <stdlib.h>
-#include <string.h>
 #include "encode_field.h"
 #include "mem.h"
+#include "app_errors.h"  // APDU response codes
+#include "common_utils.h"
 #include "parse.h"
-#include "app_errors.h"
 
 typedef enum { MSB, LSB } e_padding_type;
 
@@ -16,7 +15,7 @@ typedef enum { MSB, LSB } e_padding_type;
  * @param[in] pval value used for padding
  * @return encoded field value
  */
-static void *field_encode(const uint8_t *const value,
+static void *field_encode(const uint8_t *value,
                           uint8_t length,
                           e_padding_type ptype,
                           uint8_t pval) {
@@ -28,7 +27,7 @@ static void *field_encode(const uint8_t *const value,
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;
     }
-    if ((padded_value = mem_alloc(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
+    if ((padded_value = app_mem_alloc(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
         switch (ptype) {
             case MSB:
                 memset(padded_value, pval, TIP_712_ENCODED_FIELD_LENGTH - length);
@@ -56,7 +55,7 @@ static void *field_encode(const uint8_t *const value,
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_uint(const uint8_t *const value, uint8_t length) {
+void *encode_uint(const uint8_t *value, uint8_t length) {
     // no length check here since it will be checked by field_encode
     return field_encode(value, length, MSB, 0x00);
 }
@@ -69,7 +68,7 @@ void *encode_uint(const uint8_t *const value, uint8_t length) {
  * @param[in] typesize the type size in bytes
  * @return the encoded value
  */
-void *encode_int(const uint8_t *const value, uint8_t length, uint8_t typesize) {
+void *encode_int(const uint8_t *value, uint8_t length, uint8_t typesize) {
     uint8_t padding_value;
 
     if (length < 1) {
@@ -94,7 +93,7 @@ void *encode_int(const uint8_t *const value, uint8_t length, uint8_t typesize) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_bytes(const uint8_t *const value, uint8_t length) {
+void *encode_bytes(const uint8_t *value, uint8_t length) {
     // no length check here since it will be checked by field_encode
     return field_encode(value, length, LSB, 0x00);
 }
@@ -106,7 +105,7 @@ void *encode_bytes(const uint8_t *const value, uint8_t length) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_boolean(const bool *const value, uint8_t length) {
+void *encode_boolean(const bool *value, uint8_t length) {
     if (length != 1)  // sanity check
     {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
@@ -122,8 +121,8 @@ void *encode_boolean(const bool *const value, uint8_t length) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_address(const uint8_t *const value, uint8_t length) {
-    if (length != ADDRESS_SIZE_712)  // sanity check
+void *encode_address(const uint8_t *value, uint8_t length) {
+    if (length != ADDRESS_LENGTH)  // sanity check
     {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;

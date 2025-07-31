@@ -45,6 +45,7 @@ const internal_storage_t N_storage_real;
 tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
+cx_sha3_t global_sha3;
 
 app_state_t appState;
 

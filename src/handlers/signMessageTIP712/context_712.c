@@ -8,8 +8,10 @@
 #include "field_hash.h"
 #include "ui_logic.h"
 #include "typed_data.h"
-
+#include "commands_712.h"
 #include "app_errors.h"
+
+extern void reset_app_context();
 
 e_struct_init struct_state = NOT_INITIALIZED;
 s_tip712_context *tip712_context = NULL;
@@ -20,13 +22,17 @@ s_tip712_context *tip712_context = NULL;
  * @return a boolean indicating if the initialization was successful or not
  */
 bool tip712_context_init(void) {
-    // init global variables
-    mem_init();
+    if (tip712_context != NULL) {
+        tip712_context_deinit();
+        return false;
+    }
 
-    if ((tip712_context = MEM_ALLOC_AND_ALIGN_TYPE(*tip712_context)) == NULL) {
+    // init global variables
+    if ((tip712_context = app_mem_alloc(sizeof(*tip712_context))) == NULL) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return false;
     }
+    explicit_bzero(tip712_context, sizeof(*tip712_context));
 
     if (sol_typenames_init() == false) {
         return false;
@@ -44,14 +50,10 @@ bool tip712_context_init(void) {
         return false;
     }
 
-    if (typed_data_init() == false)  // this needs to be initialized last !
-    {
+    if (typed_data_init() == false) {
         return false;
     }
 
-    // Since they are optional, they might not be provided by the JSON data
-    explicit_bzero(tip712_context->contract_addr, sizeof(tip712_context->contract_addr));
-    tip712_context->chain_id = 0;
     tip712_context->go_home_on_failure = true;
 
     struct_state = NOT_INITIALIZED;
@@ -62,14 +64,15 @@ bool tip712_context_init(void) {
 /**
  * De-initialize the TIP712 context
  */
-extern void reset_app_context();
-
 void tip712_context_deinit(void) {
     typed_data_deinit();
     path_deinit();
     field_hash_deinit();
     ui_712_deinit();
-    mem_reset();
-    tip712_context = NULL;
+    sol_typenames_deinit();
+    if (tip712_context != NULL) {
+        app_mem_free(tip712_context);
+        tip712_context = NULL;
+    }
     reset_app_context();
 }

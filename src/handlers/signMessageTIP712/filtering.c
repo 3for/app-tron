@@ -14,6 +14,7 @@
 #include "os_pki.h"
 #include "trusted_name.h"
 
+
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_AMOUNT_JOIN_TOKEN 11
 #define FILT_MAGIC_AMOUNT_JOIN_VALUE 22
@@ -31,14 +32,16 @@
  * @param[out] path_crc pointer to the CRC of the filter path
  */
 static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *path_crc) {
-    const void *field_ptr;
+    const s_struct_712_field *field_ptr;
     const char *key;
-    uint8_t key_len;
+    const char *path;
+    uint8_t path_len;
 
     if (discarded) {
-        key = ui_712_get_discarded_path(&key_len);
-        hash_nbytes((uint8_t *) key, key_len, hash_ctx);
-        *path_crc = cx_crc32_update(*path_crc, key, key_len);
+        path = ui_712_get_discarded_path();
+        path_len = strlen(path);
+        hash_nbytes((uint8_t *) path, path_len, hash_ctx);
+        *path_crc = cx_crc32_update(*path_crc, path, path_len);
     } else {
         for (uint8_t i = 0; i < path_get_depth_count(); ++i) {
             if (i > 0) {
@@ -46,17 +49,14 @@ static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
                 *path_crc = cx_crc32_update(*path_crc, ".", 1);
             }
             if ((field_ptr = path_get_nth_field(i + 1)) != NULL) {
-                if ((key = get_struct_field_keyname(field_ptr, &key_len)) != NULL) {
+                if ((key = field_ptr->key_name) != NULL) {
                     // field name
-                    hash_nbytes((uint8_t *) key, key_len, hash_ctx);
-                    *path_crc = cx_crc32_update(*path_crc, key, key_len);
+                    hash_nbytes((uint8_t *) key, strlen(key), hash_ctx);
+                    *path_crc = cx_crc32_update(*path_crc, key, strlen(key));
 
                     // array levels
-                    if (struct_field_is_array(field_ptr)) {
-                        uint8_t lvl_count;
-
-                        get_struct_field_array_lvls_array(field_ptr, &lvl_count);
-                        for (int j = 0; j < lvl_count; ++j) {
+                    if (field_ptr->type_is_array) {
+                        for (int j = 0; j < field_ptr->array_level_count; ++j) {
                             hash_nbytes((uint8_t *) ".[]", 3, hash_ctx);
                             *path_crc = cx_crc32_update(*path_crc, ".[]", 3);
                         }
@@ -66,7 +66,7 @@ static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
         }
     }
     // so it is only usable for the following filter
-    ui_712_set_discarded_path("", 0);
+    ui_712_clear_discarded_path();
 }
 
 /**
@@ -78,6 +78,7 @@ static void hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
  */
 static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     uint64_t chain_id;
+    const uint8_t *addr;
 
     cx_sha256_init(hash_ctx);
 
@@ -89,9 +90,14 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     hash_nbytes((uint8_t *) &chain_id, sizeof(chain_id), (cx_hash_t *) hash_ctx);
 
     // Contract address
-    hash_nbytes(tip712_context->contract_addr,
-                sizeof(tip712_context->contract_addr),
-                (cx_hash_t *) hash_ctx);
+    // we can't compare the returned address with anything since filtering payloads are signed on an
+    // address which is not provided
+    /* if ((addr =
+             get_proxy_contract(&tip712_context->chain_id, tip712_context->contract_addr, NULL)) ==
+        NULL) {
+        addr = tip712_context->contract_addr;
+    } */ // TODO. Not support INS_PROVIDE_PROXY_INFO yet.
+    hash_nbytes(addr, ADDRESS_LENGTH, (cx_hash_t *) hash_ctx);
 
     // Schema hash
     hash_nbytes(tip712_context->schema_hash,
@@ -115,6 +121,7 @@ static bool sig_verif_end(cx_sha256_t *hash_ctx, const uint8_t *sig, uint8_t sig
 
     // Finalize hash
     CX_CHECK(cx_hash_no_throw((cx_hash_t *) hash_ctx, CX_LAST, NULL, 0, hash, INT256_LENGTH));
+
     CX_CHECK(check_signature_with_pubkey("TIP712 Filtering",
                                          hash,
                                          sizeof(hash),
@@ -153,7 +160,8 @@ static bool check_typename(const char *expected) {
     uint8_t typename_len = 0;
     const char *typename;
 
-    typename = get_struct_field_typename(path_get_field(), &typename_len);
+    typename = get_struct_field_typename(path_get_field());
+    typename_len = strlen(typename);
     if ((typename_len != strlen(expected)) || (strncmp(typename, expected, typename_len) != 0)) {
         PRINTF("Error: expected field of type \"%s\" but got \"", expected);
         for (int i = 0; i < typename_len; ++i) PRINTF("%c", typename[i]);
@@ -182,6 +190,7 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
+
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -214,12 +223,12 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_MESSAGE_INFO)) {
         return false;
     }
-
     hash_byte(filters_count, (cx_hash_t *) &hash_ctx);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
+
     // Handling
     ui_712_set_filters_count(filters_count);
     if (!HAS_SETTING(S_VERBOSE_TIP712)) {
@@ -241,11 +250,9 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
  * @return whether a match was found or not
  */
 static bool matches_backup_path(const char *path, uint8_t path_len, uint8_t *offset_ptr) {
-    const void *field_ptr;
+    const s_struct_712_field *field_ptr;
     const char *key;
-    uint8_t key_len;
     uint8_t offset = 0;
-    uint8_t lvl_count;
 
     for (uint8_t i = 0; i < path_backup_get_depth_count(); ++i) {
         if (i > 0) {
@@ -255,17 +262,17 @@ static bool matches_backup_path(const char *path, uint8_t path_len, uint8_t *off
             offset += 1;
         }
         if ((field_ptr = path_backup_get_nth_field(i + 1)) != NULL) {
-            if ((key = get_struct_field_keyname(field_ptr, &key_len)) != NULL) {
+            if ((key = field_ptr->key_name) != NULL) {
                 // field name
-                if (((offset + key_len) > path_len) || (memcmp(path + offset, key, key_len) != 0)) {
+                if (((offset + strlen(key)) > path_len) ||
+                    (memcmp(path + offset, key, strlen(key)) != 0)) {
                     return false;
                 }
-                offset += key_len;
+                offset += strlen(key);
 
                 // array levels
-                if (struct_field_is_array(field_ptr)) {
-                    get_struct_field_array_lvls_array(field_ptr, &lvl_count);
-                    for (int j = 0; j < lvl_count; ++j) {
+                if (field_ptr->type_is_array) {
+                    for (int j = 0; j < field_ptr->array_level_count; ++j) {
                         if (((offset + 3) > path_len) || (memcmp(path + offset, ".[]", 3) != 0)) {
                             return false;
                         }
@@ -368,6 +375,19 @@ bool filtering_trusted_name(const uint8_t *payload,
         return false;
     }
     types = (e_name_type *) &payload[offset];
+    for (int i = 0; i < type_count; ++i) {
+        switch (types[i]) {
+            case TN_TYPE_ACCOUNT:
+            case TN_TYPE_CONTRACT:
+            case TN_TYPE_NFT_COLLECTION:
+            case TN_TYPE_TOKEN:
+            case TN_TYPE_WALLET:
+            case TN_TYPE_CONTEXT_ADDRESS:
+                break;
+            default:
+                return false;
+        }
+    }
     offset += type_count;
     if ((offset + sizeof(source_count)) > length) {
         return false;
@@ -380,6 +400,20 @@ bool filtering_trusted_name(const uint8_t *payload,
         return false;
     }
     sources = (e_name_source *) &payload[offset];
+    for (int i = 0; i < source_count; ++i) {
+        switch (sources[i]) {
+            case TN_SOURCE_LAB:
+            case TN_SOURCE_CAL:
+            case TN_SOURCE_ENS:
+            case TN_SOURCE_UD:
+            case TN_SOURCE_FN:
+            case TN_SOURCE_DNS:
+            case TN_SOURCE_DYNAMIC_RESOLVER:
+                break;
+            default:
+                return false;
+        }
+    }
     offset += source_count;
     //
     if ((offset + sizeof(sig_len)) > length) {
@@ -415,7 +449,6 @@ bool filtering_trusted_name(const uint8_t *payload,
     ui_712_set_trusted_name_requirements(type_count, types, source_count, sources);
     return true;
 }
-
 /**
  * Command to display a field as a date-time
  *
@@ -603,7 +636,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
 
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
-        // Permit (TRC-2612)
+        // Permit (ERC-2612)
         int resolved_idx = get_asset_index_by_addr(tip712_context->contract_addr);
 
         if (resolved_idx == -1) {
@@ -613,14 +646,15 @@ bool filtering_amount_join_value(const uint8_t *payload,
         token_idx = (uint8_t) resolved_idx;
         // simulate as if we had received a token-join addr
         ui_712_token_join_prepare_addr_check(token_idx);
-        amount_join_set_token_received();
+        if (!amount_join_set_token_received()) {
+            return false;
+        }
     }
     if (!check_typename("uint") || !check_token_index(token_idx)) {
         return false;
     }
     ui_712_flag_field(false, false, true, false, false);
-    ui_712_token_join_prepare_amount(token_idx, name, name_len);
-    return true;
+    return ui_712_token_join_prepare_amount(token_idx, name, name_len);
 }
 
 /**
@@ -646,6 +680,7 @@ bool filtering_raw_field(const uint8_t *payload,
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
+
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;

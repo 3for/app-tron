@@ -38,7 +38,6 @@ char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
 int8_t votes_count;
-cx_sha3_t global_sha3;
 strings_t strings;
 
 extern void reset_app_context();
