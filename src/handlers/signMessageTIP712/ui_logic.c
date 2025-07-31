@@ -4,7 +4,6 @@
 #include "ui_logic.h"
 #include "mem_utils.h"
 #include "os_io.h"
-#include "common_utils.h"  // uint256_to_decimal
 #include "context_712.h"   // tip712_context_deinit
 #include "path.h"          // path_get_root_type
 #include "typed_data.h"
