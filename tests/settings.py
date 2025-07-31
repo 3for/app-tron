@@ -11,7 +11,6 @@ class SettingID(Enum):
     TRUNCATE_ADDRESS = auto()
     SIGN_BY_HASH = auto()
     VERBOSE_TIP712 = auto()
-    TRUSTED_NAME = auto()
 
 
 # Settings Positions per device. Returns the tuple (page, x, y)
@@ -21,14 +20,12 @@ SETTINGS_POSITIONS = {
         SettingID.CUSTOM_CONTRACT: (0, 350, 270),
         SettingID.SIGN_BY_HASH: (0, 350, 430),
         SettingID.VERBOSE_TIP712: (1, 350, 130),
-        SettingID.TRUSTED_NAME: (1, 350, 270),
     },
     DeviceType.FLEX: {
         SettingID.DATA_ALLOWED: (0, 420, 130),
         SettingID.CUSTOM_CONTRACT: (0, 420, 350),
         SettingID.SIGN_BY_HASH: (1, 420, 130),
         SettingID.VERBOSE_TIP712: (1, 420, 270),
-        SettingID.TRUSTED_NAME: (2, 420, 140),
     },
 }
 
@@ -43,14 +40,12 @@ def get_device_settings(device: Device) -> list[SettingID]:
             SettingID.TRUNCATE_ADDRESS,
             SettingID.SIGN_BY_HASH,
             SettingID.VERBOSE_TIP712,
-            SettingID.TRUSTED_NAME,
         ]
     return [
         SettingID.DATA_ALLOWED,
         SettingID.CUSTOM_CONTRACT,
         SettingID.SIGN_BY_HASH,
         SettingID.VERBOSE_TIP712,
-        SettingID.TRUSTED_NAME,
     ]
 
 

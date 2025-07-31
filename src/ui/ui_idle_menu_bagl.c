@@ -28,27 +28,17 @@
 #define BUF_INCREMENT (MAX(strlen(ENABLED_STR), strlen(DISABLED_STR)) + 1)
 
 #define SETTING_BLIND_SIGNING_STATE        (strings.common.fullAmount + (BUF_INCREMENT * 0))
-#define SETTING_VERBOSE_TRUSTED_NAME_STATE (strings.common.fullAmount + (BUF_INCREMENT * 1))
-#define SETTING_VERBOSE_TIP712_STATE       (strings.common.fullAmount + (BUF_INCREMENT * 2))
+#define SETTING_VERBOSE_TIP712_STATE       (strings.common.fullAmount + (BUF_INCREMENT * 1))
 
 #define BOOL_TO_STATE_STR(b) (b ? ENABLED_STR : DISABLED_STR)
 
 static void switch_settings_verbose_tip712(void);
-static void switch_settings_verbose_trusted_name(void);
 static void display_settings(const ux_flow_step_t* const);
 static void switch_settings_contract_data();
 static void switch_settings_custom_contracts();
 static void switch_settings_truncate_address();
 static void switch_settings_sign_by_hash();
 static char settings_param_value[40];
-
-UX_STEP_CB(ux_settings_flow_verbose_trusted_name_step,
-           bnnn,
-           switch_settings_verbose_trusted_name(),
-           {"ENS addresses",
-            "Displays resolved",
-            "addresses from ENS",
-            SETTING_VERBOSE_TRUSTED_NAME_STATE});
 
 UX_STEP_CB(
     ux_settings_flow_verbose_tip712_step,
@@ -94,9 +84,8 @@ UX_DEF(ux_settings_flow,
        &ux_settings_flow_2_step,
        &ux_settings_flow_3_step,
        &ux_settings_flow_4_step,
-       //change to match order with S_VERBOSE_TIP712 and S_TRUSTED_NAME
+       //change to match order with S_VERBOSE_TIP712
        &ux_settings_flow_verbose_tip712_step,
-       &ux_settings_flow_verbose_trusted_name_step,
        &ux_settings_flow_5_step);
 
 static void display_settings(const ux_flow_step_t* const start_step) {
@@ -110,9 +99,6 @@ static void display_settings(const ux_flow_step_t* const start_step) {
             sizeof(settings_param_value) - 28);
     strlcpy(SETTING_VERBOSE_TIP712_STATE,
             BOOL_TO_STATE_STR(HAS_SETTING(S_VERBOSE_TIP712)),
-            BUF_INCREMENT);
-    strlcpy(SETTING_VERBOSE_TRUSTED_NAME_STATE,
-            BOOL_TO_STATE_STR(HAS_SETTING(S_TRUSTED_NAME)),
             BUF_INCREMENT);
     ux_flow_init(0, ux_settings_flow, start_step);
 }
@@ -140,11 +126,6 @@ static void switch_settings_sign_by_hash() {
 static void switch_settings_verbose_tip712(void) {
     SETTING_TOGGLE(S_VERBOSE_TIP712);
     display_settings(&ux_settings_flow_verbose_tip712_step);
-}
-
-static void switch_settings_verbose_trusted_name(void) {
-    SETTING_TOGGLE(S_TRUSTED_NAME);
-    display_settings(&ux_settings_flow_verbose_trusted_name_step);
 }
 
 UX_STEP_NOCB(ux_idle_flow_1_step,

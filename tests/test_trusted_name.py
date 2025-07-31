@@ -27,11 +27,6 @@ GAS_LIMIT = 21000
 AMOUNT = 1.22
 
 
-@pytest.fixture(name="verbose_ens", params=[False, True])
-def verbose_ens_fixture(request) -> bool:
-    return request.param
-
-
 def common(firmware: Firmware,
            app_client: TronClient,
            cmd_builder: CommandBuilder,
@@ -46,27 +41,23 @@ def common(firmware: Firmware,
 def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
                          navigator: Navigator,
                          scenario_navigator: NavigateWithScenario,
-                         verbose_ens: bool, test_name: str):
+                         test_name: str):
     app_client = TronClient(backend, firmware, navigator)
     device = backend.device
     cmd_builder = CommandBuilder()
     challenge = common(firmware, app_client, cmd_builder)
 
-    if verbose_ens:
-        settings_toggle(device, navigator, [
-            SettingID.TRUSTED_NAME
-        ])
-        test_name += "_verbose"
-
+    print("ZYD 111")
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
-
+    print("ZYD 222")
     end_text = None
     if firmware.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
 
+    print("ZYD 333")
     app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
         "nonce": NONCE,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
