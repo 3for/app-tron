@@ -6,6 +6,7 @@ from ragger.bip import pack_derivation_path
 from enum import IntEnum, auto
 from .tip712 import TIP712FieldType
 
+
 class InsType(IntEnum):
     GET_PUBLIC_ADDR = 0x02
     GET_TRC2_PUBLIC_ADDR = 0x0e

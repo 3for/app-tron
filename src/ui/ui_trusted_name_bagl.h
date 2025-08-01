@@ -6,4 +6,4 @@
 
 extern const ux_flow_step_t ux_trusted_name_step;
 
-#endif  //HAVE_BAGL
+#endif  // HAVE_BAGL

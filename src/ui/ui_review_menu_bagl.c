@@ -961,20 +961,21 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
     e_name_source source = TN_SOURCE_ENS;
-    bool trusted_name_match = get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
+    bool trusted_name_match =
+        get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
     PRINTF("### trusted_name_match:%d\n", trusted_name_match);
     switch (state) {
         case APPROVAL_TRANSFER: {
             if (trusted_name_match) {
-                ux_flow_init(
-                    0,
-                    ((data_warning == true) ? ux_approval_tx_data_warning_trusted_name_flow : ux_approval_tx_trusted_name_flow),
-                    NULL);
+                ux_flow_init(0,
+                             ((data_warning == true) ? ux_approval_tx_data_warning_trusted_name_flow
+                                                     : ux_approval_tx_trusted_name_flow),
+                             NULL);
             } else {
-                ux_flow_init(
-                    0,
-                    ((data_warning == true) ? ux_approval_tx_data_warning_flow : ux_approval_tx_flow),
-                    NULL);
+                ux_flow_init(0,
+                             ((data_warning == true) ? ux_approval_tx_data_warning_flow
+                                                     : ux_approval_tx_flow),
+                             NULL);
             }
             break;
         }
@@ -985,10 +986,10 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                 NULL);
             break;
         case APPROVAL_WITNESSCREATE_TRANSACTION:
-            ux_flow_init(
-                0,
-                ((data_warning == true) ? ux_approval_witnesscreate_data_warning_flow : ux_approval_witnesscreate_flow),
-                NULL);
+            ux_flow_init(0,
+                         ((data_warning == true) ? ux_approval_witnesscreate_data_warning_flow
+                                                 : ux_approval_witnesscreate_flow),
+                         NULL);
             break;
         case APPROVAL_PERMISSION_UPDATE:
             ux_flow_init(

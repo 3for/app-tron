@@ -26,7 +26,7 @@
 #define MAX_TOKEN_LENGTH         67
 
 #define NETWORK_STRING_MAX_SIZE 16
-#define MAX_URL_SIZE             256
+#define MAX_URL_SIZE            256
 #define SHARED_CTX_FIELD_1_SIZE 256
 #define SHARED_CTX_FIELD_2_SIZE 40
 
@@ -165,8 +165,8 @@ typedef struct tokenDefinition_t {
 
 typedef union extraInfo_t {
     tokenDefinition_t token;
-// Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
-// and not plugins
+    // Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
+    // and not plugins
     nftInfo_t nft;
 } extraInfo_t;
 

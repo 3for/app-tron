@@ -14,4 +14,4 @@ UX_STEP_NOCB(
     });
 // clang-format on
 
-#endif  //HAVE_BAGL
+#endif  // HAVE_BAGL
