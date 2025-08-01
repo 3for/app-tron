@@ -187,7 +187,8 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
     e_name_source source = TN_SOURCE_ENS;
-    bool trusted_name_match = get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
+    bool trusted_name_match =
+        get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
     PRINTF("### trusted_name_match:%d\n", trusted_name_match);
     switch (state) {
         case APPROVAL_TRANSFER:

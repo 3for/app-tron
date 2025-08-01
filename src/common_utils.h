@@ -27,7 +27,7 @@
 // --8<-- [start:common_utils]
 
 // The standard length of an Ethereum address
-#define ADDRESS_LENGTH 20
+#define ADDRESS_LENGTH   20
 #define ADDRESS_SIZE_712 20
 
 // The length of a 128-bit integer in bytes
@@ -104,10 +104,7 @@ bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size);
  * will be stored.
  * @param out_len The length of the output buffer `out`.
  */
-bool uint256_to_decimal(const uint8_t *value,
-                        size_t value_len,
-                        char *out,
-                        size_t out_len);
+bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_t out_len);
 
 /**
  * @brief Converts an amount to its string representation with decimals and
@@ -233,10 +230,7 @@ bool getEthAddressStringFromBinary(uint8_t *address,
  * uint8_t*:0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB ->
  *      char*:"0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB\0"
  */
-bool getEthDisplayableAddress(uint8_t *in,
-                              char *out,
-                              size_t out_len,
-                              uint64_t chainId);
+bool getEthDisplayableAddress(uint8_t *in, char *out, size_t out_len, uint64_t chainId);
 
 /**
  * @brief Checks if a buffer is entirely filled with zeroes.
@@ -267,9 +261,7 @@ int ismaxint(uint8_t *buf, int n);
  * @deprecated
  * See format_hex in main SDK
  */
-DEPRECATED static inline void array_hexstr(char *strbuf,
-                                           const void *bin,
-                                           unsigned int len) {
+DEPRECATED static inline void array_hexstr(char *strbuf, const void *bin, unsigned int len) {
     // Consider the output buffer is sufficiently large!
     format_hex(bin, len, strbuf, (2 * len + 1));
 }

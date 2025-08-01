@@ -76,7 +76,7 @@ def configuration(backend: BackendInterface, navigator, firmware):
                 NavInsID.RIGHT_CLICK,
                 NavInsID.BOTH_CLICK,
             ]
-            
+
             # Skip one step
             instructions += [NavInsID.RIGHT_CLICK]
             instructions += [
@@ -88,6 +88,7 @@ def configuration(backend: BackendInterface, navigator, firmware):
         navigator.navigate(instructions,
                            screen_change_before_first_instruction=False)
 
+
 @pytest.fixture(name="app_version")
 def app_version_fixture(request) -> tuple[int, int, int]:
     with open(Path(__file__).parent.parent / "VERSION", encoding="utf-8") as f:
@@ -95,6 +96,7 @@ def app_version_fixture(request) -> tuple[int, int, int]:
         first_line = f.readline().strip()
         parsed = [int(part) for part in first_line.split('.')]
     return (parsed[0], parsed[1], parsed[2])
+
 
 #########################
 ### CONFIGURATION END ###

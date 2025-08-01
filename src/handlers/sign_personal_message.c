@@ -39,8 +39,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
         }
         appState = APP_STATE_SIGNING_MESSAGE;
 
-        off_t ret =
-            read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
+        off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
             reset_app_context();
             return io_send_sw(E_INCORRECT_BIP32_PATH);

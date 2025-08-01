@@ -27,8 +27,8 @@
 #define DISABLED_STR  "Disabled"
 #define BUF_INCREMENT (MAX(strlen(ENABLED_STR), strlen(DISABLED_STR)) + 1)
 
-#define SETTING_BLIND_SIGNING_STATE        (strings.common.fullAmount + (BUF_INCREMENT * 0))
-#define SETTING_VERBOSE_TIP712_STATE       (strings.common.fullAmount + (BUF_INCREMENT * 1))
+#define SETTING_BLIND_SIGNING_STATE  (strings.common.fullAmount + (BUF_INCREMENT * 0))
+#define SETTING_VERBOSE_TIP712_STATE (strings.common.fullAmount + (BUF_INCREMENT * 1))
 
 #define BOOL_TO_STATE_STR(b) (b ? ENABLED_STR : DISABLED_STR)
 
@@ -84,7 +84,7 @@ UX_DEF(ux_settings_flow,
        &ux_settings_flow_2_step,
        &ux_settings_flow_3_step,
        &ux_settings_flow_4_step,
-       //change to match order with S_VERBOSE_TIP712
+       // change to match order with S_VERBOSE_TIP712
        &ux_settings_flow_verbose_tip712_step,
        &ux_settings_flow_5_step);
 

@@ -1,6 +1,6 @@
 #include <ctype.h>
 #include "trusted_name.h"
-#include "utils.h"    // SET_BIT
+#include "utils.h"  // SET_BIT
 #include "read.h"
 #include "challenge.h"
 #include "hash_bytes.h"
@@ -75,14 +75,14 @@ static bool matching_trusted_name(const s_trusted_name_info *trusted_name,
                                   const e_name_source *sources,
                                   const uint64_t *chain_id,
                                   const uint8_t *addr) {
-    //const uint8_t *tmp;
+    // const uint8_t *tmp;
 
     switch (trusted_name->struct_version) {
         case 1:
             if (!matching_type(TN_TYPE_ACCOUNT, type_count, types)) {
                 return false;
             }
-            //TODO. Always true for Tron now.
+            // TODO. Always true for Tron now.
             /*if (!chain_is_ethereum_compatible(chain_id)) {
                 return false;
             }*/

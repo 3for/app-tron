@@ -4,6 +4,7 @@ from ledgered.devices import Device, DeviceType
 
 from ragger.navigator import Navigator, NavInsID, NavIns
 
+
 # The order must match that of BAGL and NBGL.
 class SettingID(Enum):
     DATA_ALLOWED = auto()
@@ -49,14 +50,16 @@ def get_device_settings(device: Device) -> list[SettingID]:
     ]
 
 
-def get_settings_moves(device: Device,
-                       to_toggle: list[SettingID]) -> list[Union[NavIns, NavInsID]]:
+def get_settings_moves(
+        device: Device,
+        to_toggle: list[SettingID]) -> list[Union[NavIns, NavInsID]]:
     """Get the navigation instructions to toggle the settings"""
     moves: list[Union[NavIns, NavInsID]] = []
     settings = get_device_settings(device)
     # Assume the app is on the 1st page of Settings
     if device.is_nano:
-        moves += [NavInsID.RIGHT_CLICK] # For "settings" is ux_idle_flow_3_step in BAGL.
+        moves += [NavInsID.RIGHT_CLICK
+                  ]  # For "settings" is ux_idle_flow_3_step in BAGL.
         moves += [NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
         for setting in settings:
             if setting in to_toggle:
@@ -69,14 +72,16 @@ def get_settings_moves(device: Device,
         for setting in settings:
             if setting in to_toggle:
                 page, x, y = SETTINGS_POSITIONS[device.type][setting]
-                moves += [NavInsID.USE_CASE_SETTINGS_NEXT] * (page - current_page)
+                moves += [NavInsID.USE_CASE_SETTINGS_NEXT
+                          ] * (page - current_page)
                 moves += [NavIns(NavInsID.TOUCH, (x, y))]
                 current_page = page
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
     return moves
 
 
-def settings_toggle(device: Device, navigator: Navigator, to_toggle: list[SettingID]):
+def settings_toggle(device: Device, navigator: Navigator,
+                    to_toggle: list[SettingID]):
     """Toggle the settings"""
     moves = get_settings_moves(device, to_toggle)
     navigator.navigate(moves, screen_change_before_first_instruction=False)

@@ -235,14 +235,10 @@ static bool path_depth_list_pop(void) {
     } else {
         switch (path_struct->root_type) {
             case ROOT_DOMAIN:
-                memcpy(tmpCtx.messageSigningContext712.domainHash,
-                       hash,
-                       KECCAK256_HASH_BYTESIZE);
+                memcpy(tmpCtx.messageSigningContext712.domainHash, hash, KECCAK256_HASH_BYTESIZE);
                 break;
             case ROOT_MESSAGE:
-                memcpy(tmpCtx.messageSigningContext712.messageHash,
-                       hash,
-                       KECCAK256_HASH_BYTESIZE);
+                memcpy(tmpCtx.messageSigningContext712.messageHash, hash, KECCAK256_HASH_BYTESIZE);
                 break;
             default:
                 break;

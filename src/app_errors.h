@@ -26,9 +26,9 @@
 #define E_SWAP_CHECKING_FAIL              0x6a8e
 
 // Official:
-#define E_WRONG_DATA_LENGTH                   0x6a87
-#define E_INS_NOT_SUPPORTED                   0x6d00
-#define E_CLA_NOT_SUPPORTED                   0x6e00
+#define E_WRONG_DATA_LENGTH 0x6a87
+#define E_INS_NOT_SUPPORTED 0x6d00
+#define E_CLA_NOT_SUPPORTED 0x6e00
 
 #define APDU_RESPONSE_OK                      0x9000
 #define APDU_RESPONSE_CMD_CODE_NOT_SUPPORTED  0x911c

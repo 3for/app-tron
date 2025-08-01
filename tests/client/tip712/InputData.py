@@ -374,7 +374,8 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
         idx = 0
         for subdata in data:
             current_path.append("[]")
-            if not evaluate_field(structs, subdata, field, lvls_left - 1, False):
+            if not evaluate_field(structs, subdata, field, lvls_left - 1,
+                                  False):
                 return False
             current_path.pop()
             idx += 1
@@ -402,7 +403,8 @@ def send_struct_impl(structs, data, structname):
 
     struct = structs[structname]
     for f in struct:
-        if not evaluate_field(structs, data[f["name"]], f, len(f["array_lvls"])):
+        if not evaluate_field(structs, data[f["name"]], f, len(
+                f["array_lvls"])):
             return False
     return True
 
@@ -532,7 +534,9 @@ def provide_token_metadata(ticker: str,
             cert_apdu = ""
         # pylint: enable=line-too-long
         if cert_apdu:
-            app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
+            app_client._pki_client.send_certificate(
+                PKIPubKeyUsage.PUBKEY_USAGE_COIN_META,
+                bytes.fromhex(cert_apdu))
 
     if sig is None:
         # Temporarily get a command with an empty signature to extract the payload and
@@ -595,9 +599,9 @@ def next_timeout(_signum: int, _frame):
 
 def enable_autonext():
     if app_client._client.firmware in (Firmware.STAX, Firmware.FLEX):
-        delay = 1*3 / 2
+        delay = 1 * 3 / 2
     else:
-        delay = 1*3 / 4
+        delay = 1 * 3 / 4
 
     # golden run has to be slower to make sure we take good snapshots
     # and not processing/loading screens
@@ -624,7 +628,7 @@ def process_data(aclient,
     global is_golden_run
     global current_path
 
-    current_path = [] # init to be empty
+    current_path = []  # init to be empty
     # deepcopy because this function modifies the dict
     data_json = copy.deepcopy(data_json)
     app_client = aclient
@@ -675,7 +679,9 @@ def process_data(aclient,
             cert_apdu = ""
         # pylint: enable=line-too-long
         if cert_apdu:
-            app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META, bytes.fromhex(cert_apdu))
+            app_client._pki_client.send_certificate(
+                PKIPubKeyUsage.PUBKEY_USAGE_COIN_META,
+                bytes.fromhex(cert_apdu))
 
     # send domain implementation
     with app_client.exchange_async_raw(
@@ -703,8 +709,8 @@ def process_data(aclient,
     return True
 
 
-def provide_trusted_name_common(app_client, cmd_builder,
-                                payload: bytes, name_source: TrustedNameSource) -> RAPDU:
+def provide_trusted_name_common(app_client, cmd_builder, payload: bytes,
+                                name_source: TrustedNameSource) -> RAPDU:
     payload += format_tlv(FieldTag.STRUCT_TYPE, 3)  # TrustedName
     cert_apdu = ""
     if name_source == TrustedNameSource.CAL:
@@ -741,12 +747,12 @@ def provide_trusted_name_common(app_client, cmd_builder,
         key = Key.TRUSTED_NAME
 
     if app_client._pki_client is not None and cert_apdu:
-        app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME, bytes.fromhex(cert_apdu))
+        app_client._pki_client.send_certificate(
+            PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME, bytes.fromhex(cert_apdu))
 
     payload += format_tlv(FieldTag.SIGNER_KEY_ID, key_id)  # test key
     payload += format_tlv(FieldTag.SIGNER_ALGO, 1)  # secp256k1
-    payload += format_tlv(FieldTag.DER_SIGNATURE,
-                            sign_data(key, payload))
+    payload += format_tlv(FieldTag.DER_SIGNATURE, sign_data(key, payload))
     chunks = cmd_builder.provide_trusted_name(payload)
     for chunk in chunks[:-1]:
         app_client.exchange_raw(chunk)
@@ -760,7 +766,8 @@ def provide_trusted_name_v1(app_client, cmd_builder, addr: bytes, name: str,
     payload += format_tlv(FieldTag.COIN_TYPE, 0x3c)  # ETH in slip-44
     payload += format_tlv(FieldTag.TRUSTED_NAME, name)
     payload += format_tlv(FieldTag.ADDRESS, addr)
-    return provide_trusted_name_common(app_client, cmd_builder, payload, TrustedNameSource.ENS)
+    return provide_trusted_name_common(app_client, cmd_builder, payload,
+                                       TrustedNameSource.ENS)
 
 
 def provide_trusted_name_v2(
@@ -788,4 +795,5 @@ def provide_trusted_name_v2(
         assert len(not_valid_after) == 3
         payload += format_tlv(FieldTag.NOT_VALID_AFTER,
                               struct.pack("BBB", *not_valid_after))
-    return provide_trusted_name_common(app_client, cmd_builder, payload, name_source)
+    return provide_trusted_name_common(app_client, cmd_builder, payload,
+                                       name_source)

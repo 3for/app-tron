@@ -274,8 +274,7 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) !=
-               0) {
+    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) != 0) {
 #ifndef SCREEN_SIZE_WALLET
         if (!HAS_SETTING(S_VERBOSE_TIP712) &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
