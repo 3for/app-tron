@@ -356,8 +356,8 @@ static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
 }
 
 bool pb_decode_witness_create_contract_owner_address(pb_istream_t *stream,
-                                           const pb_field_t *field,
-                                           void **arg) {
+                                                     const pb_field_t *field,
+                                                     void **arg) {
     UNUSED(field);
 
     size_t left_url_size = stream->bytes_left;
@@ -399,7 +399,8 @@ bool pb_decode_witness_create_contract_url(pb_istream_t *stream,
     return true;
 }
 static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) {
-    msg.witness_create_contract.owner_address.funcs.decode = pb_decode_witness_create_contract_owner_address;
+    msg.witness_create_contract.owner_address.funcs.decode =
+        pb_decode_witness_create_contract_owner_address;
     msg.witness_create_contract.owner_address.arg = content;
     msg.witness_create_contract.url.funcs.decode = pb_decode_witness_create_contract_url;
     msg.witness_create_contract.url.arg = content;

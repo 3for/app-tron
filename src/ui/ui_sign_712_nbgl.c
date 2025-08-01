@@ -144,7 +144,9 @@ void ui_712_switch_to_sign(void) {
     } else {
 #ifdef SCREEN_SIZE_WALLET
         if ((warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN))) {
-            snprintf(g_stax_shared_buffer, sizeof(g_stax_shared_buffer), "Accept risk and sign typed message?");
+            snprintf(g_stax_shared_buffer,
+                     sizeof(g_stax_shared_buffer),
+                     "Accept risk and sign typed message?");
         } else {
             snprintf(g_stax_shared_buffer, sizeof(g_stax_shared_buffer), "Sign typed message?");
         }

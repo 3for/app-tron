@@ -52,7 +52,8 @@ unfiltered_flow: bool = False
 skip_flow: bool = False
 
 
-def autonext(device: Device, navigator: Navigator, default_screenshot_path: Path):
+def autonext(device: Device, navigator: Navigator,
+             default_screenshot_path: Path):
     global autonext_idx
 
     moves = []
@@ -66,24 +67,25 @@ def autonext(device: Device, navigator: Navigator, default_screenshot_path: Path
                 InputData.disable_autonext()  # so the timer stops firing
                 moves = [
                     # Ragger does not handle the skip button
-                    NavIns(NavInsID.TOUCH, POSITIONS["RightHeader"][device.type]),
+                    NavIns(NavInsID.TOUCH,
+                           POSITIONS["RightHeader"][device.type]),
                     NavInsID.USE_CASE_CHOICE_CONFIRM,
                 ]
             else:
                 moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
     if snapshots_dirname is not None:
-        navigator.navigate_and_compare(default_screenshot_path,
-                                       snapshots_dirname,
-                                       moves,
-                                       screen_change_before_first_instruction=False,
-                                       screen_change_after_last_instruction=False,
-                                       snap_start_idx=autonext_idx)
+        navigator.navigate_and_compare(
+            default_screenshot_path,
+            snapshots_dirname,
+            moves,
+            screen_change_before_first_instruction=False,
+            screen_change_after_last_instruction=False,
+            snap_start_idx=autonext_idx)
     else:
         navigator.navigate(moves,
                            screen_change_before_first_instruction=False,
                            screen_change_after_last_instruction=False)
     autonext_idx += len(moves)
-
 
 
 def tip712_new_common(device: Device,
@@ -113,18 +115,18 @@ def tip712_new_common(device: Device,
         if device.is_nano:
             nav_ins = NavInsID.RIGHT_CLICK
             val_ins = NavInsID.BOTH_CLICK
-            text = "and sign" # need to match the text info of the last sign screen
+            text = "and sign"  # need to match the text info of the last sign screen
         else:
             nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
             val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
             text = "Hold to sign"
         if snapshots_dirname is not None:
-            navigator.navigate_until_text_and_compare(nav_ins,
-                                                      [val_ins],
-                                                      text,
-                                                      default_screenshot_path,
-                                                      snapshots_dirname,
-                                                      snap_start_idx=autonext_idx)
+            navigator.navigate_until_text_and_compare(
+                nav_ins, [val_ins],
+                text,
+                default_screenshot_path,
+                snapshots_dirname,
+                snap_start_idx=autonext_idx)
         else:
             navigator.navigate_until_text(nav_ins, [val_ins], text)
     # reset values
@@ -418,12 +420,11 @@ class TestTRX():
         print(client.getAccount(0)['addressHex'])
         tx = client.packContract(
             tron.Transaction.Contract.WitnessCreateContract,
-            contract.WitnessCreateContract(
-                owner_address=bytes.fromhex(
-                    client.getAccount(0)['addressHex']),
-                url="http://sr-1t.com".encode()
-                ))
+            contract.WitnessCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                           url="http://sr-1t.com".encode()))
         self.sign_and_validate(client, firmware, 0, tx)
+
     def test_trx_vote_witness(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
@@ -643,7 +644,9 @@ class TestTRX():
                         type=tron.Permission.Active,
                         permission_name="activeA",
                         threshold=2,
-                        operations=bytes.fromhex("7fff1fc0037e0000000000000000000000000000000000000000000000000000"),
+                        operations=bytes.fromhex(
+                            "7fff1fc0037e0000000000000000000000000000000000000000000000000000"
+                        ),
                         keys=[
                             tron.Key(
                                 address=bytes.fromhex(
@@ -656,8 +659,9 @@ class TestTRX():
                                 weight=1,
                             ),
                         ],
-                    )],
-                ))
+                    )
+                ],
+            ))
         self.sign_and_validate(client, firmware, 0, tx)
 
     def test_trx_trc20_send(self, backend, firmware, navigator):
@@ -932,9 +936,8 @@ class TestTRX():
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path, input_file: Path,
-                            verbose_raw: bool, filtering: bool, 
-                            golden_run: bool,
-                            test_name: str):
+                            verbose_raw: bool, filtering: bool,
+                            golden_run: bool, test_name: str):
 
         global unfiltered_flow
         global snapshots_dirname
@@ -960,7 +963,7 @@ class TestTRX():
         else:
             pass
             #settings_to_toggle.append(SettingID.SIGN_BY_HASH)
-        
+
         if verbose_raw:
             setting_id = SettingID.VERBOSE_TIP712
             settings_to_toggle.append(setting_id)
@@ -974,17 +977,18 @@ class TestTRX():
             data = json.load(file)
             extra_left = test_path.endswith(
                 '01-addresses_array_mail') and verbose_raw and filters is None
-            vrs = tip712_new_common(device,
-                                    navigator,
-                                    default_screenshot_path,
-                                    client,
-                                    cmd_builder,
-                                    data,
-                                    filters,
-                                    verbose_raw,
-                                    golden_run,
-                                    #False,
-                                    extra_left=extra_left)
+            vrs = tip712_new_common(
+                device,
+                navigator,
+                default_screenshot_path,
+                client,
+                cmd_builder,
+                data,
+                filters,
+                verbose_raw,
+                golden_run,
+                #False,
+                extra_left=extra_left)
             recovered_addr = recover_message(data, vrs)
 
         assert recovered_addr == get_wallet_addr(client)
@@ -1114,7 +1118,7 @@ class TestTRX():
                                                default_screenshot_path: Path):
         client = TronClient(backend, firmware, navigator)
         device = backend.device
-        
+
         setting_id = SettingID.SIGN_BY_HASH
         settings_toggle(device, navigator, [setting_id])
         cmd_builder = CommandBuilder()

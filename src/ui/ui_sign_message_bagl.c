@@ -47,11 +47,7 @@ UX_STEP_INIT(ux_191_step_dummy_pre, NULL, NULL, { dummy_pre_cb(); });
 UX_STEP_CB(ux_191_step_theres_more,
            nnn,
            G_ux.stack[0].button_push_callback = NULL;  // disable button clicks
-           skip_rest_of_message(),
-           {
-               "Press right to",
-               "continue message",
-               "Double-press to skip"});
+           skip_rest_of_message(), {"Press right to", "continue message", "Double-press to skip"});
 UX_STEP_INIT(ux_191_step_dummy_post, NULL, NULL, { dummy_post_cb(); });
 UX_STEP_CB(ux_191_step_sign,
            pbb,

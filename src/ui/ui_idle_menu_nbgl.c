@@ -36,7 +36,7 @@ enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
     HASH_TX_ID,
-    //change to make same order for bagl and nbgl
+    // change to make same order for bagl and nbgl
     TIP712_VERBOSE_ID,
     SETTINGS_SWITCHES_NB
 };
