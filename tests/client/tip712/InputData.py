@@ -549,8 +549,7 @@ def provide_token_metadata(ticker: str,
         cmd_builder.provide_trc20_token_information(ticker, addr, decimals,
                                                     chain_id, sig))
 
-
-def prepare_filtering(filter_data, message):
+def prepare_filtering(filter_data):
     global filtering_paths
     global filtering_tokens
 
@@ -660,7 +659,7 @@ def process_data(aclient,
         with app_client.exchange_async_raw(
                 cmd_builder.tip712_filtering_activate()):
             pass
-        prepare_filtering(filters, message)
+        prepare_filtering(filters)
 
     if app_client._pki_client is None:
         print(f"Ledger-PKI Not supported on '{app_client._firmware.name}'")

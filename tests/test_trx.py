@@ -1112,6 +1112,95 @@ class TestTRX():
         addr = recover_message(advanced_trusted_name_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
 
+    def test_trx_ZYD(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        
+        data = bytes.fromhex("454950373132446f6d61696e")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0x00, data)
+        print(resp)
+
+        data = bytes.fromhex("05046e616d65")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("050776657273696f6e")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("422007636861696e4964")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("0311766572696679696e67436f6e7472616374")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("5472616e73666572")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0x00, data)
+        print(resp)
+
+        data = bytes.fromhex("030477697468")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("42200a76616c75655f72656376")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("030a746f6b656e5f73656e64")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("42200a76616c75655f73656e64")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("030a746f6b656e5f72656376")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("42080765787069726573")
+        resp = backend.exchange(CLA, 0x1a, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("")
+        resp = backend.exchange(CLA, 0x1e, 0x00, 0x00, data)
+        print(resp)
+
+        data = bytes.fromhex("454950373132446f6d61696e")
+        resp = backend.exchange(CLA, 0x1c, 0x00, 0x00, data)
+        print(resp)
+
+        data = bytes.fromhex("000d416476616e6365642074657374")
+        resp = backend.exchange(CLA, 0x1c, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("000131")
+        resp = backend.exchange(CLA, 0x1c, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("000444a50f9c")
+        resp = backend.exchange(CLA, 0x1c, 0x00, 0xff, data)
+        print(resp)
+
+        data = bytes.fromhex("0014cccccccccccccccccccccccccccccccccccccccc")
+        resp = backend.exchange(CLA, 0x1c, 0x00, 0xff, data)
+        print(resp)
+
+        # filters_count is 6
+        data = bytes.fromhex("12416476616e6365642046696c746572696e6706473045022100e0e774e6066f89d82b7b4d60cc0abee0aa934bc3a6d67dbcf35cb781797ad0c1022073f3f70f1a880770a107c919bae021921441932c7bfe657b4035edddbb613c70")
+        # filters_count is 8
+        #data = bytes.fromhex("12416476616e6365642046696c746572696e67084630440220394e2e1c664cebaf4d8e37a5437596300a6cfd6102ff460a3572a9a052c8239b022004c0add67dd4d84a5f13853d2d3be0775ae9ae6163813d213ca0a33178ba924d")
+        with backend.exchange_async(CLA, 0x1e, 0x00, 0x0f, data):
+            InputData.app_client = client
+            InputData.is_golden_run = True
+            InputData.enable_autonext()
+            navigator.navigate([NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK],
+                               screen_change_before_first_instruction=True)
+        print(resp)
+        
+        assert true == true  
+
     def test_trx_tip712_bs_not_activated_error(self, firmware: Firmware,
                                                backend: BackendInterface,
                                                navigator: Navigator,

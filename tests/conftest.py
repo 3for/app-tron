@@ -4,7 +4,6 @@ from ragger.conftest import configuration
 from ragger.backend import SpeculosBackend, BackendInterface
 from ragger.navigator import NavInsID, NavIns
 from pathlib import Path
-import re
 
 ###########################
 ### CONFIGURATION START ###

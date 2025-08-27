@@ -1,6 +1,5 @@
 from ctypes import c_uint64
 import web3
-import pytest
 from client.tip712 import InputData as InputData
 
 
