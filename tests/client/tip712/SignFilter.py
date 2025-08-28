@@ -55,7 +55,8 @@ def sign_filter_data(
     sig = bytes()
     display_name = str()
 
-    """ # in app-ethereum, the filters_count is fields count in filtering_paths
+    # in app-ethereum, the filters_count is fields count in filtering_paths
+    # Will check if "712 filters are missing" when sign 712 messge
     if filters:
         if filters and "name" in filters:
             display_name = filters["name"]
@@ -64,7 +65,7 @@ def sign_filter_data(
         sig = sign_filtering_message_info(display_name, len(InputData.filtering_paths))
         out["eip712_signatures"][caddr][schema_hash]["contractName"] = {}
         out["eip712_signatures"][caddr][schema_hash]["contractName"]["label"] = display_name
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
+        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex()
 
     print("ZYD 333 out:", out)
     if not get_struct_impl(types, message, message_typename):
@@ -72,7 +73,7 @@ def sign_filter_data(
         return False
 
     out["eip712_signatures"][caddr][schema_hash]["fields"] = schema["fields"]
-    # in ledger-live hw-app-eth, the filters_count is fields count in epi712_signatures
+    """ # in ledger-live hw-app-eth, the filters_count is fields count in epi712_signatures
     if filters:
         if filters and "name" in filters:
             display_name = filters["name"]
@@ -82,7 +83,8 @@ def sign_filter_data(
         sig = sign_filtering_message_info(display_name, len(schema["fields"]))
         out["eip712_signatures"][caddr][schema_hash]["contractName"] = {}
         out["eip712_signatures"][caddr][schema_hash]["contractName"]["label"] = display_name
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex()
+        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
+    
     print("ZYD AAA out:", out)
     return True
 
@@ -106,16 +108,20 @@ def get_filter(path: str):
     single_field["path"] = path
     single_field["format"] = InputData.filtering_paths[path]["type"]
     if InputData.filtering_paths[path]["type"].startswith("amount_join_"):
+        # fixed the "format" to be "amount"
+        single_field["format"] = "amount"
         token_field = {}
         token_field["format"] = "token"
         token_field["path"] = path
         if "token" in InputData.filtering_paths[path].keys():
             token_idx = InputData.filtering_paths[path]["token"]
-            sig = sign_filtering_token(token_idx)
-            if sig:
-                token_field["coin_ref"] = token_idx
-                token_field["signature"] = sig.hex()
-                schema["fields"].append(token_field)
+            # For leger-live, ONLY add token_field if amount_join_token, not for amount_join_value
+            if InputData.filtering_paths[path]["type"].endswith("_token"):
+                sig = sign_filtering_token(token_idx)
+                if sig:
+                    token_field["coin_ref"] = token_idx
+                    token_field["signature"] = sig.hex()
+                    schema["fields"].append(token_field)
         else:
             # Permit (ERC-2612)
             sig = sign_filtering_token(0)
