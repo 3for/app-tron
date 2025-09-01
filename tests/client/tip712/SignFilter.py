@@ -1,4 +1,5 @@
 from client.tip712 import InputData
+from client.tip712 import EncodeTokenInfo
 from client.tip712 import TIP712FieldType
 import sys
 import keychain
@@ -15,6 +16,7 @@ out = {
 schema: Dict[str, Dict[str, Any]] = {}
 schema["fields"] = []
 single_field = {}
+token_entries = []
 
 def sign_filter_data(
                  #out: Dict[str, Dict[str, Any]],
@@ -86,6 +88,9 @@ def sign_filter_data(
         out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
     
     print("ZYD AAA out:", out)
+
+    trc20SignaturesBlob = EncodeTokenInfo.encode_token_info(token_entries)
+    print("ZYD trc20SignaturesBlob:", trc20SignaturesBlob)
     return True
 
 def sign_filtering_token(token_idx: int) -> bytes:
@@ -97,6 +102,15 @@ def sign_filtering_token(token_idx: int) -> bytes:
             sig = sign_token_metadata(token["ticker"],
                                    bytes.fromhex(token["addr"][2:]),
                                    token["decimals"], token["chain_id"])
+            
+            token_entry = {}
+            token_entry["ticker"] = token["ticker"]
+            token_entry["contractAddress"] = token["addr"]
+            token_entry["decimals"] = token["decimals"]
+            token_entry["chainId"] = token["chain_id"]
+            token_entry["signature"] = sig.hex()
+            token_entries.append(token_entry)
+
             token["sent"] = True
 
     return sig
