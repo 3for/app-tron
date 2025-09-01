@@ -17,6 +17,7 @@ schema: Dict[str, Dict[str, Any]] = {}
 schema["fields"] = []
 single_field = {}
 token_entries = []
+tip712_v2 = {}
 
 def sign_filter_data(
                  #out: Dict[str, Dict[str, Any]],
@@ -91,7 +92,14 @@ def sign_filter_data(
 
     trc20SignaturesBlob = EncodeTokenInfo.encode_token_info(token_entries)
     print("ZYD trc20SignaturesBlob:", trc20SignaturesBlob)
+
+    new_key = build_entry(domain["chainId"], domain["verifyingContract"].lower(), schema_hash)
+    tip712_v2[new_key] = out["eip712_signatures"][caddr][schema_hash]
+    print("ZYD tip712_v2:", tip712_v2)
     return True
+
+def build_entry(chain_id: int, contract_address: str, schema_hash: str) -> str:
+    return f"{chain_id}:{contract_address}:{schema_hash}"
 
 def sign_filtering_token(token_idx: int) -> bytes:
     assert token_idx < len(InputData.filtering_tokens)
@@ -321,7 +329,7 @@ def sign_token_metadata(ticker: str,
     # skip APDU header & empty sig
     sig = keychain.sign_data(keychain.Key.CAL, tmp[6:])
     print("ZYD sign_token_metadata sig:", sig.hex())
-    
+
     return sig
 
 # ledgerjs doesn't actually sign anything, and instead uses already pre-computed signatures
