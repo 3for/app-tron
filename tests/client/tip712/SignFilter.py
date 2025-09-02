@@ -8,9 +8,12 @@ from client.command_builder import CommandBuilder
 import copy
 from typing import Any, Dict
 
+# Define the top-level key as a variable
+root_key = "tip712_signatures"
+
 # global variable
 out = {
-    "eip712_signatures": {
+    root_key: {
     }
 }
 schema: Dict[str, Dict[str, Any]] = {}
@@ -38,9 +41,9 @@ def sign_filter_data(
         InputData.init_signature_context(types, domain)
 
     caddr = "0x" + InputData.sig_ctx["caddr"].hex()
-    out["eip712_signatures"][caddr] = {}
+    out[root_key][caddr] = {}
     schema_hash = InputData.sig_ctx["schema_hash"].hex()
-    out["eip712_signatures"][caddr][schema_hash] = {}
+    out[root_key][caddr][schema_hash] = {}
     print("ZYD 222 out:", out)
 
     # get types definition
@@ -66,16 +69,16 @@ def sign_filter_data(
         else:
             display_name = domain["name"]
         sig = sign_filtering_message_info(display_name, len(InputData.filtering_paths))
-        out["eip712_signatures"][caddr][schema_hash]["contractName"] = {}
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["label"] = display_name
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex()
+        out[root_key][caddr][schema_hash]["contractName"] = {}
+        out[root_key][caddr][schema_hash]["contractName"]["label"] = display_name
+        out[root_key][caddr][schema_hash]["contractName"]["signature"] = sig.hex()
 
     print("ZYD 333 out:", out)
     if not get_struct_impl(types, message, message_typename):
         print("Failed to get message implementation")
         return False
 
-    out["eip712_signatures"][caddr][schema_hash]["fields"] = schema["fields"]
+    out[root_key][caddr][schema_hash]["fields"] = schema["fields"]
     """ # in ledger-live hw-app-eth, the filters_count is fields count in epi712_signatures
     if filters:
         if filters and "name" in filters:
@@ -84,9 +87,9 @@ def sign_filter_data(
             display_name = domain["name"]
         print("ZYD filters_count:", len(schema["fields"]))
         sig = sign_filtering_message_info(display_name, len(schema["fields"]))
-        out["eip712_signatures"][caddr][schema_hash]["contractName"] = {}
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["label"] = display_name
-        out["eip712_signatures"][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
+        out[root_key][caddr][schema_hash]["contractName"] = {}
+        out[root_key][caddr][schema_hash]["contractName"]["label"] = display_name
+        out[root_key][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
     
     print("ZYD AAA out:", out)
 
@@ -94,7 +97,7 @@ def sign_filter_data(
     print("ZYD trc20SignaturesBlob:", trc20SignaturesBlob)
 
     new_key = build_entry(domain["chainId"], domain["verifyingContract"].lower(), schema_hash)
-    tip712_v2[new_key] = out["eip712_signatures"][caddr][schema_hash]
+    tip712_v2[new_key] = out[root_key][caddr][schema_hash]
     print("ZYD tip712_v2:", tip712_v2)
     return True
 
