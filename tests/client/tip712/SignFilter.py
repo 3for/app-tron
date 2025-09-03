@@ -133,36 +133,29 @@ def get_filter(path: str):
     single_field["path"] = path
     single_field["format"] = InputData.filtering_paths[path]["type"]
     if InputData.filtering_paths[path]["type"].startswith("amount_join_"):
-        # fixed the "format" to be "amount"
-        single_field["format"] = "amount"
-        token_field = {}
-        token_field["format"] = "token"
-        token_field["path"] = path
         if "token" in InputData.filtering_paths[path].keys():
             token_idx = InputData.filtering_paths[path]["token"]
             # For leger-live, ONLY add token_field if amount_join_token, not for amount_join_value
             if InputData.filtering_paths[path]["type"].endswith("_token"):
                 sig = sign_filtering_token(token_idx)
-                if sig:
-                    token_field["coin_ref"] = token_idx
-                    token_field["signature"] = sig.hex()
-                    schema["fields"].append(token_field)
         else:
             # Permit (ERC-2612)
             sig = sign_filtering_token(0)
             token_idx = 0xff
-            if sig:
-                token_field["coin_ref"] = token_idx
-                token_field["signature"] = sig.hex()
-                token_field["label"] = InputData.filtering_paths[path]["name"]
-                schema["fields"].append(token_field)
             
         single_field["coin_ref"] = token_idx
         print("ZYD 555 schema[\"fields\"]", schema["fields"])
         if InputData.filtering_paths[path]["type"].endswith("_token"):
+            single_field["format"] = "token"
+            # always set single_field["label"]
+            if "name" in InputData.filtering_paths[path]:
+                single_field["label"] = InputData.filtering_paths[path]["name"]
+            else:
+                single_field["label"] = single_field["path"]
             sig = sign_filtering_amount_join_token(path, token_idx)
             single_field["signature"] = sig.hex()
         elif InputData.filtering_paths[path]["type"].endswith("_value"):
+            single_field["format"] = "amount"
             single_field["label"] = InputData.filtering_paths[path]["name"]
             sig = sign_filtering_amount_join_value(path, token_idx,
                                              InputData.filtering_paths[path]["name"])
