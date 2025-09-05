@@ -56,7 +56,7 @@ typedef struct {
 
 // Static variables
 static nbgl_layoutTagValueList_t pairList;
-static nbgl_pageInfoLongPress_t infoLongPress;
+static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
 
 // Static functions declarations

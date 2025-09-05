@@ -1,4 +1,3 @@
-#ifdef HAVE_NBGL
 #include <string.h>  // explicit_bzero
 #include "ui_logic.h"
 #include "nbgl_use_case.h"
@@ -172,5 +171,3 @@ void ui_typed_message_review_choice(bool confirm) {
         nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_message_712_rejected);
     }
 }
-
-#endif  // HAVE_NBGL

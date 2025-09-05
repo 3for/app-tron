@@ -1,4 +1,5 @@
-#ifdef HAVE_NBGL
+#ifndef _UI_NBGL_H_
+#define _UI_NBGL_H_
 #define TEXT_MESSAGE "message"
 
 #define SIGN(msg)   "Sign " msg "?"
@@ -22,4 +23,4 @@ void ui_settings(void);
 
 extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
 
-#endif
+#endif  // _UI_NBGL_H_

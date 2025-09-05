@@ -19,7 +19,7 @@ ifeq ($(BOLOS_SDK),)
 $(error Environment variable BOLOS_SDK is not set)
 endif
 
-include $(BOLOS_SDK)/Makefile.defines
+include $(BOLOS_SDK)/Makefile.target
 
 APPNAME = Tron
 
@@ -47,9 +47,23 @@ ICON_NANOSP = icons/nanox_app_tron.gif
 ICON_STAX = icons/stax_app_tron.gif
 ICON_FLEX = icons/flex_app_tron.gif
 
+#prepare hsm generation
+ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX))
+    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_64px
+    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_64px_bitmap
+else
+ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_NANOX TARGET_NANOS2))
+    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_14px
+    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_14px_bitmap
+endif
+endif
+
 ENABLE_BLUETOOTH = 1
 ENABLE_SWAP = 1
 ENABLE_NBGL_QRCODE = 1
+ifneq ($(TARGET_NAME),TARGET_NANOS)
+ENABLE_NBGL_FOR_NANO_DEVICES = 1
+endif
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
 DEBUG ?= 0

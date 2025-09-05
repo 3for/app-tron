@@ -105,26 +105,34 @@ void ui_idle(void) {
     switches[TX_DATA_ID].text = "Transactions data";
     switches[TX_DATA_ID].subText = "Allow extra data in\ntransactions";
     switches[TX_DATA_ID].token = SWITCH_ALLOW_TX_DATA_TOKEN;
+#ifdef HAVE_PIEZO_SOUND
     switches[TX_DATA_ID].tuneId = TUNE_TAP_CASUAL;
+#endif
     switches[TX_DATA_ID].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
 
     switches[CSTM_CONTRACTS_ID].text = "Custom contracts";
     switches[CSTM_CONTRACTS_ID].subText = "Allow unverified contracts";
     switches[CSTM_CONTRACTS_ID].token = SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN;
+#ifdef HAVE_PIEZO_SOUND
     switches[CSTM_CONTRACTS_ID].tuneId = TUNE_TAP_CASUAL;
+#endif
     switches[CSTM_CONTRACTS_ID].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
 
     switches[HASH_TX_ID].text = "Blind signing";
     switches[HASH_TX_ID].subText = "Allow transaction blind signing";
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
+#ifdef HAVE_PIEZO_SOUND
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
+#endif
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
     switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
     switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
     switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
+#ifdef HAVE_PIEZO_SOUND
     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
+#endif
 
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &C_app_tron_64px,
@@ -146,7 +154,7 @@ static void ui_error_blind_signing_choice(bool confirm) {
 }
 
 void ui_error_blind_signing(void) {
-    nbgl_useCaseChoice(&C_Warning_64px,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "This transaction cannot be clear-signed",
                        "Enable blind signing in the settings to sign this transaction.",
                        "Go to settings",
