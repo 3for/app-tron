@@ -27,6 +27,7 @@
 #include "ui_review_menu.h"
 #include "ui_idle_menu.h"
 #include "trusted_name.h"
+#include "ui_nbgl.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER 2
@@ -94,7 +95,7 @@ static void customContractWarningChoice(bool accept) {
 }
 
 static void displayDataWarning(void) {
-    nbgl_useCaseChoice(&C_Important_Circle_64px,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
                        "Continue",
@@ -103,7 +104,7 @@ static void displayDataWarning(void) {
 }
 
 static void displayCustomContractWarning(void) {
-    nbgl_useCaseChoice(&C_Important_Circle_64px,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nCustom Contract\nProceed with care",
                        "Reject if you're not sure",
                        "Continue",

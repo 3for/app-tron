@@ -52,6 +52,5 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources);
-#ifdef SCREEN_SIZE_WALLET
+
 char *get_ui_pairs_buffer(size_t *size);
-#endif

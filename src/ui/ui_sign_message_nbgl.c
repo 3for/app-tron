@@ -1,7 +1,6 @@
 #ifdef HAVE_NBGL
-#include <nbgl_page.h>
 #include "glyphs.h"
-#include "nbgl_use_case.h"
+//#include "nbgl_use_case.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
 #include "ui_review_menu.h"
@@ -54,13 +53,18 @@ static bool ui_191_update_display_buffer(void) {
     strlcat(g_stax_shared_buffer + g_display_buffer_idx,
             strings.tmp.tmp + g_rcv_buffer_idx,
             sizeof(g_stax_shared_buffer) - g_display_buffer_idx);
+#ifdef SCREEN_SIZE_WALLET
     reached = nbgl_getTextMaxLenInNbLines(LARGE_MEDIUM_FONT,
                                           (char *) g_stax_shared_buffer,
-                                          SCREEN_WIDTH - (2 * BORDER_MARGIN),
+                                          AVAILABLE_WIDTH,
+                                          //SCREEN_WIDTH - (2 * BORDER_MARGIN),
                                           NB_MAX_LINES_IN_REVIEW,
                                           &len,
                                           false);
-
+#else   // SCREEN_SIZE_WALLET
+    len = strlen(g_stax_shared_buffer);
+    reached = (g_rcv_buffer_idx == 0);
+#endif  // SCREEN_SIZE_WALLET
     g_rcv_buffer_idx += (len - g_display_buffer_idx);
     g_display_buffer_idx = len;
     g_stax_shared_buffer[g_display_buffer_idx] = '\0';
@@ -116,7 +120,7 @@ void ui_191_start(void) {
     g_skipped = false;
 
     nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
-                                     &C_Review_64px,
+                                     &ICON_APP_REVIEW,
                                      TEXT_REVIEW_TIP191,
                                      NULL,
                                      ui_191_data_cb);

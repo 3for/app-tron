@@ -1,5 +1,7 @@
 #ifndef _UI_NBGL_H_
 #define _UI_NBGL_H_
+#include "nbgl_use_case.h"
+
 #define TEXT_MESSAGE "message"
 
 #define SIGN(msg)   "Sign " msg "?"

@@ -20,9 +20,9 @@
 #include "ui_idle_menu.h"
 #include "glyphs.h"
 #include "ux.h"
-#include "nbgl_use_case.h"
 #include "settings.h"
 #include "parse.h"
+#include "ui_nbgl.h"
 
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
