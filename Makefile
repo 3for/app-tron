@@ -47,16 +47,6 @@ ICON_NANOSP = icons/nanox_app_tron.gif
 ICON_STAX = icons/stax_app_tron.gif
 ICON_FLEX = icons/flex_app_tron.gif
 
-#prepare hsm generation
-ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX))
-    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_64px
-    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_64px_bitmap
-else
-ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_NANOX TARGET_NANOS2))
-    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_14px
-    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_14px_bitmap
-endif
-endif
 
 ENABLE_BLUETOOTH = 1
 ENABLE_SWAP = 1
