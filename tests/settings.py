@@ -58,8 +58,6 @@ def get_settings_moves(
     settings = get_device_settings(device)
     # Assume the app is on the 1st page of Settings
     if device.is_nano:
-        moves += [NavInsID.RIGHT_CLICK
-                  ]  # For "settings" is ux_idle_flow_3_step in BAGL.
         moves += [NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
         for setting in settings:
             if setting in to_toggle:

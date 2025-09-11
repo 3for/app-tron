@@ -116,7 +116,7 @@ static void displayTransaction(void) {
     // Start review
     nbgl_useCaseReview(TYPE_TRANSACTION,
                        &pairList,
-                       &C_app_tron_64px,
+                       &ICON_APP_ICONGLYPH,
                        txInfos.flowTitle,
                        txInfos.flowSubtitle,
                        infoLongPress.text,
@@ -189,7 +189,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 
     infoLongPress.text = "Sign transaction";
     infoLongPress.longPressText = "Hold to sign";
-    infoLongPress.icon = &C_app_tron_64px;
+    infoLongPress.icon = &ICON_APP_ICONGLYPH;
 
     pairList.pairs = (nbgl_layoutTagValue_t *) txInfos.fields;
 
@@ -462,7 +462,7 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     if (state == APPROVAL_VERIFY_ADDRESS) {
         nbgl_useCaseAddressReview(toAddress,
                                   NULL,
-                                  &C_app_tron_64px,
+                                  &ICON_APP_ICONGLYPH,
                                   "Verify Tron\naddress",
                                   NULL,
                                   display_address_callback);
