@@ -95,21 +95,39 @@ static void customContractWarningChoice(bool accept) {
 }
 
 static void displayDataWarning(void) {
+#ifdef SCREEN_SIZE_WALLET
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
                        "Continue",
                        "Reject transaction",
                        dataWarningChoice);
+#else
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
+                       "Data Present",
+                       "Reject if unsure",
+                       "Continue",
+                       "Reject",
+                       dataWarningChoice);
+#endif
 }
 
 static void displayCustomContractWarning(void) {
+#ifdef SCREEN_SIZE_WALLET
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nCustom Contract\nProceed with care",
                        "Reject if you're not sure",
                        "Continue",
                        "Reject transaction",
                        customContractWarningChoice);
+#else
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
+                       "Custom Contract",
+                       "Reject if unsure",
+                       "Continue",
+                       "Reject",
+                       customContractWarningChoice);
+#endif
 }
 
 static void displayTransaction(void) {
@@ -459,6 +477,7 @@ static void display_address_callback(bool confirm) {
 }
 
 void ux_flow_display(ui_approval_state_t state, bool data_warning) {
+    PRINTF("ZYD 1111");
     if (state == APPROVAL_VERIFY_ADDRESS) {
         nbgl_useCaseAddressReview(toAddress,
                                   NULL,

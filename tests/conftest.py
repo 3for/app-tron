@@ -50,7 +50,6 @@ def configuration(backend: BackendInterface, navigator, firmware):
             instructions = [
                 # Go to settings main menu
                 NavInsID.RIGHT_CLICK,
-                NavInsID.RIGHT_CLICK,
                 NavInsID.BOTH_CLICK,
                 # Allow data in TXs
                 NavInsID.BOTH_CLICK,

@@ -56,7 +56,7 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
     else:
         end_text = "Hold to sign"
 
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
+    app_client.sign_for_trusted_name_new(app_client.getAccount(0)['path'], {
         "nonce": NONCE,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
@@ -66,6 +66,7 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
     },
                                      test_name,
                                      end_text,
+                                     scenario_navigator,
                                      warning_approve=True)
 
 

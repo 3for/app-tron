@@ -59,7 +59,7 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
-
+    PRINTF("#### ZYD 11111 #####");
     if (p2 != 0x00) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
@@ -230,7 +230,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
         case TRIGGERSMARTCONTRACT:   // TRC20 Transfer
-
+            PRINTF("ZYD AAAA");
             strcpy(TRC20ActionSendAllow, "To");
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
                 if (txContent.TRC20Method == 1)
@@ -274,7 +274,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                         strcpy(toAddress, "-");
                         strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
                     }
-
+                    PRINTF("ZYD BBBB");
                     // approve custom contract
                     ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
 
@@ -316,9 +316,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     return io_send_sw(E_SWAP_CHECKING_FAIL);
                 }
             } else {
+                PRINTF("ZYD CCCC");
                 ux_flow_display(APPROVAL_TRANSFER, data_warning);
             }
 #else   // HAVE_SWAP
+            PRINTF("ZYD DDDD");
             ux_flow_display(APPROVAL_TRANSFER, data_warning);
 #endif  // HAVE_SWAP
 

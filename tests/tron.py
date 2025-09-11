@@ -23,6 +23,8 @@ from ragger.firmware import Firmware
 from conftest import MNEMONIC
 from web3 import Web3
 
+from ragger.navigator.navigation_scenario import NavigateWithScenario
+
 from client.tip712.InputData import PKIPubKeyUsage
 '''
 Tron Protobuf
@@ -438,3 +440,91 @@ class TronClient:
                          text=text,
                          snappath=snap_path,
                          warning_approve=warning_approve)
+
+    def sign_for_trusted_name_new(self,
+                              bip32_path: str,
+                              tx_params: dict,
+                              snap_path: str,
+                              text: str,
+                              scenario_navigator: NavigateWithScenario,
+                              warning_approve: bool = False):
+        tx = self.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(("41" + tx_params["to"].hex())),
+                amount=1000000,
+                asset_name="1002000".encode()), tx_params)
+
+        return self.sign_new(bip32_path,
+                         tx,
+                         scenario_navigator,
+                         text=text,
+                         snappath=snap_path,
+                         warning_approve=warning_approve)
+    
+    def sign_new(self,
+             path: str,
+             tx,
+             scenario_navigator: NavigateWithScenario,
+             signatures=[],
+             snappath: Path = None,
+             text: str = "",
+             navigate: bool = True,
+             warning_approve: bool = False):
+        messages = []
+
+        # Split transaction in multiples APDU
+        data = pack_derivation_path(path)
+        while len(tx) > 0:
+            # get next message field
+            newpos = self.get_next_length(tx)
+            assert (newpos < MAX_APDU_LEN)
+            if (len(data) + newpos) < MAX_APDU_LEN:
+                # append to data
+                data += tx[:newpos]
+                tx = tx[newpos:]
+            else:
+                # add chunk
+                messages.append(data)
+                data = bytearray()
+                continue
+        # append last
+        messages.append(data)
+        token_pos = len(messages)
+
+        for signature in signatures:
+            messages.append(bytearray.fromhex(signature))
+
+        # Send all the messages except the last
+        for i, data in enumerate(messages[:-1]):
+            if i == 0:
+                p1 = P1.FIRST
+            else:
+                if i < token_pos:
+                    p1 = P1.MORE
+                else:
+                    p1 = P1.TRC10_NAME | P1.FIRST | i - token_pos
+
+            self._client.exchange(CLA, InsType.SIGN, p1, 0x00, data)
+
+        # Send last message
+        if len(messages) == 1:
+            p1 = P1.SIGN
+        elif signatures:
+            p1 = P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE | len(
+                signatures) - 1
+        else:
+            p1 = P1.LAST
+
+        if navigate:
+            with self._client.exchange_async(CLA, InsType.SIGN, p1, 0x00,
+                                             messages[-1]):
+                if warning_approve:
+                    scenario_navigator.review_approve_with_warning(test_name=snappath)
+                else:
+                    scenario_navigator.review_approve(test_name=snappath)
+            return self._client.last_async_response
+        else:
+            return self._client.exchange(CLA, InsType.SIGN, p1, 0x00,
+                                         messages[-1])
