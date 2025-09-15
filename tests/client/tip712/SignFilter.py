@@ -37,8 +37,8 @@ def sign_filter_data(
     domain = data_json["domain"]
     message = data_json["message"]
 
-    if filters:
-        InputData.init_signature_context(types, domain)
+    #if filters:
+    InputData.init_signature_context(types, domain)
 
     caddr = "0x" + InputData.sig_ctx["caddr"].hex()
     out[root_key][caddr] = {}
