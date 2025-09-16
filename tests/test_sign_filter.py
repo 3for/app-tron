@@ -15,7 +15,7 @@ def test_sign_712_filtering_file():
     filters = None
     data = None
 
-    file_name = "12-sign_in"
+    file_name = "11-complex_structs"
     main_name = f"{os.path.dirname(__file__)}/tip712_input_files/{file_name}"
     filterfile = Path(f"{main_name}-filter.json")
     if filterfile.exists():

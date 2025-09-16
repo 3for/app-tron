@@ -6,7 +6,40 @@ import keychain
 from typing import Optional
 from client.command_builder import CommandBuilder
 import copy
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
+
+def sort_object_alphabetically(obj: Dict[str, Any]) -> Dict[str, Any]:
+    sorted_obj: Dict[str, Any] = {}
+
+    for key in sorted(obj.keys()):  # Sort keys in alphabetical order
+        value = obj[key]
+
+        if isinstance(value, list):
+            # If the value is a list, check each element; 
+            # if an element is a dict, process it recursively
+            new_list: List[Any] = []
+            for item in value:
+                if isinstance(item, dict):
+                    new_list.append(sort_object_alphabetically(item))
+                else:
+                    new_list.append(item)
+            sorted_obj[key] = new_list
+        else:
+            sorted_obj[key] = value
+
+    return sorted_obj
+
+    """ data = {
+        "z": 1,
+        "a": {"c": 3, "b": 2},
+        "m": [{"y": 25, "x": 24}, {"b": 2, "a": 1}]
+    }
+    sorted_data = {
+        "a": {"c": 3, "b": 2}, 
+        "m": [{"x": 24, "y": 25}, {"a": 1, "b": 2}], 
+        "z": 1
+    }
+    assert sorted_data ==  sort_object_alphabetically(data) """
 
 # Define the top-level key as a variable
 root_key = "tip712_signatures"
@@ -33,7 +66,10 @@ def sign_filter_data(
     data_json = copy.deepcopy(data_json)
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
-    types = data_json["types"]
+    unsorted_types = data_json["types"]
+    print("ZYD unsorted_types:", unsorted_types)
+    types = sort_object_alphabetically(unsorted_types)
+    print("ZYD sorted types:", types)
     domain = data_json["domain"]
     message = data_json["message"]
 
@@ -178,7 +214,8 @@ def get_filter(path: str):
         single_field["label"] = InputData.filtering_paths[path]["name"]
         sig = sign_filtering_raw(path, InputData.filtering_paths[path]["name"])
         single_field["signature"] = sig.hex()
-        schema["fields"].append(single_field)
+        if single_field not in schema["fields"]:
+            schema["fields"].append(single_field)
     else:
         assert False
 
@@ -189,6 +226,7 @@ def get_struct_impl_field(value, field):
     data = InputData.encoding_functions[field["enum"]](value, field["typesize"])
     print("ZYD get_struct_impl_field value:", value)
     print("ZYD get_struct_impl_field field:", field)
+    print("ZYD InputData.filtering_paths.len():", len(InputData.filtering_paths))
     if InputData.filtering_paths:
         path = ".".join(InputData.current_path)
         if path in InputData.filtering_paths.keys():
