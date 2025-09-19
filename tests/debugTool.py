@@ -1,15 +1,17 @@
 import pytest
-import time
 import signal
+from pathlib import Path
+import os
 from functools import partial
 from typing import Callable
 
 from ledgered.devices import Device
 from client.tip712 import InputData as InputData
 from ragger.backend import BackendInterface
-from ragger.navigator import Navigator, NavInsID, NavIns
+from ragger.navigator import Navigator, NavInsID
 
 test_APDUs = [
+    "b001000000",
     "e01a00000a4174746163686d656e74", 
     "e01a00ff0605046e616d65", 
     "e01a00ff0742020473697a65",
@@ -94,7 +96,56 @@ def test_raw_apdu_async(backend: BackendInterface,
     signal.signal(signal.SIGALRM, next_timeout)
     for i, item in enumerate(test_APDUs):
         if i == len(test_APDUs) - 1:
-            # ===== 4. sign request APDU =====
+            # ===== 3. sign request APDU =====
+            apdu = bytes.fromhex(item)  
+            with backend.exchange_async_raw(apdu): # Send asynchronously
+                nav_ins = NavInsID.RIGHT_CLICK
+                val_ins = NavInsID.BOTH_CLICK
+                text = "and sign"
+                navigator.navigate_until_text(nav_ins, [val_ins], text)
+        else:
+            # ===== 1. Send an APDU =====
+            apdu = bytes.fromhex(item)  
+            with backend.exchange_async_raw(apdu): # Send asynchronously
+                if item.startswith("e01e000f") or item.startswith("e01e00ff") or item.startswith("e01c00ff") or item.startswith("e00c0001"):
+                    print("ZYD 111BBB")
+                    signal.setitimer(signal.ITIMER_REAL, 3, 3)
+                print("ZYD 222")
+            
+            if item.startswith("e01e000f") or item.startswith("e01e00ff") or item.startswith("e01c00ff")  or item.startswith("e00c0001"):
+                signal.setitimer(signal.ITIMER_REAL, 0, 0)
+        
+        response = backend.last_async_response
+        # ===== 2. Get the APDU response =====
+        print("SW:", hex(response.status))
+        print("Data:", response.data.hex())
+
+    assert True == True
+
+def extract_lines(filepath):
+    results = []
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip() # remove leading/trailing spaces
+            if line.startswith("=> "):  # only process lines starting with "=> "
+                results.append(line[3:])  # remove prefix "=> "
+    return results
+
+
+def test_raw_apdu_file(backend: BackendInterface, 
+                       device: Device, 
+                       navigator: Navigator):
+    file_name = "18-filtered-v2"
+    main_name = f"{os.path.dirname(__file__)}/fixtures/apdus/{file_name}"
+    apdu_file = Path(f"{main_name}.apdus")
+    test_APDUs = extract_lines(apdu_file)
+    
+    global autonext_handler
+    autonext_handler = partial(autonext, device, navigator)
+    signal.signal(signal.SIGALRM, next_timeout)
+    for i, item in enumerate(test_APDUs):
+        if i == len(test_APDUs) - 1:
+            # ===== 3. sign request APDU =====
             apdu = bytes.fromhex(item)  
             with backend.exchange_async_raw(apdu): # Send asynchronously
                 nav_ins = NavInsID.RIGHT_CLICK

@@ -222,6 +222,29 @@ void format_signature_out(const uint8_t *signature) {
     memmove(G_io_apdu_buffer + offset + 32 - xlength, signature + xoffset, xlength);
 }
 
+void print_bip32_path(uint32_t *path, uint8_t length) {
+    PRINTF("BIP32 Path: m");
+    for (uint8_t i = 0; i < length; i++) {
+        if (path[i] & 0x80000000) {
+            PRINTF("/%d'", path[i] & 0x7FFFFFFF);
+        } else {
+            PRINTF("/%d", path[i]);
+        }
+    }
+    PRINTF("\n");
+}
+
+void print_private_key(cx_ecfp_private_key_t *key) {
+    PRINTF("curve: %d\n", key->curve);
+    PRINTF("d_len: %d\n", key->d_len);
+
+    PRINTF("d: ");
+    for (size_t i = 0; i < key->d_len; i++) {
+        PRINTF("%02x", key->d[i]);
+    }
+    PRINTF("\n");
+}
+
 bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     uint32_t tx = 0;
     cx_err_t err;
@@ -265,7 +288,10 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
         return false;
     }
 
+    PRINTF("ZYD TIP712 Domain hash 0x%.*h\n", 32, tmpCtx.messageSigningContext712.domainHash);
+    PRINTF("ZYD TIP712 Message hash 0x%.*h\n", 32, tmpCtx.messageSigningContext712.messageHash);
     PRINTF("TIP712 hash to sign %.*H\n", 32, hash);
+    print_bip32_path(tmpCtx.messageSigningContext712.bip32Path, 5);
 
     io_seproxyhal_io_heartbeat();
     // Get private key
@@ -277,6 +303,7 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     if (err != CX_OK) {
         goto end;
     }
+    print_private_key(&privateKey);
 
     io_seproxyhal_io_heartbeat();
     unsigned int signatureLength = sizeof(signature);
