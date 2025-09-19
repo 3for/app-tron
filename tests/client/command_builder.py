@@ -12,6 +12,7 @@ class InsType(IntEnum):
     GET_TRC2_PUBLIC_ADDR = 0x0e
     SIGN = 0x04
     PERSONAL_SIGN = 0x08
+    PERSONAL_SIGN_FULL_DISPLAY = 0xc8
     PROVIDE_TRC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
     PROVIDE_NFT_INFORMATION = 0x14
     SET_PLUGIN = 0x16
@@ -334,6 +335,21 @@ class CommandBuilder:
             chunk_size = 0xff
             chunks.append(
                 self._serialize(InsType.PERSONAL_SIGN, p1, 0x00,
+                                payload[:chunk_size]))
+            payload = payload[chunk_size:]
+            p1 = P1Type.SIGN_SUBSQT_CHUNK
+        return chunks
+    
+    def personal_sign_full_display(self, path: str, msg: bytes):
+        payload = pack_derivation_path(path)
+        payload += struct.pack(">I", len(msg))
+        payload += msg
+        chunks = list()
+        p1 = P1Type.SIGN_FIRST_CHUNK
+        while len(payload) > 0:
+            chunk_size = 0xff
+            chunks.append(
+                self._serialize(InsType.PERSONAL_SIGN_FULL_DISPLAY, p1, 0x00,
                                 payload[:chunk_size]))
             payload = payload[chunk_size:]
             p1 = P1Type.SIGN_SUBSQT_CHUNK
