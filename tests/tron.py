@@ -22,6 +22,7 @@ from ragger.error import ExceptionRAPDU
 from ragger.firmware import Firmware
 from conftest import MNEMONIC
 from web3 import Web3
+from client.command_builder import CommandBuilder
 
 from client.tip712.InputData import PKIPubKeyUsage
 '''
@@ -443,3 +444,23 @@ class TronClient:
                          text=text,
                          snappath=snap_path,
                          warning_approve=warning_approve)
+    
+    def response(self) -> Optional[RAPDU]:
+        return self._client.last_async_response
+
+    def get_public_addr(self,
+                        display: bool = True,
+                        chaincode: bool = False,
+                        bip32_path: str = "m/44'/195'/0'/0/0",
+                        chain_id: Optional[int] = None):
+        cmd_builder = CommandBuilder()
+        return self._client.exchange_async_raw(cmd_builder.get_public_addr(display,
+                                                                      chaincode,
+                                                                      bip32_path,
+                                                                      chain_id))
+    def personal_sign_full_display(self, path: str, msg: bytes):
+        cmd_builder = CommandBuilder()
+        chunks = cmd_builder.personal_sign_full_display(path, msg)
+        for chunk in chunks[:-1]:
+            self._client.exchange_raw(chunk)
+        return self._client.exchange_async_raw(chunks[-1])
