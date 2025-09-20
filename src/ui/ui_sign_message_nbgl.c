@@ -37,7 +37,8 @@ static void ui_191_finish_cb(bool confirm) {
             nbgl_useCaseStatus("Transaction failure", false, ui_idle);
         }
     } else {
-        rejectChoice();
+        ui_callback_tx_cancel(false);
+        nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_idle);
     }
 }
 
