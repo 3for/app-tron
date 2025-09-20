@@ -9,6 +9,7 @@ from ledgered.devices import Device
 from client.tip712 import InputData as InputData
 from ragger.backend import BackendInterface
 from ragger.navigator import Navigator, NavInsID
+from settings import settings_toggle, SettingID
 
 test_APDUs = [
     "b001000000",
@@ -135,7 +136,15 @@ def extract_lines(filepath):
 def test_raw_apdu_file(backend: BackendInterface, 
                        device: Device, 
                        navigator: Navigator):
-    file_name = "18-filtered-v2"
+    settings_to_toggle: list[SettingID] = []
+    setting_id = SettingID.SIGN_BY_HASH
+    settings_to_toggle.append(setting_id)
+    # add this for pure 712 message without filters on NanoSP/NanoX
+    # fix noFilter "Both settings not enabled => Error."
+    if len(settings_to_toggle) > 0:
+        settings_toggle(device, navigator, settings_to_toggle)
+
+    file_name = "18"
     main_name = f"{os.path.dirname(__file__)}/fixtures/apdus/{file_name}"
     apdu_file = Path(f"{main_name}.apdus")
     test_APDUs = extract_lines(apdu_file)
