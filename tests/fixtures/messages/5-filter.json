@@ -1,0 +1,17 @@
+{
+    "name": "R2D2",
+    "fields": {
+        "document.[].[]": {
+            "type": "raw",
+            "name": "Document"
+        },
+        "proof.[].[]": {
+            "type": "raw",
+            "name": "Proof"
+        },
+        "depthy.[].[].[].[]": {
+            "type": "raw",
+            "name": "Depth"
+        }
+    }
+}

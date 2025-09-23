@@ -1,0 +1,47 @@
+{
+    "name": "1inch Order",
+    "tokens": [
+        {
+            "addr": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+            "ticker": "USDC",
+            "decimals": 6,
+            "chain_id": 137
+        },
+        {
+            "addr": "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+            "ticker": "WMATIC",
+            "decimals": 18,
+            "chain_id": 137
+        }
+    ],
+    "fields": {
+        "maker": {
+            "type": "raw",
+            "name": "From"
+        },
+        "makerAsset": {
+            "token": 0,
+            "type": "amount_join_token",
+            "name": "Send"
+        },
+        "makingAmount": {
+            "token": 0,
+            "type": "amount_join_value",
+            "name":"Send"
+        },
+        "takerAsset": {
+            "token": 1,
+            "type": "amount_join_token",
+            "name": "Receive minimum"
+        },
+        "takingAmount": {
+            "token": 1,
+            "type": "amount_join_value",
+            "name":"Receive minimum"
+        },
+        "receiver": {
+            "type": "raw",
+            "name": "To"
+        }
+    }
+}

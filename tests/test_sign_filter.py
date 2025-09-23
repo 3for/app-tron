@@ -31,3 +31,24 @@ def test_sign_712_filtering_file():
     SignFilter.sign_filter_data(data, filters)
 
     assert True == True
+
+def test_sign_712_filtering_fixtures():
+    filters = None
+    data = None
+
+    file_name = "18-1inch-fusion"
+    main_name = f"{os.path.dirname(__file__)}/fixtures/messages/{file_name}"
+    filterfile = Path(f"{main_name}-filter.json")
+    if filterfile.exists():
+        with open(filterfile, encoding="utf-8") as f:
+            filters = json.load(f)
+    
+    datafile = Path(f"{main_name}-data.json")
+    with open(datafile, encoding="utf-8") as f:
+        data = json.load(f)
+
+    print("fixtures 712 message:", data)
+    print("fixtures 712 filters:", filters)
+    SignFilter.sign_filter_data(data, filters)
+
+    assert True == True

@@ -1,0 +1,59 @@
+{
+    "name": "UniswapX Exclusive Dutch Order",
+    "tokens": [
+        {
+            "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "ticker": "WETH",
+            "decimals": 18,
+            "chain_id": 1
+        },
+        {
+            "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "ticker": "WETH",
+            "decimals": 18,
+            "chain_id": 1
+        }
+    ],
+    "fields": {
+        "spender": {
+            "type": "raw",
+            "name": "Approve to spender"
+        },
+        "permitted.token": {
+            "token": 0,
+            "type": "amount_join_token",
+            "name": "Amount allowance"
+        },
+        "permitted.amount": {
+            "token": 0,
+            "type": "amount_join_value",
+            "name":"Amount allowance"
+        },
+        "witness.inputToken": {
+            "token": 1,
+            "type": "amount_join_token",
+            "name": "To swap"
+        },
+        "witness.inputStartAmount": {
+            "token": 1,
+            "type": "amount_join_value",
+            "name": "To swap"
+        },
+        "witness.outputs.[].token": {
+            "type": "raw",
+            "name": "Tokens to receive"
+        },
+        "witness.outputs.[].endAmount": {
+            "type": "raw",
+            "name": "Minimum amounts to receive"
+        },
+        "witness.outputs.[].recipient": {
+            "type": "raw",
+            "name": "On Addresses"
+        },
+        "deadline": {
+            "type": "datetime",
+            "name": "Approval expire"
+        }
+    }
+}

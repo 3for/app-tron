@@ -1,0 +1,9 @@
+{
+    "name": "Padme",
+    "fields": {
+        "val": {
+            "type": "raw",
+            "name": "Value ma man"
+        }
+    }
+}

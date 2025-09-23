@@ -1,0 +1,31 @@
+{
+    "name": "Permit2",
+    "tokens": [
+        {
+            "addr": "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+            "ticker": "WETH",
+            "decimals": 18,
+            "chain_id": 137
+        }  
+    ],
+    "fields": {
+        "details.token": {
+            "token": 0,
+            "type": "amount_join_token",
+            "name": "Amount allowance"
+        },
+        "details.amount": {
+            "token": 0,
+            "type": "amount_join_value",
+            "name":"Amount allowance"
+        },
+        "spender": {
+            "type": "raw",
+            "name": "Approve to spender"
+        },
+        "details.expiration": {
+            "type": "datetime",
+            "name": "Approval expire"
+        }
+    }
+}

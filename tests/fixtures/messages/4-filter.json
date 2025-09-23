@@ -1,0 +1,13 @@
+{
+    "name": "Boba",
+    "fields": {
+        "maker": {
+            "type": "raw",
+            "name": "Maker"
+        },
+        "taker": {
+            "type": "raw",
+            "name": "Taker"
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "name": "Warrick",
+    "fields": {
+        "newThreshold": {
+            "type": "raw",
+            "name": "New Threshold"
+        }
+    }
+}

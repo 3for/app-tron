@@ -1,0 +1,21 @@
+{
+    "name": "C3P0",
+    "fields": {
+        "from.name": {
+            "type": "raw",
+            "name": "Sender"
+        },
+        "to.members.[].name": {
+            "type": "raw",
+            "name": "Recipient"
+        },
+        "contents": {
+            "type": "raw",
+            "name": "Message"
+        },
+        "attach.list.[].name": {
+            "type": "raw",
+            "name": "Attachment"
+        }
+    }
+}

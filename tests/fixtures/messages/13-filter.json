@@ -1,0 +1,57 @@
+{
+    "name": "Dark Maul",
+    "fields": {
+        "max": {
+            "type": "raw",
+            "name": "Max UInt256"
+        },
+        "neg256": {
+            "type": "raw",
+            "name": "Min Int256"
+        },
+        "pos256": {
+            "type": "raw",
+            "name": "Max Int256"
+        },
+        "neg128": {
+            "type": "raw",
+            "name": "Min Int128"
+        },
+        "pos128": {
+            "type": "raw",
+            "name": "Max Int128"
+        },
+        "neg64": {
+            "type": "raw",
+            "name": "Min Int64"
+        },
+        "pos64": {
+            "type": "raw",
+            "name": "Max Int64"
+        },
+        "neg32": {
+            "type": "raw",
+            "name": "Min Int32"
+        },
+        "pos32": {
+            "type": "raw",
+            "name": "Max Int32"
+        },
+        "neg16": {
+            "type": "raw",
+            "name": "Min Int16"
+        },
+        "pos16": {
+            "type": "raw",
+            "name": "Max Int16"
+        },
+        "neg8": {
+            "type": "raw",
+            "name": "Min Int8"
+        },
+        "pos8": {
+            "type": "raw",
+            "name": "Max Int8"
+        }
+    }
+}

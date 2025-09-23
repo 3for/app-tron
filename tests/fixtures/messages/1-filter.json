@@ -1,0 +1,17 @@
+{
+    "name": "Chewie",
+    "fields": {
+        "from.name": {
+            "type": "raw",
+            "name": "Sender"
+        },
+        "to.[].wallets.[]": {
+            "type": "raw",
+            "name": "Recipients"
+        },
+        "contents": {
+            "type": "raw",
+            "name": "Message"
+        }
+    }
+}

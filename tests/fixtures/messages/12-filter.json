@@ -1,0 +1,13 @@
+{
+    "name": "Palpatine",
+    "fields": {
+        "curDate": {
+            "type": "raw",
+            "name": "Timestamp"
+        },
+        "id": {
+            "type": "raw",
+            "name": "Identifier"
+        }
+    }
+}

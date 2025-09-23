@@ -1,0 +1,17 @@
+{
+    "name": "Leia",
+    "fields": {
+        "from.name": {
+            "type": "raw",
+            "name": "Sender"
+        },
+        "to.[].name": {
+            "type": "raw",
+            "name": "Should be Alice & Bob"
+        },
+        "contents": {
+            "type": "raw",
+            "name": "Message"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "name": "Yoda",
+    "fields": {
+        "from": {
+            "type": "raw",
+            "name": "Sender"
+        },
+        "to.[]": {
+            "type": "raw",
+            "name": "Recipients"
+        },
+        "contents": {
+            "type": "raw",
+            "name": "Message"
+        },
+        "id": {
+            "type": "raw",
+            "name": "Hello this is ID"
+        }
+    }
+}
