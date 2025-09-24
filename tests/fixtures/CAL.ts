@@ -19,29 +19,29 @@ export const v2 = {
       }
     ]
   },
-  "5:0xcccccccccccccccccccccccccccccccccccccccc:5b2c066ad15a55058a74d5698b12785338559cb982cab547e5d93e3d": {
+  "5:0xcccccccccccccccccccccccccccccccccccccccc:f9a315b6c68ed811063e25014e88de5b2739ebc23fae9f15f8e0a0ce": {
     "contractName": {
       "label": "Chewie",
-      "signature": "30450220695783f5cdb6f7df8c12af70dce746d72eea3e8db2aa4da6883f3ecd0e18114f0221009646570ae44dc9646af8fd4d60cea6b0bc8a3b1f04f42e4ac94fb6969346924d"
+      "signature": "30450221009c88b2b389c53633a6acf8ac6e8eba336f9c6e8608e57f893480c4f227a4e078022010a4a7fcda49f396a44475c4374e86c39677ddfc5eb32e00d03f8d6d400d67ac"
     },
     "fields": [
       {
         "path": "from.name",
         "format": "raw",
         "label": "Sender",
-        "signature": "30450220415f936aa7869609af6bf29f03a6af995657fda1d53465b9b301c484bcdf80790221008cd3b3f2218bc2ae410b5e5cd768d654a3206eb7cc121dd0920ff31382c75552"
+        "signature": "3044022006c52c632b4b4ffd842d94abf16b505ad2ac1b92077c9ecec3e7a61e48c9963a022041652a972b7c62fecc4dafcfec49e087ed2f75c980edfb534670a6c3e07181ec"
       },
       {
         "path": "to.[].wallets.[]",
         "format": "raw",
         "label": "Recipients",
-        "signature": "3046022100e220a1b0ffad989dcd4f11ce8ba49438d7685e04d512f447a9ba3f9b28caff32022100d43105879d92ffccd09a795001f9034481d76d006b779cdc62536c7481333991"
+        "signature": "3045022100a8359190d4c9080c8becc70a01d931670fbf48af8552f25df8f1858192e88fce02205f939ca4bb8ec2ef2cb7cae1eb81a0ab42a117d92834ac9e414235e43838da2c"
       },
       {
         "path": "contents",
         "format": "raw",
         "label": "Message",
-        "signature": "304502201a75a81563b580604c43bc51e004f41ec9f45dad9daac80de760bc641e475cfd022100f4d7b1d3189f3db4eb8f60fc9cf10236528806e05e307f6caa176920ea348bba"
+        "signature": "304502207d90a4e2be387cf5398e5d0462220ad3109788b4998b60b8cd3ee6732be22211022100bbc5db913dcbe28a63042eeaa85f952757fe8fa43befd92b72e22630ff1d2325"
       }
     ]
   },
@@ -187,55 +187,55 @@ export const v2 = {
       }
     ]
   },
-  "5:0xccccccccccccccccccccccccccccccccccccccc1:5b2c066ad15a55058a74d5698b12785338559cb982cab547e5d93e3d": {
+  "5:0xccccccccccccccccccccccccccccccccccccccc1:f9a315b6c68ed811063e25014e88de5b2739ebc23fae9f15f8e0a0ce": {
     "contractName": {
       "label": "Leia",
-      "signature": "304402206aade75a0906c6c6f47080a195d32bcc9d2ca44d9e1fe7c936a8f2040f10722a0220378e54fc0b9b6cccab50bd3c43cf0ed034ffbaba834dd18246289b26fe8ebb3e"
+      "signature": "3046022100a3a51459d3adf212bf90585d8bbf8c7a9fe105b11ad5fae7ec483e8c8a3add2b022100b90d6ae1f960dc09aead13e2d0e54494ac21ab23b701b195a896c83538ea0ed1"
     },
     "fields": [
       {
         "path": "from.name",
         "format": "raw",
         "label": "Sender",
-        "signature": "304502205d72013185f9324c724f1456214818daa52778282f39f9511a197bef9266e910022100aa9b43014b4044eca691d3b307959fd3b8c60e42948d3488500d372b8d7ac8fd"
+        "signature": "3046022100eb56bf6529df0c57ebe0e1d926fdf3bf509de432d1271b2e39a4ac6e2aefdeb9022100bba6abd2f8cc05a9a524a7348f61b4f1fe3c885d54d12edf3cb506e0fdae70f0"
       },
       {
         "path": "to.[].name",
         "format": "raw",
         "label": "Should be Alice & Bob",
-        "signature": "3045022024e948f1f8206bea3eee90636526d33565df61271fa2c2acebd9d5f5778fa42002210095d29744785ecff74338ca21a5dc7496d3dc25071e253476b043a7bf77c1afae"
+        "signature": "3046022100d393eba84f5efd48ab37506c6575f92ba63c355357e6ec777e849a2717dc203e022100c6242eb81a63816e43b80696becc239a439053344b9ce3b870707577f8c2a266"
       },
       {
         "path": "contents",
         "format": "raw",
         "label": "Message",
-        "signature": "30450221009e6d3ceb72239082bb60202a3b095bb308f41d8a6b63360c487b8798e1dd2d24022006ef5ddfffaa1acd0911c64ae7a00adad98ab82a57d6d010906df496511213a6"
+        "signature": "304402200ad6e2706931eeb008069e7ec3a196357fa10aa1efcaa7ef72666ff4b641cfd302204e22897b9eb48e7e02e227bcbc06eeab53c29e2bc09e60895af078a1bd9e1aad"
       }
     ]
   },
-  "5:0xcccccccccccccccccccccccccccccccccccccccc:3863b554dca8a87c0367c3967cf1726802cdb6b7d4d1788301d35398": {
+  "5:0xcccccccccccccccccccccccccccccccccccccccc:ccbc1c2d282de172d94391dc53bfe1ca9575b5ef44b8374ff08204ee": {
     "contractName": {
       "label": "Han",
-      "signature": "304502207ea368d6351bf9718c16f588592cac7f62c291aa944883788135165ee8c3490b022100bfc6097b5ef08a3b8b04e41ad5d7300ad8ec10fe86d5889f540f1261aac8c49e"
+      "signature": "3046022100e08201e76ec521f5fd61158f8ea1242c04c5ae8c2a2d9e582fd3012297924778022100b6cd270abfebd2f7f8ff34450364b1e08c9c0467ca2208cb42ca6f930c427ca3"
     },
     "fields": [
       {
         "path": "from.name",
         "format": "raw",
         "label": "Sender",
-        "signature": "304502206ace512db580330cba97a8519e888ac75968a88868bb76956bf23aac2c40d4d9022100d0746e178cc8662d231c765cb4982e155b590b1012d295ebc8d495088ed1b3d1"
+        "signature": "3044022062ae20dc22d3f89832f97af07ad60bd412052d3440e2cde3ab2c8aed5eb60bec02201a8861de7811cb3180fc6496ae3d2112e70fdbe2d14fae77d7f66d98fb4d2883"
       },
       {
         "path": "to.[].wallets.[]",
         "format": "raw",
         "label": "Recipients",
-        "signature": "3046022100a35791e52689caef688b4c11da7472d94460f714076c796cf210d5319bc232d602210096d014bde1e23496b35fc319087c2dbe7e8a1a8c4bd6935ee04ad7954baa7bc8"
+        "signature": "3044022013bbe281a4e1a5bb273360dca3a2d1428be7985a6a0e2a60f34a2f812451ea7f02202b3d001f7b345d46ff51b3730a3d3325c03adfcd471e610222fe34c2254c6966"
       },
       {
         "path": "contents",
         "format": "raw",
         "label": "Message",
-        "signature": "3046022100d6095472a275cf338b4d83b5c7c50da3ef60f482c665b14be25c16fe4e04dc1a022100b5ac8e017b945e9c9f00aa2247a30d4340f501b652c262f1b8f0f5a569482d63"
+        "signature": "304602210086d556628e13296856d289f45b76ed6197ccb9b35036ae70a0ff439cca2dc25b022100e24e4d3ddfde6db1bad74d71ce8f61b18d14f8c24d61566896ce4686379ab5cf"
       }
     ]
   },

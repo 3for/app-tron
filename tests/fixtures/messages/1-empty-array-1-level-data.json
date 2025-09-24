@@ -41,16 +41,6 @@
                 "type": "address"
             }
         ],
-        "Group": [
-            {
-                "name": "name",
-                "type": "string"
-            },
-            {
-                "name": "members",
-                "type": "Person[]"
-            }
-        ],
         "Mail": [
             {
                 "name": "from",

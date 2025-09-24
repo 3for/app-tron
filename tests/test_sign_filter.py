@@ -36,7 +36,7 @@ def test_sign_712_filtering_fixtures():
     filters = None
     data = None
 
-    file_name = "18-1inch-fusion"
+    file_name = "9"
     main_name = f"{os.path.dirname(__file__)}/fixtures/messages/{file_name}"
     filterfile = Path(f"{main_name}-filter.json")
     if filterfile.exists():

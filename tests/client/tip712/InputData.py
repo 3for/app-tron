@@ -4,7 +4,7 @@ import re
 import signal
 import sys
 import copy
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Union, Dict
 import struct
 from enum import IntEnum
 
@@ -613,13 +613,47 @@ def enable_autonext():
 def disable_autonext():
     signal.setitimer(signal.ITIMER_REAL, 0, 0)
 
+def sort_object_alphabetically(obj: Dict[str, Any]) -> Dict[str, Any]:
+    sorted_obj: Dict[str, Any] = {}
+
+    for key in sorted(obj.keys()):  # Sort keys in alphabetical order
+        value = obj[key]
+
+        if isinstance(value, list):
+            # If the value is a list, check each element; 
+            # if an element is a dict, process it recursively
+            new_list: List[Any] = []
+            for item in value:
+                if isinstance(item, dict):
+                    new_list.append(sort_object_alphabetically(item))
+                else:
+                    new_list.append(item)
+            sorted_obj[key] = new_list
+        else:
+            sorted_obj[key] = value
+
+    return sorted_obj
+
+    """ data = {
+        "z": 1,
+        "a": {"c": 3, "b": 2},
+        "m": [{"y": 25, "x": 24}, {"b": 2, "a": 1}]
+    }
+    sorted_data = {
+        "a": {"c": 3, "b": 2}, 
+        "m": [{"x": 24, "y": 25}, {"a": 1, "b": 2}], 
+        "z": 1
+    }
+    assert sorted_data ==  sort_object_alphabetically(data) """
+
 
 def process_data(aclient,
                  cbuilder: CommandBuilder,
                  data_json: dict,
                  filters: Optional[dict] = None,
                  autonext: Optional[Callable] = None,
-                 golden_run: bool = False) -> bool:
+                 golden_run: bool = False,
+                 sort: bool = False) -> bool:
     global sig_ctx
     global app_client
     global cmd_builder
@@ -635,6 +669,9 @@ def process_data(aclient,
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
     types = data_json["types"]
+    if sort: 
+        types = sort_object_alphabetically(data_json["types"])
+    
     domain = data_json["domain"]
     message = data_json["message"]
     if autonext:
