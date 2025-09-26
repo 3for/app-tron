@@ -1,6 +1,6 @@
 {
    "domain" : {
-      "chainId" : 1,
+      "chainId" : 1151668124,
       "name" : "Exchange",
       "verifyingContract" : "0x9757f2d2b135150bbeb65308d4a91804107cd8d6",
       "version" : "2"

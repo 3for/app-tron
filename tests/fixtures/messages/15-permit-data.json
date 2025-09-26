@@ -2,7 +2,7 @@
   "domain": {
     "name": "USD Coin",
     "verifyingContract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-    "chainId": 1,
+    "chainId": 1151668124,
     "version": "2"
   },
   "primaryType": "Permit",

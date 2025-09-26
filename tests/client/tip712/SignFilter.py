@@ -128,6 +128,7 @@ def sign_filter_data(
         out[root_key][caddr][schema_hash]["contractName"]["signature"] = sig.hex() """
     
     print("ZYD AAA out:", out)
+    print("ZYD BBB token_entries:", token_entries)
 
     trc20SignaturesBlob = EncodeTokenInfo.encode_token_info(token_entries)
     print("ZYD trc20SignaturesBlob:", trc20SignaturesBlob)
@@ -171,9 +172,11 @@ def get_filter(path: str):
     if InputData.filtering_paths[path]["type"].startswith("amount_join_"):
         if "token" in InputData.filtering_paths[path].keys():
             token_idx = InputData.filtering_paths[path]["token"]
-            # For leger-live, ONLY add token_field if amount_join_token, not for amount_join_value
+            
+            sig = sign_filtering_token(token_idx)
+            """ # For leger-live, ONLY add token_field if amount_join_token, not for amount_join_value
             if InputData.filtering_paths[path]["type"].endswith("_token"):
-                sig = sign_filtering_token(token_idx)
+                sig = sign_filtering_token(token_idx) """
         else:
             # Permit (ERC-2612)
             sig = sign_filtering_token(0)

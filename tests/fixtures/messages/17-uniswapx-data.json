@@ -1,7 +1,7 @@
 {
   "domain": {
     "name": "Permit2",
-    "chainId": 1,
+    "chainId": 1151668124,
     "verifyingContract": "0x000000000022d473030f116ddee9f6b43ac78ba3"
   },
   "primaryType": "PermitWitnessTransferFrom",

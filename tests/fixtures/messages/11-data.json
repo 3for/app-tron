@@ -1,8 +1,8 @@
 {
     "domain": {
-        "chainId": 1,
+        "chainId": 1151668124,
         "name": "Complex Structs Mail",
-        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCccccccc2",
         "version": "1"
     },
     "message": {

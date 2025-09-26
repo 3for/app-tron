@@ -144,7 +144,7 @@ def test_raw_apdu_file(backend: BackendInterface,
     if len(settings_to_toggle) > 0:
         settings_toggle(device, navigator, settings_to_toggle)
 
-    file_name = "15-filtered-v1"
+    file_name = "16-filtered-v2"
     main_name = f"{os.path.dirname(__file__)}/fixtures/apdus/{file_name}"
     apdu_file = Path(f"{main_name}.apdus")
     test_APDUs = extract_lines(apdu_file)

@@ -1,6 +1,6 @@
 {
    "domain" : {
-      "chainId" : 1,
+      "chainId" : 1151668124,
       "name" : "Wyvern Exchange Contract",
       "verifyingContract" : "0x7f268357a8c2552623316e2562d90e642bb538e5",
       "version" : "2.3"

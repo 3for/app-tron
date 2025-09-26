@@ -5,13 +5,13 @@
             "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
             "ticker": "WETH",
             "decimals": 18,
-            "chain_id": 1
+            "chain_id": 1151668124
         },
         {
             "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
             "ticker": "WETH",
             "decimals": 18,
-            "chain_id": 1
+            "chain_id": 1151668124
         }
     ],
     "fields": {

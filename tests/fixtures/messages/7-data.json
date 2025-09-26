@@ -1,6 +1,6 @@
 {
     "domain": {
-        "chainId": 5,
+        "chainId": 1151668124,
         "name": "Ether Mail",
         "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCccccccc1",
         "version": "1"

@@ -48,10 +48,10 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     dataLength -= 4;
     // TODO: Handle 64-bit long chain IDs
     chain_id = U4BE(workBuffer, offset);
-    /* if (chainConfig->chainId != chain_id) {
+    if (chainConfig->chainId != chain_id) {
         UNSUPPORTED_CHAIN_ID_MSG(chain_id);
         return APDU_RESPONSE_INVALID_DATA;
-    } */ //TODO. ZYD. DEBUG.
+    }
     offset += 4;
     dataLength -= 4;
 
