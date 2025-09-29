@@ -5,7 +5,7 @@ import json
 import os
 from client.tip712 import EncodeTokenInfo
 
-index = 2
+index = 0
 def test_sign_712_filtering_advanced():
     print("712 message:", ADVANCED_DATA_SETS[index].data)
     SignFilter.sign_filter_data(ADVANCED_DATA_SETS[index].data, ADVANCED_DATA_SETS[index].filters)
@@ -91,7 +91,23 @@ def test_encode_token_info():
             "decimals": 18,
             "chainId": 1151668124,
             "signature": "30450221009714216babc36cfc3518b6b11348960e2030886e2bb39a748672e7b483ef9ec802200b6b252ebe3310ecd58cc3d26532431954856ac5afaf50d891a276c02a237fc6"
-        }
+        },
+        # For ADVANCED_DATA_SETS
+        {
+            "ticker": "DAI",
+            "contractAddress": "0x6b175474e89094c44da98b954eedeac495271d0f",
+            "decimals": 18,
+            "chainId": 1151668124,
+            "signature": "3045022100aa617a406cac77f9b38b5855e46f1f79f0f49846266ad6b613999ae2af21505f02205a1283c9217043786f1a44dcf0f71a8db5f9449b39c3bff8058cce3680354004"
+        },
+        {
+            "ticker": "ENS",
+            "contractAddress": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "decimals": 18,
+            "chainId": 1151668124,
+            "signature": "30450221008d0e1d1bea212a8e19db98227ef1aa3ec958c0a11048b860caf3d3fa2d645a0102200dfe438e911a7aac14880aa4d8b8e9785133398082265e5e23f0cd4e03078862"
+        },
+
     ]
     
     trc20SignaturesBlob = EncodeTokenInfo.encode_token_info(token_entries)
