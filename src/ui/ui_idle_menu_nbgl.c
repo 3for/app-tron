@@ -24,6 +24,7 @@
 #include "ui_globals.h"
 #include "settings.h"
 #include "parse.h"
+#include "ui_nbgl.h"
 
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
@@ -147,7 +148,7 @@ static void ui_error_blind_signing_choice(bool confirm) {
 }
 
 void ui_error_blind_signing(void) {
-    nbgl_useCaseChoice(&C_Warning_64px,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "This transaction cannot be clear-signed",
                        "Enable blind signing in the settings to sign this transaction.",
                        "Go to settings",
