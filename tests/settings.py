@@ -28,6 +28,18 @@ SETTINGS_POSITIONS = {
         SettingID.SIGN_BY_HASH: (1, 420, 130),
         SettingID.VERBOSE_TIP712: (1, 420, 270),
     },
+    DeviceType.APEX_P: {
+        SettingID.DATA_ALLOWED: (0, 260, 90),
+        SettingID.CUSTOM_CONTRACT: (0, 260, 235),
+        SettingID.SIGN_BY_HASH: (1, 260, 90),
+        SettingID.VERBOSE_TIP712: (1, 260, 190),
+    },
+    DeviceType.APEX_M: {
+        SettingID.DATA_ALLOWED: (0, 260, 90),
+        SettingID.CUSTOM_CONTRACT: (0, 260, 235),
+        SettingID.SIGN_BY_HASH: (1, 260, 90),
+        SettingID.VERBOSE_TIP712: (1, 260, 190),
+    },
 }
 
 

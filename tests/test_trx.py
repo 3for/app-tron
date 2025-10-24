@@ -1170,6 +1170,9 @@ class TestTRX():
         elif firmware == Firmware.FLEX:
             navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))],
                                screen_change_before_first_instruction=True)
+        elif firmware == Firmware.APEX_P:
+            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 350))],
+                               screen_change_before_first_instruction=True)
         settings_toggle(device, navigator, [setting_id])
 
     def test_trx_tip712_skip(self, firmware: Firmware,
