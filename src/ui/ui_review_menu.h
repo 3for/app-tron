@@ -42,4 +42,3 @@ typedef enum {
 } ui_approval_state_t;
 
 void ux_flow_display(ui_approval_state_t state, bool warning);
-void rejectChoice(void);

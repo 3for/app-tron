@@ -68,8 +68,7 @@ static void displayCustomContractWarning(void);
 static void dataWarningChoice(bool reject);
 static void customContractWarningChoice(bool reject);
 static void reviewChoice(bool confirm);
-static void rejectConfirmation(void);
-void rejectChoice(void);
+static void rejectChoice(void);
 
 static void dataWarningChoice(bool accept) {
     if (accept) {
