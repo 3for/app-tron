@@ -12,7 +12,10 @@
 #define TEXT_BLIND_SIGN_TIP712 BLIND_SIGN(TEXT_TYPED_MESSAGE)
 void ui_settings(void);
 
-#ifdef SCREEN_SIZE_WALLET
+#ifdef TARGET_APEX_P
+#define ICON_APP_WARNING LARGE_WARNING_ICON
+#define ICON_APP_REVIEW  LARGE_REVIEW_ICON
+#elifdef SCREEN_SIZE_WALLET // for both flex and stax
 #define ICON_APP_WARNING C_Warning_64px
 #define ICON_APP_REVIEW  C_Review_64px
 #else
