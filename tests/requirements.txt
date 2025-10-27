@@ -7,3 +7,4 @@ crypto==1.4.1
 ragger[speculos]>=1.7.1
 # ragger[ledgerwallet]>=1.7.1
 ecdsa>=0.16.1,<0.17.0
+web3~=7.0
