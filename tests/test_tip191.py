@@ -11,13 +11,11 @@ from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
 from client.tip712.InputData import StatusWord
 import response_parser as ResponseParser
 
-
 BIP32_PATH = "m/44'/195'/0'/0/0"
 
-def common(scenario_navigator: NavigateWithScenario,
-           test_name: str,
-           firmware: Firmware,
-           msg: str | bytes):
+
+def common(scenario_navigator: NavigateWithScenario, test_name: str,
+           firmware: Firmware, msg: str | bytes):
 
     backend = scenario_navigator.backend
     navigator = scenario_navigator.navigator
@@ -27,14 +25,14 @@ def common(scenario_navigator: NavigateWithScenario,
         pass
     _, DEVICE_ADDR, _ = ResponseParser.pk_addr(app_client.response().data)
 
-    PUBLIC_ADDR = DEVICE_ADDR[1:] # ETH format address
+    PUBLIC_ADDR = DEVICE_ADDR[1:]  # ETH format address
     if isinstance(msg, str):
         msg = msg.encode('ascii')
 
     try:
         with app_client.personal_sign_full_display(BIP32_PATH, msg):
             if firmware.is_nano:
-                    text = "message"
+                text = "message"
             else:
                 text = "Hold to sign"
             app_client.navigate(test_name, text)
@@ -50,27 +48,31 @@ def common(scenario_navigator: NavigateWithScenario,
     hash_to_sign = keccak_hash.digest()
     print(hash_to_sign.hex())
 
-
     # verify signature
     vrs = ResponseParser.signature(app_client.response().data)
     sig = keys.Signature(app_client.response().data)
     addr = sig.recover_public_key_from_msg_hash(hash_to_sign)
 
-    assert addr.to_checksum_address().lower() == "0x" + PUBLIC_ADDR.hex().lower()
+    assert addr.to_checksum_address().lower(
+    ) == "0x" + PUBLIC_ADDR.hex().lower()
 
 
-def test_personal_sign_metamask(scenario_navigator: NavigateWithScenario, firmware: Firmware, test_name: str):
+def test_personal_sign_metamask(scenario_navigator: NavigateWithScenario,
+                                firmware: Firmware, test_name: str):
 
     msg = "Example `personal_sign` message"
     common(scenario_navigator, test_name, firmware, msg)
 
 
-def test_personal_sign_non_ascii(scenario_navigator: NavigateWithScenario, firmware: Firmware, test_name: str):
-    msg = bytes.fromhex("9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658")
+def test_personal_sign_non_ascii(scenario_navigator: NavigateWithScenario,
+                                 firmware: Firmware, test_name: str):
+    msg = bytes.fromhex(
+        "9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658")
     common(scenario_navigator, test_name, firmware, msg)
 
 
-def test_personal_sign_opensea(scenario_navigator: NavigateWithScenario, firmware: Firmware, test_name: str):
+def test_personal_sign_opensea(scenario_navigator: NavigateWithScenario,
+                               firmware: Firmware, test_name: str):
 
     msg = "Welcome to OpenSea!\n\n"
     msg += "Click to sign in and accept the OpenSea Terms of Service: https://opensea.io/tos\n\n"
@@ -80,7 +82,8 @@ def test_personal_sign_opensea(scenario_navigator: NavigateWithScenario, firmwar
     common(scenario_navigator, test_name, firmware, msg)
 
 
-def test_personal_sign_reject(scenario_navigator: NavigateWithScenario, firmware: Firmware, test_name: str):
+def test_personal_sign_reject(scenario_navigator: NavigateWithScenario,
+                              firmware: Firmware, test_name: str):
 
     backend = scenario_navigator.backend
     navigator = scenario_navigator.navigator
@@ -89,7 +92,8 @@ def test_personal_sign_reject(scenario_navigator: NavigateWithScenario, firmware
 
     msg = "This is an reject sign"
     try:
-        with app_client.personal_sign_full_display(BIP32_PATH, msg.encode('ascii')):
+        with app_client.personal_sign_full_display(BIP32_PATH,
+                                                   msg.encode('ascii')):
             scenario_navigator.review_reject(default_screenshot_path)
 
     except ExceptionRAPDU as e:

@@ -444,7 +444,7 @@ class TronClient:
                          text=text,
                          snappath=snap_path,
                          warning_approve=warning_approve)
-    
+
     def response(self) -> Optional[RAPDU]:
         return self._client.last_async_response
 
@@ -454,10 +454,10 @@ class TronClient:
                         bip32_path: str = "m/44'/195'/0'/0/0",
                         chain_id: Optional[int] = None):
         cmd_builder = CommandBuilder()
-        return self._client.exchange_async_raw(cmd_builder.get_public_addr(display,
-                                                                      chaincode,
-                                                                      bip32_path,
-                                                                      chain_id))
+        return self._client.exchange_async_raw(
+            cmd_builder.get_public_addr(display, chaincode, bip32_path,
+                                        chain_id))
+
     def personal_sign_full_display(self, path: str, msg: bytes):
         cmd_builder = CommandBuilder()
         chunks = cmd_builder.personal_sign_full_display(path, msg)
