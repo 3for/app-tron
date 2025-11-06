@@ -339,7 +339,7 @@ class CommandBuilder:
             payload = payload[chunk_size:]
             p1 = P1Type.SIGN_SUBSQT_CHUNK
         return chunks
-    
+
     def personal_sign_full_display(self, path: str, msg: bytes):
         payload = pack_derivation_path(path)
         payload += struct.pack(">I", len(msg))
