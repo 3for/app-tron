@@ -9,6 +9,7 @@ from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primar
 from typing import Any, Dict, List
 from hexbytes import HexBytes
 from eth_utils import keccak
+from client.tip712 import InputData as InputData
 
 import hashlib
 import rlp
@@ -56,7 +57,10 @@ def encode_typed_data(
                 "`domain_data`, `message_types`, and `message_data` as three arguments,"
                 " but not both.")
 
-        full_message_types = full_message["types"].copy()
+        # To support trcToken for TRON, replace `trcToken` type to `uint256`
+        # full_message_types = full_message["types"].copy()
+        full_message_types = InputData.replace_trc_token_in_types(
+            full_message["types"].copy())
         full_message_domain = full_message["domain"].copy()
 
         # If EIP712Domain types were provided, check that they match the domain data

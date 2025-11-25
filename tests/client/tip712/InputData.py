@@ -618,6 +618,59 @@ def disable_autonext():
     signal.setitimer(signal.ITIMER_REAL, 0, 0)
 
 
+def replace_trc_token_in_type(_type: str) -> str:
+    """
+    Replace the base type 'trcToken' with 'uint256' while preserving
+    any array dimensions or nested structures.
+
+    Supports examples such as:
+        trcToken
+        trcToken[]
+        trcToken[][]
+        trcToken[5]
+        trcToken[5][10][]
+        trcToken[][][3]
+    """
+
+    # \b ensures matching the exact type name
+    return re.sub(r"\btrcToken\b", "uint256", _type)
+
+
+def replace_trc_token_in_types(types: dict) -> dict:
+    """
+    Recursively replace all trcToken usages in the given EIP-712-like type dict.
+
+    Input format example:
+        {
+            "A": [
+                {"name": "id", "type": "trcToken"},
+                {"name": "arr", "type": "trcToken[][]"}
+            ]
+        }
+    
+    Output format example:
+        {
+            "A": [
+                {"name": "id", "type": "uint256"},
+                {"name": "arr", "type": "uint256[][]"}
+            ]
+        }
+    """
+
+    new_types = {}
+
+    for struct_name, fields in types.items():
+        new_fields = []
+        for field in fields:
+            new_fields.append({
+                **field, "type":
+                replace_trc_token_in_type(field["type"])
+            })
+        new_types[struct_name] = new_fields
+
+    return new_types
+
+
 def process_data(aclient,
                  cbuilder: CommandBuilder,
                  data_json: dict,
@@ -638,7 +691,9 @@ def process_data(aclient,
     cmd_builder = cbuilder
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
-    types = data_json["types"]
+    # to support trcToken for TRON, replace `trcToken` type to `uint256`
+    # types = data_json["types"]
+    types = replace_trc_token_in_types(data_json["types"])
     domain = data_json["domain"]
     message = data_json["message"]
     if autonext:
