@@ -1,0 +1,51 @@
+{
+    "domain": {
+        "chainId": "0xd698d4192c56cb6be724a558448e2684802de4d6cd8690dc",
+        "name": "TrcToken Test",
+        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+        "version": "1"
+    },
+    "message": {
+        "from": {
+            "name": "Cow",
+            "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+            "trcTokenId": "1002000"
+        },
+        "to": {
+            "name": "Bob",
+            "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+            "trcTokenArr": ["1002000", "1002000"]
+        },
+        "contents": "Hello, Bob!",
+        "tAddr": ["0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB", "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"],
+        "trcTokenId": "1002000",
+        "trcTokenArr": ["1002000", "1002000"]
+    },
+    "primaryType": "Mail",
+    "types": {
+        "EIP712Domain": [
+            { "name": "name", "type": "string" },
+            { "name": "version", "type": "string" },
+            { "name": "chainId", "type": "uint256" },
+            { "name": "verifyingContract", "type": "address" }
+        ],
+        "Mail": [
+            { "name": "from", "type": "FromPerson" },
+            { "name": "to", "type": "ToPerson" },
+            { "name": "contents", "type": "string" },
+            { "name": "tAddr", "type": "address[]" },
+            { "name": "trcTokenId", "type": "trcToken" },
+            { "name": "trcTokenArr", "type": "trcToken[]" }
+        ],
+        "FromPerson": [
+            { "name": "name", "type": "string" },
+            { "name": "wallet", "type": "address" },
+            { "name": "trcTokenId", "type": "trcToken" }
+        ],
+        "ToPerson": [
+            { "name": "name", "type": "string" },
+            { "name": "wallet", "type": "address" },
+            { "name": "trcTokenArr", "type": "trcToken[]" }
+        ]
+    }
+}
