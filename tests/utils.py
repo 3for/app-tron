@@ -4,7 +4,8 @@ from eth_keys.datatypes import PublicKey
 
 from eth_account import Account
 from eth_account.messages import encode_defunct, SignableMessage
-from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
+#from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
+from tron_encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
 
 from typing import Any, Dict, List
 from hexbytes import HexBytes
@@ -77,10 +78,7 @@ def encode_typed_data(
                 "`domain_data`, `message_types`, and `message_data` as three arguments,"
                 " but not both.")
 
-        # To support trcToken for TRON, replace `trcToken` type to `uint256`
-        # full_message_types = full_message["types"].copy()
-        full_message_types = InputData.replace_trc_token_in_types(
-            full_message["types"].copy())
+        full_message_types = full_message["types"].copy()
         full_message_domain = full_message["domain"].copy()
 
         # If EIP712Domain types were provided, check that they match the domain data

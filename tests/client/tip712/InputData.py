@@ -199,6 +199,8 @@ def parse_bytes(typesize):
         return (TIP712FieldType.FIX_BYTES, typesize)
     return (TIP712FieldType.DYN_BYTES, None)
 
+def parse_trctoken(typesize):
+    return (TIP712FieldType.TRCTOKEN, None) # same as uint256
 
 # set functions for each type
 parsing_type_functions = {}
@@ -208,6 +210,7 @@ parsing_type_functions["address"] = parse_address
 parsing_type_functions["bool"] = parse_bool
 parsing_type_functions["string"] = parse_string
 parsing_type_functions["bytes"] = parse_bytes
+parsing_type_functions["trcToken"] = parse_trctoken
 
 
 def send_struct_def_field(typename, keyname):
@@ -285,6 +288,9 @@ def encode_bytes_dyn(value: str, typesize: int) -> bytes:
     # / by the length of one byte in a hex string (2)
     return encode_hex_string(value, int((len(value) - 2) / 2))
 
+def encode_trctoken(value: str, typesize: int) -> bytes:
+    # To support trcToken for TRON solidity,  `trcToken` type is equal to `uint256`
+    return encode_integer(value, 256)
 
 # set functions for each type
 encoding_functions = {}
@@ -295,6 +301,7 @@ encoding_functions[TIP712FieldType.BOOL] = encode_bool
 encoding_functions[TIP712FieldType.STRING] = encode_string
 encoding_functions[TIP712FieldType.FIX_BYTES] = encode_bytes_fix
 encoding_functions[TIP712FieldType.DYN_BYTES] = encode_bytes_dyn
+encoding_functions[TIP712FieldType.TRCTOKEN] = encode_trctoken
 
 
 def send_filtering_token(token_idx: int):
@@ -618,59 +625,6 @@ def disable_autonext():
     signal.setitimer(signal.ITIMER_REAL, 0, 0)
 
 
-def replace_trc_token_in_type(_type: str) -> str:
-    """
-    Replace the base type 'trcToken' with 'uint256' while preserving
-    any array dimensions or nested structures.
-
-    Supports examples such as:
-        trcToken
-        trcToken[]
-        trcToken[][]
-        trcToken[5]
-        trcToken[5][10][]
-        trcToken[][][3]
-    """
-
-    # \b ensures matching the exact type name
-    return re.sub(r"\btrcToken\b", "uint256", _type)
-
-
-def replace_trc_token_in_types(types: dict) -> dict:
-    """
-    Recursively replace all trcToken usages in the given EIP-712-like type dict.
-
-    Input format example:
-        {
-            "A": [
-                {"name": "id", "type": "trcToken"},
-                {"name": "arr", "type": "trcToken[][]"}
-            ]
-        }
-    
-    Output format example:
-        {
-            "A": [
-                {"name": "id", "type": "uint256"},
-                {"name": "arr", "type": "uint256[][]"}
-            ]
-        }
-    """
-
-    new_types = {}
-
-    for struct_name, fields in types.items():
-        new_fields = []
-        for field in fields:
-            new_fields.append({
-                **field, "type":
-                replace_trc_token_in_type(field["type"])
-            })
-        new_types[struct_name] = new_fields
-
-    return new_types
-
-
 def process_data(aclient,
                  cbuilder: CommandBuilder,
                  data_json: dict,
@@ -691,9 +645,7 @@ def process_data(aclient,
     cmd_builder = cbuilder
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
-    # to support trcToken for TRON, replace `trcToken` type to `uint256`
-    # types = data_json["types"]
-    types = replace_trc_token_in_types(data_json["types"])
+    types = data_json["types"]
     domain = data_json["domain"]
     message = data_json["message"]
     if autonext:

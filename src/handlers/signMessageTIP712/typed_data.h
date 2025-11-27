@@ -22,6 +22,7 @@ typedef enum {
     TYPE_SOL_STRING,
     TYPE_SOL_BYTES_FIX,
     TYPE_SOL_BYTES_DYN,
+    TYPE_SOL_TRCTOKEN,
     TYPES_COUNT
 } e_type;
 

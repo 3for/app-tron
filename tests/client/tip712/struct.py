@@ -10,3 +10,4 @@ class TIP712FieldType(IntEnum):
     STRING = auto()
     FIX_BYTES = auto()
     DYN_BYTES = auto()
+    TRCTOKEN = auto()

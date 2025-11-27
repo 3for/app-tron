@@ -628,6 +628,11 @@ bool ui_712_feed_to_display(const void *field_ptr,
                     return false;
                 }
                 break;
+            case TYPE_SOL_TRCTOKEN:
+                if (ui_712_format_uint(data, length, first) == false) {
+                    return false;
+                }
+                break;
             default:
                 PRINTF("Unhandled type\n");
                 return false;
