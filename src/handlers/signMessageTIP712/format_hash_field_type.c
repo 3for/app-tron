@@ -23,6 +23,7 @@ static bool format_hash_field_type_size(const void *const field_ptr, cx_hash_t *
     switch (struct_field_type(field_ptr)) {
         case TYPE_SOL_INT:
         case TYPE_SOL_UINT:
+        case TYPE_SOL_TRCTOKEN:
             field_size *= 8;  // bytes -> bits
             break;
         case TYPE_SOL_BYTES_FIX:

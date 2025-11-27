@@ -1,9 +1,9 @@
 {
     "domain": {
-        "chainId": "0xd698d4192c56cb6be724a558448e2684802de4d6cd8690dc",
         "name": "TrcToken Test",
-        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
-        "version": "1"
+        "version": "1",
+        "chainId": "0xd698d4192c56cb6be724a558448e2684802de4d6cd8690dc",
+        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
     },
     "message": {
         "from": {
@@ -29,14 +29,6 @@
             { "name": "chainId", "type": "uint256" },
             { "name": "verifyingContract", "type": "address" }
         ],
-        "Mail": [
-            { "name": "from", "type": "FromPerson" },
-            { "name": "to", "type": "ToPerson" },
-            { "name": "contents", "type": "string" },
-            { "name": "tAddr", "type": "address[]" },
-            { "name": "trcTokenId", "type": "trcToken" },
-            { "name": "trcTokenArr", "type": "trcToken[]" }
-        ],
         "FromPerson": [
             { "name": "name", "type": "string" },
             { "name": "wallet", "type": "address" },
@@ -45,6 +37,14 @@
         "ToPerson": [
             { "name": "name", "type": "string" },
             { "name": "wallet", "type": "address" },
+            { "name": "trcTokenArr", "type": "trcToken[]" }
+        ],
+        "Mail": [
+            { "name": "from", "type": "FromPerson" },
+            { "name": "to", "type": "ToPerson" },
+            { "name": "contents", "type": "string" },
+            { "name": "tAddr", "type": "address[]" },
+            { "name": "trcTokenId", "type": "trcToken" },
             { "name": "trcTokenArr", "type": "trcToken[]" }
         ]
     }

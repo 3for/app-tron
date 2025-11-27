@@ -99,6 +99,9 @@ static const uint8_t *field_hash_finalize_static(const void *const field_ptr,
         case TYPE_SOL_BOOL:
             value = encode_boolean((bool *) data, data_length);
             break;
+        case TYPE_SOL_TRCTOKEN: // trcToken is equal to uint256
+            value = encode_uint(data, data_length);
+            break;
         case TYPE_CUSTOM:
         default:
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
