@@ -3,21 +3,21 @@
         "name": "TrcToken Test",
         "version": "1",
         "chainId": "0xd698d4192c56cb6be724a558448e2684802de4d6cd8690dc",
-        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+        "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t"
     },
     "message": {
         "from": {
             "name": "Cow",
-            "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+            "wallet": "TUg28KYvCXWW81EqMUeZvCZmZw2BChk1HQ",
             "trcTokenId": "1002000"
         },
         "to": {
             "name": "Bob",
-            "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+            "wallet": "TT5rFsXYCrnzdE2q1WdR9F2SuVY59A4hoM",
             "trcTokenArr": ["1002000", "1002000"]
         },
         "contents": "Hello, Bob!",
-        "tAddr": ["0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB", "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"],
+        "tAddr": ["TT5rFsXYCrnzdE2q1WdR9F2SuVY59A4hoM", "TT5rFsXYCrnzdE2q1WdR9F2SuVY59A4hoM"],
         "trcTokenId": "1002000",
         "trcTokenArr": ["1002000", "1002000"]
     },

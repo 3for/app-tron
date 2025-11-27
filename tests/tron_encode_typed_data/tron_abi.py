@@ -3,7 +3,7 @@ import functools
 from eth_abi.base import parse_type_str
 from eth_abi.codec import ABICodec as ETHABICodec
 from eth_abi.decoding import Fixed32ByteSizeDecoder
-from eth_abi.encoding import NumberEncoder
+from eth_abi.encoding import (Fixed32ByteSizeEncoder, NumberEncoder)
 from eth_abi.registry import BaseEquals
 from eth_abi.registry import registry as default_registry
 from eth_utils import (
@@ -14,6 +14,54 @@ from eth_utils import (
 from eth_abi.utils.numeric import (
     compute_unsigned_integer_bounds,
 )
+from eth_abi.exceptions import NonEmptyPaddingBytes
+import sys
+from pathlib import Path
+sys.path.append(f"{Path(__file__).parent.resolve()}")
+from address import (
+    to_tvm_address,
+    is_address,
+    to_base58check_address,
+)
+
+class TronAddressEncoder(Fixed32ByteSizeEncoder):
+    value_bit_size = 20 * 8
+    encode_fn = staticmethod(to_tvm_address)
+    is_big_endian = True
+
+    @classmethod
+    def validate_value(cls, value):
+        if not is_address(value):
+            cls.invalidate_value(value)
+
+    def validate(self):
+        super().validate()
+        if self.value_bit_size != 20 * 8:
+            raise ValueError("Addresses must be 160 bits in length")
+
+    @parse_type_str("address")
+    def from_type_str(cls, abi_type, registry):
+        return cls()
+
+class TronAddressDecoder(Fixed32ByteSizeDecoder):
+    value_bit_size = 20 * 8
+    is_big_endian = True
+    decoder_fn = staticmethod(to_base58check_address)
+
+    @parse_type_str("address")
+    def from_type_str(cls, abi_type, registry):
+        return cls()
+
+    def validate_padding_bytes(self, value, padding_bytes):
+        value_byte_size = self._get_value_byte_size()
+        padding_size = self.data_byte_size - value_byte_size
+
+        if (
+            padding_bytes != b"\x00" * padding_size
+            and padding_bytes != b"\x00" * (padding_size - 2) + b"\x00A"
+            and self.strict
+        ):
+            raise NonEmptyPaddingBytes(f"Padding bytes were not empty: {repr(padding_bytes)}")
 
 #
 # trcToken Encoder
@@ -55,6 +103,14 @@ class TrcTokenDecoder(Fixed32ByteSizeDecoder):
         return cls(value_bit_size=256)
 
 def do_patching(registry):
+    registry.unregister("address")
+
+    registry.register(
+        BaseEquals("address"),
+        TronAddressEncoder,
+        TronAddressDecoder,
+        label="address",
+    )
 
     registry.register(
         BaseEquals("trcToken"),
