@@ -14,6 +14,10 @@ import keychain
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
 from keychain import sign_data, Key
+import base58
+from pathlib import Path
+sys.path.append(f"{Path(__file__).parent.parent.resolve()}")
+from address import to_tvm_address
 
 
 class TrustedNameType(IntEnum):
@@ -265,9 +269,15 @@ def encode_hex_string(value: str, size: int) -> bytes:
     assert len(value) == (size * 2)
     return bytes.fromhex(value)
 
+def is_base58check_address(value: str) -> bool:
+    return value[0] == "T" and len(base58.b58decode_check(value)) == 21
+
+def is_eth_address(value: str) -> bool:
+    return value.startswith("0x") and len(bytes.fromhex(value[2:])) == 20
 
 def encode_address(value: str, typesize: int) -> bytes:
-    return encode_hex_string(value, 20)
+    eth_addr_hex = "0x" + to_tvm_address(value).hex()
+    return encode_hex_string(eth_addr_hex, 20)
 
 
 def encode_bool(value: str, typesize: int) -> bytes:
