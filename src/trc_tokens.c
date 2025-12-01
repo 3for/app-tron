@@ -16,7 +16,7 @@
  ********************************************************************************/
 
 #include <string.h>
-#include "tokens.h"
+#include "trc_tokens.h"
 #include "os_io_seproxyhal.h"
 
 const uint8_t token_public_key[] = {

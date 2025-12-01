@@ -22,7 +22,7 @@
 #include "format.h"
 #include "parse.h"
 #include "settings.h"
-#include "tokens.h"
+#include "trc_tokens.h"
 #include "app_errors.h"
 #include "ui_globals.h"
 
