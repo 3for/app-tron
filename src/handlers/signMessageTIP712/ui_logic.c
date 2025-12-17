@@ -263,16 +263,16 @@ static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
 }
 
 static inline uint8_t hexNibble(char c) {
-    if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
-    if (c >= 'a' && c <= 'f') return (uint8_t)(c - 'a' + 10);
-    if (c >= 'A' && c <= 'F') return (uint8_t)(c - 'A' + 10);
+    if (c >= '0' && c <= '9') return (uint8_t) (c - '0');
+    if (c >= 'a' && c <= 'f') return (uint8_t) (c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return (uint8_t) (c - 'A' + 10);
     return 0;
 }
 
 static void hex2bin(const char *hex, uint8_t *out) {
     for (int i = 0; i < 20; i++) {
         uint8_t high = hexNibble(hex[2 * i]);
-        uint8_t low  = hexNibble(hex[2 * i + 1]);
+        uint8_t low = hexNibble(hex[2 * i + 1]);
         out[i] = (high << 4) | low;
     }
 }

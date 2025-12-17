@@ -64,28 +64,79 @@ void continue_displaying_message(void) {
  */
 void feed_display(void) {
     int c;
+    bool is_hex = false;
+    uint32_t i;
+    static bool hex_prefix_written = false;
 
-    while ((unprocessed_length() > 0) && (remaining_ui_191_buffer_length() > 0)) {
-        c = *(char *) unprocessed_data();
-        if (isspace(c))  // to replace all white-space characters as spaces
-        {
-            c = ' ';
+    /* ---------- Phase 1: detect display mode ---------- */
+    for (i = 0; i < unprocessed_length(); i++) {
+        c = ((uint8_t *) unprocessed_data())[i];
+        if (!isprint(c) && !isspace(c)) {
+            is_hex = true;
+            break;
         }
-        if (isprint(c)) {
-            sprintf(remaining_ui_191_buffer(), "%c", (char) c);
-            processed_size_191 += 1;
-        } else {
-            if (remaining_ui_191_buffer_length() >= 4)  // 4 being the fixed length of \x00
-            {
-                snprintf(remaining_ui_191_buffer(), remaining_ui_191_buffer_length(), "\\x%02x", c);
+    }
+
+    /* Reset prefix flag when starting a new message */
+    if (processed_size_191 == 0) {
+        hex_prefix_written = false;
+    }
+
+    /* ---------- Phase 2: feed UI buffer ---------- */
+    while ((unprocessed_length() > 0) && (remaining_ui_191_buffer_length() > 0)) {
+        c = *(uint8_t *) unprocessed_data();
+
+        if (!is_hex) {
+            /* ---------- ASCII display ---------- */
+            if (isspace(c)) {  // to replace all white-space characters as spaces
+                c = ' ';
+            }
+
+            if (isprint(c)) {
+                sprintf(remaining_ui_191_buffer(), "%c", (char) c);
                 processed_size_191 += 1;
             } else {
-                // fill the rest of the UI buffer spaces, to consider the buffer full
+                if (remaining_ui_191_buffer_length() >= 4)  // 4 being the fixed length of \x00
+                {
+                    snprintf(remaining_ui_191_buffer(),
+                             remaining_ui_191_buffer_length(),
+                             "\\x%02x",
+                             c);
+                    processed_size_191 += 1;
+                } else {
+                    // fill the rest of the UI buffer spaces, to consider the buffer full
+                    memset(remaining_ui_191_buffer(), ' ', remaining_ui_191_buffer_length());
+                }
+            }
+        } else {
+            /* ---------- HEX display ---------- */
+
+            /* Write 0x prefix once */
+            if (!hex_prefix_written) {
+                if (remaining_ui_191_buffer_length() < 2) {
+                    break;
+                }
+                memcpy(remaining_ui_191_buffer(), "0x", 2);
+                hex_prefix_written = true;
+                continue;
+            }
+
+            /* Each byte -> 2 hex chars */
+            if (remaining_ui_191_buffer_length() >= 2) {
+                snprintf(remaining_ui_191_buffer(),
+                         remaining_ui_191_buffer_length(),
+                         "%02x",
+                         (uint8_t) c);
+                processed_size_191 += 1;
+            } else {
+                /* Pad remaining UI buffer */
                 memset(remaining_ui_191_buffer(), ' ', remaining_ui_191_buffer_length());
+                break;
             }
         }
     }
 
+    /* ---------- UI state handling ---------- */
     if ((remaining_ui_191_buffer_length() == 0) || (txContent.dataBytes == 0)) {
         if (!states191.ui_started) {
             ui_191_start();

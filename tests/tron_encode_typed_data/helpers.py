@@ -4,8 +4,7 @@ from typing import (
 )
 
 from eth_utils import (
-    is_hexstr,
-)
+    is_hexstr, )
 
 
 def _get_eip712_solidity_types() -> List[str]:
@@ -30,12 +29,12 @@ def is_0x_prefixed_hexstr(value: Any) -> bool:
 # strip all brackets: Person[][] -> Person
 def parse_core_array_type(type_: str) -> str:
     if is_array_type(type_):
-        type_ = type_[: type_.index("[")]
+        type_ = type_[:type_.index("[")]
     return type_
 
 
 # strip only last set of brackets: Person[3][1] -> Person[3]
 def parse_parent_array_type(type_: str) -> str:
     if is_array_type(type_):
-        type_ = type_[: type_.rindex("[")]
+        type_ = type_[:type_.rindex("[")]
     return type_

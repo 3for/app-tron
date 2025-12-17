@@ -16,6 +16,7 @@ from ragger.utils import RAPDU
 from keychain import sign_data, Key
 import base58
 from pathlib import Path
+
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}")
 from address import to_tvm_address
 
@@ -203,8 +204,10 @@ def parse_bytes(typesize):
         return (TIP712FieldType.FIX_BYTES, typesize)
     return (TIP712FieldType.DYN_BYTES, None)
 
+
 def parse_trctoken(typesize):
-    return (TIP712FieldType.TRCTOKEN, None) # same as uint256
+    return (TIP712FieldType.TRCTOKEN, None)  # same as uint256
+
 
 # set functions for each type
 parsing_type_functions = {}
@@ -269,11 +272,14 @@ def encode_hex_string(value: str, size: int) -> bytes:
     assert len(value) == (size * 2)
     return bytes.fromhex(value)
 
+
 def is_base58check_address(value: str) -> bool:
     return value[0] == "T" and len(base58.b58decode_check(value)) == 21
 
+
 def is_eth_address(value: str) -> bool:
     return value.startswith("0x") and len(bytes.fromhex(value[2:])) == 20
+
 
 def encode_address(value: str, typesize: int) -> bytes:
     eth_addr_hex = "0x" + to_tvm_address(value).hex()
@@ -298,9 +304,11 @@ def encode_bytes_dyn(value: str, typesize: int) -> bytes:
     # / by the length of one byte in a hex string (2)
     return encode_hex_string(value, int((len(value) - 2) / 2))
 
+
 def encode_trctoken(value: str, typesize: int) -> bytes:
     # To support trcToken for TRON solidity,  `trcToken` type is equal to `uint256`
     return encode_integer(value, 256)
+
 
 # set functions for each type
 encoding_functions = {}
