@@ -23,6 +23,7 @@ from .helpers import (
     EIP712_SOLIDITY_TYPES,
 )
 
+
 def get_primary_type(types: Dict[str, List[Dict[str, str]]]) -> str:
     custom_types = set(types.keys())
     custom_types_that_are_deps = set()
@@ -66,8 +67,7 @@ def encode_field(
         if not isinstance(value, list):
             raise ValueError(
                 f"Invalid value for field `{name}` of type `{type_}`: "
-                f"expected array, got `{value}` of type `{type(value)}`"
-            )
+                f"expected array, got `{value}` of type `{type(value)}`")
 
         parsed_type = parse_parent_array_type(type_)
         type_value_pairs = [
@@ -81,11 +81,13 @@ def encode_field(
             )
 
         data_types, data_hashes = zip(*type_value_pairs)
-        return ("bytes32", keccak(tron_abi.encode_abi(data_types, data_hashes)))
+        return ("bytes32", keccak(tron_abi.encode_abi(data_types,
+                                                      data_hashes)))
 
     elif type_ == "bool":
         falsy_values = {"False", "false", "0"}
-        return (type_, False) if not value or value in falsy_values else (type_, True)
+        return (type_,
+                False) if not value or value in falsy_values else (type_, True)
 
     # all bytes types allow hexstr and str values
     elif type_.startswith("bytes"):
@@ -102,11 +104,9 @@ def encode_field(
 
         return (
             # keccak hash if dynamic `bytes` type
-            ("bytes32", keccak(value))
-            if type_ == "bytes"
+            ("bytes32", keccak(value)) if type_ == "bytes"
             # if fixed bytesXX type, do not hash
-            else (type_, value)
-        )
+            else (type_, value))
 
     elif type_ == "string":
         if isinstance(value, int):
@@ -137,17 +137,15 @@ def find_type_dependencies(
     if not isinstance(type_, str):
         raise ValueError(
             "Invalid find_type_dependencies input: expected string, got "
-            f"`{type_}` of type `{type(type_)}`"
-        )
+            f"`{type_}` of type `{type(type_)}`")
     # get core type if it's an array type
     type_ = parse_core_array_type(type_)
 
     if (
-        # don't look for dependencies of solidity types
-        type_ in EIP712_SOLIDITY_TYPES
-        # found a type that's already been added
-        or type_ in results
-    ):
+            # don't look for dependencies of solidity types
+            type_ in EIP712_SOLIDITY_TYPES
+            # found a type that's already been added
+            or type_ in results):
         return results
 
     # found a type that isn't defined
@@ -193,9 +191,8 @@ def encode_data(
     encoded_values: List[Union[bytes, int]] = [hash_type(type_, types)]
 
     for field in types[type_]:
-        type, value = encode_field(
-            types, field["name"], field["type"], data.get(field["name"])
-        )
+        type, value = encode_field(types, field["name"], field["type"],
+                                   data.get(field["name"]))
         encoded_types.append(type)
         encoded_values.append(value)
 
@@ -217,16 +214,32 @@ def hash_eip712_message(
     message_data: Dict[str, Any],
 ) -> bytes:
     primary_type = get_primary_type(message_types)
-    return bytes(keccak(encode_data(primary_type, message_types, message_data)))
+    return bytes(keccak(encode_data(primary_type, message_types,
+                                    message_data)))
 
 
 def hash_domain(domain_data: Dict[str, Any]) -> bytes:
     eip712_domain_map = {
-        "name": {"name": "name", "type": "string"},
-        "version": {"name": "version", "type": "string"},
-        "chainId": {"name": "chainId", "type": "uint256"},
-        "verifyingContract": {"name": "verifyingContract", "type": "address"},
-        "salt": {"name": "salt", "type": "bytes32"},
+        "name": {
+            "name": "name",
+            "type": "string"
+        },
+        "version": {
+            "name": "version",
+            "type": "string"
+        },
+        "chainId": {
+            "name": "chainId",
+            "type": "uint256"
+        },
+        "verifyingContract": {
+            "name": "verifyingContract",
+            "type": "address"
+        },
+        "salt": {
+            "name": "salt",
+            "type": "bytes32"
+        },
     }
 
     for k in domain_data.keys():
@@ -235,7 +248,8 @@ def hash_domain(domain_data: Dict[str, Any]) -> bytes:
 
     domain_types = {
         "EIP712Domain": [
-            eip712_domain_map[k] for k in eip712_domain_map.keys() if k in domain_data
+            eip712_domain_map[k] for k in eip712_domain_map.keys()
+            if k in domain_data
         ]
     }
 
