@@ -761,6 +761,129 @@ bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **a
     return true;
 }
 
+parserStatus_e processClearSignTx(uint8_t *buffer, uint32_t length, txContent_t *content) {
+    protocol_Transaction_raw transaction;
+
+    if (length == 0) {
+        return USTREAM_FINISHED;
+    }
+
+    memset(&transaction, 0, sizeof(transaction));
+    memset(&msg, 0, sizeof(msg));
+
+    pb_istream_t stream = pb_istream_from_buffer(buffer, length);
+
+    /* Set callbacks to retrieve "Contract" message bounds.
+     * This is required because contract type is not necessarily parsed at the
+     * time of the transaction is decoded (fields are not required to be ordered)
+     * and deserializing the nested contract inside the message requires too much
+     * stack for Nano S
+     */
+    buffer_t contract_buffer;
+    transaction.contract->parameter.value.funcs.decode = pb_decode_contract_parameter;
+    transaction.contract->parameter.value.arg = &contract_buffer;
+
+    /* Set callback to determine if transaction contains custom data.
+     * This allows to retrieve the size of arbitrary data. */
+    transaction.custom_data.funcs.decode = pb_get_tx_data_size;
+    transaction.custom_data.arg = &content->dataBytes;
+
+    if (!pb_decode(&stream, protocol_Transaction_raw_fields, &transaction)) {
+        return USTREAM_FAULT;
+    }
+
+    if (!HAS_SETTING(S_DATA_ALLOWED) && content->dataBytes != 0) {
+        return USTREAM_MISSING_SETTING_DATA_ALLOWED;
+    }
+
+    /* Parse contract parameters if any...
+       and it may come in different message chunk
+       so test if chunk has the contract
+     */
+    if (transaction.contract->has_parameter) {
+        content->permission_id = transaction.contract->Permission_id;
+        content->contractType = (contractType_e) transaction.contract->type;
+
+        pb_istream_t tx_stream = pb_istream_from_buffer(contract_buffer.buf, contract_buffer.size);
+        bool ret;
+
+        switch (transaction.contract->type) {
+            case protocol_Transaction_Contract_ContractType_TransferContract:
+                ret = transfer_contract(content, &tx_stream);
+                break;
+
+            case protocol_Transaction_Contract_ContractType_TransferAssetContract:
+                ret = transfer_asset_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
+                ret = vote_witness_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
+                ret = freeze_balance_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
+                ret = unfreeze_balance_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
+                ret = freeze_balance_v2_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
+                ret = unfreeze_balance_v2_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
+                ret = withdraw_expire_unfreeze_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
+                ret = delegate_resource_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
+                ret = undelegate_resource_contrace(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
+                ret = withdraw_balance_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
+                ret = proposal_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
+                ret = proposal_approve_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ProposalDeleteContract:
+                ret = proposal_delete_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
+                ret = account_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
+                ret = trigger_smart_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
+                ret = exchange_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
+                ret = exchange_inject_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ExchangeWithdrawContract:
+                ret = exchange_withdraw_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ExchangeTransactionContract:
+                ret = exchange_transaction_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
+                ret = account_permission_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
+                ret = witness_create_contract(content, &tx_stream);
+                break;
+            default:
+                return USTREAM_FAULT;
+        }
+        return ret ? USTREAM_PROCESSING : USTREAM_FAULT;
+    }
+
+    return USTREAM_PROCESSING;
+}
+
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content) {
     protocol_Transaction_raw transaction;
 

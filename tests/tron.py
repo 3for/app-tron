@@ -74,6 +74,7 @@ class InsType(IntEnum):
     SIGN_PERSONAL_MESSAGE_FULL_DISPLAY = 0xC8
     GET_ECDH_SECRET = 0x0A
     SIGN_TIP_712_MESSAGE = 0x0C
+    CLEAR_SIGN = 0xC4
 
 
 class Errors(IntEnum):
@@ -370,7 +371,8 @@ class TronClient:
              snappath: Path = None,
              text: str = "",
              navigate: bool = True,
-             warning_approve: bool = False):
+             warning_approve: bool = False,
+             ins: InsType = InsType.SIGN):
         messages = []
 
         # Split transaction in multiples APDU
@@ -405,7 +407,7 @@ class TronClient:
                 else:
                     p1 = P1.TRC10_NAME | P1.FIRST | i - token_pos
 
-            self._client.exchange(CLA, InsType.SIGN, p1, 0x00, data)
+            self._client.exchange(CLA, ins, p1, 0x00, data)
 
         # Send last message
         if len(messages) == 1:
@@ -417,12 +419,12 @@ class TronClient:
             p1 = P1.LAST
 
         if navigate:
-            with self._client.exchange_async(CLA, InsType.SIGN, p1, 0x00,
+            with self._client.exchange_async(CLA, ins, p1, 0x00,
                                              messages[-1]):
                 self.navigate(snappath, text, warning_approve)
             return self._client.last_async_response
         else:
-            return self._client.exchange(CLA, InsType.SIGN, p1, 0x00,
+            return self._client.exchange(CLA, ins, p1, 0x00,
                                          messages[-1])
 
     def sign_for_trusted_name(self,

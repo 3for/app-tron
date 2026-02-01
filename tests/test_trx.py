@@ -214,7 +214,8 @@ class TestTRX():
                           text_index,
                           tx,
                           signatures=[],
-                          warning_approve=False):
+                          warning_approve=False,
+                          ins: InsType = InsType.SIGN):
         path = Path(currentframe().f_back.f_code.co_name)
         text = None
         if firmware.is_nano:
@@ -231,7 +232,8 @@ class TestTRX():
                            signatures=signatures,
                            snappath=path,
                            text=text,
-                           warning_approve=warning_approve)
+                           warning_approve=warning_approve,
+                           ins=ins)
         assert check_tx_signature(tx, resp.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
@@ -709,6 +711,20 @@ class TestTRX():
                     client.address_hex("TKkeiboTkxXKJpbmVFbv4a8ov5rAfRDMf9")),
                 data=tx_calldata))
         self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_trc20_send_clear_sign(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=bytes.fromhex(
+                    "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
+                )))
+        self.sign_and_validate(client, firmware, 0, tx, ins=InsType.CLEAR_SIGN)
 
     def test_trx_trc20_approve(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
