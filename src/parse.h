@@ -256,6 +256,7 @@ unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t
 void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
+parserStatus_e processClearSignTx(uint8_t *buffer, uint32_t length, txContent_t *content);
 
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;

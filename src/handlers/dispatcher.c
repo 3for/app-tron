@@ -101,6 +101,10 @@ int apdu_dispatcher(const command_t *cmd) {
         case INS_ENS_PROVIDE_INFO:
             return handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
+        case INS_CLEAR_SIGN:
+            // Plugin Request Signature
+            return handleClearSign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);
     }
