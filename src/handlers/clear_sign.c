@@ -29,12 +29,115 @@
 #include "app_errors.h"
 #include "parse.h"
 #include "settings.h"
+#include "trc_tokens.h"
+#include "transaction_trigger_decode.h"
 #ifdef HAVE_SWAP
 #include "swap.h"
 #include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
 extern void reset_app_context();
+
+static tron_stream_decoder_t clear_sign_decoder;
+
+static bool clear_sign_decoder_complete(const tron_stream_decoder_t *dec) {
+    return tron_stream_decoder_is_done(dec);
+}
+
+static bool clear_sign_parse_trigger_data(const tron_decode_result_t *res, txContent_t *content) {
+    if (res == NULL || content == NULL) {
+        return false;
+    }
+
+    if (!res->has_data) {
+        return true;
+    }
+
+    if (res->data_len < 4 || res->data_prefix_len < 4) {
+        return false;
+    }
+
+    content->customSelector = U4BE(res->data_prefix, 0);
+
+    if (memcmp(res->data_prefix, SELECTOR[0], 4) == 0) {
+        content->TRC20Method = 1;  // transfer(address,uint256)
+    } else if (memcmp(res->data_prefix, SELECTOR[1], 4) == 0) {
+        content->TRC20Method = 2;  // approve(address,uint256)
+    } else {
+        content->TRC20Method = 0;
+        return ((res->data_len - 4) % 32 == 0);
+    }
+
+    if (res->data_len != (4 + 32 + 32) || res->data_prefix_len < (4 + 32 + 32)) {
+        return false;
+    }
+
+    const uint8_t *arg1 = res->data_prefix + 4;
+    memcpy(content->destination, arg1 + (32 - ADDRESS_SIZE), ADDRESS_SIZE);
+    content->destination[0] = ADD_PRE_FIX_BYTE_MAINNET;
+
+    const uint8_t *arg2 = res->data_prefix + 4 + 32;
+    memmove(content->TRC20Amount, arg2, 32);
+
+    return true;
+}
+
+static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent_t *content) {
+    if (res == NULL || content == NULL) {
+        return false;
+    }
+
+    if (!res->has_contract_type) {
+        return false;
+    }
+    content->contractType = (contractType_e) res->contract_type;
+
+    if (res->has_owner_address) {
+        if (res->owner_address_len != ADDRESS_SIZE) {
+            return false;
+        }
+        memcpy(content->account, res->owner_address, ADDRESS_SIZE);
+    } else {
+        return false;
+    }
+
+    if (res->has_contract_address) {
+        if (res->contract_address_len != ADDRESS_SIZE) {
+            return false;
+        }
+        memcpy(content->contractAddress, res->contract_address, ADDRESS_SIZE);
+    } else {
+        return false;
+    }
+
+    if (res->has_call_value) {
+        content->amount[0] = (uint64_t) res->call_value;
+    }
+
+    if (res->has_custom_data) {
+        content->dataBytes = res->custom_data_len;
+    }
+
+    if (res->has_permission_id) {
+        content->permission_id = (uint8_t) res->permission_id;
+    }
+
+    if (!clear_sign_parse_trigger_data(res, content)) {
+        return false;
+    }
+
+    tokenDefinition_t *trc20 = getKnownToken(content);
+    if (trc20 == NULL) {
+        content->TRC20Method = 0;
+        return true;
+    }
+
+    content->decimals[0] = trc20->decimals;
+    content->tokenNamesLength[0] = strlen(trc20->ticker) + 1;
+    memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0]);
+
+    return true;
+}
 
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
@@ -57,8 +160,16 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         workBuffer += ret;
         dataLength -= ret;
 
+        if (dataLength < 4) {
+            return io_send_sw(E_INCORRECT_LENGTH);
+        }
+        uint32_t total_len = U4BE(workBuffer, 0);
+        workBuffer += 4;
+        dataLength -= 4;
+
         initTx(&txContext, &txContent);
         customContractField = 0;
+        tron_stream_decoder_init_raw(&clear_sign_decoder, total_len);
 
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
         return io_send_sw(E_INCORRECT_P1_P2);
@@ -95,29 +206,29 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
 #endif
 
     // process buffer
-    uint16_t txResult = processClearSignTx(workBuffer, dataLength, &txContent);
-    PRINTF("CLEAR SIGN txResult: %04x\n", txResult);
-    switch (txResult) {
-        case USTREAM_PROCESSING:
-            // Last data should not return
-            if (p1 == P1_LAST || p1 == P1_SIGN) {
-                break;
-            }
-            return io_send_sw(E_OK);
-        case USTREAM_FINISHED:
-            break;
-        case USTREAM_FAULT:
-            return io_send_sw(E_INCORRECT_DATA);
-        case USTREAM_MISSING_SETTING_DATA_ALLOWED:
+    if (!tron_stream_decoder_feed(&clear_sign_decoder, workBuffer, dataLength)) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
+    if (p1 != P1_LAST && p1 != P1_SIGN) {
+        return io_send_sw(E_OK);
+    }
+
+    if (!clear_sign_decoder_complete(&clear_sign_decoder)) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
+    if (!clear_sign_fill_txcontent(&clear_sign_decoder.result, &txContent)) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
+    if (!HAS_SETTING(S_DATA_ALLOWED) && txContent.dataBytes != 0) {
 #ifdef HAVE_SWAP
-            if (G_called_from_swap) {
-                return io_send_sw(E_SWAP_CHECKING_FAIL);
-            }
+        if (G_called_from_swap) {
+            return io_send_sw(E_SWAP_CHECKING_FAIL);
+        }
 #endif
-            return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
-        default:
-            PRINTF("Unexpected parser status\n");
-            return io_send_sw(txResult);
+        return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
     }
 
     // Last data hash

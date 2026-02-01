@@ -215,7 +215,8 @@ class TestTRX():
                           tx,
                           signatures=[],
                           warning_approve=False,
-                          ins: InsType = InsType.SIGN):
+                          ins: InsType = InsType.SIGN,
+                          include_tx_len: bool = False):
         path = Path(currentframe().f_back.f_code.co_name)
         text = None
         if firmware.is_nano:
@@ -233,7 +234,8 @@ class TestTRX():
                            snappath=path,
                            text=text,
                            warning_approve=warning_approve,
-                           ins=ins)
+                           ins=ins,
+                           include_tx_len=include_tx_len)
         assert check_tx_signature(tx, resp.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
@@ -724,7 +726,12 @@ class TestTRX():
                 data=bytes.fromhex(
                     "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
                 )))
-        self.sign_and_validate(client, firmware, 0, tx, ins=InsType.CLEAR_SIGN)
+        self.sign_and_validate(client,
+                               firmware,
+                               0,
+                               tx,
+                               ins=InsType.CLEAR_SIGN,
+                               include_tx_len=True)
 
     def test_trx_trc20_approve(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)

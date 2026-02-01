@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from enum import IntEnum
 from pathlib import Path
 from typing import Tuple, Generator
-from struct import unpack
+from struct import unpack, pack
 from bip_utils import Bip39SeedGenerator, Bip32Slip10Secp256k1
 from bip_utils.addr import TrxAddrEncoder
 from eth_keys import keys
@@ -372,11 +372,15 @@ class TronClient:
              text: str = "",
              navigate: bool = True,
              warning_approve: bool = False,
-             ins: InsType = InsType.SIGN):
+             ins: InsType = InsType.SIGN,
+             include_tx_len: bool = False):
         messages = []
 
         # Split transaction in multiples APDU
+        tx_len = len(tx)
         data = pack_derivation_path(path)
+        if include_tx_len:
+            data += pack(">I", tx_len)
         while len(tx) > 0:
             # get next message field
             newpos = self.get_next_length(tx)

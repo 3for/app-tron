@@ -250,13 +250,13 @@ bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen);
 
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *context);
 bool parseExchange(const uint8_t *data, size_t dataLength, txContent_t *context);
+tokenDefinition_t *getKnownToken(txContent_t *context);
 
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun);
 
 void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
-parserStatus_e processClearSignTx(uint8_t *buffer, uint32_t length, txContent_t *content);
 
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
