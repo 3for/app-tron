@@ -306,9 +306,11 @@ static void ethToTronBase58(const char *ethAddress, char *out58) {
 static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) {
     // no reason for an address to be received over multiple chunks
     if (!first) {
+        PRINTF("TIP712 addr: unexpected continuation chunk\n");
         return false;
     }
-    if (length != ADDRESS_SIZE_712) {
+    if (length != ADDRESS_LENGTH) {
+        PRINTF("TIP712 addr: invalid length %u\n", length);
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
@@ -320,6 +322,7 @@ static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) 
                                   ethAddr,
                                   sizeof(ethAddr),
                                   chainConfig->chainId)) {
+        PRINTF("TIP712 addr: getEthDisplayableAddress failed\n");
         apdu_response_code = APDU_RESPONSE_ERROR_NO_INFO;
         return false;
     }
@@ -535,7 +538,7 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
     switch (ui_ctx->amount.state) {
         case AMOUNT_JOIN_STATE_TOKEN:
             if (token != NULL) {
-                if (memcmp(data, token->address, ADDRESS_SIZE_712) != 0) {
+                if (memcmp(data, token->address, ADDRESS_LENGTH) != 0) {
                     return false;
                 }
             }

@@ -45,6 +45,8 @@ const internal_storage_t N_storage_real;
 tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
+dataContext_t dataContext;
+pluginType_t pluginType;
 
 app_state_t appState;
 
@@ -54,6 +56,7 @@ extern void roll_challenge(void);
 
 void reset_app_context() {
     appState = APP_STATE_IDLE;
+    pluginType = PLUGIN_TYPE_NONE;
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));
     memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));

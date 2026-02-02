@@ -7,6 +7,10 @@
 #include <stdbool.h>
 #include "core/Contract.pb.h"
 #include "common_utils.h"
+#include "asset_info.h"
+#include "tx_content.h"
+#include "bip32_utils.h"
+#include "eth_plugin_interface.h"
 
 #define MAX_BIP32_PATH 10
 
@@ -23,16 +27,19 @@
 #define SUN_DIG                  6
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 #define MAX_RAW_SIGNATURE        65
-#define MAX_TOKEN_LENGTH         67
 
 #define NETWORK_STRING_MAX_SIZE 16
-#define MAX_URL_SIZE            256
 #define SHARED_CTX_FIELD_1_SIZE 256
 #define SHARED_CTX_FIELD_2_SIZE 40
 
 #define SHARED_BUFFER_SIZE SHARED_CTX_FIELD_1_SIZE
 
 #define MAX_ASSETS 5
+
+#define UNSUPPORTED_CHAIN_ID_MSG(id)                                              \
+    do {                                                                          \
+        PRINTF("Unsupported chain ID: %u (app: %u)\n", id, chainConfig->chainId); \
+    } while (0)
 
 typedef union {
     protocol_TransferContract transfer_contract;
@@ -68,45 +75,6 @@ typedef enum parserStatus_e {
     USTREAM_MISSING_SETTING_DATA_ALLOWED
 } parserStatus_e;
 
-typedef enum contractType_e {
-    ACCOUNTCREATECONTRACT = 0,
-    TRANSFERCONTRACT,
-    TRANSFERASSETCONTRACT,
-    VOTEASSETCONTRACT,
-    VOTEWITNESSCONTRACT,
-    WITNESSCREATECONTRACT,
-    ASSETISSUECONTRACT,
-    WITNESSUPDATECONTRACT = 8,
-    PARTICIPATEASSETISSUECONTRACT,
-    ACCOUNTUPDATECONTRACT,
-    FREEZEBALANCECONTRACT,
-    UNFREEZEBALANCECONTRACT,
-    WITHDRAWBALANCECONTRACT,
-    UNFREEZEASSETCONTRACT,
-    UPDATEASSETCONTRACT,
-    PROPOSALCREATECONTRACT,
-    PROPOSALAPPROVECONTRACT,
-    PROPOSALDELETECONTRACT,
-    SETACCOUNTIDCONTRACT,
-    CUSTOMCONTRACT,
-    CREATESMARTCONTRACT = 30,
-    TRIGGERSMARTCONTRACT,
-    EXCHANGECREATECONTRACT = 41,
-    EXCHANGEINJECTCONTRACT,
-    EXCHANGEWITHDRAWCONTRACT,
-    EXCHANGETRANSACTIONCONTRACT,
-    UPDATEENERGYLIMITCONTRACT,
-    ACCOUNTPERMISSIONUPDATECONTRACT,
-    FREEZEBALANCEV2CONTRACT = 54,
-    UNFREEZEBALANCEV2CONTRACT,
-    WITHDRAWEXPIREUNFREEZECONTRACT,
-    DELEGATERESOURCECONTRACT,
-    UNDELEGATERESOURCECONTRACT,
-
-    UNKNOWN_CONTRACT = 254,
-    INVALID_CONTRACT = 255
-} contractType_e;
-
 enum { OFFSET_CLA = 0, OFFSET_INS, OFFSET_P1, OFFSET_P2, OFFSET_LC, OFFSET_CDATA };
 typedef enum {
     APP_STATE_IDLE,
@@ -139,37 +107,6 @@ typedef struct publicKeyContext_t {
     bool getChaincode;
 } publicKeyContext_t;
 
-typedef struct {
-    uint32_t indices[MAX_BIP32_PATH];
-    uint8_t length;
-} bip32_path_t;
-
-#define COLLECTION_NAME_MAX_LEN 70
-
-typedef struct nftInfo_t {
-    uint8_t contractAddress[ADDRESS_SIZE_712];  // must be first item
-    char collectionName[COLLECTION_NAME_MAX_LEN + 1];
-} nftInfo_t;
-
-// TOKENS
-
-#define MAX_TICKER_LEN 11  // 10 characters + '\0'
-
-typedef struct tokenDefinition_t {
-    uint8_t address[ADDRESS_SIZE];  // must be first item
-    char ticker[MAX_TICKER_LEN];
-    uint8_t decimals;
-} tokenDefinition_t;
-
-// UNION
-
-typedef union extraInfo_t {
-    tokenDefinition_t token;
-    // Would have used HAVE_NFT_SUPPORT but it is only declared for the Tron app
-    // and not plugins
-    nftInfo_t nft;
-} extraInfo_t;
-
 typedef struct transactionContext_t {
     bip32_path_t bip32_path;
     uint8_t hash[HASH_SIZE];
@@ -179,26 +116,6 @@ typedef struct transactionContext_t {
     bool assetSet[MAX_ASSETS];
     uint8_t currentAssetIndex;
 } transactionContext_t;
-
-typedef struct txContent_t {
-    uint64_t amount[2];
-    uint64_t exchangeID;
-    uint8_t account[ADDRESS_SIZE];
-    uint8_t destination[ADDRESS_SIZE];
-    uint8_t contractAddress[ADDRESS_SIZE];
-    uint8_t TRC20Amount[32];
-    uint8_t decimals[2];
-    uint8_t url[MAX_URL_SIZE];
-    char tokenNames[2][MAX_TOKEN_LENGTH];
-    uint8_t tokenNamesLength[2];
-    uint8_t resource;
-    uint8_t TRC20Method;
-    uint32_t customSelector;
-    contractType_e contractType;
-    uint64_t dataBytes;
-    uint8_t permission_id;
-    uint32_t customData;
-} txContent_t;
 
 typedef struct messageSigningContext712_t {
     uint8_t pathLength;
@@ -219,6 +136,41 @@ typedef union {
     messageSigningContext712_t messageSigningContext712;
     // messageSigningContext_t messageSigningContext;
 } tmpCtx_t;
+
+#define SELECTOR_LENGTH 4
+#define PLUGIN_ID_LENGTH 30
+
+typedef struct tokenContext_t {
+    char pluginName[PLUGIN_ID_LENGTH];
+
+    uint8_t data[INT256_LENGTH];
+    uint16_t fieldIndex;
+    uint8_t fieldOffset;
+
+    uint8_t pluginUiMaxItems;
+    uint8_t pluginUiCurrentItem;
+    uint8_t pluginUiState;
+
+    union {
+        struct {
+            uint8_t contractAddress[ADDRESS_LENGTH];
+            uint8_t methodSelector[SELECTOR_LENGTH];
+        };
+        // This needs to be strictly 4 bytes aligned since pointers to it will be casted as
+        // plugin context struct pointers (structs that contain up to 4 bytes wide elements)
+        uint8_t pluginContext[PLUGIN_CONTEXT_SIZE] __attribute__((aligned(4)));
+    };
+
+    uint8_t pluginStatus;
+
+} tokenContext_t;
+
+_Static_assert((offsetof(tokenContext_t, pluginContext) % 4) == 0, "Plugin context not aligned");
+
+typedef union {
+    tokenContext_t tokenContext;
+} dataContext_t;
+
 
 typedef struct txStringProperties_t {
     char fullAddress[43];
@@ -258,9 +210,26 @@ void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
 
+typedef enum {
+    PLUGIN_TYPE_NONE = 0,
+    // External plugin, set by setExternalPlugin
+    PLUGIN_TYPE_EXTERNAL,
+    // Specific SWAP_WITH_CALLDATA internal plugin
+    // set as fallback when started if calldata is provided in swap mode
+    PLUGIN_TYPE_SWAP_WITH_CALLDATA,
+    // Specific ERC721 internal plugin, set by setPlugin
+    PLUGIN_TYPE_ERC721,
+    // Specific ERC1155 internal plugin, set by setPlugin
+    PLUGIN_TYPE_ERC1155,
+    // Old internal plugin, not set by any command
+    PLUGIN_TYPE_OLD_INTERNAL,
+} pluginType_t;
+
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
+extern dataContext_t dataContext;
+extern pluginType_t pluginType;
 extern uint8_t appState;
 extern states191_t states191;
 extern uint8_t processed_size_191;
