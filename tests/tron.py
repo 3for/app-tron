@@ -379,24 +379,37 @@ class TronClient:
         # Split transaction in multiples APDU
         tx_len = len(tx)
         data = pack_derivation_path(path)
-        if include_tx_len:
-            data += pack(">I", tx_len)
-        while len(tx) > 0:
-            # get next message field
-            newpos = self.get_next_length(tx)
-            assert (newpos < MAX_APDU_LEN)
-            if (len(data) + newpos) < MAX_APDU_LEN:
-                # append to data
-                data += tx[:newpos]
-                tx = tx[newpos:]
-            else:
-                # add chunk
-                messages.append(data)
-                data = bytearray()
-                continue
-        # append last
-        messages.append(data)
-        token_pos = len(messages)
+        if ins == InsType.CLEAR_SIGN:
+            if include_tx_len:
+                data += pack(">I", tx_len)
+            max_first = MAX_APDU_LEN - len(data)
+            assert (max_first >= 0)
+            data += tx[:max_first]
+            tx = tx[max_first:]
+            messages.append(data)
+            while len(tx) > 0:
+                messages.append(tx[:MAX_APDU_LEN])
+                tx = tx[MAX_APDU_LEN:]
+            token_pos = len(messages)
+        else:
+            if include_tx_len:
+                data += pack(">I", tx_len)
+            while len(tx) > 0:
+                # get next message field
+                newpos = self.get_next_length(tx)
+                assert (newpos < MAX_APDU_LEN)
+                if (len(data) + newpos) < MAX_APDU_LEN:
+                    # append to data
+                    data += tx[:newpos]
+                    tx = tx[newpos:]
+                else:
+                    # add chunk
+                    messages.append(data)
+                    data = bytearray()
+                    continue
+            # append last
+            messages.append(data)
+            token_pos = len(messages)
 
         for signature in signatures:
             messages.append(bytearray.fromhex(signature))
