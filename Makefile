@@ -56,6 +56,11 @@ ENABLE_NBGL_QRCODE = 1
 DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
+APP_SOURCE_FILES += $(filter-out ./ethereum-plugin-sdk/src/main.c, $(wildcard ./ethereum-plugin-sdk/src/*.c))
+INCLUDES_PATH += ./ethereum-plugin-sdk/src
+
+# Don't define plugin function in the plugin SDK
+DEFINES += IS_NOT_A_PLUGIN
 
 # ENS
 TRUSTED_NAME_TEST_KEY ?= 0

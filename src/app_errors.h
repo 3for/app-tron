@@ -17,6 +17,8 @@
 #define E_INCORRECT_DATA 0x6a80
 // "Invalid parameter received"
 #define E_INCORRECT_P1_P2 0x6b00
+// "Plugin requested is not installed on the device"
+#define E_PLUGIN_NOT_FOUND 0x6984
 
 // TRON defined:
 #define E_INCORRECT_BIP32_PATH            0x6a8a
