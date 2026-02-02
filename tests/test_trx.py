@@ -733,6 +733,28 @@ class TestTRX():
                                ins=InsType.CLEAR_SIGN,
                                include_tx_len=True)
 
+    def test_trx_long_TSC_clear_sign(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        custom_data = ("In this section of the Developer Portal, you will find the resources to build, test and submit C and Rust apps, "
+        "Ethereum plugins and Cloned coins apps, compatible with all Ledger devices (Ledger Nano S+, Ledger Nano X, Ledger "
+        "Stax and Ledger Flex).This is a test case for extra data.").encode()
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.address_hex("TWfJUBctrtDiQzrkEzQKqizvcrseyhrPck")),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=bytes.fromhex(
+                    "855d175e0000000000000000000000000000000000000000000000003782dace9d900000432464fe1e9c33eaf99edad710ef11359d0291506bc81f7445f1447ba112ab1830579dd4decdd0ed38f33215375c00e1fb324f0f35892991aa0b8f5eb2a9dfcb1533ca563b77de5177a41e8ffefb2fd688334af95bcd1143470318c026b00e2e86227c50592880dd3f0c362258714e50b9b9d54eb193b0bba6cc04cf348d841d55261810658d9eeaeb2920005179f9e099c9eaf06c793ccc3ec2f30c8f52d9394d0f6084bc53f142663d713f6ef575db86b0c55abfe9aacf6515bb0a5986a0b214bc1c48c9678906c88a4c625336b8d8a9be49d1ec75762bb60338f738ad99891b98ce18c723e76e70f53dce7c03b247aa937354a6954feac4f8858ae5830b3cfc0466421864b2ffc5740dc19210e691d5d4fccf9a3e7d1f4ef6e2a676975deccd63c5990d8275dc35d0922be3bd5dc7c4a81494e8276b282e61a19fbe9cca0532592b05623b7bffee09ef81fb298cbaf4ece9c42fe5ac80a716e90c7dff7f012c1215f739c89e715ffab693eff699b5eb6368753af0c0087274db0f14c38ce7b0b36100f9a2f51cc7f6eca87eb750544f9fbe18ea79dbd8595028c4d33da6ee62afe4eca52cfe40f164f00063abe1c76e3d0fc0af2db17aad96b3f472d41f0b56d8dd4fa5b9d6de028678731425871cbf134701c351aba7edeaad07e8d400601e245bc1751ebb514365c774e5108c348a39533e836a10338ab8ae00ceb0f819f3f45268ee88bdf9fdadf6c921269d707fe457fa25d6997a5da382ac8b4f960a381ab539c33421931569785dbe6dfa59914ca6bc597576e9e33314eb62326658c8548c22622f3a9a06b3fe40842210018bedbda8e95662a2a7bb1db9121e39bcc2f6d004c9b7cf5131d3989a32a3ade8c447d34b4244841a0cb071efdd7ed68e7c02d1aeadbda9ab1f6e5f3f2b0227e07a8d5e30418e354f000329f12f4462aac4db0dbd034e85ed9b3dc2cac483c41bdfa690fefacfc038dd20067b1e8dc1e772e1c719ad4e6b14c87c779b4477daa5edb47a5218ad5d4afb6983d460aa012e6415ac67135a9f9cb438ca9f9655fd2dfd44a43785d2eb7e8b4d77e81573f7f02355f114601e9909793ec437d9d2257512c799c0ee769876bb98842995d73468e1a81ef9c8dc5e6702179d25632cfe8ec8214b76b6bceab5741ade28f5fa10ffa72abfcfaffb7e8224fc89fe65a2c440fa9a291e974f366ec5c87302e86d1df74b73396f5e35030106dcc9ac54f20557a58dabba7975decbce146536f4a1b13d71f549e7b7d8c5e61b3c92118dbf0f6dacd09a24f3514d1642f711d02b6c29d47f5d3f4a2b7c66dd941eb9f02ba311a72c00f449a837767c5d71e99414c84cf9e8c37ef731efaaa8266cdd309311615aea396f264389fe115abb0a1967a9af14b972f20d8bf31550d9c4e67366161b5546b58003000000000000000000000000"
+                )), custom_data)
+        self.sign_and_validate(client,
+                               firmware,
+                               0,
+                               tx,
+                               ins=InsType.CLEAR_SIGN,
+                               include_tx_len=True)
+
     def test_trx_trc20_approve(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx_calldata = build_trc20_calldata(
