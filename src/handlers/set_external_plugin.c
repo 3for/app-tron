@@ -37,7 +37,7 @@ int handleSetExternalPlugin(uint8_t p1,
     cx_err_t error = CX_INTERNAL_ERROR;
 
     PRINTF("plugin Name Length: %d\n", pluginNameLength);
-    const size_t payload_size = 1 + pluginNameLength + ADDRESS_LENGTH + SELECTOR_SIZE;
+    const size_t payload_size = 1 + pluginNameLength + TRON_ADDRESS_SIZE + SELECTOR_SIZE;
 
     if (dataLength <= payload_size) {
         PRINTF("data too small: expected at least %d got %d\n", payload_size, dataLength);
@@ -99,8 +99,8 @@ int handleSetExternalPlugin(uint8_t p1,
     END_TRY;
 
     PRINTF("Plugin found\n");
-    memmove(dataContext.tokenContext.contractAddress, workBuffer, ADDRESS_LENGTH);
-    workBuffer += ADDRESS_LENGTH;
+    memmove(dataContext.tokenContext.contractAddress, workBuffer, TRON_ADDRESS_SIZE);
+    workBuffer += TRON_ADDRESS_SIZE;
     memmove(dataContext.tokenContext.methodSelector, workBuffer, SELECTOR_SIZE);
     pluginType = PLUGIN_TYPE_EXTERNAL;
 
