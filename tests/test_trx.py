@@ -28,11 +28,13 @@ from utils import check_tx_signature, check_hash_signature, build_trc20_calldata
 from eth_keys import KeyAPI
 
 from ragger.backend import BackendInterface
+from ragger.backend.interface import RaisePolicy
 from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 
 from settings import settings_toggle, SettingID
 from client.command_builder import CommandBuilder
+import keychain
 import response_parser as ResponseParser
 from client.tip712 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
@@ -716,22 +718,59 @@ class TestTRX():
 
     def test_trx_trc20_send_clear_sign(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
+        contract_address = bytes.fromhex(
+            client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"))
+        selector = bytes.fromhex("a9059cbb")
         tx = client.packContract(
             tron.Transaction.Contract.TriggerSmartContract,
             contract.TriggerSmartContract(
                 owner_address=bytes.fromhex(
                     client.getAccount(0)['addressHex']),
-                contract_address=bytes.fromhex(
-                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                contract_address=contract_address,
                 data=bytes.fromhex(
                     "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
                 )))
+        cmd_builder = CommandBuilder()
+        plugin_name = "trc20"
+        payload = bytearray()
+        payload.append(len(plugin_name))
+        payload += plugin_name.encode()
+        payload += contract_address
+        payload += selector
+        sig = keychain.sign_data(keychain.Key.CAL, payload)
+        apdu = cmd_builder.set_external_plugin(plugin_name, contract_address,
+                                               selector, sig)
+        previous_policy = backend.raise_policy
+        backend.raise_policy = RaisePolicy.RAISE_NOTHING
+        try:
+            rapdu = backend.exchange_raw(apdu)
+        finally:
+            backend.raise_policy = previous_policy
+        assert rapdu.status in (Errors.OK, 0x6984)
+        print(rapdu.status)
         self.sign_and_validate(client,
                                firmware,
                                0,
                                tx,
                                ins=InsType.CLEAR_SIGN,
                                include_tx_len=True)
+
+    def test_trx_external_plugin_setup_apdu(self, backend):
+        apdu_hex = (
+            "e01200007111506c7567696e426f696c6572706c61746541"
+            "14183f3bbca4ae9fc1de55b9bbe2d071942dc1a6"
+            "a9059cbb304402206ddfb7ef677a577222a11ede300ce5414203071a30075cffa"
+            "971c64a8e7eaae502200781425e1c4d1cc0f5dec5376271296ea61f67ea59af4d"
+            "720242ff28d0c55f6e"
+        )
+        apdu = bytes.fromhex(apdu_hex)
+        previous_policy = backend.raise_policy
+        backend.raise_policy = RaisePolicy.RAISE_NOTHING
+        try:
+            rapdu = backend.exchange_raw(apdu)
+        finally:
+            backend.raise_policy = previous_policy
+        assert rapdu.status in (Errors.OK, 0x6984)
 
     def test_trx_long_TSC_clear_sign(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
