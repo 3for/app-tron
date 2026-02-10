@@ -25,7 +25,7 @@
 #include "io.h"
 #include "parser.h"
 #include "ux.h"
-
+#include "mem.h"
 #include "ui_idle_menu.h"
 #include "settings.h"
 #include "handlers.h"
@@ -51,12 +51,16 @@ pluginType_t pluginType;
 app_state_t appState;
 
 const chain_config_t *chainConfig;
+caller_app_t *caller_app = NULL;
 
 extern void roll_challenge(void);
 
 void reset_app_context() {
     appState = APP_STATE_IDLE;
+    G_called_from_swap = false;
+    G_swap_response_ready = false;
     pluginType = PLUGIN_TYPE_NONE;
+    forget_known_assets();
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));
     memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));
@@ -171,4 +175,70 @@ void app_main(void) {
     }
 
     return;
+}
+
+// Common initialization for the application, both in Standalone or Library mode (Swap)
+static void app_init(bool library_mode) {
+    reset_app_context();
+    common_app_init();
+    //storage_init();
+    if (library_mode == false) {
+        // If we are not in library mode, we need to initialize the UX
+        io_init();
+        ui_idle();
+    }
+
+    // to prevent it from having a fixed value at boot
+    roll_challenge();
+}
+
+void coin_main(tron_libargs_t *args) {
+    if (args) {
+        if ((caller_app = args->caller_app) != NULL) {
+            caller_app->type = CALLER_TYPE_PLUGIN;
+        }
+    }
+
+    app_init(false);
+
+    app_main();
+}
+
+void app_quit(void) {
+    reset_app_context();
+    app_exit();
+}
+
+int tron_main(tron_libargs_t *args) {
+    // exit critical section
+    __asm volatile("cpsie i");
+
+    // ensure exception will work as planned
+    os_boot();
+
+    if (args == NULL) {
+        // called from dashboard as standalone tron app
+        coin_main(NULL);
+        return 0;
+    }
+
+    if (args->id != 0x100) {
+        app_quit();
+        return 0;
+    }
+    switch (args->command) {
+        case RUN_APPLICATION:
+            // called as tron from altcoin or plugin
+            coin_main(args);
+            break;
+        default:
+            // called as tron or altcoin library
+            //library_main(args);
+            coin_main(NULL); // omit the args for tron
+    }
+    return 0;
+}
+
+__attribute__((section(".boot"))) int main(int arg0) {
+    return tron_main((tron_libargs_t *) arg0);
 }

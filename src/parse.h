@@ -11,6 +11,9 @@
 #include "tx_content.h"
 #include "bip32_utils.h"
 #include "eth_plugin_interface.h"
+#include "caller_api.h"
+#include "swap_lib_calls.h"
+#include "main_std_app.h"
 
 #define MAX_BIP32_PATH 10
 
@@ -241,3 +244,15 @@ void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);
 void validate_current_asset_info(void);
+
+typedef struct tron_libargs_s {
+    unsigned int id;
+    unsigned int command;
+    chain_config_t *chain_config;
+    union {
+        check_address_parameters_t *check_address;
+        create_transaction_parameters_t *create_transaction;
+        get_printable_amount_parameters_t *get_printable_amount;
+        caller_app_t *caller_app;
+    };
+} tron_libargs_t;
