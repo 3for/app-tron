@@ -156,7 +156,7 @@ typedef struct tokenContext_t {
 
     union {
         struct {
-            uint8_t contractAddress[ADDRESS_LENGTH];
+            uint8_t contractAddress[TRON_ADDRESS_SIZE];
             uint8_t methodSelector[SELECTOR_LENGTH];
         };
         // This needs to be strictly 4 bytes aligned since pointers to it will be casted as
