@@ -243,6 +243,7 @@ int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);
+extraInfo_t *get_asset_info_by_addr(const uint8_t *addr);
 void validate_current_asset_info(void);
 
 typedef struct tron_libargs_s {

@@ -166,6 +166,99 @@ static bool clear_sign_external_plugin_provide_parameter(const uint8_t *paramete
     return false;
 }
 
+static bool clear_sign_external_plugin_finalize(ethPluginFinalize_t *finalize) {
+    if (finalize == NULL) {
+        return false;
+    }
+
+    memset(finalize, 0, sizeof(*finalize));
+
+    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+        finalize->result = ETH_PLUGIN_RESULT_FALLBACK;
+        return true;
+    }
+
+    finalize->txContent = &txContent;
+    finalize->pluginContext = dataContext.tokenContext.pluginContext;
+    finalize->result = ETH_PLUGIN_RESULT_ERROR;
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_FINALIZE, finalize)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) finalize->result;
+    if (finalize->result == ETH_PLUGIN_RESULT_FALLBACK) {
+        clear_sign_plugin_stream.plugin_active = false;
+        return true;
+    }
+    if (finalize->result <= ETH_PLUGIN_RESULT_UNSUCCESSFUL) {
+        PRINTF("External plugin finalize rejected (%d)\n", finalize->result);
+        return false;
+    }
+
+    return true;
+}
+
+static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *finalize,
+                                                    ethPluginProvideInfo_t *provide) {
+    if (provide == NULL) {
+        return false;
+    }
+
+    memset(provide, 0, sizeof(*provide));
+    provide->result = ETH_PLUGIN_RESULT_FALLBACK;
+
+    if (finalize == NULL) {
+        return false;
+    }
+
+    provide->result = finalize->result;
+
+    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+        return true;
+    }
+
+    if ((finalize->tokenLookup1 == NULL) && (finalize->tokenLookup2 == NULL)) {
+        return true;
+    }
+
+    provide->txContent = &txContent;
+    provide->pluginContext = dataContext.tokenContext.pluginContext;
+    provide->result = ETH_PLUGIN_RESULT_ERROR;
+    provide->item1 = NULL;
+    provide->item2 = NULL;
+
+    if (finalize->tokenLookup1 != NULL) {
+        PRINTF("Lookup1: %.*H\n", ADDRESS_LENGTH, finalize->tokenLookup1);
+        provide->item1 = get_asset_info_by_addr(finalize->tokenLookup1);
+        if (provide->item1 != NULL) {
+            PRINTF("Token1 ticker: %s\n", provide->item1->token.ticker);
+        }
+    }
+    if (finalize->tokenLookup2 != NULL) {
+        PRINTF("Lookup2: %.*H\n", ADDRESS_LENGTH, finalize->tokenLookup2);
+        provide->item2 = get_asset_info_by_addr(finalize->tokenLookup2);
+        if (provide->item2 != NULL) {
+            PRINTF("Token2 ticker: %s\n", provide->item2->token.ticker);
+        }
+    }
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_PROVIDE_INFO, provide)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) provide->result;
+    if (provide->result <= ETH_PLUGIN_RESULT_UNSUCCESSFUL) {
+        PRINTF("Plugin provide token call failed (%d)\n", provide->result);
+        return false;
+    }
+    if (provide->result == ETH_PLUGIN_RESULT_FALLBACK) {
+        clear_sign_plugin_stream.plugin_active = false;
+    }
+
+    return true;
+}
+
 static bool clear_sign_plugin_flush_parameter(void) {
     if (clear_sign_plugin_stream.parameter_len == 0) {
         return true;
@@ -379,6 +472,8 @@ static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
+    ethPluginFinalize_t plugin_finalize;
+    ethPluginProvideInfo_t plugin_provide_info;
 
     if (p2 != 0x00) {
         return io_send_sw(E_INCORRECT_P1_P2);
@@ -470,6 +565,27 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         }
 #endif
         return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
+    }
+
+    if (!clear_sign_external_plugin_finalize(&plugin_finalize)) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    if (!clear_sign_external_plugin_provide_info(&plugin_finalize, &plugin_provide_info)) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    plugin_finalize.result = plugin_provide_info.result;
+    if (plugin_finalize.result != ETH_PLUGIN_RESULT_FALLBACK) {
+        PRINTF("pluginFinalize.result %d successful\n", plugin_finalize.result);
+        switch (plugin_finalize.uiType) {
+            case ETH_UI_TYPE_GENERIC:
+                dataContext.tokenContext.pluginUiMaxItems =
+                    plugin_finalize.numScreens + plugin_provide_info.additionalScreens;
+                break;
+            case ETH_UI_TYPE_AMOUNT_ADDRESS:
+            default:
+                PRINTF("ui type %d not supported\n", plugin_finalize.uiType);
+                return io_send_sw(E_INCORRECT_DATA);
+        }
     }
 
     // Last data hash
