@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include "io.h"
+#include "os_io_seproxyhal.h"
 
 #include "format.h"
 
@@ -39,6 +40,242 @@
 extern void reset_app_context();
 
 static tron_stream_decoder_t clear_sign_decoder;
+
+typedef struct {
+    bool expect_external_plugin;
+    bool plugin_initialized;
+    bool plugin_active;
+    uint8_t selector[SELECTOR_LENGTH];
+    uint8_t selector_len;
+    uint8_t parameter[INT256_LENGTH];
+    uint8_t parameter_len;
+    uint32_t parameter_offset;
+    uint8_t expected_contract[ADDRESS_SIZE];
+    uint8_t expected_selector[SELECTOR_LENGTH];
+} clear_sign_plugin_stream_t;
+
+static clear_sign_plugin_stream_t clear_sign_plugin_stream;
+
+static void clear_sign_sync_partial_txcontent(const tron_decode_result_t *res, txContent_t *content) {
+    if (res == NULL || content == NULL) {
+        return;
+    }
+
+    content->contractType = TRIGGERSMARTCONTRACT;
+    if (res->has_contract_type) {
+        content->contractType = (contractType_e) res->contract_type;
+    }
+    if (res->has_owner_address && res->owner_address_len == ADDRESS_SIZE) {
+        memcpy(content->account, res->owner_address, ADDRESS_SIZE);
+    }
+    if (res->has_contract_address && res->contract_address_len == ADDRESS_SIZE) {
+        memcpy(content->contractAddress, res->contract_address, ADDRESS_SIZE);
+    }
+    if (res->has_call_value) {
+        content->amount[0] = (uint64_t) res->call_value;
+    }
+    if (res->has_permission_id) {
+        content->permission_id = (uint8_t) res->permission_id;
+    }
+}
+
+static bool clear_sign_call_external_plugin(uint32_t message, void *parameters) {
+    uint32_t params[3];
+
+    if (pluginType != PLUGIN_TYPE_EXTERNAL || dataContext.tokenContext.pluginName[0] == '\0') {
+        return true;
+    }
+
+    params[0] = (uint32_t) dataContext.tokenContext.pluginName;
+    params[1] = message;
+    params[2] = (uint32_t) parameters;
+
+    BEGIN_TRY {
+        TRY {
+            os_lib_call(params);
+        }
+        CATCH_OTHER(e) {
+            PRINTF("External plugin call failed (%d)\n", e);
+            CLOSE_TRY;
+            return false;
+        }
+        FINALLY {
+        }
+    }
+    END_TRY;
+
+    return true;
+}
+
+static bool clear_sign_external_plugin_init(size_t data_size) {
+    ethPluginInitContract_t init = {0};
+
+    init.interfaceVersion = ETH_PLUGIN_INTERFACE_VERSION_LATEST;
+    init.txContent = &txContent;
+    init.pluginContextLength = PLUGIN_CONTEXT_SIZE;
+    init.selector = clear_sign_plugin_stream.selector;
+    init.dataSize = data_size;
+    init.bip32 = &tmpCtx.transactionContext.bip32_path;
+    init.pluginContext = dataContext.tokenContext.pluginContext;
+    init.result = ETH_PLUGIN_RESULT_ERROR;
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_INIT_CONTRACT, &init)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) init.result;
+    if (init.result == ETH_PLUGIN_RESULT_OK) {
+        clear_sign_plugin_stream.plugin_active = true;
+        return true;
+    }
+    if (init.result == ETH_PLUGIN_RESULT_FALLBACK) {
+        clear_sign_plugin_stream.plugin_active = false;
+        return true;
+    }
+
+    PRINTF("External plugin init rejected (%d)\n", init.result);
+    return false;
+}
+
+static bool clear_sign_external_plugin_provide_parameter(const uint8_t *parameter,
+                                                         uint8_t parameter_size,
+                                                         uint32_t parameter_offset) {
+    ethPluginProvideParameter_t provide = {0};
+
+    provide.txContent = &txContent;
+    provide.parameter = parameter;
+    provide.parameterOffset = parameter_offset;
+    provide.pluginContext = dataContext.tokenContext.pluginContext;
+    provide.parameter_size = parameter_size;
+    provide.result = ETH_PLUGIN_RESULT_ERROR;
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_PROVIDE_PARAMETER, &provide)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) provide.result;
+    if (provide.result == ETH_PLUGIN_RESULT_OK) {
+        return true;
+    }
+    if (provide.result == ETH_PLUGIN_RESULT_FALLBACK) {
+        clear_sign_plugin_stream.plugin_active = false;
+        return true;
+    }
+
+    PRINTF("External plugin parameter rejected (%d)\n", provide.result);
+    return false;
+}
+
+static bool clear_sign_plugin_flush_parameter(void) {
+    if (clear_sign_plugin_stream.parameter_len == 0) {
+        return true;
+    }
+
+    if (clear_sign_plugin_stream.plugin_initialized && clear_sign_plugin_stream.plugin_active) {
+        if (!clear_sign_external_plugin_provide_parameter(clear_sign_plugin_stream.parameter,
+                                                          clear_sign_plugin_stream.parameter_len,
+                                                          clear_sign_plugin_stream.parameter_offset)) {
+            return false;
+        }
+        clear_sign_plugin_stream.parameter_offset += clear_sign_plugin_stream.parameter_len;
+        dataContext.tokenContext.fieldIndex++;
+    }
+
+    clear_sign_plugin_stream.parameter_len = 0;
+    dataContext.tokenContext.fieldOffset = 0;
+    return true;
+}
+
+static bool clear_sign_plugin_feed_data_chunk(void *ctx,
+                                              const uint8_t *chunk,
+                                              size_t chunk_len,
+                                              size_t chunk_offset,
+                                              size_t total_len) {
+    UNUSED(ctx);
+
+    if (chunk == NULL || chunk_len == 0) {
+        return true;
+    }
+
+    for (size_t i = 0; i < chunk_len; i++) {
+        const uint8_t byte = chunk[i];
+        const bool is_last_byte = ((chunk_offset + i + 1U) == total_len);
+
+        if (clear_sign_plugin_stream.selector_len < SELECTOR_LENGTH) {
+            clear_sign_plugin_stream.selector[clear_sign_plugin_stream.selector_len++] = byte;
+            if (clear_sign_plugin_stream.selector_len == SELECTOR_LENGTH) {
+                clear_sign_plugin_stream.parameter_offset = SELECTOR_LENGTH;
+                if (clear_sign_plugin_stream.expect_external_plugin) {
+                    bool contract_match = true;
+
+                    if (clear_sign_decoder.result.has_contract_address &&
+                        clear_sign_decoder.result.contract_address_len == ADDRESS_SIZE) {
+                        contract_match =
+                            (memcmp(clear_sign_decoder.result.contract_address,
+                                    clear_sign_plugin_stream.expected_contract,
+                                    ADDRESS_SIZE) == 0);
+                    }
+
+                    if (!contract_match ||
+                        memcmp(clear_sign_plugin_stream.selector,
+                               clear_sign_plugin_stream.expected_selector,
+                               SELECTOR_LENGTH) != 0) {
+                        clear_sign_plugin_stream.expect_external_plugin = false;
+                    } else {
+                        clear_sign_sync_partial_txcontent(&clear_sign_decoder.result, &txContent);
+                        if (!clear_sign_external_plugin_init(total_len)) {
+                            return false;
+                        }
+                        clear_sign_plugin_stream.plugin_initialized = true;
+                    }
+                }
+            }
+        } else {
+            if (clear_sign_plugin_stream.plugin_initialized && clear_sign_plugin_stream.plugin_active) {
+                clear_sign_plugin_stream.parameter[clear_sign_plugin_stream.parameter_len++] = byte;
+                dataContext.tokenContext.fieldOffset = clear_sign_plugin_stream.parameter_len;
+                if (clear_sign_plugin_stream.parameter_len == INT256_LENGTH) {
+                    if (!clear_sign_external_plugin_provide_parameter(
+                            clear_sign_plugin_stream.parameter,
+                            INT256_LENGTH,
+                            clear_sign_plugin_stream.parameter_offset)) {
+                        return false;
+                    }
+                    clear_sign_plugin_stream.parameter_offset += INT256_LENGTH;
+                    clear_sign_plugin_stream.parameter_len = 0;
+                    dataContext.tokenContext.fieldOffset = 0;
+                    dataContext.tokenContext.fieldIndex++;
+                }
+            }
+        }
+
+        if (is_last_byte) {
+            if (!clear_sign_plugin_flush_parameter()) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+static void clear_sign_plugin_stream_reset(void) {
+    memset(&clear_sign_plugin_stream, 0, sizeof(clear_sign_plugin_stream));
+
+    dataContext.tokenContext.fieldIndex = 0;
+    dataContext.tokenContext.fieldOffset = 0;
+    dataContext.tokenContext.pluginStatus = ETH_PLUGIN_RESULT_UNAVAILABLE;
+
+    if (pluginType == PLUGIN_TYPE_EXTERNAL && dataContext.tokenContext.pluginName[0] != '\0') {
+        clear_sign_plugin_stream.expect_external_plugin = true;
+        memcpy(clear_sign_plugin_stream.expected_contract,
+               dataContext.tokenContext.contractAddress,
+               ADDRESS_SIZE);
+        memcpy(clear_sign_plugin_stream.expected_selector,
+               dataContext.tokenContext.methodSelector,
+               SELECTOR_LENGTH);
+    }
+}
 
 static bool clear_sign_decoder_complete(const tron_stream_decoder_t *dec) {
     return tron_stream_decoder_is_done(dec);
@@ -65,7 +302,7 @@ static bool clear_sign_parse_trigger_data(const tron_decode_result_t *res, txCon
         content->TRC20Method = 2;  // approve(address,uint256)
     } else {
         content->TRC20Method = 0;
-        return ((res->data_len - 4) % 32 == 0);
+        return true;
     }
 
     if (res->data_len != (4 + 32 + 32) || res->data_prefix_len < (4 + 32 + 32)) {
@@ -170,6 +407,10 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         initTx(&txContext, &txContent);
         customContractField = 0;
         tron_stream_decoder_init_raw(&clear_sign_decoder, total_len);
+        clear_sign_plugin_stream_reset();
+        tron_stream_decoder_set_trigger_data_observer(&clear_sign_decoder,
+                                                      clear_sign_plugin_feed_data_chunk,
+                                                      NULL);
 
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
         return io_send_sw(E_INCORRECT_P1_P2);

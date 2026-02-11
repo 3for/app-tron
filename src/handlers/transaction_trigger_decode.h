@@ -44,6 +44,12 @@ typedef enum
     TRON_ACT_ENTER_TRIGGER = 4
 } tron_action_t;
 
+typedef bool (*tron_trigger_data_observer_t)(void *ctx,
+                                             const uint8_t *chunk,
+                                             size_t chunk_len,
+                                             size_t chunk_offset,
+                                             size_t total_len);
+
 typedef struct
 {
     bool has_contract_type;
@@ -101,6 +107,11 @@ typedef struct
     uint8_t *capture_buf;
     size_t capture_cap;
     size_t capture_len;
+    bool in_trigger_data;
+    size_t trigger_data_total_len;
+    size_t trigger_data_offset;
+    tron_trigger_data_observer_t trigger_data_observer;
+    void *trigger_data_observer_ctx;
 
     bool error;
     bool done;
@@ -110,6 +121,9 @@ typedef struct
 
 void tron_stream_decoder_init(tron_stream_decoder_t *dec, size_t total_len);
 void tron_stream_decoder_init_raw(tron_stream_decoder_t *dec, size_t total_len);
+void tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder_t *dec,
+                                                   tron_trigger_data_observer_t observer,
+                                                   void *ctx);
 bool tron_stream_decoder_feed(tron_stream_decoder_t *dec, const uint8_t *data, size_t len);
 bool tron_stream_decoder_is_done(const tron_stream_decoder_t *dec);
 bool tron_stream_decoder_get_result(const tron_stream_decoder_t *dec, tron_decode_result_t *out);
