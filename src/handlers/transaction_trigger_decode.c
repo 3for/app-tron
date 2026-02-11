@@ -208,6 +208,9 @@ static void tron_start_capture_if_needed(tron_stream_decoder_t *dec, size_t len)
         dec->capture_cap = sizeof(dec->result.data_prefix);
         dec->capture_len = 0;
         dec->result.data_prefix_len = min_size(len, dec->capture_cap);
+        dec->in_trigger_data = true;
+        dec->trigger_data_total_len = len;
+        dec->trigger_data_offset = 0;
     }
 }
 
@@ -255,6 +258,9 @@ static bool tron_process_length(tron_stream_decoder_t *dec, size_t len)
     dec->capture_buf = NULL;
     dec->capture_cap = 0;
     dec->capture_len = 0;
+    dec->in_trigger_data = false;
+    dec->trigger_data_total_len = 0;
+    dec->trigger_data_offset = 0;
     tron_start_capture_if_needed(dec, len);
     tron_start_bytes(dec, len);
     return true;
@@ -337,6 +343,23 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte)
             break;
         }
 
+        if (dec->in_trigger_data)
+        {
+            if (dec->trigger_data_observer != NULL)
+            {
+                if (!dec->trigger_data_observer(dec->trigger_data_observer_ctx,
+                                                &byte,
+                                                1,
+                                                dec->trigger_data_offset,
+                                                dec->trigger_data_total_len))
+                {
+                    ok = false;
+                    break;
+                }
+            }
+            dec->trigger_data_offset++;
+        }
+
         if (dec->capture_buf != NULL && dec->capture_len < dec->capture_cap)
         {
             dec->capture_buf[dec->capture_len++] = byte;
@@ -352,6 +375,12 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte)
             else if (dec->capture_buf == dec->result.custom_data_prefix)
             {
                 dec->result.custom_data_prefix_len = dec->capture_len;
+            }
+            if (dec->in_trigger_data)
+            {
+                dec->in_trigger_data = false;
+                dec->trigger_data_total_len = 0;
+                dec->trigger_data_offset = 0;
             }
             dec->mode = TRON_MODE_KEY;
         }
@@ -395,6 +424,18 @@ void tron_stream_decoder_init_raw(tron_stream_decoder_t *dec, size_t total_len)
     {
         (void)tron_push_frame(dec, TRON_CTX_RAW, total_len);
     }
+}
+
+void tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder_t *dec,
+                                                   tron_trigger_data_observer_t observer,
+                                                   void *ctx)
+{
+    if (dec == NULL)
+    {
+        return;
+    }
+    dec->trigger_data_observer = observer;
+    dec->trigger_data_observer_ctx = ctx;
 }
 
 bool tron_stream_decoder_feed(tron_stream_decoder_t *dec, const uint8_t *data, size_t len)
