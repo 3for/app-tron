@@ -32,10 +32,6 @@
 #include "settings.h"
 #include "trc_tokens.h"
 #include "transaction_trigger_decode.h"
-#ifdef HAVE_SWAP
-#include "swap.h"
-#include "handle_swap_sign_transaction.h"
-#endif  // HAVE_SWAP
 
 extern void reset_app_context();
 
@@ -525,22 +521,6 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
     // hash data
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
-#ifdef HAVE_SWAP
-    if (G_called_from_swap) {
-        if (G_swap_response_ready) {
-            // Safety against trying to make the app sign multiple TX
-            // This code should never be triggered as the app is supposed to exit after
-            // sending the signed transaction
-            PRINTF("Safety against double signing triggered\n");
-            os_sched_exit(-1);
-        } else {
-            // We will quit the app after this transaction, whether it succeeds or fails
-            PRINTF("Swap response is ready, the app will quit after the next send\n");
-            G_swap_response_ready = true;
-        }
-    }
-#endif
-
     // process buffer
     if (!tron_stream_decoder_feed(&clear_sign_decoder, workBuffer, dataLength)) {
         return io_send_sw(E_INCORRECT_DATA);
@@ -559,11 +539,6 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
     }
 
     if (!HAS_SETTING(S_DATA_ALLOWED) && txContent.dataBytes != 0) {
-#ifdef HAVE_SWAP
-        if (G_called_from_swap) {
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
-        }
-#endif
         return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
     }
 
@@ -606,26 +581,6 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
     }
 
     data_warning = ((txContent.dataBytes > 0) ? true : false);
-
-#ifdef HAVE_SWAP
-    if (G_called_from_swap) {
-        if (txContent.contractType != TRIGGERSMARTCONTRACT) {  // TRC20 Transfer
-            PRINTF("Refused contract type when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
-        }
-
-        if (txContent.TRC20Method != 1) {
-            // Only transfer method allowed for TRC20
-            PRINTF("Refused method type when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
-        }
-
-        if (data_warning) {
-            PRINTF("Refused data warning when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
-        }
-    }
-#endif  // HAVE_SWAP
 
     if (txContent.contractType != TRIGGERSMARTCONTRACT) {
         return io_send_sw(E_INCORRECT_DATA);
@@ -689,26 +644,8 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
 
     // get token name if any
     memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-#ifdef HAVE_SWAP
-    // If we are in swap context, do not redisplay the message data
-    // Instead, ensure they are identical with what was previously displayed
-    if (G_called_from_swap) {
-        if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
-                                fullContract,               // Token name
-                                TRC20ActionSendAllow,       // "Send To"
-                                toAddress)) {
-            PRINTF("Signing valid swap transaction\n");
-            ui_callback_tx_ok(false);
-        } else {
-            PRINTF("Refused signing incorrect Swap transaction\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
-        }
-    } else {
-        ux_flow_display(APPROVAL_TRANSFER, data_warning);
-    }
-#else   // HAVE_SWAP
+
     ux_flow_display(APPROVAL_TRANSFER, data_warning);
-#endif  // HAVE_SWAP
 
     return 0;
 }
