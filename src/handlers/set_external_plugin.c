@@ -23,6 +23,7 @@
 #include "public_keys.h"
 #include "app_errors.h"
 #include "eth_plugin_interface.h"
+#include "settings.h"
 
 int handleSetExternalPlugin(uint8_t p1,
                             uint8_t p2,
