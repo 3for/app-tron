@@ -31,7 +31,6 @@
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 #define MAX_RAW_SIGNATURE        65
 
-#define NETWORK_STRING_MAX_SIZE 16
 #define SHARED_CTX_FIELD_1_SIZE 256
 #define SHARED_CTX_FIELD_2_SIZE 40
 
@@ -175,12 +174,17 @@ typedef union {
 } dataContext_t;
 
 
-typedef struct txStringProperties_t {
-    char fullAddress[43];
-    char fullAmount[79];  // 2^256 is 78 digits long
+// must be able to hold in decimal up to : floor(MAX_UINT64 / 2) - 36
+#define NETWORK_STRING_MAX_SIZE 19
+
+typedef struct txStringProperties_s {
+    char fromAddress[43];
+    char toAddress[43];
+    char fullAmount[MAX_TICKER_LEN + 1 + 78 + 1];  // 2^256 is 78 digits long
     char maxFee[50];
     char nonce[8];  // 10M tx per account ought to be enough for everybody
-    char network_name[NETWORK_STRING_MAX_SIZE];
+    char network_name[NETWORK_STRING_MAX_SIZE + 1];
+    char tx_hash[2 + (INT256_LENGTH * 2) + 1];
 } txStringProperties_t;
 
 typedef struct strDataTmp_t {

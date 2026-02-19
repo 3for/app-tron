@@ -26,11 +26,9 @@
 #include "handlers.h"
 #include "ui_review_menu.h"
 #include "ui_globals.h"
-#include "uint256.h"
 #include "app_errors.h"
 #include "parse.h"
 #include "settings.h"
-#include "trc_tokens.h"
 #include "transaction_trigger_decode.h"
 
 extern void reset_app_context();
@@ -385,26 +383,6 @@ static bool clear_sign_parse_trigger_data(const tron_decode_result_t *res, txCon
 
     content->customSelector = U4BE(res->data_prefix, 0);
 
-    if (memcmp(res->data_prefix, SELECTOR[0], 4) == 0) {
-        content->TRC20Method = 1;  // transfer(address,uint256)
-    } else if (memcmp(res->data_prefix, SELECTOR[1], 4) == 0) {
-        content->TRC20Method = 2;  // approve(address,uint256)
-    } else {
-        content->TRC20Method = 0;
-        return true;
-    }
-
-    if (res->data_len != (4 + 32 + 32) || res->data_prefix_len < (4 + 32 + 32)) {
-        return false;
-    }
-
-    const uint8_t *arg1 = res->data_prefix + 4;
-    memcpy(content->destination, arg1 + (32 - ADDRESS_SIZE), ADDRESS_SIZE);
-    content->destination[0] = ADD_PRE_FIX_BYTE_MAINNET;
-
-    const uint8_t *arg2 = res->data_prefix + 4 + 32;
-    memmove(content->TRC20Amount, arg2, 32);
-
     return true;
 }
 
@@ -453,20 +431,16 @@ static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent
     }
 
     tokenDefinition_t *trc20 = getKnownToken(content);
-    if (trc20 == NULL) {
-        content->TRC20Method = 0;
-        return true;
+    if (trc20 != NULL) {
+        content->decimals[0] = trc20->decimals;
+        content->tokenNamesLength[0] = strlen(trc20->ticker) + 1;
+        memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0]);
     }
-
-    content->decimals[0] = trc20->decimals;
-    content->tokenNamesLength[0] = strlen(trc20->ticker) + 1;
-    memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0]);
 
     return true;
 }
 
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    uint256_t uint256;
     bool data_warning;
     ethPluginFinalize_t plugin_finalize;
     ethPluginProvideInfo_t plugin_provide_info;
@@ -586,66 +560,37 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    strcpy(TRC20ActionSendAllow, "To");
-    if (txContent.TRC20Method == 1) {
-        strcpy(TRC20Action, "Asset");
-    } else if (txContent.TRC20Method == 2) {
-        strcpy(TRC20ActionSendAllow, "Allow");
-        strcpy(TRC20Action, "Approve");
+    /* if (!HAS_SETTING(S_CUSTOM_CONTRACT)) {
+        return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
+    } */ //TODO. ZYD
+    customContractField = 1;
+
+    getBase58FromAddress(txContent.contractAddress, fullContract, HAS_SETTING(S_TRUNCATE_ADDRESS));
+    snprintf((char *) TRC20Action, sizeof(TRC20Action), "%08x", txContent.customSelector);
+    G_io_apdu_buffer[0] = '\0';
+    G_io_apdu_buffer[100] = '\0';
+    toAddress[0] = '\0';
+    if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    // call has value
+    if (txContent.amount[0] > 0) {
+        strcpy(toAddress, "TRX");
+        print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
+        customContractField |= (1 << 0x05);
+        customContractField |= (1 << 0x06);
+    } else if (txContent.amount[1] > 0) {
+        memcpy(toAddress, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+        print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
+        customContractField |= (1 << 0x05);
+        customContractField |= (1 << 0x06);
     } else {
-        if (!HAS_SETTING(S_CUSTOM_CONTRACT)) {
-            return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
-        }
-        customContractField = 1;
-
-        getBase58FromAddress(txContent.contractAddress,
-                             fullContract,
-                             HAS_SETTING(S_TRUNCATE_ADDRESS));
-        snprintf((char *) TRC20Action, sizeof(TRC20Action), "%08x", txContent.customSelector);
-        G_io_apdu_buffer[0] = '\0';
-        G_io_apdu_buffer[100] = '\0';
-        toAddress[0] = '\0';
-        if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
-            return io_send_sw(E_INCORRECT_DATA);
-        }
-        // call has value
-        if (txContent.amount[0] > 0) {
-            strcpy(toAddress, "TRX");
-            print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
-            customContractField |= (1 << 0x05);
-            customContractField |= (1 << 0x06);
-        } else if (txContent.amount[1] > 0) {
-            memcpy(toAddress, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-            print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
-            customContractField |= (1 << 0x05);
-            customContractField |= (1 << 0x06);
-        } else {
-            strcpy(toAddress, "-");
-            strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
-        }
-
-        // approve custom contract
-        ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
-
-        return 0;
+        strcpy(toAddress, "-");
+        strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
     }
 
-    convertUint256BE(txContent.TRC20Amount, 32, &uint256);
-    tostring256(&uint256, 10, (char *) G_io_apdu_buffer + 100, 100);
-    if (!adjustDecimals((char *) G_io_apdu_buffer + 100,
-                        strlen((const char *) G_io_apdu_buffer + 100),
-                        (char *) G_io_apdu_buffer,
-                        100,
-                        txContent.decimals[0])) {
-        return io_send_sw(E_INCORRECT_LENGTH);
-    }
-
-    getBase58FromAddress(txContent.destination, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
-
-    // get token name if any
-    memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-
-    ux_flow_display(APPROVAL_TRANSFER, data_warning);
+    // approve custom contract
+    ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
 
     return 0;
 }
