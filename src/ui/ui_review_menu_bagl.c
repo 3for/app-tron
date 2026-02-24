@@ -22,6 +22,7 @@
 
 #include "ux.h"
 #include "os_io_seproxyhal.h"
+#include "handlers/handlers.h"
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 #include "trusted_name.h"
@@ -873,6 +874,75 @@ const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
 
 // CUSTOM CONTRACT
 //////////////////////////////////////////////////////////////////////
+#define MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL 10
+#define MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL (MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL + 8)
+
+static const ux_flow_step_t *ux_approval_clear_sign_plugin_flow[MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL];
+
+static void prepare_clear_sign_plugin_contract_name_bagl(void) {
+    if (!clear_sign_plugin_query_contract_id(strings.tmp.tmp,
+                                             sizeof(strings.tmp.tmp),
+                                             strings.tmp.tmp2,
+                                             sizeof(strings.tmp.tmp2)) ||
+        strings.tmp.tmp[0] == '\0') {
+        strlcpy(strings.tmp.tmp, fullContract, sizeof(strings.tmp.tmp));
+    }
+}
+
+static void prepare_clear_sign_plugin_contract_version_bagl(void) {
+    if (!clear_sign_plugin_query_contract_id(strings.tmp.tmp2,
+                                             sizeof(strings.tmp.tmp2),
+                                             strings.tmp.tmp,
+                                             sizeof(strings.tmp.tmp)) ||
+        strings.tmp.tmp[0] == '\0') {
+        strlcpy(strings.tmp.tmp, "-", sizeof(strings.tmp.tmp));
+    }
+}
+
+static void prepare_clear_sign_plugin_ui_screen_bagl(uint8_t screen_index) {
+    if (!clear_sign_plugin_query_contract_ui(screen_index,
+                                             strings.tmp.tmp2,
+                                             sizeof(strings.tmp.tmp2),
+                                             strings.tmp.tmp,
+                                             sizeof(strings.tmp.tmp))) {
+        strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
+        strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
+    }
+}
+
+#define DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(IDX)                                               \
+    static void prepare_clear_sign_plugin_ui_##IDX##_bagl(void) {                                  \
+        prepare_clear_sign_plugin_ui_screen_bagl(IDX);                                              \
+    }                                                                                               \
+    UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_ui_##IDX##_step,                               \
+                      bnnn_paging,                                                                  \
+                      prepare_clear_sign_plugin_ui_##IDX##_bagl(),                                  \
+                      {.title = strings.tmp.tmp2, .text = strings.tmp.tmp});
+
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(0)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(1)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(2)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(3)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(4)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(5)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(6)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(7)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(8)
+DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(9)
+
+static const ux_flow_step_t *const ux_approval_clear_sign_plugin_ui_steps[] = {
+    &ux_approval_clear_sign_plugin_ui_0_step,
+    &ux_approval_clear_sign_plugin_ui_1_step,
+    &ux_approval_clear_sign_plugin_ui_2_step,
+    &ux_approval_clear_sign_plugin_ui_3_step,
+    &ux_approval_clear_sign_plugin_ui_4_step,
+    &ux_approval_clear_sign_plugin_ui_5_step,
+    &ux_approval_clear_sign_plugin_ui_6_step,
+    &ux_approval_clear_sign_plugin_ui_7_step,
+    &ux_approval_clear_sign_plugin_ui_8_step,
+    &ux_approval_clear_sign_plugin_ui_9_step,
+};
+
 UX_STEP_NOCB(ux_approval_custom_contract_1_step,
              pnn,
              {
@@ -921,6 +991,16 @@ UX_DEF(ux_approval_custom_contract_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
+UX_DEF(ux_approval_custom_contract_no_warning_flow,
+       &ux_approval_custom_contract_1_step,
+       &ux_approval_custom_contract_2_step,
+       &ux_approval_custom_contract_3_step,
+       &ux_approval_custom_contract_4_step,
+       &ux_approval_custom_contract_5_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
 UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_custom_contract_1_step,
        &ux_approval_custom_contract_warning_step,
@@ -932,6 +1012,42 @@ UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_from_address_step,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
+
+UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_contract_name_step,
+                  bnnn_paging,
+                  prepare_clear_sign_plugin_contract_name_bagl(),
+                  {.title = "Contract", .text = strings.tmp.tmp});
+UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_contract_version_step,
+                  bnnn_paging,
+                  prepare_clear_sign_plugin_contract_version_bagl(),
+                  {.title = "Version", .text = strings.tmp.tmp});
+
+static bool init_clear_sign_plugin_flow_bagl(void) {
+    uint8_t ui_items = dataContext.tokenContext.pluginUiMaxItems;
+    int step = 0;
+
+    if ((ui_items == 0) ||
+        (ui_items > (sizeof(ux_approval_clear_sign_plugin_ui_steps) /
+                     sizeof(ux_approval_clear_sign_plugin_ui_steps[0])))) {
+        return false;
+    }
+
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_custom_contract_1_step;
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_contract_name_step;
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_contract_version_step;
+
+    for (uint8_t i = 0; i < ui_items; i++) {
+        ux_approval_clear_sign_plugin_flow[step++] = ux_approval_clear_sign_plugin_ui_steps[i];
+    }
+
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_from_address_step;
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_confirm_step;
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_reject_step;
+    ux_approval_clear_sign_plugin_flow[step++] = FLOW_END_STEP;
+
+    ux_flow_init(0, ux_approval_clear_sign_plugin_flow, NULL);
+    return true;
+}
 
 // Account Permission Update:
 //////////////////////////////////////////////////////////////////////
@@ -1062,6 +1178,11 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                          ((data_warning == true) ? ux_approval_custom_contract_data_warning_flow
                                                  : ux_approval_custom_contract_flow),
                          NULL);
+            break;
+        case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
+            if (!init_clear_sign_plugin_flow_bagl()) {
+                ux_flow_init(0, ux_approval_custom_contract_no_warning_flow, NULL);
+            }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
             // reserve a display stack slot if none yet
