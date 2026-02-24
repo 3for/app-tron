@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include "app_errors.h"
+#include "handlers/handlers.h"
 #include "ux.h"
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
@@ -31,6 +32,7 @@
 // Macros
 #define WARNING_TYPES_NUMBER 2
 #define MAX_TX_FIELDS        20
+#define MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS (MAX_TX_FIELDS - 3)
 
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
@@ -58,6 +60,10 @@ typedef struct {
 static nbgl_layoutTagValueList_t pairList;
 static nbgl_pageInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
+static char clearSignPluginContractName[SHARED_CTX_FIELD_2_SIZE];
+static char clearSignPluginContractVersion[SHARED_CTX_FIELD_2_SIZE];
+static char clearSignPluginUiTitles[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_2_SIZE];
+static char clearSignPluginUiMsgs[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
 
 // Static functions declarations
 static void prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -69,6 +75,8 @@ static void dataWarningChoice(bool reject);
 static void customContractWarningChoice(bool reject);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
+static bool prepareClearSignCustomContractPluginUi(void);
+static void prepareGenericClearSignCustomContractUi(void);
 
 static void dataWarningChoice(bool accept) {
     if (accept) {
@@ -119,6 +127,77 @@ static void displayTransaction(void) {
                        txInfos.flowSubtitle,
                        infoLongPress.text,
                        reviewChoice);
+}
+
+static bool prepareClearSignCustomContractPluginUi(void) {
+    uint8_t pluginUiItems = dataContext.tokenContext.pluginUiMaxItems;
+    uint8_t fieldIndex = 0;
+
+    if ((pluginUiItems == 0) || (pluginUiItems > MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS)) {
+        return false;
+    }
+
+    memset(clearSignPluginContractName, 0, sizeof(clearSignPluginContractName));
+    memset(clearSignPluginContractVersion, 0, sizeof(clearSignPluginContractVersion));
+
+    if (!clear_sign_plugin_query_contract_id(clearSignPluginContractName,
+                                             sizeof(clearSignPluginContractName),
+                                             clearSignPluginContractVersion,
+                                             sizeof(clearSignPluginContractVersion))) {
+        return false;
+    }
+
+    for (uint8_t i = 0; i < pluginUiItems; i++) {
+        memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
+        memset(clearSignPluginUiMsgs[i], 0, sizeof(clearSignPluginUiMsgs[i]));
+        if (!clear_sign_plugin_query_contract_ui(i,
+                                                 clearSignPluginUiTitles[i],
+                                                 sizeof(clearSignPluginUiTitles[i]),
+                                                 clearSignPluginUiMsgs[i],
+                                                 sizeof(clearSignPluginUiMsgs[i]))) {
+            return false;
+        }
+    }
+
+    txInfos.flowTitle = "Review contract";
+    txInfos.flowSubtitle =
+        (clearSignPluginContractName[0] != '\0') ? clearSignPluginContractName : "Clear Sign";
+    infoLongPress.text = "Sign transaction";
+
+    txInfos.fields[fieldIndex].item = "Contract";
+    txInfos.fields[fieldIndex++].value =
+        (clearSignPluginContractName[0] != '\0') ? clearSignPluginContractName : fullContract;
+
+    if (clearSignPluginContractVersion[0] != '\0') {
+        txInfos.fields[fieldIndex].item = "Version";
+        txInfos.fields[fieldIndex++].value = clearSignPluginContractVersion;
+    }
+
+    for (uint8_t i = 0; i < pluginUiItems; i++) {
+        txInfos.fields[fieldIndex].item = clearSignPluginUiTitles[i];
+        txInfos.fields[fieldIndex++].value = clearSignPluginUiMsgs[i];
+    }
+
+    txInfos.fields[fieldIndex].item = stringLabelSenderAddress;
+    txInfos.fields[fieldIndex++].value = fromAddress;
+    pairList.nbPairs = fieldIndex;
+
+    return true;
+}
+
+static void prepareGenericClearSignCustomContractUi(void) {
+    txInfos.fields[0].item = "Contract";
+    txInfos.fields[0].value = fullContract;
+    txInfos.fields[1].item = "Selector";
+    txInfos.fields[1].value = TRC20Action;
+    txInfos.fields[2].item = "Pay Token";
+    txInfos.fields[2].value = toAddress;
+    txInfos.fields[3].item = "Call Amount";
+    txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
+    txInfos.fields[4].item = stringLabelSenderAddress;
+    txInfos.fields[4].value = fromAddress;
+    pairList.nbPairs = 5;
+    txInfos.flowSubtitle = "Clear Sign";
 }
 
 static void reviewStart() {
@@ -361,6 +440,11 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[4].value = fromAddress;
             pairList.nbPairs = 5;
             txInfos.flowSubtitle = "Custom Contract";
+            break;
+        case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
+            if (!prepareClearSignCustomContractPluginUi()) {
+                prepareGenericClearSignCustomContractUi();
+            }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
             txInfos.fields[0].item = "ECDH Address";

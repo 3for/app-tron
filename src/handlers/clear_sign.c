@@ -36,6 +36,11 @@ extern void reset_app_context();
 static tron_stream_decoder_t clear_sign_decoder;
 
 typedef struct {
+    extraInfo_t *item1;
+    extraInfo_t *item2;
+} clear_sign_plugin_ui_info_t;
+
+typedef struct {
     bool expect_external_plugin;
     bool plugin_initialized;
     bool plugin_active;
@@ -49,6 +54,7 @@ typedef struct {
 } clear_sign_plugin_stream_t;
 
 static clear_sign_plugin_stream_t clear_sign_plugin_stream;
+static clear_sign_plugin_ui_info_t clear_sign_plugin_ui_info;
 
 static void clear_sign_sync_partial_txcontent(const tron_decode_result_t *res, txContent_t *content) {
     if (res == NULL || content == NULL) {
@@ -208,6 +214,9 @@ static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *f
 
     provide->result = finalize->result;
 
+    clear_sign_plugin_ui_info.item1 = NULL;
+    clear_sign_plugin_ui_info.item2 = NULL;
+
     if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
         return true;
     }
@@ -248,9 +257,85 @@ static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *f
     }
     if (provide->result == ETH_PLUGIN_RESULT_FALLBACK) {
         clear_sign_plugin_stream.plugin_active = false;
+        clear_sign_plugin_ui_info.item1 = NULL;
+        clear_sign_plugin_ui_info.item2 = NULL;
+    } else {
+        clear_sign_plugin_ui_info.item1 = provide->item1;
+        clear_sign_plugin_ui_info.item2 = provide->item2;
     }
 
     return true;
+}
+
+bool clear_sign_plugin_query_contract_id(char *name,
+                                         size_t name_len,
+                                         char *version,
+                                         size_t version_len) {
+    ethQueryContractID_t query = {0};
+
+    if ((name == NULL) || (version == NULL) || (name_len == 0) || (version_len == 0)) {
+        return false;
+    }
+
+    name[0] = '\0';
+    version[0] = '\0';
+
+    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+        return false;
+    }
+
+    query.txContent = &txContent;
+    query.name = name;
+    query.nameLength = name_len;
+    query.version = version;
+    query.versionLength = version_len;
+    query.pluginContext = dataContext.tokenContext.pluginContext;
+    query.result = ETH_PLUGIN_RESULT_ERROR;
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_ID, &query)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) query.result;
+    return query.result == ETH_PLUGIN_RESULT_OK;
+}
+
+bool clear_sign_plugin_query_contract_ui(uint8_t screen_index,
+                                         char *title,
+                                         size_t title_len,
+                                         char *out_msg,
+                                         size_t out_msg_len) {
+    ethQueryContractUI_t query = {0};
+
+    if ((title == NULL) || (out_msg == NULL) || (title_len == 0) || (out_msg_len == 0)) {
+        return false;
+    }
+
+    title[0] = '\0';
+    out_msg[0] = '\0';
+
+    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+        return false;
+    }
+
+    query.txContent = &txContent;
+    query.item1 = clear_sign_plugin_ui_info.item1;
+    query.item2 = clear_sign_plugin_ui_info.item2;
+    strlcpy(query.network_ticker, chainConfig->coinName, sizeof(query.network_ticker));
+    query.screenIndex = screen_index;
+    query.title = title;
+    query.titleLength = title_len;
+    query.msg = out_msg;
+    query.msgLength = out_msg_len;
+    query.pluginContext = dataContext.tokenContext.pluginContext;
+    query.result = ETH_PLUGIN_RESULT_ERROR;
+
+    if (!clear_sign_call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_UI, &query)) {
+        return false;
+    }
+
+    dataContext.tokenContext.pluginStatus = (uint8_t) query.result;
+    return query.result == ETH_PLUGIN_RESULT_OK;
 }
 
 static bool clear_sign_plugin_flush_parameter(void) {
@@ -348,9 +433,13 @@ static bool clear_sign_plugin_feed_data_chunk(void *ctx,
 
 static void clear_sign_plugin_stream_reset(void) {
     memset(&clear_sign_plugin_stream, 0, sizeof(clear_sign_plugin_stream));
+    memset(&clear_sign_plugin_ui_info, 0, sizeof(clear_sign_plugin_ui_info));
 
     dataContext.tokenContext.fieldIndex = 0;
     dataContext.tokenContext.fieldOffset = 0;
+    dataContext.tokenContext.pluginUiMaxItems = 0;
+    dataContext.tokenContext.pluginUiCurrentItem = 0;
+    dataContext.tokenContext.pluginUiState = 0;
     dataContext.tokenContext.pluginStatus = ETH_PLUGIN_RESULT_UNAVAILABLE;
 
     if (pluginType == PLUGIN_TYPE_EXTERNAL && dataContext.tokenContext.pluginName[0] != '\0') {
@@ -441,7 +530,6 @@ static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent
 }
 
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    bool data_warning;
     ethPluginFinalize_t plugin_finalize;
     ethPluginProvideInfo_t plugin_provide_info;
 
@@ -554,8 +642,6 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         getBase58FromAddress(txContent.account, fromAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
     }
 
-    data_warning = ((txContent.dataBytes > 0) ? true : false);
-
     if (txContent.contractType != TRIGGERSMARTCONTRACT) {
         return io_send_sw(E_INCORRECT_DATA);
     }
@@ -589,8 +675,9 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
     }
 
-    // approve custom contract
-    ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
+    // approve clear sign custom contract
+    // data_warning always false for clear sign case
+    ux_flow_display(APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT, false);
 
     return 0;
 }
