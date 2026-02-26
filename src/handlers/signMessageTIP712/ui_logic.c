@@ -14,7 +14,7 @@
 #include "parse.h"
 #include "settings.h"
 #include "trusted_name.h"
-#include "helpers.h"
+#include "common_utils.h"
 
 #define AMOUNT_JOIN_FLAG_TOKEN (1 << 0)
 #define AMOUNT_JOIN_FLAG_VALUE (1 << 1)
@@ -262,39 +262,6 @@ static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
     }
 }
 
-static inline uint8_t hexNibble(char c) {
-    if (c >= '0' && c <= '9') return (uint8_t) (c - '0');
-    if (c >= 'a' && c <= 'f') return (uint8_t) (c - 'a' + 10);
-    if (c >= 'A' && c <= 'F') return (uint8_t) (c - 'A' + 10);
-    return 0;
-}
-
-static void hex2bin(const char *hex, uint8_t *out) {
-    for (int i = 0; i < 20; i++) {
-        uint8_t high = hexNibble(hex[2 * i]);
-        uint8_t low = hexNibble(hex[2 * i + 1]);
-        out[i] = (high << 4) | low;
-    }
-}
-
-static void ethToTronBase58(const char *ethAddress, char *out58) {
-    uint8_t eth20[20];
-    uint8_t tronAddr[21];
-
-    // ethAddress: "0xCD2a3d9F93..."
-    const char *hex = ethAddress[1] == 'x' ? ethAddress + 2 : ethAddress;
-
-    // Step 1: hex → 20 bytes
-    hex2bin(hex, eth20);
-
-    // Step 2: add TRON prefix
-    tronAddr[0] = 0x41;
-    memcpy(tronAddr + 1, eth20, 20);
-
-    // Step 3: convert to Base58Check
-    getBase58FromAddress(tronAddr, out58, false);
-}
-
 /**
  * Format a given data as a string representation of an address
  *
@@ -327,7 +294,11 @@ static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
 
-    ethToTronBase58(ethAddr, strings.tmp.tmp);
+    if (!ethToTronBase58(ethAddr, strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
+        PRINTF("TIP712 addr: ethToTronBase58 failed\n");
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
 
     return true;
 }
