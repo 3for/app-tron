@@ -140,21 +140,21 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     memset(clearSignPluginContractName, 0, sizeof(clearSignPluginContractName));
     memset(clearSignPluginContractVersion, 0, sizeof(clearSignPluginContractVersion));
 
-    if (!clear_sign_plugin_query_contract_id(clearSignPluginContractName,
-                                             sizeof(clearSignPluginContractName),
-                                             clearSignPluginContractVersion,
-                                             sizeof(clearSignPluginContractVersion))) {
+    if (!clear_sign_plugin_get_cached_contract_id(clearSignPluginContractName,
+                                                  sizeof(clearSignPluginContractName),
+                                                  clearSignPluginContractVersion,
+                                                  sizeof(clearSignPluginContractVersion))) {
         return false;
     }
 
     for (uint8_t i = 0; i < pluginUiItems; i++) {
         memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
         memset(clearSignPluginUiMsgs[i], 0, sizeof(clearSignPluginUiMsgs[i]));
-        if (!clear_sign_plugin_query_contract_ui(i,
-                                                 clearSignPluginUiTitles[i],
-                                                 sizeof(clearSignPluginUiTitles[i]),
-                                                 clearSignPluginUiMsgs[i],
-                                                 sizeof(clearSignPluginUiMsgs[i]))) {
+        if (!clear_sign_plugin_get_cached_contract_ui(i,
+                                                      clearSignPluginUiTitles[i],
+                                                      sizeof(clearSignPluginUiTitles[i]),
+                                                      clearSignPluginUiMsgs[i],
+                                                      sizeof(clearSignPluginUiMsgs[i]))) {
             return false;
         }
     }

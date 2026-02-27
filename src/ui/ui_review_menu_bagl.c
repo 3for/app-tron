@@ -878,6 +878,19 @@ const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
 #define MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL (MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL + 8)
 static const ux_flow_step_t *ux_approval_clear_sign_plugin_flow[MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL];
 static char g_titleMsg[SHARED_CTX_FIELD_1_SIZE];
+static bool g_clear_sign_plugin_has_contract_id;
+static char g_clear_sign_plugin_contract_name[SHARED_CTX_FIELD_2_SIZE];
+static char g_clear_sign_plugin_contract_version[SHARED_CTX_FIELD_2_SIZE];
+static char g_clear_sign_plugin_ui_titles[MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL][SHARED_CTX_FIELD_2_SIZE];
+static char g_clear_sign_plugin_ui_msgs[MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL][SHARED_CTX_FIELD_1_SIZE];
+
+static void clear_sign_plugin_bagl_cache_reset(void) {
+    g_clear_sign_plugin_has_contract_id = false;
+    memset(g_clear_sign_plugin_contract_name, 0, sizeof(g_clear_sign_plugin_contract_name));
+    memset(g_clear_sign_plugin_contract_version, 0, sizeof(g_clear_sign_plugin_contract_version));
+    memset(g_clear_sign_plugin_ui_titles, 0, sizeof(g_clear_sign_plugin_ui_titles));
+    memset(g_clear_sign_plugin_ui_msgs, 0, sizeof(g_clear_sign_plugin_ui_msgs));
+}
 
 static void lowercase_ascii_inplace(char *s, size_t s_len) {
     if ((s == NULL) || (s_len == 0)) {
@@ -892,45 +905,38 @@ static void lowercase_ascii_inplace(char *s, size_t s_len) {
 }
 
 static void prepare_clear_sign_plugin_contract_name_bagl(void) {
-    bool has_contract_id = clear_sign_plugin_query_contract_id(strings.tmp.tmp,
-                                                               sizeof(strings.tmp.tmp),
-                                                               strings.tmp.tmp2,
-                                                               sizeof(strings.tmp.tmp2));
-
-    if (!has_contract_id || strings.tmp.tmp[0] == '\0') {
-        strlcpy(strings.tmp.tmp, fullContract, sizeof(strings.tmp.tmp));
-        strlcpy(strings.tmp.tmp2, "-", sizeof(strings.tmp.tmp2));
-        snprintf(g_titleMsg, sizeof(g_titleMsg), "%s %s", strings.tmp.tmp, strings.tmp.tmp2);
+    if (!g_clear_sign_plugin_has_contract_id || g_clear_sign_plugin_contract_name[0] == '\0') {
+        snprintf(g_titleMsg, sizeof(g_titleMsg), "%s %s", fullContract, "-");
         return;
     }
 
     {
-        char contract_name[SHARED_CTX_FIELD_1_SIZE];
+        char contract_version[SHARED_CTX_FIELD_2_SIZE];
         const char *title_prefix = "Review transaction";
 
-        strlcpy(contract_name, strings.tmp.tmp, sizeof(contract_name));
-
-        lowercase_ascii_inplace(strings.tmp.tmp2, sizeof(strings.tmp.tmp2));
-        strlcpy(strings.tmp.tmp, contract_name, sizeof(strings.tmp.tmp));
+        strlcpy(contract_version,
+                g_clear_sign_plugin_contract_version,
+                sizeof(contract_version));
+        lowercase_ascii_inplace(contract_version, sizeof(contract_version));
 
         snprintf(g_titleMsg,
                  sizeof(g_titleMsg),
                  "%s to %s on %s",
                  title_prefix,
-                 strings.tmp.tmp2,
-                 strings.tmp.tmp);
+                 contract_version,
+                 g_clear_sign_plugin_contract_name);
     }
 }
 
 static void prepare_clear_sign_plugin_ui_screen_bagl(uint8_t screen_index) {
-    if (!clear_sign_plugin_query_contract_ui(screen_index,
-                                             strings.tmp.tmp2,
-                                             sizeof(strings.tmp.tmp2),
-                                             strings.tmp.tmp,
-                                             sizeof(strings.tmp.tmp))) {
+    if (screen_index >= MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL) {
         strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
         strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
+        return;
     }
+
+    strlcpy(strings.tmp.tmp2, g_clear_sign_plugin_ui_titles[screen_index], sizeof(strings.tmp.tmp2));
+    strlcpy(strings.tmp.tmp, g_clear_sign_plugin_ui_msgs[screen_index], sizeof(strings.tmp.tmp));
 }
 
 #define DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(IDX)                                               \
@@ -1042,6 +1048,7 @@ UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_contract_name_step,
                   {.title = "", .text = g_titleMsg});
 
 static bool init_clear_sign_plugin_flow_bagl(void) {
+    bool has_contract_id;
     uint8_t ui_items = dataContext.tokenContext.pluginUiMaxItems;
     int step = 0;
 
@@ -1049,6 +1056,30 @@ static bool init_clear_sign_plugin_flow_bagl(void) {
         (ui_items > (sizeof(ux_approval_clear_sign_plugin_ui_steps) /
                      sizeof(ux_approval_clear_sign_plugin_ui_steps[0])))) {
         return false;
+    }
+
+    clear_sign_plugin_bagl_cache_reset();
+    has_contract_id = clear_sign_plugin_get_cached_contract_id(g_clear_sign_plugin_contract_name,
+                                                               sizeof(g_clear_sign_plugin_contract_name),
+                                                               g_clear_sign_plugin_contract_version,
+                                                               sizeof(g_clear_sign_plugin_contract_version));
+    if (has_contract_id && g_clear_sign_plugin_contract_name[0] != '\0') {
+        g_clear_sign_plugin_has_contract_id = true;
+    }
+
+    for (uint8_t i = 0; i < ui_items; i++) {
+        if (!clear_sign_plugin_get_cached_contract_ui(i,
+                                                      g_clear_sign_plugin_ui_titles[i],
+                                                      sizeof(g_clear_sign_plugin_ui_titles[i]),
+                                                      g_clear_sign_plugin_ui_msgs[i],
+                                                      sizeof(g_clear_sign_plugin_ui_msgs[i]))) {
+            strlcpy(g_clear_sign_plugin_ui_titles[i],
+                    "Plugin Field",
+                    sizeof(g_clear_sign_plugin_ui_titles[i]));
+            strlcpy(g_clear_sign_plugin_ui_msgs[i],
+                    "Unavailable",
+                    sizeof(g_clear_sign_plugin_ui_msgs[i]));
+        }
     }
 
     ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_contract_name_step;
