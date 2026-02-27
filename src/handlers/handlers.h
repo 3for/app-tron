@@ -81,12 +81,12 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
 int handleSetExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 
-bool clear_sign_plugin_query_contract_id(char *name,
-                                         size_t name_len,
-                                         char *version,
-                                         size_t version_len);
-bool clear_sign_plugin_query_contract_ui(uint8_t screen_index,
-                                         char *title,
-                                         size_t title_len,
-                                         char *out_msg,
-                                         size_t out_msg_len);
+bool clear_sign_plugin_get_cached_contract_id(char *name,
+                                              size_t name_len,
+                                              char *version,
+                                              size_t version_len);
+bool clear_sign_plugin_get_cached_contract_ui(uint8_t screen_index,
+                                              char *title,
+                                              size_t title_len,
+                                              char *out_msg,
+                                              size_t out_msg_len);
