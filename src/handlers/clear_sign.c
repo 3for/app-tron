@@ -40,20 +40,16 @@ typedef struct {
     extraInfo_t *item2;
 } clear_sign_plugin_ui_info_t;
 
-#ifdef HAVE_NBGL
-#define CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS 17
-#else
-#define CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS 10
-#endif
-
 typedef struct {
     bool ready;
     bool has_contract_id;
     uint8_t item_count;
+    char g_titleMsg[SHARED_CTX_FIELD_1_SIZE];
+    char g_finishMsg[SHARED_CTX_FIELD_1_SIZE];
     char contract_name[SHARED_CTX_FIELD_2_SIZE];
     char contract_version[SHARED_CTX_FIELD_2_SIZE];
-    char title[CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS][SHARED_CTX_FIELD_2_SIZE];
-    char msg[CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS][SHARED_CTX_FIELD_1_SIZE];
+    char title[CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_2_SIZE];
+    char msg[CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_1_SIZE];
 } clear_sign_plugin_ui_cache_t;
 
 typedef struct {
@@ -287,6 +283,59 @@ static void clear_sign_plugin_ui_cache_reset(void) {
     memset(&clear_sign_plugin_ui_cache, 0, sizeof(clear_sign_plugin_ui_cache));
 }
 
+static void lowercase_ascii_inplace(char *s, size_t s_len) {
+    if ((s == NULL) || (s_len == 0)) {
+        return;
+    }
+
+    for (size_t i = 0; (i < s_len) && (s[i] != '\0'); i++) {
+        if ((s[i] >= 'A') && (s[i] <= 'Z')) {
+            s[i] = (char) (s[i] - 'A' + 'a');
+        }
+    }
+}
+
+static void clear_sign_plugin_prepare_title_msg(void) {
+    if (!clear_sign_plugin_ui_cache.has_contract_id || clear_sign_plugin_ui_cache.contract_name[0] == '\0') {
+        char contract_addr[BASE58CHECK_ADDRESS_SIZE + 1];
+
+        getBase58FromAddress(txContent.contractAddress, contract_addr, HAS_SETTING(S_TRUNCATE_ADDRESS));
+        snprintf(clear_sign_plugin_ui_cache.g_titleMsg,
+                 sizeof(clear_sign_plugin_ui_cache.g_titleMsg),
+                 "%s %s",
+                 contract_addr,
+                 "-");
+        snprintf(clear_sign_plugin_ui_cache.g_finishMsg,
+                 sizeof(clear_sign_plugin_ui_cache.g_finishMsg),
+                 "%s %s?",
+                 contract_addr,
+                 "-");
+        return;
+    }
+
+    {
+        char contract_version[SHARED_CTX_FIELD_2_SIZE];
+        const char *title_prefix = "Review transaction";
+        const char *finish_prefix = "Sign transaction";
+
+        strlcpy(contract_version, clear_sign_plugin_ui_cache.contract_version, sizeof(contract_version));
+        lowercase_ascii_inplace(contract_version, sizeof(contract_version));
+
+        snprintf(clear_sign_plugin_ui_cache.g_titleMsg,
+                 sizeof(clear_sign_plugin_ui_cache.g_titleMsg),
+                 "%s to %s on %s",
+                 title_prefix,
+                 contract_version,
+                 clear_sign_plugin_ui_cache.contract_name);
+        snprintf(clear_sign_plugin_ui_cache.g_finishMsg,
+                 sizeof(clear_sign_plugin_ui_cache.g_finishMsg),
+                 "%s to %s on %s?",
+                 finish_prefix,
+                 contract_version,
+                 clear_sign_plugin_ui_cache.contract_name);
+    }
+}
+
 static bool clear_sign_plugin_query_contract_id_raw(char *name,
                                                     size_t name_len,
                                                     char *version,
@@ -320,23 +369,48 @@ static bool clear_sign_plugin_query_contract_id_raw(char *name,
     return query.result == ETH_PLUGIN_RESULT_OK;
 }
 
-bool clear_sign_plugin_get_cached_contract_id(char *name,
-                                              size_t name_len,
-                                              char *version,
-                                              size_t version_len) {
-    if ((name == NULL) || (version == NULL) || (name_len == 0) || (version_len == 0)) {
+bool clear_sign_plugin_get_cached_ui_items_count(uint8_t *count) {
+    if (count == NULL) {
         return false;
     }
 
-    name[0] = '\0';
-    version[0] = '\0';
+    *count = 0;
 
-    if (!clear_sign_plugin_ui_cache.ready || !clear_sign_plugin_ui_cache.has_contract_id) {
+    if (!clear_sign_plugin_ui_cache.ready) {
         return false;
     }
 
-    strlcpy(name, clear_sign_plugin_ui_cache.contract_name, name_len);
-    strlcpy(version, clear_sign_plugin_ui_cache.contract_version, version_len);
+    *count = clear_sign_plugin_ui_cache.item_count;
+    return true;
+}
+
+bool clear_sign_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len) {
+    if ((title_msg == NULL) || (title_msg_len == 0)) {
+        return false;
+    }
+
+    title_msg[0] = '\0';
+
+    if (!clear_sign_plugin_ui_cache.ready || clear_sign_plugin_ui_cache.g_titleMsg[0] == '\0') {
+        return false;
+    }
+
+    strlcpy(title_msg, clear_sign_plugin_ui_cache.g_titleMsg, title_msg_len);
+    return true;
+}
+
+bool clear_sign_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_len) {
+    if ((finish_msg == NULL) || (finish_msg_len == 0)) {
+        return false;
+    }
+
+    finish_msg[0] = '\0';
+
+    if (!clear_sign_plugin_ui_cache.ready || clear_sign_plugin_ui_cache.g_finishMsg[0] == '\0') {
+        return false;
+    }
+
+    strlcpy(finish_msg, clear_sign_plugin_ui_cache.g_finishMsg, finish_msg_len);
     return true;
 }
 
@@ -405,15 +479,15 @@ static bool clear_sign_prepare_plugin_ui_cache(void) {
     clear_sign_plugin_ui_cache_reset();
 
     if (plugin_ui_items == 0) {
-        clear_sign_plugin_ui_cache.ready = true;
-        return true;
+        PRINTF("Plugin UI items cannot be zero\n");
+        return false;
     }
 
-    if (plugin_ui_items > CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS) {
+    if (plugin_ui_items > CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS) {
         PRINTF("Plugin UI items exceed cache capacity (%u > %u)\n",
                (unsigned int) plugin_ui_items,
-               (unsigned int) CLEAR_SIGN_PLUGIN_UI_CACHE_MAX_ITEMS);
-        return true;
+               (unsigned int) CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS);
+        return false;
     }
 
     if (!clear_sign_plugin_query_contract_id_raw(clear_sign_plugin_ui_cache.contract_name,
@@ -425,6 +499,7 @@ static bool clear_sign_prepare_plugin_ui_cache(void) {
         return false;
     }
     clear_sign_plugin_ui_cache.has_contract_id = true;
+    clear_sign_plugin_prepare_title_msg();
 
     for (uint8_t i = 0; i < plugin_ui_items; i++) {
         if (!clear_sign_plugin_query_contract_ui_raw(i,
