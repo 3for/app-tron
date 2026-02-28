@@ -874,69 +874,33 @@ const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
 
 // CUSTOM CONTRACT
 //////////////////////////////////////////////////////////////////////
-#define MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL 10
-#define MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL (MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL + 8)
+#define MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL (CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL + 8)
 static const ux_flow_step_t *ux_approval_clear_sign_plugin_flow[MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL];
-static char g_titleMsg[SHARED_CTX_FIELD_1_SIZE];
-static bool g_clear_sign_plugin_has_contract_id;
-static char g_clear_sign_plugin_contract_name[SHARED_CTX_FIELD_2_SIZE];
-static char g_clear_sign_plugin_contract_version[SHARED_CTX_FIELD_2_SIZE];
-static char g_clear_sign_plugin_ui_titles[MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL][SHARED_CTX_FIELD_2_SIZE];
-static char g_clear_sign_plugin_ui_msgs[MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL][SHARED_CTX_FIELD_1_SIZE];
 
-static void clear_sign_plugin_bagl_cache_reset(void) {
-    g_clear_sign_plugin_has_contract_id = false;
-    memset(g_clear_sign_plugin_contract_name, 0, sizeof(g_clear_sign_plugin_contract_name));
-    memset(g_clear_sign_plugin_contract_version, 0, sizeof(g_clear_sign_plugin_contract_version));
-    memset(g_clear_sign_plugin_ui_titles, 0, sizeof(g_clear_sign_plugin_ui_titles));
-    memset(g_clear_sign_plugin_ui_msgs, 0, sizeof(g_clear_sign_plugin_ui_msgs));
-}
-
-static void lowercase_ascii_inplace(char *s, size_t s_len) {
-    if ((s == NULL) || (s_len == 0)) {
-        return;
-    }
-
-    for (size_t i = 0; (i < s_len) && (s[i] != '\0'); i++) {
-        if ((s[i] >= 'A') && (s[i] <= 'Z')) {
-            s[i] = (char) (s[i] - 'A' + 'a');
-        }
-    }
-}
-
-static void prepare_clear_sign_plugin_contract_name_bagl(void) {
-    if (!g_clear_sign_plugin_has_contract_id || g_clear_sign_plugin_contract_name[0] == '\0') {
-        snprintf(g_titleMsg, sizeof(g_titleMsg), "%s %s", fullContract, "-");
-        return;
-    }
-
-    {
-        char contract_version[SHARED_CTX_FIELD_2_SIZE];
-        const char *title_prefix = "Review transaction";
-
-        strlcpy(contract_version,
-                g_clear_sign_plugin_contract_version,
-                sizeof(contract_version));
-        lowercase_ascii_inplace(contract_version, sizeof(contract_version));
-
-        snprintf(g_titleMsg,
-                 sizeof(g_titleMsg),
-                 "%s to %s on %s",
-                 title_prefix,
-                 contract_version,
-                 g_clear_sign_plugin_contract_name);
+static void prepare_clear_sign_plugin_first_screen_bagl(void) {
+    if (!clear_sign_plugin_get_cached_title_msg(strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
+        PRINTF("Missing cached clear-sign title\n");
+        strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
     }
 }
 
 static void prepare_clear_sign_plugin_ui_screen_bagl(uint8_t screen_index) {
-    if (screen_index >= MAX_CLEAR_SIGN_PLUGIN_UI_ITEMS_BAGL) {
+    if (screen_index >= CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL) {
+        PRINTF("Clear-sign UI index out of range: %u\n", (unsigned int) screen_index);
         strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
         strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
         return;
     }
 
-    strlcpy(strings.tmp.tmp2, g_clear_sign_plugin_ui_titles[screen_index], sizeof(strings.tmp.tmp2));
-    strlcpy(strings.tmp.tmp, g_clear_sign_plugin_ui_msgs[screen_index], sizeof(strings.tmp.tmp));
+    if (!clear_sign_plugin_get_cached_contract_ui(screen_index,
+                                                  strings.tmp.tmp2,
+                                                  sizeof(strings.tmp.tmp2),
+                                                  strings.tmp.tmp,
+                                                  sizeof(strings.tmp.tmp))) {
+        PRINTF("Missing cached clear-sign UI for index %u\n", (unsigned int) screen_index);
+        strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
+        strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
+    }
 }
 
 #define DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(IDX)                                               \
@@ -1020,16 +984,6 @@ UX_DEF(ux_approval_custom_contract_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
-UX_DEF(ux_approval_custom_contract_no_warning_flow,
-       &ux_approval_custom_contract_1_step,
-       &ux_approval_custom_contract_2_step,
-       &ux_approval_custom_contract_3_step,
-       &ux_approval_custom_contract_4_step,
-       &ux_approval_custom_contract_5_step,
-       &ux_approval_from_address_step,
-       &ux_approval_confirm_step,
-       &ux_approval_reject_step);
-
 UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_custom_contract_1_step,
        &ux_approval_custom_contract_warning_step,
@@ -1042,47 +996,44 @@ UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
-UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_contract_name_step,
+UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_first_screen_step,
                   bnnn_paging,
-                  prepare_clear_sign_plugin_contract_name_bagl(),
-                  {.title = "", .text = g_titleMsg});
+                  prepare_clear_sign_plugin_first_screen_bagl(),
+                  {.title = "", .text = strings.tmp.tmp});
 
 static bool init_clear_sign_plugin_flow_bagl(void) {
-    bool has_contract_id;
-    uint8_t ui_items = dataContext.tokenContext.pluginUiMaxItems;
+    char title[SHARED_CTX_FIELD_2_SIZE];
+    char ui_msg[SHARED_CTX_FIELD_1_SIZE];
+    char flow_title[SHARED_CTX_FIELD_1_SIZE];
+    uint8_t ui_items = 0;
     int step = 0;
 
+    if (!clear_sign_plugin_get_cached_ui_items_count(&ui_items)) {
+        PRINTF("Missing cached clear-sign UI item count\n");
+        return false;
+    }
     if ((ui_items == 0) ||
         (ui_items > (sizeof(ux_approval_clear_sign_plugin_ui_steps) /
                      sizeof(ux_approval_clear_sign_plugin_ui_steps[0])))) {
+        PRINTF("Invalid clear-sign UI items count: %u\n", (unsigned int) ui_items);
         return false;
     }
-
-    clear_sign_plugin_bagl_cache_reset();
-    has_contract_id = clear_sign_plugin_get_cached_contract_id(g_clear_sign_plugin_contract_name,
-                                                               sizeof(g_clear_sign_plugin_contract_name),
-                                                               g_clear_sign_plugin_contract_version,
-                                                               sizeof(g_clear_sign_plugin_contract_version));
-    if (has_contract_id && g_clear_sign_plugin_contract_name[0] != '\0') {
-        g_clear_sign_plugin_has_contract_id = true;
+    if (!clear_sign_plugin_get_cached_title_msg(flow_title, sizeof(flow_title))) {
+        PRINTF("Missing cached clear-sign flow title\n");
+        return false;
     }
-
     for (uint8_t i = 0; i < ui_items; i++) {
         if (!clear_sign_plugin_get_cached_contract_ui(i,
-                                                      g_clear_sign_plugin_ui_titles[i],
-                                                      sizeof(g_clear_sign_plugin_ui_titles[i]),
-                                                      g_clear_sign_plugin_ui_msgs[i],
-                                                      sizeof(g_clear_sign_plugin_ui_msgs[i]))) {
-            strlcpy(g_clear_sign_plugin_ui_titles[i],
-                    "Plugin Field",
-                    sizeof(g_clear_sign_plugin_ui_titles[i]));
-            strlcpy(g_clear_sign_plugin_ui_msgs[i],
-                    "Unavailable",
-                    sizeof(g_clear_sign_plugin_ui_msgs[i]));
+                                                      title,
+                                                      sizeof(title),
+                                                      ui_msg,
+                                                      sizeof(ui_msg))) {
+            PRINTF("Missing cached clear-sign UI at index %u\n", (unsigned int) i);
+            return false;
         }
     }
 
-    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_contract_name_step;
+    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_first_screen_step;
 
     for (uint8_t i = 0; i < ui_items; i++) {
         ux_approval_clear_sign_plugin_flow[step++] = ux_approval_clear_sign_plugin_ui_steps[i];
@@ -1229,7 +1180,8 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
             break;
         case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
             if (!init_clear_sign_plugin_flow_bagl()) {
-                ux_flow_init(0, ux_approval_custom_contract_no_warning_flow, NULL);
+                PRINTF("Failed to init clear-sign plugin flow\n");
+                ui_callback_tx_cancel(true);
             }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:

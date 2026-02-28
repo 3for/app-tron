@@ -32,7 +32,11 @@
 // Macros
 #define WARNING_TYPES_NUMBER 2
 #define MAX_TX_FIELDS        20
-#define MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS (MAX_TX_FIELDS - 3)
+#define MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_NBGL
+
+#if (MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS != (MAX_TX_FIELDS - 3))
+#error "MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS must be MAX_TX_FIELDS - 3"
+#endif
 
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
@@ -60,8 +64,8 @@ typedef struct {
 static nbgl_layoutTagValueList_t pairList;
 static nbgl_pageInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
-static char clearSignPluginContractName[SHARED_CTX_FIELD_2_SIZE];
-static char clearSignPluginContractVersion[SHARED_CTX_FIELD_2_SIZE];
+static char clearSignPluginTitleMsg[SHARED_CTX_FIELD_1_SIZE];
+static char clearSignPluginFinishMsg[SHARED_CTX_FIELD_1_SIZE];
 static char clearSignPluginUiTitles[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_2_SIZE];
 static char clearSignPluginUiMsgs[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
 
@@ -130,22 +134,31 @@ static void displayTransaction(void) {
 }
 
 static bool prepareClearSignCustomContractPluginUi(void) {
-    uint8_t pluginUiItems = dataContext.tokenContext.pluginUiMaxItems;
+    uint8_t pluginUiItems = 0;
     uint8_t fieldIndex = 0;
+
+    if (!clear_sign_plugin_get_cached_ui_items_count(&pluginUiItems)) {
+        return false;
+    }
 
     if ((pluginUiItems == 0) || (pluginUiItems > MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS)) {
         return false;
     }
 
-    memset(clearSignPluginContractName, 0, sizeof(clearSignPluginContractName));
-    memset(clearSignPluginContractVersion, 0, sizeof(clearSignPluginContractVersion));
-
-    if (!clear_sign_plugin_get_cached_contract_id(clearSignPluginContractName,
-                                                  sizeof(clearSignPluginContractName),
-                                                  clearSignPluginContractVersion,
-                                                  sizeof(clearSignPluginContractVersion))) {
+    memset(clearSignPluginTitleMsg, 0, sizeof(clearSignPluginTitleMsg));
+    memset(clearSignPluginFinishMsg, 0, sizeof(clearSignPluginFinishMsg));
+    if (!clear_sign_plugin_get_cached_title_msg(clearSignPluginTitleMsg,
+                                                sizeof(clearSignPluginTitleMsg))) {
         return false;
     }
+    if (!clear_sign_plugin_get_cached_finish_msg(clearSignPluginFinishMsg,
+                                                 sizeof(clearSignPluginFinishMsg))) {
+        return false;
+    }
+
+    txInfos.flowTitle = clearSignPluginTitleMsg;
+    txInfos.flowSubtitle = NULL;
+    infoLongPress.text = clearSignPluginFinishMsg;
 
     for (uint8_t i = 0; i < pluginUiItems; i++) {
         memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
@@ -157,28 +170,11 @@ static bool prepareClearSignCustomContractPluginUi(void) {
                                                       sizeof(clearSignPluginUiMsgs[i]))) {
             return false;
         }
-    }
-
-    txInfos.flowTitle = "Review contract";
-    txInfos.flowSubtitle =
-        (clearSignPluginContractName[0] != '\0') ? clearSignPluginContractName : "Clear Sign";
-    infoLongPress.text = "Sign transaction";
-
-    txInfos.fields[fieldIndex].item = "Contract";
-    txInfos.fields[fieldIndex++].value =
-        (clearSignPluginContractName[0] != '\0') ? clearSignPluginContractName : fullContract;
-
-    if (clearSignPluginContractVersion[0] != '\0') {
-        txInfos.fields[fieldIndex].item = "Version";
-        txInfos.fields[fieldIndex++].value = clearSignPluginContractVersion;
-    }
-
-    for (uint8_t i = 0; i < pluginUiItems; i++) {
         txInfos.fields[fieldIndex].item = clearSignPluginUiTitles[i];
         txInfos.fields[fieldIndex++].value = clearSignPluginUiMsgs[i];
     }
 
-    txInfos.fields[fieldIndex].item = stringLabelSenderAddress;
+    txInfos.fields[fieldIndex].item = "From Address";
     txInfos.fields[fieldIndex++].value = fromAddress;
     pairList.nbPairs = fieldIndex;
 

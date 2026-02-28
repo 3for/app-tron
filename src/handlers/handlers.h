@@ -61,6 +61,15 @@
 #define P2_TIP712_LEGACY_IMPLEM 0x00
 #define P2_TIP712_FULL_IMPLEM   0x01
 
+#define CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL 10
+#define CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_NBGL 17
+
+#if defined(HAVE_NBGL)
+#define CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_NBGL
+#else
+#define CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL
+#endif
+
 int apdu_dispatcher(const command_t *cmd);
 
 int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dataLength);
@@ -81,10 +90,9 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
 int handleSetExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 
-bool clear_sign_plugin_get_cached_contract_id(char *name,
-                                              size_t name_len,
-                                              char *version,
-                                              size_t version_len);
+bool clear_sign_plugin_get_cached_ui_items_count(uint8_t *count);
+bool clear_sign_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len);
+bool clear_sign_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_len);
 bool clear_sign_plugin_get_cached_contract_ui(uint8_t screen_index,
                                               char *title,
                                               size_t title_len,
