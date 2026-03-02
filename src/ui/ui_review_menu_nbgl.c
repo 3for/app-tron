@@ -70,7 +70,7 @@ static char clearSignPluginUiTitles[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_
 static char clearSignPluginUiMsgs[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
 
 // Static functions declarations
-static void prepareTxInfos(ui_approval_state_t state, bool data_warning);
+static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
 static void reviewStart(void);
 static void displayTransaction(void);
 static void displayDataWarning(void);
@@ -80,7 +80,6 @@ static void customContractWarningChoice(bool reject);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static bool prepareClearSignCustomContractPluginUi(void);
-static void prepareGenericClearSignCustomContractUi(void);
 
 static void dataWarningChoice(bool accept) {
     if (accept) {
@@ -181,21 +180,6 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     return true;
 }
 
-static void prepareGenericClearSignCustomContractUi(void) {
-    txInfos.fields[0].item = "Contract";
-    txInfos.fields[0].value = fullContract;
-    txInfos.fields[1].item = "Selector";
-    txInfos.fields[1].value = TRC20Action;
-    txInfos.fields[2].item = "Pay Token";
-    txInfos.fields[2].value = toAddress;
-    txInfos.fields[3].item = "Call Amount";
-    txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-    txInfos.fields[4].item = stringLabelSenderAddress;
-    txInfos.fields[4].value = fromAddress;
-    pairList.nbPairs = 5;
-    txInfos.flowSubtitle = "Clear Sign";
-}
-
 static void reviewStart() {
     if (txInfos.warnings[DATA_WARNING] == true) {
         displayDataWarning();
@@ -244,7 +228,7 @@ static char *format_hash(const uint8_t *hash, char *buffer, size_t buffer_size, 
     return buffer + offset;
 }
 
-static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
+static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     memset(&txInfos, 0, sizeof(txInfos));
     memset(&infoLongPress, 0, sizeof(infoLongPress));
 
@@ -439,7 +423,9 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             break;
         case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
             if (!prepareClearSignCustomContractPluginUi()) {
-                prepareGenericClearSignCustomContractUi();
+                ui_callback_tx_cancel(false);
+                nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
+                return false;
             }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
@@ -516,6 +502,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             PRINTF("This should not happen !\n");
             break;
     }
+    return true;
 }
 
 static void display_address_callback(bool confirm) {
@@ -538,7 +525,9 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                                   display_address_callback);
     } else {
         // Prepare transaction infos to be displayed (field values etc.)
-        prepareTxInfos(state, data_warning);
+        if (!prepareTxInfos(state, data_warning)) {
+            return;
+        }
         // Display transaction
         reviewStart();
     }
