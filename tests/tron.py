@@ -88,6 +88,8 @@ class Errors(IntEnum):
     SECURITY_STATUS_NOT_SATISFIED = 0x6982
     # "Condition of use not satisfied (denied by the user?)";
     CONDITIONS_OF_USE_NOT_SATISFIED = 0x6985
+    # "Plugin requested is not installed on the device"
+    PLUGIN_NOT_FOUND = 0x6984
     # "Invalid data received"
     INCORRECT_DATA = 0x6a80
     # "Invalid parameter received"
