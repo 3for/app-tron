@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import sys
+from pathlib import Path
 
-# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
-# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
-# `python3 signPermissionedTransaction.py`
+# `./buildproto.sh` to generate local python protobuf files
+sys.path.append(str(Path(__file__).resolve().parent / "proto"))
 
 from pprint import pprint
 import logging
@@ -154,10 +155,10 @@ logger.debug('-= Tron Ledger =-')
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core.contract import balance_contract_pb2 as balance_contract
-from tron_sdk_py.proto.core.contract import account_contract_pb2 as account_contract
-from tron_sdk_py.proto.core import Tron_pb2 as tron
-from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from core.contract import balance_contract_pb2 as balance_contract
+from core.contract import account_contract_pb2 as account_contract
+from core import Tron_pb2 as tron
+from api.api_pb2_grpc import WalletStub
 import grpc
 
 # Start Channel and WalletStub
