@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+from pathlib import Path
 
-# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
-# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
-# `python3 runTest.py`
-sys.path.append("./examples/proto")
+# `./buildproto.sh` to generate local python protobuf files
+sys.path.append(str(Path(__file__).resolve().parent / "proto"))
 
 from pprint import pprint
 import logging
 import time
-from pathlib import Path
 from ledgerblue.comm import getDongle
 import argparse
 from base import parse_bip32_path
@@ -122,17 +120,17 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core.contract import balance_contract_pb2 as balance_contract
-from tron_sdk_py.proto.core.contract import asset_issue_contract_pb2 as asset_issue_contract
-from tron_sdk_py.proto.core.contract import exchange_contract_pb2 as exchange_contract
-from tron_sdk_py.proto.core.contract import witness_contract_pb2 as witness_contract
-from tron_sdk_py.proto.core.contract import proposal_contract_pb2 as proposal_contract
-from tron_sdk_py.proto.core.contract import account_contract_pb2 as account_contract
-from tron_sdk_py.proto.core.contract import smart_contract_pb2 as smart_contract
-from tron_sdk_py.proto.core.contract import common_pb2 as common
-from tron_sdk_py.proto.api import api_pb2 as api
-from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
-from tron_sdk_py.proto.core import Tron_pb2 as tron
+from core.contract import balance_contract_pb2 as balance_contract
+from core.contract import asset_issue_contract_pb2 as asset_issue_contract
+from core.contract import exchange_contract_pb2 as exchange_contract
+from core.contract import witness_contract_pb2 as witness_contract
+from core.contract import proposal_contract_pb2 as proposal_contract
+from core.contract import account_contract_pb2 as account_contract
+from core.contract import smart_contract_pb2 as smart_contract
+from core.contract import common_pb2 as common
+from api import api_pb2 as api
+from api.api_pb2_grpc import WalletStub
+from core import Tron_pb2 as tron
 from google.protobuf.any_pb2 import Any
 import grpc
 

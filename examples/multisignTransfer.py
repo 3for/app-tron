@@ -1,22 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
-
-# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
-# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
-# `python3 multisignTransfer.py`
-sys.path.append("./examples/proto")
-
-from pprint import pprint
-import logging
-import time
 from pathlib import Path
-from ledgerblue.comm import getDongle
-import argparse
-from base import parse_bip32_path
 
-import validateSignature
-import binascii
+# `./buildproto.sh` to generate local python protobuf files
+sys.path.append(str(Path(__file__).resolve().parent / "proto"))
+
+import logging
+from ledgerblue.comm import getDongle
+from base import parse_bip32_path
 import base58
 
 logging.basicConfig(level=logging.DEBUG,
@@ -26,12 +18,10 @@ logger = logging.getLogger()
 # Start Ledger
 dongle = getDongle(True)
 
-
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
         yield l[i:i + n]
-
 
 def apduMessage(INS, P1, P2, PATH, MESSAGE):
     hexString = ""
@@ -45,7 +35,6 @@ def apduMessage(INS, P1, P2, PATH, MESSAGE):
             len(MESSAGE) // 2, MESSAGE)
     print(hexString)
     return bytearray.fromhex(hexString)
-
 
 def ledgerSign(PATH, tx, tokenSignature=[]):
     raw_tx = tx.raw_data.SerializeToString().hex()
@@ -87,22 +76,16 @@ def ledgerSign(PATH, tx, tokenSignature=[]):
 
     return raw_tx, result
 
-
 def address_hex(address):
     return base58.b58decode_check(address).hex().upper()
-
 
 # Get Addresses
 logger.debug('-= Tron Ledger =-')
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.api import api_pb2 as api
-from tron_sdk_py.proto.core.contract.balance_contract_pb2 import TransferContract
-from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
-from tron_sdk_py.types import HEX, ADDR
-from tron_sdk_py.proto.api.api_pb2 import EmptyMessage # , AccountAddressMessage, BytesMessage
-from google.protobuf.any_pb2 import Any
+from core.contract import balance_contract_pb2 as contract
+from api.api_pb2_grpc import WalletStub
 import grpc
 
 # Start Channel and WalletStub
@@ -113,29 +96,25 @@ logger.debug('''
    Tron MultiSign tests
 ''')
 
-print(stub.GetNowBlock2(EmptyMessage()))
+tx = stub.CreateTransaction2(
+    contract.TransferContract(
+        owner_address=bytes.fromhex(
+            address_hex("THrZxZgDH9ZuhLZq6HP61LZJJc7cYbifwZ")),
+        to_address=bytes.fromhex(
+            address_hex("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")),
+        amount=100000))
+# use permission 2
+tx.transaction.raw_data.contract[0].Permission_id = 2
 
-req = TransferContract()
-req.owner_address = ADDR("THrZxZgDH9ZuhLZq6HP61LZJJc7cYbifwZ")
-req.to_address = ADDR("TPnYqC2ukKyhEDAjqRRobSVygMAb8nAcXM")
-req.amount = 100000
-tx = stub.CreateTransaction2(req)
-print("tx info:", tx)
-print("TXID:", HEX(tx.txid))
-if len(tx.transaction.raw_data.contract) > 0:
-    # use permission 2
-    tx.transaction.raw_data.contract[0].Permission_id = 2
+raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
+raw_tx, sign2 = ledgerSign(parse_bip32_path("44'/195'/1'/0/0"), tx.transaction)
 
-    raw_tx, sign1 = ledgerSign(parse_bip32_path("44'/195'/0'/0/0"), tx.transaction)
-    raw_tx, sign2 = ledgerSign(parse_bip32_path("44'/195'/1'/0/0"), tx.transaction)
+tx.transaction.signature.extend([bytes(sign1[0:65])])
+tx.transaction.signature.extend([bytes(sign2[0:65])])
 
-    tx.transaction.signature.extend([bytes(sign1[0:65])])
-    tx.transaction.signature.extend([bytes(sign2[0:65])])
+r = stub.BroadcastTransaction(tx.transaction)
 
-    r = stub.BroadcastTransaction(tx.transaction)
-
-    print("result:", r)
-    if r.result == True:
-        print("Success")
-    else:
-        print("Fail")
+if r.result == True:
+    print("Success")
+else:
+    print("Fail")

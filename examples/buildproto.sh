@@ -1,16 +1,22 @@
 #!/bin/sh
+set -e
+
+# Build Python protobuf + gRPC bindings into ./proto for the examples.
 mkdir -p protocol/googleapis/google/api
-mkdir proto
-cp -r ../proto/* proto
+mkdir -p proto
 
-git clone https://github.com/tronprotocol/protocol.git protocol/tron
-curl https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto > protocol/googleapis/google/api/annotations.proto
-curl https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto > protocol/googleapis/google/api/http.proto
+if [ ! -d protocol/tron/.git ]; then
+  git clone https://github.com/tronprotocol/protocol.git protocol/tron
+fi
 
-# python -m grpc_tools.protoc -I./proto -I./protocol/googleapis -I./protocol/tron --python_out=./proto ./protocol/googleapis/google/api/*.proto
-python -m grpc_tools.protoc -I./protocol/googleapis/  -I./protocol/tron/ --python_out=./proto \
-    ./protocol/googleapis/google/api/*.proto \
-    ./protocol/tron/api/*.proto \
-    ./protocol/tron/core/*.proto \
-    ./protocol/tron/core/contract/*.proto \
-    ./protocol/tron/core/tron/*.proto
+curl -fsSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto -o protocol/googleapis/google/api/annotations.proto
+curl -fsSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto -o protocol/googleapis/google/api/http.proto
+
+python3.11 -m grpc_tools.protoc \
+  -I./protocol/googleapis \
+  -I./protocol/tron \
+  --python_out=./proto \
+  --grpc_python_out=./proto \
+  ./protocol/tron/core/*.proto \
+  ./protocol/tron/api/*.proto \
+  ./protocol/tron/core/contract/*.proto

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+from pathlib import Path
 
-# `pip3 install tron-sdk-py` to make sure tron-sdk-py is installed
-# `pip3 install --upgrade protobuf` to fix `cannot import name 'runtime_version' from 'google.protobuf'`
-# `python3 testCustomContracts.py`
+# `./buildproto.sh` to generate local python protobuf files
+sys.path.append(str(Path(__file__).resolve().parent / "proto"))
 
 from pprint import pprint
 import logging
@@ -120,9 +120,9 @@ for i in range(2):
 '''
 Tron Protobuf
 '''
-from tron_sdk_py.proto.core.contract import smart_contract_pb2 as contract
-from tron_sdk_py.proto.api import api_pb2 as api
-from tron_sdk_py.proto.api.api_pb2_grpc import WalletStub
+from core.contract import smart_contract_pb2 as contract
+from api import api_pb2 as api
+from api.api_pb2_grpc import WalletStub
 from google.protobuf.any_pb2 import Any
 import grpc
 
