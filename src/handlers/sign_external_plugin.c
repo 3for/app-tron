@@ -33,12 +33,12 @@
 
 extern void reset_app_context();
 
-static tron_stream_decoder_t clear_sign_decoder;
+static tron_stream_decoder_t tron_stream_decoder;
 
 typedef struct {
     extraInfo_t *item1;
     extraInfo_t *item2;
-} clear_sign_plugin_ui_info_t;
+} external_plugin_ui_info_t;
 
 typedef struct {
     bool ready;
@@ -48,9 +48,9 @@ typedef struct {
     char g_finishMsg[SHARED_CTX_FIELD_1_SIZE];
     char contract_name[SHARED_CTX_FIELD_2_SIZE];
     char contract_version[SHARED_CTX_FIELD_2_SIZE];
-    char title[CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_2_SIZE];
-    char msg[CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_1_SIZE];
-} clear_sign_plugin_ui_cache_t;
+    char title[EXTERNAL_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_2_SIZE];
+    char msg[EXTERNAL_PLUGIN_UI_MAX_ITEMS][SHARED_CTX_FIELD_1_SIZE];
+} external_plugin_ui_cache_t;
 
 typedef struct {
     bool expect_external_plugin;
@@ -63,14 +63,14 @@ typedef struct {
     uint32_t parameter_offset;
     uint8_t expected_contract[ADDRESS_SIZE];
     uint8_t expected_selector[SELECTOR_LENGTH];
-} clear_sign_plugin_stream_t;
+} external_plugin_stream_t;
 
-static clear_sign_plugin_stream_t clear_sign_plugin_stream;
-static clear_sign_plugin_ui_info_t clear_sign_plugin_ui_info;
-static clear_sign_plugin_ui_cache_t clear_sign_plugin_ui_cache;
-static uint16_t clear_sign_stream_plugin_failure_sw;
+static external_plugin_stream_t external_plugin_stream;
+static external_plugin_ui_info_t external_plugin_ui_info;
+static external_plugin_ui_cache_t external_plugin_ui_cache;
+static uint16_t external_plugin_stream_failure_sw;
 
-static uint16_t clear_sign_plugin_status_to_sw(uint8_t plugin_status) {
+static uint16_t external_plugin_status_to_sw(uint8_t plugin_status) {
     if (plugin_status == ETH_PLUGIN_RESULT_UNAVAILABLE) {
         return E_PLUGIN_NOT_FOUND;
     }
@@ -85,15 +85,15 @@ static uint16_t clear_sign_plugin_status_to_sw(uint8_t plugin_status) {
     return E_INCORRECT_DATA;
 }
 
-static uint16_t clear_sign_plugin_failure_sw(void) {
-    return clear_sign_plugin_status_to_sw(dataContext.tokenContext.pluginStatus);
+static uint16_t external_plugin_failure_sw(void) {
+    return external_plugin_status_to_sw(dataContext.tokenContext.pluginStatus);
 }
 
-static void clear_sign_record_plugin_failure(void) {
-    clear_sign_stream_plugin_failure_sw = clear_sign_plugin_failure_sw();
+static void record_plugin_failure(void) {
+    external_plugin_stream_failure_sw = external_plugin_failure_sw();
 }
 
-static void clear_sign_sync_partial_txcontent(const tron_decode_result_t *res, txContent_t *content) {
+static void sync_partial_txcontent(const tron_decode_result_t *res, txContent_t *content) {
     if (res == NULL || content == NULL) {
         return;
     }
@@ -116,7 +116,7 @@ static void clear_sign_sync_partial_txcontent(const tron_decode_result_t *res, t
     }
 }
 
-static bool clear_sign_call_external_plugin(uint32_t message, void *parameters) {
+static bool call_external_plugin(uint32_t message, void *parameters) {
     uint32_t params[3];
 
     if (pluginType != PLUGIN_TYPE_EXTERNAL || dataContext.tokenContext.pluginName[0] == '\0') {
@@ -145,25 +145,25 @@ static bool clear_sign_call_external_plugin(uint32_t message, void *parameters) 
     return true;
 }
 
-static bool clear_sign_external_plugin_init(size_t data_size) {
+static bool external_plugin_init(size_t data_size) {
     ethPluginInitContract_t init = {0};
 
     init.interfaceVersion = ETH_PLUGIN_INTERFACE_VERSION_LATEST;
     init.txContent = &txContent;
     init.pluginContextLength = PLUGIN_CONTEXT_SIZE;
-    init.selector = clear_sign_plugin_stream.selector;
+    init.selector = external_plugin_stream.selector;
     init.dataSize = data_size;
     init.bip32 = &tmpCtx.transactionContext.bip32_path;
     init.pluginContext = dataContext.tokenContext.pluginContext;
     init.result = ETH_PLUGIN_RESULT_ERROR;
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_INIT_CONTRACT, &init)) {
+    if (!call_external_plugin(ETH_PLUGIN_INIT_CONTRACT, &init)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) init.result;
     if (init.result == ETH_PLUGIN_RESULT_OK) {
-        clear_sign_plugin_stream.plugin_active = true;
+        external_plugin_stream.plugin_active = true;
         return true;
     }
     if (init.result == ETH_PLUGIN_RESULT_FALLBACK) {
@@ -175,7 +175,7 @@ static bool clear_sign_external_plugin_init(size_t data_size) {
     return false;
 }
 
-static bool clear_sign_external_plugin_provide_parameter(const uint8_t *parameter,
+static bool external_plugin_provide_parameter(const uint8_t *parameter,
                                                          uint8_t parameter_size,
                                                          uint32_t parameter_offset) {
     ethPluginProvideParameter_t provide = {0};
@@ -187,7 +187,7 @@ static bool clear_sign_external_plugin_provide_parameter(const uint8_t *paramete
     provide.parameter_size = parameter_size;
     provide.result = ETH_PLUGIN_RESULT_ERROR;
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_PROVIDE_PARAMETER, &provide)) {
+    if (!call_external_plugin(ETH_PLUGIN_PROVIDE_PARAMETER, &provide)) {
         return false;
     }
 
@@ -204,14 +204,14 @@ static bool clear_sign_external_plugin_provide_parameter(const uint8_t *paramete
     return false;
 }
 
-static bool clear_sign_external_plugin_finalize(ethPluginFinalize_t *finalize) {
+static bool external_plugin_finalize(ethPluginFinalize_t *finalize) {
     if (finalize == NULL) {
         return false;
     }
 
     memset(finalize, 0, sizeof(*finalize));
 
-    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+    if (!external_plugin_stream.plugin_initialized || !external_plugin_stream.plugin_active) {
         finalize->result = ETH_PLUGIN_RESULT_FALLBACK;
         return true;
     }
@@ -220,7 +220,7 @@ static bool clear_sign_external_plugin_finalize(ethPluginFinalize_t *finalize) {
     finalize->pluginContext = dataContext.tokenContext.pluginContext;
     finalize->result = ETH_PLUGIN_RESULT_ERROR;
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_FINALIZE, finalize)) {
+    if (!call_external_plugin(ETH_PLUGIN_FINALIZE, finalize)) {
         return false;
     }
 
@@ -237,7 +237,7 @@ static bool clear_sign_external_plugin_finalize(ethPluginFinalize_t *finalize) {
     return true;
 }
 
-static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *finalize,
+static bool external_plugin_provide_info(const ethPluginFinalize_t *finalize,
                                                     ethPluginProvideInfo_t *provide) {
     if (provide == NULL) {
         return false;
@@ -252,10 +252,10 @@ static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *f
 
     provide->result = finalize->result;
 
-    clear_sign_plugin_ui_info.item1 = NULL;
-    clear_sign_plugin_ui_info.item2 = NULL;
+    external_plugin_ui_info.item1 = NULL;
+    external_plugin_ui_info.item2 = NULL;
 
-    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+    if (!external_plugin_stream.plugin_initialized || !external_plugin_stream.plugin_active) {
         return true;
     }
 
@@ -284,7 +284,7 @@ static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *f
         }
     }
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_PROVIDE_INFO, provide)) {
+    if (!call_external_plugin(ETH_PLUGIN_PROVIDE_INFO, provide)) {
         return false;
     }
 
@@ -298,14 +298,14 @@ static bool clear_sign_external_plugin_provide_info(const ethPluginFinalize_t *f
         return false;
     }
 
-    clear_sign_plugin_ui_info.item1 = provide->item1;
-    clear_sign_plugin_ui_info.item2 = provide->item2;
+    external_plugin_ui_info.item1 = provide->item1;
+    external_plugin_ui_info.item2 = provide->item2;
 
     return true;
 }
 
-static void clear_sign_plugin_ui_cache_reset(void) {
-    memset(&clear_sign_plugin_ui_cache, 0, sizeof(clear_sign_plugin_ui_cache));
+static void external_plugin_ui_cache_reset(void) {
+    memset(&external_plugin_ui_cache, 0, sizeof(external_plugin_ui_cache));
 }
 
 static void lowercase_ascii_inplace(char *s, size_t s_len) {
@@ -320,18 +320,18 @@ static void lowercase_ascii_inplace(char *s, size_t s_len) {
     }
 }
 
-static void clear_sign_plugin_prepare_title_msg(void) {
-    if (!clear_sign_plugin_ui_cache.has_contract_id || clear_sign_plugin_ui_cache.contract_name[0] == '\0') {
+static void external_plugin_prepare_title_msg(void) {
+    if (!external_plugin_ui_cache.has_contract_id || external_plugin_ui_cache.contract_name[0] == '\0') {
         char contract_addr[BASE58CHECK_ADDRESS_SIZE + 1];
 
         getBase58FromAddress(txContent.contractAddress, contract_addr, HAS_SETTING(S_TRUNCATE_ADDRESS));
-        snprintf(clear_sign_plugin_ui_cache.g_titleMsg,
-                 sizeof(clear_sign_plugin_ui_cache.g_titleMsg),
+        snprintf(external_plugin_ui_cache.g_titleMsg,
+                 sizeof(external_plugin_ui_cache.g_titleMsg),
                  "%s %s",
                  contract_addr,
                  "-");
-        snprintf(clear_sign_plugin_ui_cache.g_finishMsg,
-                 sizeof(clear_sign_plugin_ui_cache.g_finishMsg),
+        snprintf(external_plugin_ui_cache.g_finishMsg,
+                 sizeof(external_plugin_ui_cache.g_finishMsg),
                  "%s %s?",
                  contract_addr,
                  "-");
@@ -343,25 +343,25 @@ static void clear_sign_plugin_prepare_title_msg(void) {
         const char *title_prefix = "Review transaction";
         const char *finish_prefix = "Sign transaction";
 
-        strlcpy(contract_version, clear_sign_plugin_ui_cache.contract_version, sizeof(contract_version));
+        strlcpy(contract_version, external_plugin_ui_cache.contract_version, sizeof(contract_version));
         lowercase_ascii_inplace(contract_version, sizeof(contract_version));
 
-        snprintf(clear_sign_plugin_ui_cache.g_titleMsg,
-                 sizeof(clear_sign_plugin_ui_cache.g_titleMsg),
+        snprintf(external_plugin_ui_cache.g_titleMsg,
+                 sizeof(external_plugin_ui_cache.g_titleMsg),
                  "%s to %s on %s",
                  title_prefix,
                  contract_version,
-                 clear_sign_plugin_ui_cache.contract_name);
-        snprintf(clear_sign_plugin_ui_cache.g_finishMsg,
-                 sizeof(clear_sign_plugin_ui_cache.g_finishMsg),
+                 external_plugin_ui_cache.contract_name);
+        snprintf(external_plugin_ui_cache.g_finishMsg,
+                 sizeof(external_plugin_ui_cache.g_finishMsg),
                  "%s to %s on %s?",
                  finish_prefix,
                  contract_version,
-                 clear_sign_plugin_ui_cache.contract_name);
+                 external_plugin_ui_cache.contract_name);
     }
 }
 
-static bool clear_sign_plugin_query_contract_id_raw(char *name,
+static bool external_plugin_query_contract_id_raw(char *name,
                                                     size_t name_len,
                                                     char *version,
                                                     size_t version_len) {
@@ -374,7 +374,7 @@ static bool clear_sign_plugin_query_contract_id_raw(char *name,
     name[0] = '\0';
     version[0] = '\0';
 
-    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+    if (!external_plugin_stream.plugin_initialized || !external_plugin_stream.plugin_active) {
         return false;
     }
 
@@ -386,7 +386,7 @@ static bool clear_sign_plugin_query_contract_id_raw(char *name,
     query.pluginContext = dataContext.tokenContext.pluginContext;
     query.result = ETH_PLUGIN_RESULT_ERROR;
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_ID, &query)) {
+    if (!call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_ID, &query)) {
         return false;
     }
 
@@ -394,52 +394,52 @@ static bool clear_sign_plugin_query_contract_id_raw(char *name,
     return query.result == ETH_PLUGIN_RESULT_OK;
 }
 
-bool clear_sign_plugin_get_cached_ui_items_count(uint8_t *count) {
+bool external_plugin_get_cached_ui_items_count(uint8_t *count) {
     if (count == NULL) {
         return false;
     }
 
     *count = 0;
 
-    if (!clear_sign_plugin_ui_cache.ready) {
+    if (!external_plugin_ui_cache.ready) {
         return false;
     }
 
-    *count = clear_sign_plugin_ui_cache.item_count;
+    *count = external_plugin_ui_cache.item_count;
     return true;
 }
 
-bool clear_sign_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len) {
+bool external_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len) {
     if ((title_msg == NULL) || (title_msg_len == 0)) {
         return false;
     }
 
     title_msg[0] = '\0';
 
-    if (!clear_sign_plugin_ui_cache.ready || clear_sign_plugin_ui_cache.g_titleMsg[0] == '\0') {
+    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_titleMsg[0] == '\0') {
         return false;
     }
 
-    strlcpy(title_msg, clear_sign_plugin_ui_cache.g_titleMsg, title_msg_len);
+    strlcpy(title_msg, external_plugin_ui_cache.g_titleMsg, title_msg_len);
     return true;
 }
 
-bool clear_sign_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_len) {
+bool external_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_len) {
     if ((finish_msg == NULL) || (finish_msg_len == 0)) {
         return false;
     }
 
     finish_msg[0] = '\0';
 
-    if (!clear_sign_plugin_ui_cache.ready || clear_sign_plugin_ui_cache.g_finishMsg[0] == '\0') {
+    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_finishMsg[0] == '\0') {
         return false;
     }
 
-    strlcpy(finish_msg, clear_sign_plugin_ui_cache.g_finishMsg, finish_msg_len);
+    strlcpy(finish_msg, external_plugin_ui_cache.g_finishMsg, finish_msg_len);
     return true;
 }
 
-static bool clear_sign_plugin_query_contract_ui_raw(uint8_t screen_index,
+static bool external_plugin_query_contract_ui_raw(uint8_t screen_index,
                                                     char *title,
                                                     size_t title_len,
                                                     char *out_msg,
@@ -453,13 +453,13 @@ static bool clear_sign_plugin_query_contract_ui_raw(uint8_t screen_index,
     title[0] = '\0';
     out_msg[0] = '\0';
 
-    if (!clear_sign_plugin_stream.plugin_initialized || !clear_sign_plugin_stream.plugin_active) {
+    if (!external_plugin_stream.plugin_initialized || !external_plugin_stream.plugin_active) {
         return false;
     }
 
     query.txContent = &txContent;
-    query.item1 = clear_sign_plugin_ui_info.item1;
-    query.item2 = clear_sign_plugin_ui_info.item2;
+    query.item1 = external_plugin_ui_info.item1;
+    query.item2 = external_plugin_ui_info.item2;
     strlcpy(query.network_ticker, chainConfig->coinName, sizeof(query.network_ticker));
     query.screenIndex = screen_index;
     query.title = title;
@@ -469,7 +469,7 @@ static bool clear_sign_plugin_query_contract_ui_raw(uint8_t screen_index,
     query.pluginContext = dataContext.tokenContext.pluginContext;
     query.result = ETH_PLUGIN_RESULT_ERROR;
 
-    if (!clear_sign_call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_UI, &query)) {
+    if (!call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_UI, &query)) {
         return false;
     }
 
@@ -477,7 +477,7 @@ static bool clear_sign_plugin_query_contract_ui_raw(uint8_t screen_index,
     return query.result == ETH_PLUGIN_RESULT_OK;
 }
 
-bool clear_sign_plugin_get_cached_contract_ui(uint8_t screen_index,
+bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
                                               char *title,
                                               size_t title_len,
                                               char *out_msg,
@@ -489,82 +489,82 @@ bool clear_sign_plugin_get_cached_contract_ui(uint8_t screen_index,
     title[0] = '\0';
     out_msg[0] = '\0';
 
-    if (!clear_sign_plugin_ui_cache.ready || (screen_index >= clear_sign_plugin_ui_cache.item_count)) {
+    if (!external_plugin_ui_cache.ready || (screen_index >= external_plugin_ui_cache.item_count)) {
         return false;
     }
 
-    strlcpy(title, clear_sign_plugin_ui_cache.title[screen_index], title_len);
-    strlcpy(out_msg, clear_sign_plugin_ui_cache.msg[screen_index], out_msg_len);
+    strlcpy(title, external_plugin_ui_cache.title[screen_index], title_len);
+    strlcpy(out_msg, external_plugin_ui_cache.msg[screen_index], out_msg_len);
     return true;
 }
 
-static uint16_t clear_sign_prepare_plugin_ui_cache(void) {
+static uint16_t prepare_plugin_ui_cache(void) {
     uint8_t plugin_ui_items = dataContext.tokenContext.pluginUiMaxItems;
 
-    clear_sign_plugin_ui_cache_reset();
+    external_plugin_ui_cache_reset();
 
     if (plugin_ui_items == 0) {
         PRINTF("Plugin UI items cannot be zero\n");
         return E_INCORRECT_DATA;
     }
 
-    if (plugin_ui_items > CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS) {
+    if (plugin_ui_items > EXTERNAL_PLUGIN_UI_MAX_ITEMS) {
         PRINTF("Plugin UI items exceed cache capacity (%u > %u)\n",
                (unsigned int) plugin_ui_items,
-               (unsigned int) CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS);
+               (unsigned int) EXTERNAL_PLUGIN_UI_MAX_ITEMS);
         return E_INCORRECT_DATA;
     }
 
-    if (!clear_sign_plugin_query_contract_id_raw(clear_sign_plugin_ui_cache.contract_name,
-                                                 sizeof(clear_sign_plugin_ui_cache.contract_name),
-                                                 clear_sign_plugin_ui_cache.contract_version,
-                                                 sizeof(clear_sign_plugin_ui_cache.contract_version))) {
+    if (!external_plugin_query_contract_id_raw(external_plugin_ui_cache.contract_name,
+                                                 sizeof(external_plugin_ui_cache.contract_name),
+                                                 external_plugin_ui_cache.contract_version,
+                                                 sizeof(external_plugin_ui_cache.contract_version))) {
         PRINTF("Plugin contract ID query failed\n");
-        clear_sign_plugin_ui_cache_reset();
-        return clear_sign_plugin_failure_sw();
+        external_plugin_ui_cache_reset();
+        return external_plugin_failure_sw();
     }
-    clear_sign_plugin_ui_cache.has_contract_id = true;
-    clear_sign_plugin_prepare_title_msg();
+    external_plugin_ui_cache.has_contract_id = true;
+    external_plugin_prepare_title_msg();
 
     for (uint8_t i = 0; i < plugin_ui_items; i++) {
-        if (!clear_sign_plugin_query_contract_ui_raw(i,
-                                                     clear_sign_plugin_ui_cache.title[i],
-                                                     sizeof(clear_sign_plugin_ui_cache.title[i]),
-                                                     clear_sign_plugin_ui_cache.msg[i],
-                                                     sizeof(clear_sign_plugin_ui_cache.msg[i]))) {
+        if (!external_plugin_query_contract_ui_raw(i,
+                                                     external_plugin_ui_cache.title[i],
+                                                     sizeof(external_plugin_ui_cache.title[i]),
+                                                     external_plugin_ui_cache.msg[i],
+                                                     sizeof(external_plugin_ui_cache.msg[i]))) {
             PRINTF("Plugin UI query failed at screen %u\n", (unsigned int) i);
-            clear_sign_plugin_ui_cache_reset();
-            return clear_sign_plugin_failure_sw();
+            external_plugin_ui_cache_reset();
+            return external_plugin_failure_sw();
         }
     }
 
-    clear_sign_plugin_ui_cache.item_count = plugin_ui_items;
-    clear_sign_plugin_ui_cache.ready = true;
+    external_plugin_ui_cache.item_count = plugin_ui_items;
+    external_plugin_ui_cache.ready = true;
     return E_OK;
 }
 
-static bool clear_sign_plugin_flush_parameter(void) {
-    if (clear_sign_plugin_stream.parameter_len == 0) {
+static bool external_plugin_flush_parameter(void) {
+    if (external_plugin_stream.parameter_len == 0) {
         return true;
     }
 
-    if (clear_sign_plugin_stream.plugin_initialized && clear_sign_plugin_stream.plugin_active) {
-        if (!clear_sign_external_plugin_provide_parameter(clear_sign_plugin_stream.parameter,
-                                                          clear_sign_plugin_stream.parameter_len,
-                                                          clear_sign_plugin_stream.parameter_offset)) {
-            clear_sign_record_plugin_failure();
+    if (external_plugin_stream.plugin_initialized && external_plugin_stream.plugin_active) {
+        if (!external_plugin_provide_parameter(external_plugin_stream.parameter,
+                                                          external_plugin_stream.parameter_len,
+                                                          external_plugin_stream.parameter_offset)) {
+            record_plugin_failure();
             return false;
         }
-        clear_sign_plugin_stream.parameter_offset += clear_sign_plugin_stream.parameter_len;
+        external_plugin_stream.parameter_offset += external_plugin_stream.parameter_len;
         dataContext.tokenContext.fieldIndex++;
     }
 
-    clear_sign_plugin_stream.parameter_len = 0;
+    external_plugin_stream.parameter_len = 0;
     dataContext.tokenContext.fieldOffset = 0;
     return true;
 }
 
-static bool clear_sign_plugin_feed_data_chunk(void *ctx,
+static bool external_plugin_feed_data_chunk(void *ctx,
                                               const uint8_t *chunk,
                                               size_t chunk_len,
                                               size_t chunk_offset,
@@ -579,50 +579,50 @@ static bool clear_sign_plugin_feed_data_chunk(void *ctx,
         const uint8_t byte = chunk[i];
         const bool is_last_byte = ((chunk_offset + i + 1U) == total_len);
 
-        if (clear_sign_plugin_stream.selector_len < SELECTOR_LENGTH) {
-            clear_sign_plugin_stream.selector[clear_sign_plugin_stream.selector_len++] = byte;
-            if (clear_sign_plugin_stream.selector_len == SELECTOR_LENGTH) {
-                clear_sign_plugin_stream.parameter_offset = SELECTOR_LENGTH;
-                if (clear_sign_plugin_stream.expect_external_plugin) {
+        if (external_plugin_stream.selector_len < SELECTOR_LENGTH) {
+            external_plugin_stream.selector[external_plugin_stream.selector_len++] = byte;
+            if (external_plugin_stream.selector_len == SELECTOR_LENGTH) {
+                external_plugin_stream.parameter_offset = SELECTOR_LENGTH;
+                if (external_plugin_stream.expect_external_plugin) {
                     bool contract_match = true;
 
-                    if (clear_sign_decoder.result.has_contract_address &&
-                        clear_sign_decoder.result.contract_address_len == ADDRESS_SIZE) {
+                    if (tron_stream_decoder.result.has_contract_address &&
+                        tron_stream_decoder.result.contract_address_len == ADDRESS_SIZE) {
                         contract_match =
-                            (memcmp(clear_sign_decoder.result.contract_address,
-                                    clear_sign_plugin_stream.expected_contract,
+                            (memcmp(tron_stream_decoder.result.contract_address,
+                                    external_plugin_stream.expected_contract,
                                     ADDRESS_SIZE) == 0);
                     }
 
                     if (!contract_match ||
-                        memcmp(clear_sign_plugin_stream.selector,
-                               clear_sign_plugin_stream.expected_selector,
+                        memcmp(external_plugin_stream.selector,
+                               external_plugin_stream.expected_selector,
                                SELECTOR_LENGTH) != 0) {
-                        clear_sign_plugin_stream.expect_external_plugin = false;
+                        external_plugin_stream.expect_external_plugin = false;
                     } else {
-                        clear_sign_sync_partial_txcontent(&clear_sign_decoder.result, &txContent);
-                        if (!clear_sign_external_plugin_init(total_len)) {
-                            clear_sign_record_plugin_failure();
+                        sync_partial_txcontent(&tron_stream_decoder.result, &txContent);
+                        if (!external_plugin_init(total_len)) {
+                            record_plugin_failure();
                             return false;
                         }
-                        clear_sign_plugin_stream.plugin_initialized = true;
+                        external_plugin_stream.plugin_initialized = true;
                     }
                 }
             }
         } else {
-            if (clear_sign_plugin_stream.plugin_initialized && clear_sign_plugin_stream.plugin_active) {
-                clear_sign_plugin_stream.parameter[clear_sign_plugin_stream.parameter_len++] = byte;
-                dataContext.tokenContext.fieldOffset = clear_sign_plugin_stream.parameter_len;
-                if (clear_sign_plugin_stream.parameter_len == INT256_LENGTH) {
-                    if (!clear_sign_external_plugin_provide_parameter(
-                            clear_sign_plugin_stream.parameter,
+            if (external_plugin_stream.plugin_initialized && external_plugin_stream.plugin_active) {
+                external_plugin_stream.parameter[external_plugin_stream.parameter_len++] = byte;
+                dataContext.tokenContext.fieldOffset = external_plugin_stream.parameter_len;
+                if (external_plugin_stream.parameter_len == INT256_LENGTH) {
+                    if (!external_plugin_provide_parameter(
+                            external_plugin_stream.parameter,
                             INT256_LENGTH,
-                            clear_sign_plugin_stream.parameter_offset)) {
-                        clear_sign_record_plugin_failure();
+                            external_plugin_stream.parameter_offset)) {
+                        record_plugin_failure();
                         return false;
                     }
-                    clear_sign_plugin_stream.parameter_offset += INT256_LENGTH;
-                    clear_sign_plugin_stream.parameter_len = 0;
+                    external_plugin_stream.parameter_offset += INT256_LENGTH;
+                    external_plugin_stream.parameter_len = 0;
                     dataContext.tokenContext.fieldOffset = 0;
                     dataContext.tokenContext.fieldIndex++;
                 }
@@ -630,7 +630,7 @@ static bool clear_sign_plugin_feed_data_chunk(void *ctx,
         }
 
         if (is_last_byte) {
-            if (!clear_sign_plugin_flush_parameter()) {
+            if (!external_plugin_flush_parameter()) {
                 return false;
             }
         }
@@ -639,11 +639,11 @@ static bool clear_sign_plugin_feed_data_chunk(void *ctx,
     return true;
 }
 
-static void clear_sign_plugin_stream_reset(void) {
-    memset(&clear_sign_plugin_stream, 0, sizeof(clear_sign_plugin_stream));
-    memset(&clear_sign_plugin_ui_info, 0, sizeof(clear_sign_plugin_ui_info));
-    clear_sign_plugin_ui_cache_reset();
-    clear_sign_stream_plugin_failure_sw = E_OK;
+static void external_plugin_stream_reset(void) {
+    memset(&external_plugin_stream, 0, sizeof(external_plugin_stream));
+    memset(&external_plugin_ui_info, 0, sizeof(external_plugin_ui_info));
+    external_plugin_ui_cache_reset();
+    external_plugin_stream_failure_sw = E_OK;
 
     dataContext.tokenContext.fieldIndex = 0;
     dataContext.tokenContext.fieldOffset = 0;
@@ -653,21 +653,21 @@ static void clear_sign_plugin_stream_reset(void) {
     dataContext.tokenContext.pluginStatus = ETH_PLUGIN_RESULT_UNAVAILABLE;
 
     if (pluginType == PLUGIN_TYPE_EXTERNAL && dataContext.tokenContext.pluginName[0] != '\0') {
-        clear_sign_plugin_stream.expect_external_plugin = true;
-        memcpy(clear_sign_plugin_stream.expected_contract,
+        external_plugin_stream.expect_external_plugin = true;
+        memcpy(external_plugin_stream.expected_contract,
                dataContext.tokenContext.contractAddress,
                ADDRESS_SIZE);
-        memcpy(clear_sign_plugin_stream.expected_selector,
+        memcpy(external_plugin_stream.expected_selector,
                dataContext.tokenContext.methodSelector,
                SELECTOR_LENGTH);
     }
 }
 
-static bool clear_sign_decoder_complete(const tron_stream_decoder_t *dec) {
+static bool tron_stream_decoder_complete(const tron_stream_decoder_t *dec) {
     return tron_stream_decoder_is_done(dec);
 }
 
-static bool clear_sign_parse_trigger_data(const tron_decode_result_t *res, txContent_t *content) {
+static bool tron_stream_parse_trigger_data(const tron_decode_result_t *res, txContent_t *content) {
     if (res == NULL || content == NULL) {
         return false;
     }
@@ -685,7 +685,7 @@ static bool clear_sign_parse_trigger_data(const tron_decode_result_t *res, txCon
     return true;
 }
 
-static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent_t *content) {
+static bool tron_stream_fill_txcontent(const tron_decode_result_t *res, txContent_t *content) {
     if (res == NULL || content == NULL) {
         return false;
     }
@@ -725,7 +725,7 @@ static bool clear_sign_fill_txcontent(const tron_decode_result_t *res, txContent
         content->permission_id = (uint8_t) res->permission_id;
     }
 
-    if (!clear_sign_parse_trigger_data(res, content)) {
+    if (!tron_stream_parse_trigger_data(res, content)) {
         return false;
     }
 
@@ -769,10 +769,10 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
 
         initTx(&txContext, &txContent);
         customContractField = 0;
-        tron_stream_decoder_init_raw(&clear_sign_decoder, total_len);
-        clear_sign_plugin_stream_reset();
-        tron_stream_decoder_set_trigger_data_observer(&clear_sign_decoder,
-                                                      clear_sign_plugin_feed_data_chunk,
+        tron_stream_decoder_init_raw(&tron_stream_decoder, total_len);
+        external_plugin_stream_reset();
+        tron_stream_decoder_set_trigger_data_observer(&tron_stream_decoder,
+                                                      external_plugin_feed_data_chunk,
                                                       NULL);
 
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
@@ -794,9 +794,9 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
     // process buffer
-    if (!tron_stream_decoder_feed(&clear_sign_decoder, workBuffer, dataLength)) {
+    if (!tron_stream_decoder_feed(&tron_stream_decoder, workBuffer, dataLength)) {
         uint16_t sw =
-            (clear_sign_stream_plugin_failure_sw != E_OK) ? clear_sign_stream_plugin_failure_sw
+            (external_plugin_stream_failure_sw != E_OK) ? external_plugin_stream_failure_sw
                                                           : E_INCORRECT_DATA;
         reset_app_context();
         return io_send_sw(sw);
@@ -806,23 +806,23 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         return io_send_sw(E_OK);
     }
 
-    if (!clear_sign_decoder_complete(&clear_sign_decoder)) {
+    if (!tron_stream_decoder_complete(&tron_stream_decoder)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (!clear_sign_fill_txcontent(&clear_sign_decoder.result, &txContent)) {
+    if (!tron_stream_fill_txcontent(&tron_stream_decoder.result, &txContent)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (!clear_sign_external_plugin_finalize(&plugin_finalize)) {
+    if (!external_plugin_finalize(&plugin_finalize)) {
         reset_app_context();
-        return io_send_sw(clear_sign_plugin_failure_sw());
+        return io_send_sw(external_plugin_failure_sw());
     }
-    if (!clear_sign_external_plugin_provide_info(&plugin_finalize, &plugin_provide_info)) {
+    if (!external_plugin_provide_info(&plugin_finalize, &plugin_provide_info)) {
         reset_app_context();
-        return io_send_sw(clear_sign_plugin_failure_sw());
+        return io_send_sw(external_plugin_failure_sw());
     }
     plugin_finalize.result = plugin_provide_info.result;
     if (plugin_finalize.result != ETH_PLUGIN_RESULT_FALLBACK) {
@@ -840,7 +840,7 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
         }
     }
     {
-        const uint16_t sw = clear_sign_prepare_plugin_ui_cache();
+        const uint16_t sw = prepare_plugin_ui_cache();
         if (sw != E_OK) {
             PRINTF("Plugin query contract UI call failed\n");
             reset_app_context();
@@ -902,7 +902,7 @@ int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLe
 
     // approve clear sign custom contract
     // data_warning always false for clear sign case
-    ux_flow_display(APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT, false);
+    ux_flow_display(APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT, false);
 
     return 0;
 }

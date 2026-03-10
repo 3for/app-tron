@@ -874,25 +874,25 @@ const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
 
 // CUSTOM CONTRACT
 //////////////////////////////////////////////////////////////////////
-#define MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL (CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL + 8)
-static const ux_flow_step_t *ux_approval_clear_sign_plugin_flow[MAX_CLEAR_SIGN_PLUGIN_FLOW_STEPS_BAGL];
+#define MAX_EXTERNAL_PLUGIN_FLOW_STEPS_BAGL (EXTERNAL_PLUGIN_UI_MAX_ITEMS_BAGL + 8)
+static const ux_flow_step_t *ux_approval_external_plugin_flow[MAX_EXTERNAL_PLUGIN_FLOW_STEPS_BAGL];
 
-static void prepare_clear_sign_plugin_first_screen_bagl(void) {
-    if (!clear_sign_plugin_get_cached_title_msg(strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
+static void prepare_external_plugin_first_screen_bagl(void) {
+    if (!external_plugin_get_cached_title_msg(strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
         PRINTF("Missing cached clear-sign title\n");
         strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
     }
 }
 
-static void prepare_clear_sign_plugin_ui_screen_bagl(uint8_t screen_index) {
-    if (screen_index >= CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_BAGL) {
+static void prepare_external_plugin_ui_screen_bagl(uint8_t screen_index) {
+    if (screen_index >= EXTERNAL_PLUGIN_UI_MAX_ITEMS_BAGL) {
         PRINTF("Clear-sign UI index out of range: %u\n", (unsigned int) screen_index);
         strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
         strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
         return;
     }
 
-    if (!clear_sign_plugin_get_cached_contract_ui(screen_index,
+    if (!external_plugin_get_cached_contract_ui(screen_index,
                                                   strings.tmp.tmp2,
                                                   sizeof(strings.tmp.tmp2),
                                                   strings.tmp.tmp,
@@ -903,37 +903,37 @@ static void prepare_clear_sign_plugin_ui_screen_bagl(uint8_t screen_index) {
     }
 }
 
-#define DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(IDX)                                               \
-    static void prepare_clear_sign_plugin_ui_##IDX##_bagl(void) {                                  \
-        prepare_clear_sign_plugin_ui_screen_bagl(IDX);                                              \
+#define DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(IDX)                                               \
+    static void prepare_external_plugin_ui_##IDX##_bagl(void) {                                  \
+        prepare_external_plugin_ui_screen_bagl(IDX);                                              \
     }                                                                                               \
-    UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_ui_##IDX##_step,                               \
+    UX_STEP_NOCB_INIT(ux_approval_external_plugin_ui_##IDX##_step,                               \
                       bnnn_paging,                                                                  \
-                      prepare_clear_sign_plugin_ui_##IDX##_bagl(),                                  \
+                      prepare_external_plugin_ui_##IDX##_bagl(),                                  \
                       {.title = strings.tmp.tmp2, .text = strings.tmp.tmp});
 
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(0)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(1)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(2)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(3)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(4)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(5)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(6)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(7)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(8)
-DECLARE_CLEAR_SIGN_PLUGIN_UI_STEP_BAGL(9)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(0)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(1)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(2)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(3)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(4)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(5)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(6)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(7)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(8)
+DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(9)
 
-static const ux_flow_step_t *const ux_approval_clear_sign_plugin_ui_steps[] = {
-    &ux_approval_clear_sign_plugin_ui_0_step,
-    &ux_approval_clear_sign_plugin_ui_1_step,
-    &ux_approval_clear_sign_plugin_ui_2_step,
-    &ux_approval_clear_sign_plugin_ui_3_step,
-    &ux_approval_clear_sign_plugin_ui_4_step,
-    &ux_approval_clear_sign_plugin_ui_5_step,
-    &ux_approval_clear_sign_plugin_ui_6_step,
-    &ux_approval_clear_sign_plugin_ui_7_step,
-    &ux_approval_clear_sign_plugin_ui_8_step,
-    &ux_approval_clear_sign_plugin_ui_9_step,
+static const ux_flow_step_t *const ux_approval_external_plugin_ui_steps[] = {
+    &ux_approval_external_plugin_ui_0_step,
+    &ux_approval_external_plugin_ui_1_step,
+    &ux_approval_external_plugin_ui_2_step,
+    &ux_approval_external_plugin_ui_3_step,
+    &ux_approval_external_plugin_ui_4_step,
+    &ux_approval_external_plugin_ui_5_step,
+    &ux_approval_external_plugin_ui_6_step,
+    &ux_approval_external_plugin_ui_7_step,
+    &ux_approval_external_plugin_ui_8_step,
+    &ux_approval_external_plugin_ui_9_step,
 };
 
 UX_STEP_NOCB(ux_approval_custom_contract_1_step,
@@ -996,34 +996,34 @@ UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
-UX_STEP_NOCB_INIT(ux_approval_clear_sign_plugin_first_screen_step,
+UX_STEP_NOCB_INIT(ux_approval_external_plugin_first_screen_step,
                   bnnn_paging,
-                  prepare_clear_sign_plugin_first_screen_bagl(),
+                  prepare_external_plugin_first_screen_bagl(),
                   {.title = "", .text = strings.tmp.tmp});
 
-static bool init_clear_sign_plugin_flow_bagl(void) {
+static bool init_external_plugin_flow_bagl(void) {
     char title[SHARED_CTX_FIELD_2_SIZE];
     char ui_msg[SHARED_CTX_FIELD_1_SIZE];
     char flow_title[SHARED_CTX_FIELD_1_SIZE];
     uint8_t ui_items = 0;
     int step = 0;
 
-    if (!clear_sign_plugin_get_cached_ui_items_count(&ui_items)) {
+    if (!external_plugin_get_cached_ui_items_count(&ui_items)) {
         PRINTF("Missing cached clear-sign UI item count\n");
         return false;
     }
     if ((ui_items == 0) ||
-        (ui_items > (sizeof(ux_approval_clear_sign_plugin_ui_steps) /
-                     sizeof(ux_approval_clear_sign_plugin_ui_steps[0])))) {
+        (ui_items > (sizeof(ux_approval_external_plugin_ui_steps) /
+                     sizeof(ux_approval_external_plugin_ui_steps[0])))) {
         PRINTF("Invalid clear-sign UI items count: %u\n", (unsigned int) ui_items);
         return false;
     }
-    if (!clear_sign_plugin_get_cached_title_msg(flow_title, sizeof(flow_title))) {
+    if (!external_plugin_get_cached_title_msg(flow_title, sizeof(flow_title))) {
         PRINTF("Missing cached clear-sign flow title\n");
         return false;
     }
     for (uint8_t i = 0; i < ui_items; i++) {
-        if (!clear_sign_plugin_get_cached_contract_ui(i,
+        if (!external_plugin_get_cached_contract_ui(i,
                                                       title,
                                                       sizeof(title),
                                                       ui_msg,
@@ -1033,18 +1033,18 @@ static bool init_clear_sign_plugin_flow_bagl(void) {
         }
     }
 
-    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_clear_sign_plugin_first_screen_step;
+    ux_approval_external_plugin_flow[step++] = &ux_approval_external_plugin_first_screen_step;
 
     for (uint8_t i = 0; i < ui_items; i++) {
-        ux_approval_clear_sign_plugin_flow[step++] = ux_approval_clear_sign_plugin_ui_steps[i];
+        ux_approval_external_plugin_flow[step++] = ux_approval_external_plugin_ui_steps[i];
     }
 
-    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_from_address_step;
-    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_confirm_step;
-    ux_approval_clear_sign_plugin_flow[step++] = &ux_approval_reject_step;
-    ux_approval_clear_sign_plugin_flow[step++] = FLOW_END_STEP;
+    ux_approval_external_plugin_flow[step++] = &ux_approval_from_address_step;
+    ux_approval_external_plugin_flow[step++] = &ux_approval_confirm_step;
+    ux_approval_external_plugin_flow[step++] = &ux_approval_reject_step;
+    ux_approval_external_plugin_flow[step++] = FLOW_END_STEP;
 
-    ux_flow_init(0, ux_approval_clear_sign_plugin_flow, NULL);
+    ux_flow_init(0, ux_approval_external_plugin_flow, NULL);
     return true;
 }
 
@@ -1178,8 +1178,8 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                                                  : ux_approval_custom_contract_flow),
                          NULL);
             break;
-        case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
-            if (!init_clear_sign_plugin_flow_bagl()) {
+        case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
+            if (!init_external_plugin_flow_bagl()) {
                 PRINTF("Failed to init clear-sign plugin flow\n");
                 ui_callback_tx_cancel(true);
             }

@@ -105,7 +105,7 @@ int apdu_dispatcher(const command_t *cmd) {
             // Set External Plugin
             return handleSetExternalPlugin(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-        case INS_CLEAR_SIGN:
+        case INS_SIGN_EXTERNAL_PLUGIN:
             // Plugin Request Signature
             return handleClearSign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 

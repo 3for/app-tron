@@ -71,7 +71,7 @@ def test_set_external_plugin_returns_plugin_not_found(
         raise
 
 
-def test_clear_sign_without_external_plugin_returns_invalid_data(
+def test_sign_external_plugin_without_external_plugin_returns_invalid_data(
         firmware: Firmware, backend: BackendInterface):
     client = TronClient(backend, firmware, None)
     tx = build_trc20_transfer_tx(client)
@@ -80,6 +80,6 @@ def test_clear_sign_without_external_plugin_returns_invalid_data(
         client.sign(client.getAccount(0)["path"],
                     tx,
                     navigate=False,
-                    ins=InsType.CLEAR_SIGN,
+                    ins=InsType.SIGN_EXTERNAL_PLUGIN,
                     include_tx_len=True)
     assert e.value.status == Errors.INCORRECT_DATA
