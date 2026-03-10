@@ -10,10 +10,10 @@ import keychain
 
 import sys
 from pathlib import Path
+
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}/proto")
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
-
 
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
 TRC20_TRANSFER_SELECTOR = bytes.fromhex("a9059cbb")

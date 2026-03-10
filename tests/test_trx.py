@@ -715,6 +715,7 @@ class TestTRX():
                     client.address_hex("TKkeiboTkxXKJpbmVFbv4a8ov5rAfRDMf9")),
                 data=tx_calldata))
         self.sign_and_validate(client, firmware, 0, tx)
+
     def test_trx_trc20_approve(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx_calldata = build_trc20_calldata(
