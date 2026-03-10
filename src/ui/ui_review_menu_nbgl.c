@@ -32,10 +32,10 @@
 // Macros
 #define WARNING_TYPES_NUMBER 2
 #define MAX_TX_FIELDS        20
-#define MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS CLEAR_SIGN_PLUGIN_UI_MAX_ITEMS_NBGL
+#define MAX_EXTERNAL_PLUGIN_UI_FIELDS EXTERNAL_PLUGIN_UI_MAX_ITEMS_NBGL
 
-#if (MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS != (MAX_TX_FIELDS - 3))
-#error "MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS must be MAX_TX_FIELDS - 3"
+#if (MAX_EXTERNAL_PLUGIN_UI_FIELDS != (MAX_TX_FIELDS - 3))
+#error "MAX_EXTERNAL_PLUGIN_UI_FIELDS must be MAX_TX_FIELDS - 3"
 #endif
 
 static const char *stringLabelSenderAddress = "From";
@@ -66,8 +66,8 @@ static nbgl_pageInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
 static char clearSignPluginTitleMsg[SHARED_CTX_FIELD_1_SIZE];
 static char clearSignPluginFinishMsg[SHARED_CTX_FIELD_1_SIZE];
-static char clearSignPluginUiTitles[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_2_SIZE];
-static char clearSignPluginUiMsgs[MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
+static char clearSignPluginUiTitles[MAX_EXTERNAL_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_2_SIZE];
+static char clearSignPluginUiMsgs[MAX_EXTERNAL_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
 
 // Static functions declarations
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -136,21 +136,21 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     uint8_t pluginUiItems = 0;
     uint8_t fieldIndex = 0;
 
-    if (!clear_sign_plugin_get_cached_ui_items_count(&pluginUiItems)) {
+    if (!external_plugin_get_cached_ui_items_count(&pluginUiItems)) {
         return false;
     }
 
-    if ((pluginUiItems == 0) || (pluginUiItems > MAX_CLEAR_SIGN_PLUGIN_UI_FIELDS)) {
+    if ((pluginUiItems == 0) || (pluginUiItems > MAX_EXTERNAL_PLUGIN_UI_FIELDS)) {
         return false;
     }
 
     memset(clearSignPluginTitleMsg, 0, sizeof(clearSignPluginTitleMsg));
     memset(clearSignPluginFinishMsg, 0, sizeof(clearSignPluginFinishMsg));
-    if (!clear_sign_plugin_get_cached_title_msg(clearSignPluginTitleMsg,
+    if (!external_plugin_get_cached_title_msg(clearSignPluginTitleMsg,
                                                 sizeof(clearSignPluginTitleMsg))) {
         return false;
     }
-    if (!clear_sign_plugin_get_cached_finish_msg(clearSignPluginFinishMsg,
+    if (!external_plugin_get_cached_finish_msg(clearSignPluginFinishMsg,
                                                  sizeof(clearSignPluginFinishMsg))) {
         return false;
     }
@@ -162,7 +162,7 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     for (uint8_t i = 0; i < pluginUiItems; i++) {
         memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
         memset(clearSignPluginUiMsgs[i], 0, sizeof(clearSignPluginUiMsgs[i]));
-        if (!clear_sign_plugin_get_cached_contract_ui(i,
+        if (!external_plugin_get_cached_contract_ui(i,
                                                       clearSignPluginUiTitles[i],
                                                       sizeof(clearSignPluginUiTitles[i]),
                                                       clearSignPluginUiMsgs[i],
@@ -421,7 +421,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 5;
             txInfos.flowSubtitle = "Custom Contract";
             break;
-        case APPROVAL_CLEAR_SIGN_CUSTOM_CONTRACT:
+        case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
             if (!prepareClearSignCustomContractPluginUi()) {
                 ui_callback_tx_cancel(false);
                 nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);

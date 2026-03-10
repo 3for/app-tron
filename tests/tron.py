@@ -74,7 +74,7 @@ class InsType(IntEnum):
     SIGN_PERSONAL_MESSAGE_FULL_DISPLAY = 0xC8
     GET_ECDH_SECRET = 0x0A
     SIGN_TIP_712_MESSAGE = 0x0C
-    CLEAR_SIGN = 0xC4
+    SIGN_EXTERNAL_PLUGIN = 0xC4
 
 
 class Errors(IntEnum):
@@ -381,7 +381,7 @@ class TronClient:
         # Split transaction in multiples APDU
         tx_len = len(tx)
         data = pack_derivation_path(path)
-        if ins == InsType.CLEAR_SIGN:
+        if ins == InsType.SIGN_EXTERNAL_PLUGIN:
             if include_tx_len:
                 data += pack(">I", tx_len)
             max_first = MAX_APDU_LEN - len(data)
