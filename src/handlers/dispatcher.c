@@ -107,7 +107,7 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_SIGN_EXTERNAL_PLUGIN:
             // Plugin Request Signature
-            return handleClearSign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            return handleSignExternalPlugin(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);

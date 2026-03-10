@@ -739,7 +739,7 @@ static bool tron_stream_fill_txcontent(const tron_decode_result_t *res, txConten
     return true;
 }
 
-int handleClearSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     ethPluginFinalize_t plugin_finalize;
     ethPluginProvideInfo_t plugin_provide_info;
 
