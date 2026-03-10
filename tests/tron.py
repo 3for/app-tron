@@ -438,13 +438,11 @@ class TronClient:
             p1 = P1.LAST
 
         if navigate:
-            with self._client.exchange_async(CLA, ins, p1, 0x00,
-                                             messages[-1]):
+            with self._client.exchange_async(CLA, ins, p1, 0x00, messages[-1]):
                 self.navigate(snappath, text, warning_approve)
             return self._client.last_async_response
         else:
-            return self._client.exchange(CLA, ins, p1, 0x00,
-                                         messages[-1])
+            return self._client.exchange(CLA, ins, p1, 0x00, messages[-1])
 
     def sign_for_trusted_name(self,
                               bip32_path: str,
