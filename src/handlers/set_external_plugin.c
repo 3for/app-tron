@@ -22,7 +22,7 @@
 #include "os_io_seproxyhal.h"
 #include "public_keys.h"
 #include "app_errors.h"
-#include "eth_plugin_interface.h"
+#include "tron_plugin_interface.h"
 #include "settings.h"
 
 int handleSetExternalPlugin(uint8_t p1,
@@ -34,7 +34,7 @@ int handleSetExternalPlugin(uint8_t p1,
     PRINTF("Handling set Plugin\n");
     uint8_t hash[INT256_LENGTH];
     uint8_t pluginNameLength = *workBuffer;
-    uint32_t params[2];
+    unsigned int params[2];
     cx_err_t error = CX_INTERNAL_ERROR;
 
     PRINTF("plugin Name Length: %d\n", pluginNameLength);
@@ -79,8 +79,8 @@ int handleSetExternalPlugin(uint8_t p1,
     PRINTF("Check external plugin %s\n", dataContext.tokenContext.pluginName);
 
     // Check if the plugin is present on the device
-    params[0] = (uint32_t) dataContext.tokenContext.pluginName;
-    params[1] = ETH_PLUGIN_CHECK_PRESENCE;
+    params[0] = (unsigned int) (uintptr_t) dataContext.tokenContext.pluginName;
+    params[1] = TRON_PLUGIN_CHECK_PRESENCE;
     BEGIN_TRY {
         TRY {
             os_lib_call(params);

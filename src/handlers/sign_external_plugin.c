@@ -71,14 +71,14 @@ static external_plugin_ui_cache_t external_plugin_ui_cache;
 static uint16_t external_plugin_stream_failure_sw;
 
 static uint16_t external_plugin_status_to_sw(uint8_t plugin_status) {
-    if (plugin_status == ETH_PLUGIN_RESULT_UNAVAILABLE) {
+    if (plugin_status == TRON_PLUGIN_RESULT_UNAVAILABLE) {
         return E_PLUGIN_NOT_FOUND;
     }
-    if (plugin_status == ETH_PLUGIN_RESULT_FALLBACK) {
+    if (plugin_status == TRON_PLUGIN_RESULT_FALLBACK) {
         return E_CONDITIONS_OF_USE_NOT_SATISFIED;
     }
 
-    if (plugin_status <= ETH_PLUGIN_RESULT_UNSUCCESSFUL) {
+    if (plugin_status <= TRON_PLUGIN_RESULT_UNSUCCESSFUL) {
         return E_CONDITIONS_OF_USE_NOT_SATISFIED;
     }
 
@@ -117,15 +117,15 @@ static void sync_partial_txcontent(const tron_decode_result_t *res, txContent_t 
 }
 
 static bool call_external_plugin(uint32_t message, void *parameters) {
-    uint32_t params[3];
+    unsigned int params[3];
 
     if (pluginType != PLUGIN_TYPE_EXTERNAL || dataContext.tokenContext.pluginName[0] == '\0') {
         return true;
     }
 
-    params[0] = (uint32_t) dataContext.tokenContext.pluginName;
-    params[1] = message;
-    params[2] = (uint32_t) parameters;
+    params[0] = (unsigned int) (uintptr_t) dataContext.tokenContext.pluginName;
+    params[1] = (unsigned int) message;
+    params[2] = (unsigned int) (uintptr_t) parameters;
 
     BEGIN_TRY {
         TRY {
@@ -133,7 +133,7 @@ static bool call_external_plugin(uint32_t message, void *parameters) {
         }
         CATCH_OTHER(e) {
             PRINTF("External plugin call failed (%d)\n", e);
-            dataContext.tokenContext.pluginStatus = ETH_PLUGIN_RESULT_UNAVAILABLE;
+            dataContext.tokenContext.pluginStatus = TRON_PLUGIN_RESULT_UNAVAILABLE;
             CLOSE_TRY;
             return false;
         }
@@ -146,27 +146,27 @@ static bool call_external_plugin(uint32_t message, void *parameters) {
 }
 
 static bool external_plugin_init(size_t data_size) {
-    ethPluginInitContract_t init = {0};
+    tronPluginInitContract_t init = {0};
 
-    init.interfaceVersion = ETH_PLUGIN_INTERFACE_VERSION_LATEST;
+    init.interfaceVersion = TRON_PLUGIN_INTERFACE_VERSION_LATEST;
     init.txContent = &txContent;
     init.pluginContextLength = PLUGIN_CONTEXT_SIZE;
     init.selector = external_plugin_stream.selector;
     init.dataSize = data_size;
     init.bip32 = &tmpCtx.transactionContext.bip32_path;
     init.pluginContext = dataContext.tokenContext.pluginContext;
-    init.result = ETH_PLUGIN_RESULT_ERROR;
+    init.result = TRON_PLUGIN_RESULT_ERROR;
 
-    if (!call_external_plugin(ETH_PLUGIN_INIT_CONTRACT, &init)) {
+    if (!call_external_plugin(TRON_PLUGIN_INIT_CONTRACT, &init)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) init.result;
-    if (init.result == ETH_PLUGIN_RESULT_OK) {
+    if (init.result == TRON_PLUGIN_RESULT_OK) {
         external_plugin_stream.plugin_active = true;
         return true;
     }
-    if (init.result == ETH_PLUGIN_RESULT_FALLBACK) {
+    if (init.result == TRON_PLUGIN_RESULT_FALLBACK) {
         PRINTF("External plugin init fallback (%d)\n", init.result);
         return false;
     }
@@ -178,24 +178,24 @@ static bool external_plugin_init(size_t data_size) {
 static bool external_plugin_provide_parameter(const uint8_t *parameter,
                                                          uint8_t parameter_size,
                                                          uint32_t parameter_offset) {
-    ethPluginProvideParameter_t provide = {0};
+    tronPluginProvideParameter_t provide = {0};
 
     provide.txContent = &txContent;
     provide.parameter = parameter;
     provide.parameterOffset = parameter_offset;
     provide.pluginContext = dataContext.tokenContext.pluginContext;
     provide.parameter_size = parameter_size;
-    provide.result = ETH_PLUGIN_RESULT_ERROR;
+    provide.result = TRON_PLUGIN_RESULT_ERROR;
 
-    if (!call_external_plugin(ETH_PLUGIN_PROVIDE_PARAMETER, &provide)) {
+    if (!call_external_plugin(TRON_PLUGIN_PROVIDE_PARAMETER, &provide)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) provide.result;
-    if (provide.result == ETH_PLUGIN_RESULT_OK) {
+    if (provide.result == TRON_PLUGIN_RESULT_OK) {
         return true;
     }
-    if (provide.result == ETH_PLUGIN_RESULT_FALLBACK) {
+    if (provide.result == TRON_PLUGIN_RESULT_FALLBACK) {
         PRINTF("External plugin provide parameter fallback (%d)\n", provide.result);
         return false;
     }
@@ -204,7 +204,7 @@ static bool external_plugin_provide_parameter(const uint8_t *parameter,
     return false;
 }
 
-static bool external_plugin_finalize(ethPluginFinalize_t *finalize) {
+static bool external_plugin_finalize(tronPluginFinalize_t *finalize) {
     if (finalize == NULL) {
         return false;
     }
@@ -212,24 +212,24 @@ static bool external_plugin_finalize(ethPluginFinalize_t *finalize) {
     memset(finalize, 0, sizeof(*finalize));
 
     if (!external_plugin_stream.plugin_initialized || !external_plugin_stream.plugin_active) {
-        finalize->result = ETH_PLUGIN_RESULT_FALLBACK;
+        finalize->result = TRON_PLUGIN_RESULT_FALLBACK;
         return true;
     }
 
     finalize->txContent = &txContent;
     finalize->pluginContext = dataContext.tokenContext.pluginContext;
-    finalize->result = ETH_PLUGIN_RESULT_ERROR;
+    finalize->result = TRON_PLUGIN_RESULT_ERROR;
 
-    if (!call_external_plugin(ETH_PLUGIN_FINALIZE, finalize)) {
+    if (!call_external_plugin(TRON_PLUGIN_FINALIZE, finalize)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) finalize->result;
-    if (finalize->result == ETH_PLUGIN_RESULT_FALLBACK) {
+    if (finalize->result == TRON_PLUGIN_RESULT_FALLBACK) {
         PRINTF("External plugin finalize fallback (%d)\n", finalize->result);
         return false;
     }
-    if (finalize->result <= ETH_PLUGIN_RESULT_UNSUCCESSFUL) {
+    if (finalize->result <= TRON_PLUGIN_RESULT_UNSUCCESSFUL) {
         PRINTF("External plugin finalize rejected (%d)\n", finalize->result);
         return false;
     }
@@ -237,14 +237,14 @@ static bool external_plugin_finalize(ethPluginFinalize_t *finalize) {
     return true;
 }
 
-static bool external_plugin_provide_info(const ethPluginFinalize_t *finalize,
-                                                    ethPluginProvideInfo_t *provide) {
+static bool external_plugin_provide_info(const tronPluginFinalize_t *finalize,
+                                                    tronPluginProvideInfo_t *provide) {
     if (provide == NULL) {
         return false;
     }
 
     memset(provide, 0, sizeof(*provide));
-    provide->result = ETH_PLUGIN_RESULT_FALLBACK;
+    provide->result = TRON_PLUGIN_RESULT_FALLBACK;
 
     if (finalize == NULL) {
         return false;
@@ -265,7 +265,7 @@ static bool external_plugin_provide_info(const ethPluginFinalize_t *finalize,
 
     provide->txContent = &txContent;
     provide->pluginContext = dataContext.tokenContext.pluginContext;
-    provide->result = ETH_PLUGIN_RESULT_ERROR;
+    provide->result = TRON_PLUGIN_RESULT_ERROR;
     provide->item1 = NULL;
     provide->item2 = NULL;
 
@@ -284,16 +284,16 @@ static bool external_plugin_provide_info(const ethPluginFinalize_t *finalize,
         }
     }
 
-    if (!call_external_plugin(ETH_PLUGIN_PROVIDE_INFO, provide)) {
+    if (!call_external_plugin(TRON_PLUGIN_PROVIDE_INFO, provide)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) provide->result;
-    if (provide->result <= ETH_PLUGIN_RESULT_UNSUCCESSFUL) {
+    if (provide->result <= TRON_PLUGIN_RESULT_UNSUCCESSFUL) {
         PRINTF("Plugin provide token call failed (%d)\n", provide->result);
         return false;
     }
-    if (provide->result == ETH_PLUGIN_RESULT_FALLBACK) {
+    if (provide->result == TRON_PLUGIN_RESULT_FALLBACK) {
         PRINTF("Plugin provide info fallback (%d)\n", provide->result);
         return false;
     }
@@ -384,14 +384,14 @@ static bool external_plugin_query_contract_id_raw(char *name,
     query.version = version;
     query.versionLength = version_len;
     query.pluginContext = dataContext.tokenContext.pluginContext;
-    query.result = ETH_PLUGIN_RESULT_ERROR;
+    query.result = TRON_PLUGIN_RESULT_ERROR;
 
-    if (!call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_ID, &query)) {
+    if (!call_external_plugin(TRON_PLUGIN_QUERY_CONTRACT_ID, &query)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) query.result;
-    return query.result == ETH_PLUGIN_RESULT_OK;
+    return query.result == TRON_PLUGIN_RESULT_OK;
 }
 
 bool external_plugin_get_cached_ui_items_count(uint8_t *count) {
@@ -467,14 +467,14 @@ static bool external_plugin_query_contract_ui_raw(uint8_t screen_index,
     query.msg = out_msg;
     query.msgLength = out_msg_len;
     query.pluginContext = dataContext.tokenContext.pluginContext;
-    query.result = ETH_PLUGIN_RESULT_ERROR;
+    query.result = TRON_PLUGIN_RESULT_ERROR;
 
-    if (!call_external_plugin(ETH_PLUGIN_QUERY_CONTRACT_UI, &query)) {
+    if (!call_external_plugin(TRON_PLUGIN_QUERY_CONTRACT_UI, &query)) {
         return false;
     }
 
     dataContext.tokenContext.pluginStatus = (uint8_t) query.result;
-    return query.result == ETH_PLUGIN_RESULT_OK;
+    return query.result == TRON_PLUGIN_RESULT_OK;
 }
 
 bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
@@ -650,7 +650,7 @@ static void external_plugin_stream_reset(void) {
     dataContext.tokenContext.pluginUiMaxItems = 0;
     dataContext.tokenContext.pluginUiCurrentItem = 0;
     dataContext.tokenContext.pluginUiState = 0;
-    dataContext.tokenContext.pluginStatus = ETH_PLUGIN_RESULT_UNAVAILABLE;
+    dataContext.tokenContext.pluginStatus = TRON_PLUGIN_RESULT_UNAVAILABLE;
 
     if (pluginType == PLUGIN_TYPE_EXTERNAL && dataContext.tokenContext.pluginName[0] != '\0') {
         external_plugin_stream.expect_external_plugin = true;
@@ -740,8 +740,8 @@ static bool tron_stream_fill_txcontent(const tron_decode_result_t *res, txConten
 }
 
 int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    ethPluginFinalize_t plugin_finalize;
-    ethPluginProvideInfo_t plugin_provide_info;
+    tronPluginFinalize_t plugin_finalize;
+    tronPluginProvideInfo_t plugin_provide_info;
 
     if (p2 != 0x00) {
         return io_send_sw(E_INCORRECT_P1_P2);
@@ -825,14 +825,14 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         return io_send_sw(external_plugin_failure_sw());
     }
     plugin_finalize.result = plugin_provide_info.result;
-    if (plugin_finalize.result != ETH_PLUGIN_RESULT_FALLBACK) {
+    if (plugin_finalize.result != TRON_PLUGIN_RESULT_FALLBACK) {
         PRINTF("pluginFinalize.result %d successful\n", plugin_finalize.result);
         switch (plugin_finalize.uiType) {
-            case ETH_UI_TYPE_GENERIC:
+            case TRON_UI_TYPE_GENERIC:
                 dataContext.tokenContext.pluginUiMaxItems =
                     plugin_finalize.numScreens + plugin_provide_info.additionalScreens;
                 break;
-            case ETH_UI_TYPE_AMOUNT_ADDRESS:
+            case TRON_UI_TYPE_AMOUNT_ADDRESS:
             default:
                 PRINTF("ui type %d not supported\n", plugin_finalize.uiType);
                 reset_app_context();
