@@ -181,7 +181,7 @@ void app_main(void) {
 static void app_init(bool library_mode) {
     reset_app_context();
     common_app_init();
-    //storage_init();
+    // storage_init();
     if (library_mode == false) {
         // If we are not in library mode, we need to initialize the UX
         io_init();
@@ -233,8 +233,8 @@ int tron_main(tron_libargs_t *args) {
             break;
         default:
             // called as tron or altcoin library
-            //library_main(args);
-            coin_main(NULL); // omit the args for tron
+            // library_main(args);
+            coin_main(NULL);  // omit the args for tron
     }
     return 0;
 }

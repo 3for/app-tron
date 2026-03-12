@@ -37,7 +37,7 @@
 #define INS_TIP712_STRUCT_IMPL                 0x1C
 #define INS_TIP712_FILTERING                   0x1E
 #define INS_SET_EXTERNAL_PLUGIN                0x12
-#define INS_SIGN_EXTERNAL_PLUGIN                         0xC4 // plugin(TriggerSmartContract)
+#define INS_SIGN_EXTERNAL_PLUGIN               0xC4  // plugin(TriggerSmartContract)
 
 #define INS_PROVIDE_TRC20_TOKEN_INFORMATION 0xCA  // 0x0A in eth
 
@@ -94,7 +94,7 @@ bool external_plugin_get_cached_ui_items_count(uint8_t *count);
 bool external_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len);
 bool external_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_len);
 bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
-                                              char *title,
-                                              size_t title_len,
-                                              char *out_msg,
-                                              size_t out_msg_len);
+                                            char *title,
+                                            size_t title_len,
+                                            char *out_msg,
+                                            size_t out_msg_len);

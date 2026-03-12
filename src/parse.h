@@ -139,7 +139,7 @@ typedef union {
     // messageSigningContext_t messageSigningContext;
 } tmpCtx_t;
 
-#define SELECTOR_LENGTH 4
+#define SELECTOR_LENGTH  4
 #define PLUGIN_ID_LENGTH 30
 
 typedef struct tokenContext_t {
@@ -172,7 +172,6 @@ _Static_assert((offsetof(tokenContext_t, pluginContext) % 4) == 0, "Plugin conte
 typedef union {
     tokenContext_t tokenContext;
 } dataContext_t;
-
 
 // must be able to hold in decimal up to : floor(MAX_UINT64 / 2) - 36
 #define NETWORK_STRING_MAX_SIZE 19
