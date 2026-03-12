@@ -30,8 +30,8 @@
 #include "trusted_name.h"
 
 // Macros
-#define WARNING_TYPES_NUMBER 2
-#define MAX_TX_FIELDS        20
+#define WARNING_TYPES_NUMBER          2
+#define MAX_TX_FIELDS                 20
 #define MAX_EXTERNAL_PLUGIN_UI_FIELDS EXTERNAL_PLUGIN_UI_MAX_ITEMS_NBGL
 
 #if (MAX_EXTERNAL_PLUGIN_UI_FIELDS != (MAX_TX_FIELDS - 3))
@@ -147,11 +147,11 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     memset(clearSignPluginTitleMsg, 0, sizeof(clearSignPluginTitleMsg));
     memset(clearSignPluginFinishMsg, 0, sizeof(clearSignPluginFinishMsg));
     if (!external_plugin_get_cached_title_msg(clearSignPluginTitleMsg,
-                                                sizeof(clearSignPluginTitleMsg))) {
+                                              sizeof(clearSignPluginTitleMsg))) {
         return false;
     }
     if (!external_plugin_get_cached_finish_msg(clearSignPluginFinishMsg,
-                                                 sizeof(clearSignPluginFinishMsg))) {
+                                               sizeof(clearSignPluginFinishMsg))) {
         return false;
     }
 
@@ -163,10 +163,10 @@ static bool prepareClearSignCustomContractPluginUi(void) {
         memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
         memset(clearSignPluginUiMsgs[i], 0, sizeof(clearSignPluginUiMsgs[i]));
         if (!external_plugin_get_cached_contract_ui(i,
-                                                      clearSignPluginUiTitles[i],
-                                                      sizeof(clearSignPluginUiTitles[i]),
-                                                      clearSignPluginUiMsgs[i],
-                                                      sizeof(clearSignPluginUiMsgs[i]))) {
+                                                    clearSignPluginUiTitles[i],
+                                                    sizeof(clearSignPluginUiTitles[i]),
+                                                    clearSignPluginUiMsgs[i],
+                                                    sizeof(clearSignPluginUiMsgs[i]))) {
             return false;
         }
         txInfos.fields[fieldIndex].item = clearSignPluginUiTitles[i];

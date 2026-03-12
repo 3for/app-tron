@@ -12,8 +12,7 @@
 extern "C" {
 #endif
 
-typedef enum
-{
+typedef enum {
     TRON_CTX_TX = 0,
     TRON_CTX_RAW = 1,
     TRON_CTX_CONTRACT = 2,
@@ -21,22 +20,19 @@ typedef enum
     TRON_CTX_TRIGGER = 4
 } tron_ctx_t;
 
-typedef struct
-{
+typedef struct {
     tron_ctx_t ctx;
     size_t remaining;
 } tron_frame_t;
 
-typedef enum
-{
+typedef enum {
     TRON_MODE_KEY = 0,
     TRON_MODE_VARINT = 1,
     TRON_MODE_LENGTH = 2,
     TRON_MODE_BYTES = 3
 } tron_mode_t;
 
-typedef enum
-{
+typedef enum {
     TRON_ACT_SKIP = 0,
     TRON_ACT_ENTER_RAW = 1,
     TRON_ACT_ENTER_CONTRACT = 2,
@@ -50,8 +46,7 @@ typedef bool (*tron_trigger_data_observer_t)(void *ctx,
                                              size_t chunk_offset,
                                              size_t total_len);
 
-typedef struct
-{
+typedef struct {
     bool has_contract_type;
     protocol_Transaction_Contract_ContractType contract_type;
 
@@ -89,8 +84,7 @@ typedef struct
     size_t custom_data_prefix_len;
 } tron_decode_result_t;
 
-typedef struct
-{
+typedef struct {
     tron_frame_t frames[5];
     size_t depth;
 

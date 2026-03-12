@@ -893,23 +893,23 @@ static void prepare_external_plugin_ui_screen_bagl(uint8_t screen_index) {
     }
 
     if (!external_plugin_get_cached_contract_ui(screen_index,
-                                                  strings.tmp.tmp2,
-                                                  sizeof(strings.tmp.tmp2),
-                                                  strings.tmp.tmp,
-                                                  sizeof(strings.tmp.tmp))) {
+                                                strings.tmp.tmp2,
+                                                sizeof(strings.tmp.tmp2),
+                                                strings.tmp.tmp,
+                                                sizeof(strings.tmp.tmp))) {
         PRINTF("Missing cached clear-sign UI for index %u\n", (unsigned int) screen_index);
         strlcpy(strings.tmp.tmp2, "Plugin Field", sizeof(strings.tmp.tmp2));
         strlcpy(strings.tmp.tmp, "Unavailable", sizeof(strings.tmp.tmp));
     }
 }
 
-#define DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(IDX)                                               \
-    static void prepare_external_plugin_ui_##IDX##_bagl(void) {                                  \
-        prepare_external_plugin_ui_screen_bagl(IDX);                                              \
-    }                                                                                               \
-    UX_STEP_NOCB_INIT(ux_approval_external_plugin_ui_##IDX##_step,                               \
-                      bnnn_paging,                                                                  \
-                      prepare_external_plugin_ui_##IDX##_bagl(),                                  \
+#define DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(IDX)                  \
+    static void prepare_external_plugin_ui_##IDX##_bagl(void) {    \
+        prepare_external_plugin_ui_screen_bagl(IDX);               \
+    }                                                              \
+    UX_STEP_NOCB_INIT(ux_approval_external_plugin_ui_##IDX##_step, \
+                      bnnn_paging,                                 \
+                      prepare_external_plugin_ui_##IDX##_bagl(),   \
                       {.title = strings.tmp.tmp2, .text = strings.tmp.tmp});
 
 DECLARE_EXTERNAL_PLUGIN_UI_STEP_BAGL(0)
@@ -1012,9 +1012,8 @@ static bool init_external_plugin_flow_bagl(void) {
         PRINTF("Missing cached clear-sign UI item count\n");
         return false;
     }
-    if ((ui_items == 0) ||
-        (ui_items > (sizeof(ux_approval_external_plugin_ui_steps) /
-                     sizeof(ux_approval_external_plugin_ui_steps[0])))) {
+    if ((ui_items == 0) || (ui_items > (sizeof(ux_approval_external_plugin_ui_steps) /
+                                        sizeof(ux_approval_external_plugin_ui_steps[0])))) {
         PRINTF("Invalid clear-sign UI items count: %u\n", (unsigned int) ui_items);
         return false;
     }
@@ -1024,10 +1023,10 @@ static bool init_external_plugin_flow_bagl(void) {
     }
     for (uint8_t i = 0; i < ui_items; i++) {
         if (!external_plugin_get_cached_contract_ui(i,
-                                                      title,
-                                                      sizeof(title),
-                                                      ui_msg,
-                                                      sizeof(ui_msg))) {
+                                                    title,
+                                                    sizeof(title),
+                                                    ui_msg,
+                                                    sizeof(ui_msg))) {
             PRINTF("Missing cached clear-sign UI at index %u\n", (unsigned int) i);
             return false;
         }

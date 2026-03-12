@@ -66,7 +66,8 @@ int handleSetExternalPlugin(uint8_t p1,
     if (error != CX_OK) {
         PRINTF("Invalid signature\n");
 #ifndef HAVE_BYPASS_SIGNATURES
-        return io_send_sw(E_INCORRECT_DATA);;
+        return io_send_sw(E_INCORRECT_DATA);
+        ;
 #endif
     }
 
