@@ -87,6 +87,7 @@ typedef struct {
 typedef struct {
     tron_frame_t frames[5];
     size_t depth;
+    bool first_contract_seen;
 
     tron_mode_t mode;
     tron_action_t pending_action;

@@ -142,6 +142,21 @@ static test_buffer_t build_contract_message(const test_buffer_t *any,
     return contract;
 }
 
+static test_buffer_t build_contract_message_parameter_first(
+    const test_buffer_t *any,
+    protocol_Transaction_Contract_ContractType contract_type,
+    uint32_t permission_id) {
+    test_buffer_t contract = {0};
+
+    test_buffer_append_message_field(&contract, protocol_Transaction_Contract_parameter_tag, any);
+    test_buffer_append_varint_field(&contract, protocol_Transaction_Contract_type_tag, contract_type);
+    test_buffer_append_varint_field(&contract,
+                                    protocol_Transaction_Contract_Permission_id_tag,
+                                    permission_id);
+
+    return contract;
+}
+
 static test_buffer_t build_raw_message(const test_buffer_t *contract,
                                        uint64_t fee_limit,
                                        const uint8_t *custom_data,
@@ -627,6 +642,105 @@ static void test_rejects_invalid_wire_type_and_overlong_varints(void **state) {
     assert_false(tron_stream_decoder_is_done(&decoder));
 }
 
+static void test_rejects_non_trigger_contract_type(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0x11, 0x22, 0x33, 0x44};
+    const uint8_t custom_data[] = {0x55};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    const test_buffer_t trigger = build_trigger_message(owner,
+                                                        sizeof(owner),
+                                                        contract_address,
+                                                        sizeof(contract_address),
+                                                        1U,
+                                                        trigger_data,
+                                                        sizeof(trigger_data),
+                                                        0U,
+                                                        0U);
+    const test_buffer_t any = build_any_message(&trigger);
+    const test_buffer_t contract = build_contract_message_parameter_first(
+        &any,
+        protocol_Transaction_Contract_ContractType_TransferContract,
+        1U);
+    const test_buffer_t raw = build_raw_message(&contract, 5U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_keeps_only_first_contract(void **state) {
+    (void) state;
+
+    const uint8_t owner1[21] = {0x41, 0x01};
+    const uint8_t contract1[21] = {0x41, 0x11};
+    const uint8_t data1[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t owner2[21] = {0x41, 0x02};
+    const uint8_t contract2[21] = {0x41, 0x22};
+    const uint8_t data2[] = {0x10, 0x20, 0x30, 0x40};
+    const uint8_t custom_data[] = {0x99};
+    test_buffer_t raw = {0};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    const test_buffer_t trigger1 = build_trigger_message(owner1,
+                                                         sizeof(owner1),
+                                                         contract1,
+                                                         sizeof(contract1),
+                                                         100U,
+                                                         data1,
+                                                         sizeof(data1),
+                                                         1U,
+                                                         2U);
+    const test_buffer_t any1 = build_any_message(&trigger1);
+    const test_buffer_t contract_msg1 =
+        build_contract_message(&any1,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               7U);
+    const test_buffer_t trigger2 = build_trigger_message(owner2,
+                                                         sizeof(owner2),
+                                                         contract2,
+                                                         sizeof(contract2),
+                                                         200U,
+                                                         data2,
+                                                         sizeof(data2),
+                                                         3U,
+                                                         4U);
+    const test_buffer_t any2 = build_any_message(&trigger2);
+    const test_buffer_t contract_msg2 =
+        build_contract_message(&any2,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               8U);
+
+    test_buffer_append_bytes_field(&raw,
+                                   protocol_Transaction_raw_custom_data_tag,
+                                   custom_data,
+                                   sizeof(custom_data));
+    test_buffer_append_message_field(&raw, protocol_Transaction_raw_contract_tag, &contract_msg1);
+    test_buffer_append_message_field(&raw, protocol_Transaction_raw_contract_tag, &contract_msg2);
+    test_buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 999U);
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_true(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_true(tron_stream_decoder_is_done(&decoder));
+    assert_true(tron_stream_decoder_get_result(&decoder, &result));
+
+    assert_int_equal(result.permission_id, 7);
+    assert_int_equal(result.call_value, 100);
+    assert_int_equal(result.call_token_value, 1);
+    assert_int_equal(result.token_id, 2);
+    assert_memory_equal(result.owner_address, owner1, sizeof(owner1));
+    assert_memory_equal(result.contract_address, contract1, sizeof(contract1));
+    assert_memory_equal(result.data_prefix, data1, sizeof(data1));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_decode_transaction_in_chunks),
@@ -637,6 +751,8 @@ int main(void) {
         cmocka_unit_test(test_handles_zero_length_fields_and_zero_length_decoder),
         cmocka_unit_test(test_api_argument_guards),
         cmocka_unit_test(test_rejects_invalid_wire_type_and_overlong_varints),
+        cmocka_unit_test(test_rejects_non_trigger_contract_type),
+        cmocka_unit_test(test_keeps_only_first_contract),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

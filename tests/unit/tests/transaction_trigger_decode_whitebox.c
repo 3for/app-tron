@@ -51,8 +51,15 @@ static void test_tron_consume_byte_rejects_invalid_states(void **state) {
 static void test_tron_length_action_handles_non_string_and_unknown_ctx(void **state) {
     (void) state;
 
-    assert_int_equal(tron_length_action(TRON_CTX_TX, 1U, PB_WT_VARINT), TRON_ACT_SKIP);
-    assert_int_equal(tron_length_action((tron_ctx_t) 99, 1U, PB_WT_STRING), TRON_ACT_SKIP);
+    tron_stream_decoder_t decoder;
+
+    memset(&decoder, 0, sizeof(decoder));
+    assert_int_equal(tron_length_action(&decoder, 1U, PB_WT_VARINT), TRON_ACT_SKIP);
+
+    memset(&decoder, 0, sizeof(decoder));
+    decoder.depth = 1U;
+    decoder.frames[0].ctx = (tron_ctx_t) 99;
+    assert_int_equal(tron_length_action(&decoder, 1U, PB_WT_STRING), TRON_ACT_SKIP);
 }
 
 static void test_tron_enter_submessage_rejects_invalid_action(void **state) {
@@ -86,6 +93,19 @@ static void test_tron_process_byte_handles_whitebox_error_modes(void **state) {
     assert_false(tron_process_byte(&decoder, 0x00U));
 }
 
+static void test_tron_varint_feed_rejects_invalid_tenth_byte(void **state) {
+    (void) state;
+
+    tron_stream_decoder_t decoder;
+    bool done = false;
+    uint64_t value = 0;
+
+    memset(&decoder, 0, sizeof(decoder));
+    decoder.varint_count = 9U;
+    decoder.varint_shift = 63U;
+    assert_false(tron_varint_feed(&decoder, 0x02U, &done, &value));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_tron_current_ctx_returns_tx_when_stack_empty),
@@ -94,6 +114,7 @@ int main(void) {
         cmocka_unit_test(test_tron_length_action_handles_non_string_and_unknown_ctx),
         cmocka_unit_test(test_tron_enter_submessage_rejects_invalid_action),
         cmocka_unit_test(test_tron_process_byte_handles_whitebox_error_modes),
+        cmocka_unit_test(test_tron_varint_feed_rejects_invalid_tenth_byte),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
