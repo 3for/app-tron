@@ -675,6 +675,39 @@ static void test_rejects_non_trigger_contract_type(void **state) {
     assert_false(tron_stream_decoder_get_result(&decoder, &result));
 }
 
+static void test_rejects_trigger_parameter_before_contract_type(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0x11, 0x22, 0x33, 0x44};
+    const uint8_t custom_data[] = {0x55};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    const test_buffer_t trigger = build_trigger_message(owner,
+                                                        sizeof(owner),
+                                                        contract_address,
+                                                        sizeof(contract_address),
+                                                        1U,
+                                                        trigger_data,
+                                                        sizeof(trigger_data),
+                                                        0U,
+                                                        0U);
+    const test_buffer_t any = build_any_message(&trigger);
+    const test_buffer_t contract = build_contract_message_parameter_first(
+        &any,
+        protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+        1U);
+    const test_buffer_t raw = build_raw_message(&contract, 5U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
 static void test_keeps_only_first_contract(void **state) {
     (void) state;
 
@@ -741,6 +774,135 @@ static void test_keeps_only_first_contract(void **state) {
     assert_memory_equal(result.data_prefix, data1, sizeof(data1));
 }
 
+static void test_rejects_data_before_addresses(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t custom_data[] = {0x99};
+    test_buffer_t trigger = {0};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_data_tag,
+                                   trigger_data,
+                                   sizeof(trigger_data));
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_owner_address_tag,
+                                   owner,
+                                   sizeof(owner));
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_contract_address_tag,
+                                   contract_address,
+                                   sizeof(contract_address));
+    test_buffer_append_varint_field(&trigger, protocol_TriggerSmartContract_call_value_tag, 1U);
+
+    const test_buffer_t any = build_any_message(&trigger);
+    const test_buffer_t contract =
+        build_contract_message(&any,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               1U);
+    const test_buffer_t raw = build_raw_message(&contract, 7U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_length_exceeding_remaining_bytes(void **state) {
+    (void) state;
+
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+    test_buffer_t raw = {0};
+
+    test_buffer_append_key(&raw, protocol_Transaction_raw_custom_data_tag, PB_WT_STRING);
+    test_buffer_append_varint(&raw, 3U);
+    test_buffer_append_byte(&raw, 0xAAU);
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_truncated_terminal_varint_is_not_marked_done(void **state) {
+    (void) state;
+
+    const uint8_t raw[] = {
+        0x90U, 0x01U, /* fee_limit key */
+        0x80U,        /* truncated varint payload */
+    };
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    tron_stream_decoder_init_raw(&decoder, sizeof(raw));
+
+    assert_true(tron_stream_decoder_feed(&decoder, raw, sizeof(raw)));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_out_of_range_numeric_fields(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0x11, 0x22, 0x33, 0x44};
+    const uint8_t custom_data[] = {0x55};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    const test_buffer_t trigger_negative = build_trigger_message(owner,
+                                                                 sizeof(owner),
+                                                                 contract_address,
+                                                                 sizeof(contract_address),
+                                                                 UINT64_MAX,
+                                                                 trigger_data,
+                                                                 sizeof(trigger_data),
+                                                                 0U,
+                                                                 0U);
+    const test_buffer_t any_negative = build_any_message(&trigger_negative);
+    const test_buffer_t contract_negative =
+        build_contract_message(&any_negative,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               1U);
+    const test_buffer_t raw_negative =
+        build_raw_message(&contract_negative, 5U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw_negative.len);
+    assert_false(tron_stream_decoder_feed(&decoder, raw_negative.bytes, raw_negative.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+
+    const test_buffer_t trigger_permission = build_trigger_message(owner,
+                                                                   sizeof(owner),
+                                                                   contract_address,
+                                                                   sizeof(contract_address),
+                                                                   1U,
+                                                                   trigger_data,
+                                                                   sizeof(trigger_data),
+                                                                   0U,
+                                                                   0U);
+    const test_buffer_t any_permission = build_any_message(&trigger_permission);
+    const test_buffer_t contract_permission =
+        build_contract_message(&any_permission,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               300U);
+    const test_buffer_t raw_permission =
+        build_raw_message(&contract_permission, 5U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw_permission.len);
+    assert_false(tron_stream_decoder_feed(&decoder, raw_permission.bytes, raw_permission.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_decode_transaction_in_chunks),
@@ -752,7 +914,12 @@ int main(void) {
         cmocka_unit_test(test_api_argument_guards),
         cmocka_unit_test(test_rejects_invalid_wire_type_and_overlong_varints),
         cmocka_unit_test(test_rejects_non_trigger_contract_type),
+        cmocka_unit_test(test_rejects_trigger_parameter_before_contract_type),
         cmocka_unit_test(test_keeps_only_first_contract),
+        cmocka_unit_test(test_rejects_data_before_addresses),
+        cmocka_unit_test(test_rejects_length_exceeding_remaining_bytes),
+        cmocka_unit_test(test_truncated_terminal_varint_is_not_marked_done),
+        cmocka_unit_test(test_rejects_out_of_range_numeric_fields),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
