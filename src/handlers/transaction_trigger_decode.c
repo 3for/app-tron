@@ -116,6 +116,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
     const tron_ctx_t ctx = tron_current_ctx(dec);
 
     if (ctx == TRON_CTX_RAW && dec->pending_tag == protocol_Transaction_raw_fee_limit_tag) {
+        if (dec->result.has_fee_limit) {
+            tron_set_error(dec);
+            return;
+        }
         if (value > INT64_MAX) {
             tron_set_error(dec);
             return;
@@ -124,6 +128,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
         dec->result.fee_limit = (int64_t) value;
     } else if (ctx == TRON_CTX_CONTRACT &&
                dec->pending_tag == protocol_Transaction_Contract_type_tag) {
+        if (dec->result.has_contract_type) {
+            tron_set_error(dec);
+            return;
+        }
         dec->result.has_contract_type = true;
         dec->result.contract_type = (protocol_Transaction_Contract_ContractType) value;
         if (dec->result.contract_type !=
@@ -132,6 +140,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
         }
     } else if (ctx == TRON_CTX_CONTRACT &&
                dec->pending_tag == protocol_Transaction_Contract_Permission_id_tag) {
+        if (dec->result.has_permission_id) {
+            tron_set_error(dec);
+            return;
+        }
         if (value > UINT8_MAX) {
             tron_set_error(dec);
             return;
@@ -140,6 +152,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
         dec->result.permission_id = (uint32_t) value;
     } else if (ctx == TRON_CTX_TRIGGER &&
                dec->pending_tag == protocol_TriggerSmartContract_call_value_tag) {
+        if (dec->result.has_call_value) {
+            tron_set_error(dec);
+            return;
+        }
         if (value > INT64_MAX) {
             tron_set_error(dec);
             return;
@@ -148,6 +164,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
         dec->result.call_value = (int64_t) value;
     } else if (ctx == TRON_CTX_TRIGGER &&
                dec->pending_tag == protocol_TriggerSmartContract_call_token_value_tag) {
+        if (dec->result.has_call_token_value) {
+            tron_set_error(dec);
+            return;
+        }
         if (value > INT64_MAX) {
             tron_set_error(dec);
             return;
@@ -156,6 +176,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
         dec->result.call_token_value = (int64_t) value;
     } else if (ctx == TRON_CTX_TRIGGER &&
                dec->pending_tag == protocol_TriggerSmartContract_token_id_tag) {
+        if (dec->result.has_token_id) {
+            tron_set_error(dec);
+            return;
+        }
         if (value > INT64_MAX) {
             tron_set_error(dec);
             return;
@@ -170,35 +194,47 @@ static void tron_start_bytes(tron_stream_decoder_t *dec, size_t len) {
     dec->mode = (len == 0U) ? TRON_MODE_KEY : TRON_MODE_BYTES;
 }
 
-static void tron_start_capture_if_needed(tron_stream_decoder_t *dec, size_t len) {
+static bool tron_start_capture_if_needed(tron_stream_decoder_t *dec, size_t len) {
     const tron_ctx_t ctx = tron_current_ctx(dec);
-    if (dec->pending_wire != PB_WT_STRING) return;
+    if (dec->pending_wire != PB_WT_STRING) return true;
 
     if (ctx == TRON_CTX_RAW && dec->pending_tag == protocol_Transaction_raw_custom_data_tag) {
+        if (dec->result.has_custom_data) {
+            return false;
+        }
         dec->result.has_custom_data = true;
         dec->result.custom_data_len = len;
         dec->capture_buf = dec->result.custom_data_prefix;
         dec->capture_cap = sizeof(dec->result.custom_data_prefix);
         dec->capture_len = 0;
         dec->result.custom_data_prefix_len = min_size(len, dec->capture_cap);
-        return;
+        return true;
     }
 
-    if (ctx != TRON_CTX_TRIGGER) return;
+    if (ctx != TRON_CTX_TRIGGER) return true;
 
     if (dec->pending_tag == protocol_TriggerSmartContract_owner_address_tag) {
+        if (dec->result.has_owner_address) {
+            return false;
+        }
         dec->capture_buf = dec->result.owner_address;
         dec->capture_cap = sizeof(dec->result.owner_address);
         dec->capture_len = 0;
         dec->result.has_owner_address = true;
         dec->result.owner_address_len = min_size(len, dec->capture_cap);
     } else if (dec->pending_tag == protocol_TriggerSmartContract_contract_address_tag) {
+        if (dec->result.has_contract_address) {
+            return false;
+        }
         dec->capture_buf = dec->result.contract_address;
         dec->capture_cap = sizeof(dec->result.contract_address);
         dec->capture_len = 0;
         dec->result.has_contract_address = true;
         dec->result.contract_address_len = min_size(len, dec->capture_cap);
     } else if (dec->pending_tag == protocol_TriggerSmartContract_data_tag) {
+        if (dec->result.has_data) {
+            return false;
+        }
         dec->result.has_data = true;
         dec->result.data_len = len;
         dec->capture_buf = dec->result.data_prefix;
@@ -209,6 +245,8 @@ static void tron_start_capture_if_needed(tron_stream_decoder_t *dec, size_t len)
         dec->trigger_data_total_len = len;
         dec->trigger_data_offset = 0;
     }
+
+    return true;
 }
 
 static bool tron_enter_submessage(tron_stream_decoder_t *dec, tron_action_t action, size_t len) {
@@ -268,6 +306,17 @@ static bool tron_process_length(tron_stream_decoder_t *dec, size_t len) {
 
     if (action == TRON_ACT_ENTER_RAW || action == TRON_ACT_ENTER_CONTRACT ||
         action == TRON_ACT_ENTER_ANY || action == TRON_ACT_ENTER_TRIGGER) {
+        if (action == TRON_ACT_ENTER_ANY) {
+            if (dec->parameter_seen) {
+                return false;
+            }
+            dec->parameter_seen = true;
+        } else if (action == TRON_ACT_ENTER_TRIGGER) {
+            if (dec->any_value_seen) {
+                return false;
+            }
+            dec->any_value_seen = true;
+        }
         dec->mode = TRON_MODE_KEY;
         return tron_enter_submessage(dec, action, len);
     }
@@ -279,7 +328,9 @@ static bool tron_process_length(tron_stream_decoder_t *dec, size_t len) {
     dec->in_trigger_data = false;
     dec->trigger_data_total_len = 0;
     dec->trigger_data_offset = 0;
-    tron_start_capture_if_needed(dec, len);
+    if (!tron_start_capture_if_needed(dec, len)) {
+        return false;
+    }
     tron_start_bytes(dec, len);
     return true;
 }

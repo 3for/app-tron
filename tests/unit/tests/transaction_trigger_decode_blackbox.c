@@ -813,6 +813,153 @@ static void test_rejects_data_before_addresses(void **state) {
     assert_false(tron_stream_decoder_get_result(&decoder, &result));
 }
 
+static void test_rejects_duplicate_contract_parameter(void **state) {
+    (void) state;
+
+    const uint8_t owner1[21] = {0x41, 0x01};
+    const uint8_t contract1[21] = {0x41, 0x11};
+    const uint8_t data1[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t owner2[21] = {0x41, 0x02};
+    const uint8_t contract2[21] = {0x41, 0x22};
+    const uint8_t data2[] = {0x10, 0x20, 0x30, 0x40};
+    const uint8_t custom_data[] = {0x99};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+    test_buffer_t contract = {0};
+    test_buffer_t raw = {0};
+
+    const test_buffer_t trigger1 = build_trigger_message(owner1,
+                                                         sizeof(owner1),
+                                                         contract1,
+                                                         sizeof(contract1),
+                                                         100U,
+                                                         data1,
+                                                         sizeof(data1),
+                                                         1U,
+                                                         2U);
+    const test_buffer_t trigger2 = build_trigger_message(owner2,
+                                                         sizeof(owner2),
+                                                         contract2,
+                                                         sizeof(contract2),
+                                                         200U,
+                                                         data2,
+                                                         sizeof(data2),
+                                                         3U,
+                                                         4U);
+    const test_buffer_t any1 = build_any_message(&trigger1);
+    const test_buffer_t any2 = build_any_message(&trigger2);
+
+    test_buffer_append_varint_field(&contract,
+                                    protocol_Transaction_Contract_type_tag,
+                                    protocol_Transaction_Contract_ContractType_TriggerSmartContract);
+    test_buffer_append_message_field(&contract, protocol_Transaction_Contract_parameter_tag, &any1);
+    test_buffer_append_message_field(&contract, protocol_Transaction_Contract_parameter_tag, &any2);
+    test_buffer_append_bytes_field(&raw,
+                                   protocol_Transaction_raw_custom_data_tag,
+                                   custom_data,
+                                   sizeof(custom_data));
+    test_buffer_append_message_field(&raw, protocol_Transaction_raw_contract_tag, &contract);
+    test_buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 7U);
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_duplicate_any_value(void **state) {
+    (void) state;
+
+    const uint8_t owner1[21] = {0x41, 0x01};
+    const uint8_t contract1[21] = {0x41, 0x11};
+    const uint8_t data1[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t owner2[21] = {0x41, 0x02};
+    const uint8_t contract2[21] = {0x41, 0x22};
+    const uint8_t data2[] = {0x10, 0x20, 0x30, 0x40};
+    const uint8_t custom_data[] = {0x99};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+    test_buffer_t any = {0};
+    test_buffer_t contract = {0};
+    test_buffer_t raw = {0};
+
+    const test_buffer_t trigger1 = build_trigger_message(owner1,
+                                                         sizeof(owner1),
+                                                         contract1,
+                                                         sizeof(contract1),
+                                                         100U,
+                                                         data1,
+                                                         sizeof(data1),
+                                                         1U,
+                                                         2U);
+    const test_buffer_t trigger2 = build_trigger_message(owner2,
+                                                         sizeof(owner2),
+                                                         contract2,
+                                                         sizeof(contract2),
+                                                         200U,
+                                                         data2,
+                                                         sizeof(data2),
+                                                         3U,
+                                                         4U);
+    test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger1.bytes, trigger1.len);
+    test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger2.bytes, trigger2.len);
+    contract = build_contract_message(&any,
+                                      protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                                      1U);
+    raw = build_raw_message(&contract, 7U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_duplicate_trigger_singleton_field(void **state) {
+    (void) state;
+
+    const uint8_t owner1[21] = {0x41, 0x01};
+    const uint8_t owner2[21] = {0x41, 0x02};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t custom_data[] = {0x99};
+    test_buffer_t trigger = {0};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_owner_address_tag,
+                                   owner1,
+                                   sizeof(owner1));
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_contract_address_tag,
+                                   contract_address,
+                                   sizeof(contract_address));
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_data_tag,
+                                   trigger_data,
+                                   sizeof(trigger_data));
+    test_buffer_append_bytes_field(&trigger,
+                                   protocol_TriggerSmartContract_owner_address_tag,
+                                   owner2,
+                                   sizeof(owner2));
+    test_buffer_append_varint_field(&trigger, protocol_TriggerSmartContract_call_value_tag, 1U);
+
+    const test_buffer_t any = build_any_message(&trigger);
+    const test_buffer_t contract =
+        build_contract_message(&any,
+                               protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                               1U);
+    const test_buffer_t raw = build_raw_message(&contract, 7U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
 static void test_rejects_length_exceeding_remaining_bytes(void **state) {
     (void) state;
 
@@ -917,6 +1064,9 @@ int main(void) {
         cmocka_unit_test(test_rejects_trigger_parameter_before_contract_type),
         cmocka_unit_test(test_keeps_only_first_contract),
         cmocka_unit_test(test_rejects_data_before_addresses),
+        cmocka_unit_test(test_rejects_duplicate_contract_parameter),
+        cmocka_unit_test(test_rejects_duplicate_any_value),
+        cmocka_unit_test(test_rejects_duplicate_trigger_singleton_field),
         cmocka_unit_test(test_rejects_length_exceeding_remaining_bytes),
         cmocka_unit_test(test_truncated_terminal_varint_is_not_marked_done),
         cmocka_unit_test(test_rejects_out_of_range_numeric_fields),
