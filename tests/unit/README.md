@@ -28,6 +28,14 @@ The `default rules` of makefile will compile the tests and run them.
 make
 ```
 
+If you want to run the unit tests directly with CMake, from the repository root:
+
+```sh
+cmake -S tests/unit -B tests/unit/build
+cmake --build tests/unit/build
+ctest --test-dir tests/unit/build --output-on-failure
+```
+
 The `coverage rule` will launch the default rules and generate the coverage
 and you will be **automatically redirected** to the generated .html
 
