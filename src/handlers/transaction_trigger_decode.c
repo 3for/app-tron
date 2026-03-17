@@ -67,6 +67,7 @@ static bool tron_varint_feed(tron_stream_decoder_t *dec,
                              bool *out_done,
                              uint64_t *out_value) {
     if (dec->varint_count >= 10U) return false;
+    if (dec->varint_count == 9U && byte > 1U) return false;
 
     dec->varint_value |= ((uint64_t) (byte & 0x7FU)) << dec->varint_shift;
     dec->varint_shift = (uint8_t) (dec->varint_shift + 7U);
@@ -83,15 +84,20 @@ static bool tron_varint_feed(tron_stream_decoder_t *dec,
     return true;
 }
 
-static tron_action_t tron_length_action(tron_ctx_t ctx, uint32_t tag, pb_wire_type_t wire) {
+static tron_action_t tron_length_action(const tron_stream_decoder_t *dec,
+                                        uint32_t tag,
+                                        pb_wire_type_t wire) {
     if (wire != PB_WT_STRING) return TRON_ACT_SKIP;
 
+    const tron_ctx_t ctx = tron_current_ctx(dec);
     switch (ctx) {
         case TRON_CTX_TX:
             return (tag == protocol_Transaction_raw_data_tag) ? TRON_ACT_ENTER_RAW : TRON_ACT_SKIP;
         case TRON_CTX_RAW:
-            return (tag == protocol_Transaction_raw_contract_tag) ? TRON_ACT_ENTER_CONTRACT
-                                                                  : TRON_ACT_SKIP;
+            if (tag != protocol_Transaction_raw_contract_tag) {
+                return TRON_ACT_SKIP;
+            }
+            return dec->first_contract_seen ? TRON_ACT_SKIP : TRON_ACT_ENTER_CONTRACT;
         case TRON_CTX_CONTRACT:
             return (tag == protocol_Transaction_Contract_parameter_tag) ? TRON_ACT_ENTER_ANY
                                                                         : TRON_ACT_SKIP;
@@ -115,6 +121,10 @@ static void tron_handle_varint_value(tron_stream_decoder_t *dec, uint64_t value)
                dec->pending_tag == protocol_Transaction_Contract_type_tag) {
         dec->result.has_contract_type = true;
         dec->result.contract_type = (protocol_Transaction_Contract_ContractType) value;
+        if (dec->result.contract_type !=
+            protocol_Transaction_Contract_ContractType_TriggerSmartContract) {
+            tron_set_error(dec);
+        }
     } else if (ctx == TRON_CTX_CONTRACT &&
                dec->pending_tag == protocol_Transaction_Contract_Permission_id_tag) {
         dec->result.has_permission_id = true;
@@ -200,6 +210,9 @@ static bool tron_enter_submessage(tron_stream_decoder_t *dec, tron_action_t acti
     }
 
     if (!tron_push_frame(dec, next_ctx, len)) return false;
+    if (action == TRON_ACT_ENTER_CONTRACT) {
+        dec->first_contract_seen = true;
+    }
 
     /* If len is zero, we immediately pop and continue. */
     tron_pop_finished_frames(dec);
@@ -207,8 +220,7 @@ static bool tron_enter_submessage(tron_stream_decoder_t *dec, tron_action_t acti
 }
 
 static bool tron_process_length(tron_stream_decoder_t *dec, size_t len) {
-    const tron_action_t action =
-        tron_length_action(tron_current_ctx(dec), dec->pending_tag, dec->pending_wire);
+    const tron_action_t action = tron_length_action(dec, dec->pending_tag, dec->pending_wire);
 
     if (action == TRON_ACT_ENTER_RAW || action == TRON_ACT_ENTER_CONTRACT ||
         action == TRON_ACT_ENTER_ANY || action == TRON_ACT_ENTER_TRIGGER) {
@@ -274,6 +286,10 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
             }
             if (done) {
                 tron_handle_varint_value(dec, value);
+                if (dec->error) {
+                    ok = false;
+                    break;
+                }
                 dec->mode = TRON_MODE_KEY;
             }
             break;
@@ -342,6 +358,9 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
 }
 
 void tron_stream_decoder_init(tron_stream_decoder_t *dec, size_t total_len) {
+    if (dec == NULL) {
+        return;
+    }
     memset(dec, 0, sizeof(*dec));
     dec->mode = TRON_MODE_KEY;
     tron_varint_reset(dec);
@@ -353,6 +372,9 @@ void tron_stream_decoder_init(tron_stream_decoder_t *dec, size_t total_len) {
 }
 
 void tron_stream_decoder_init_raw(tron_stream_decoder_t *dec, size_t total_len) {
+    if (dec == NULL) {
+        return;
+    }
     memset(dec, 0, sizeof(*dec));
     dec->mode = TRON_MODE_KEY;
     tron_varint_reset(dec);
