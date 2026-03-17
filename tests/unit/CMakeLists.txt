@@ -52,14 +52,9 @@ set(UNIT_TESTING OFF CACHE BOOL "CMocka: Build with unit testing" FORCE)
 set(PICKY_DEVELOPER OFF CACHE BOOL "CMocka: Build with picky developer flags" FORCE)
 FetchContent_MakeAvailable(cmocka)
 
-add_compile_definitions(TEST DEBUG=0 SKIP_FOR_CMOCKA)
+add_compile_definitions(TEST DEBUG=0 SKIP_FOR_CMOCKA PB_SYSTEM_HEADER=\"pb_system_header.h\")
 
-include_directories(../../src/)
-
-# add cmocka tests
 add_executable(test_demo tests/demo.c)
-
-# add src
 add_library(demo SHARED ./demo_tu.c)
 
 target_link_libraries(test_demo PUBLIC cmocka demo)
@@ -68,3 +63,42 @@ if(NOT APPLE)
 endif()
 
 add_test(test_demo test_demo)
+
+add_library(transaction_trigger_decode_lib STATIC ../../src/handlers/transaction_trigger_decode.c)
+target_include_directories(transaction_trigger_decode_lib
+                           PUBLIC
+                           .
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+
+add_executable(test_transaction_trigger_decode_blackbox tests/transaction_trigger_decode_blackbox.c)
+target_include_directories(test_transaction_trigger_decode_blackbox
+                           PRIVATE
+                           .
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+target_link_libraries(test_transaction_trigger_decode_blackbox
+                      PUBLIC
+                      cmocka
+                      transaction_trigger_decode_lib)
+if(NOT APPLE)
+    target_link_libraries(test_transaction_trigger_decode_blackbox PUBLIC gcov)
+endif()
+
+add_test(test_transaction_trigger_decode_blackbox test_transaction_trigger_decode_blackbox)
+
+add_executable(test_transaction_trigger_decode_whitebox tests/transaction_trigger_decode_whitebox.c)
+target_include_directories(test_transaction_trigger_decode_whitebox
+                           PRIVATE
+                           .
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+target_link_libraries(test_transaction_trigger_decode_whitebox PUBLIC cmocka)
+if(NOT APPLE)
+    target_link_libraries(test_transaction_trigger_decode_whitebox PUBLIC gcov)
+endif()
+
+add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
