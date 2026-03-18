@@ -8,6 +8,7 @@
 static const uint8_t tron_trigger_type_url[] =
     "type.googleapis.com/protocol.TriggerSmartContract";
 static const size_t tron_trigger_type_url_len = sizeof(tron_trigger_type_url) - 1U;
+static const uint32_t tron_max_field_number = 0x1FFFFFFFU;
 
 static size_t min_size(size_t a, size_t b) {
     return (a < b) ? a : b;
@@ -369,7 +370,14 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                 break;
             }
             if (done) {
-                dec->pending_tag = (uint32_t) (value >> 3U);
+                const uint64_t field_number = value >> 3U;
+
+                if (field_number > (uint64_t) tron_max_field_number) {
+                    ok = false;
+                    break;
+                }
+
+                dec->pending_tag = (uint32_t) field_number;
                 dec->pending_wire = (pb_wire_type_t) (value & 0x07U);
 
                 /* Protobuf field numbers start at 1; tag 0 is always invalid. */
