@@ -372,6 +372,12 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                 dec->pending_tag = (uint32_t) (value >> 3U);
                 dec->pending_wire = (pb_wire_type_t) (value & 0x07U);
 
+                /* Protobuf field numbers start at 1; tag 0 is always invalid. */
+                if (dec->pending_tag == 0U) {
+                    ok = false;
+                    break;
+                }
+
                 switch (dec->pending_wire) {
                     case PB_WT_VARINT:
                         dec->mode = TRON_MODE_VARINT;
