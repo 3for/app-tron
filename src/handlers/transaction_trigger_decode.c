@@ -5,6 +5,10 @@
 #include "core/Contract.pb.h"
 #include "google/protobuf/any.pb.h"
 
+static const uint8_t tron_trigger_type_url[] =
+    "type.googleapis.com/protocol.TriggerSmartContract";
+static const size_t tron_trigger_type_url_len = sizeof(tron_trigger_type_url) - 1U;
+
 static size_t min_size(size_t a, size_t b) {
     return (a < b) ? a : b;
 }
@@ -211,6 +215,16 @@ static bool tron_start_capture_if_needed(tron_stream_decoder_t *dec, size_t len)
         return true;
     }
 
+    if (ctx == TRON_CTX_ANY && dec->pending_tag == google_protobuf_Any_type_url_tag) {
+        if (dec->type_url_seen || len != tron_trigger_type_url_len) {
+            return false;
+        }
+        dec->type_url_seen = true;
+        dec->validating_type_url = true;
+        dec->type_url_offset = 0;
+        return true;
+    }
+
     if (ctx != TRON_CTX_TRIGGER) return true;
 
     if (dec->pending_tag == protocol_TriggerSmartContract_owner_address_tag) {
@@ -294,6 +308,10 @@ static bool tron_validate_length_field(const tron_stream_decoder_t *dec) {
                    protocol_Transaction_Contract_ContractType_TriggerSmartContract;
     }
 
+    if (ctx == TRON_CTX_ANY && dec->pending_tag == google_protobuf_Any_value_tag) {
+        return dec->type_url_seen;
+    }
+
     if (ctx == TRON_CTX_TRIGGER && dec->pending_tag == protocol_TriggerSmartContract_data_tag) {
         return dec->result.has_owner_address && dec->result.has_contract_address;
     }
@@ -325,6 +343,8 @@ static bool tron_process_length(tron_stream_decoder_t *dec, size_t len) {
     dec->capture_buf = NULL;
     dec->capture_cap = 0;
     dec->capture_len = 0;
+    dec->validating_type_url = false;
+    dec->type_url_offset = 0;
     dec->in_trigger_data = false;
     dec->trigger_data_total_len = 0;
     dec->trigger_data_offset = 0;
@@ -409,6 +429,15 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                 break;
             }
 
+            if (dec->validating_type_url) {
+                if (dec->type_url_offset >= tron_trigger_type_url_len ||
+                    byte != tron_trigger_type_url[dec->type_url_offset]) {
+                    ok = false;
+                    break;
+                }
+                dec->type_url_offset++;
+            }
+
             if (dec->in_trigger_data) {
                 if (dec->trigger_data_observer != NULL) {
                     if (!dec->trigger_data_observer(dec->trigger_data_observer_ctx,
@@ -433,6 +462,14 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                     dec->result.data_prefix_len = dec->capture_len;
                 } else if (dec->capture_buf == dec->result.custom_data_prefix) {
                     dec->result.custom_data_prefix_len = dec->capture_len;
+                }
+                if (dec->validating_type_url) {
+                    if (dec->type_url_offset != tron_trigger_type_url_len) {
+                        ok = false;
+                        break;
+                    }
+                    dec->validating_type_url = false;
+                    dec->type_url_offset = 0;
                 }
                 if (dec->in_trigger_data) {
                     dec->in_trigger_data = false;

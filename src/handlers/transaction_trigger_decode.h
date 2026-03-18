@@ -89,6 +89,7 @@ typedef struct {
     size_t depth;
     bool first_contract_seen;
     bool parameter_seen;
+    bool type_url_seen;
     bool any_value_seen;
 
     tron_mode_t mode;
@@ -104,6 +105,8 @@ typedef struct {
     uint8_t *capture_buf;
     size_t capture_cap;
     size_t capture_len;
+    bool validating_type_url;
+    size_t type_url_offset;
     bool in_trigger_data;
     size_t trigger_data_total_len;
     size_t trigger_data_offset;
