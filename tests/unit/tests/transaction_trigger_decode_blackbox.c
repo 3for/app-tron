@@ -23,6 +23,9 @@ typedef struct {
     size_t fail_at_offset;
 } observer_ctx_t;
 
+static const uint8_t test_trigger_type_url[] =
+    "type.googleapis.com/protocol.TriggerSmartContract";
+
 static void test_buffer_append_byte(test_buffer_t *buffer, uint8_t byte) {
     assert_true(buffer->len < sizeof(buffer->bytes));
     buffer->bytes[buffer->len++] = byte;
@@ -123,6 +126,10 @@ static test_buffer_t build_trigger_message(const uint8_t *owner,
 static test_buffer_t build_any_message(const test_buffer_t *trigger) {
     test_buffer_t any = {0};
 
+    test_buffer_append_bytes_field(&any,
+                                   google_protobuf_Any_type_url_tag,
+                                   test_trigger_type_url,
+                                   sizeof(test_trigger_type_url) - 1U);
     test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger->bytes, trigger->len);
 
     return any;
@@ -462,7 +469,6 @@ static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
     const uint8_t custom_data[] = {0xCA, 0xFE};
     const uint8_t top_level_signature[] = {0xAA, 0xBB};
     const uint8_t provider[] = {'d', 'e', 'm', 'o'};
-    const uint8_t type_url[] = "type.googleapis.com/protocol.TriggerSmartContract";
     const uint8_t fixed32_value[4] = {0x44, 0x33, 0x22, 0x11};
     const uint8_t fixed64_value[8] = {0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01};
     test_buffer_t trigger = {0};
@@ -488,7 +494,10 @@ static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
                                    trigger_data,
                                    sizeof(trigger_data));
 
-    test_buffer_append_bytes_field(&any, google_protobuf_Any_type_url_tag, type_url, sizeof(type_url));
+    test_buffer_append_bytes_field(&any,
+                                   google_protobuf_Any_type_url_tag,
+                                   test_trigger_type_url,
+                                   sizeof(test_trigger_type_url) - 1U);
     test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger.bytes, trigger.len);
 
     test_buffer_append_varint_field(&contract,
@@ -902,8 +911,87 @@ static void test_rejects_duplicate_any_value(void **state) {
                                                          sizeof(data2),
                                                          3U,
                                                          4U);
+    test_buffer_append_bytes_field(&any,
+                                   google_protobuf_Any_type_url_tag,
+                                   test_trigger_type_url,
+                                   sizeof(test_trigger_type_url) - 1U);
     test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger1.bytes, trigger1.len);
     test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger2.bytes, trigger2.len);
+    contract = build_contract_message(&any,
+                                      protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                                      1U);
+    raw = build_raw_message(&contract, 7U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_missing_any_type_url(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t custom_data[] = {0x99};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+    test_buffer_t any = {0};
+    test_buffer_t contract = {0};
+    test_buffer_t raw = {0};
+
+    const test_buffer_t trigger = build_trigger_message(owner,
+                                                        sizeof(owner),
+                                                        contract_address,
+                                                        sizeof(contract_address),
+                                                        1U,
+                                                        trigger_data,
+                                                        sizeof(trigger_data),
+                                                        0U,
+                                                        0U);
+    test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger.bytes, trigger.len);
+    contract = build_contract_message(&any,
+                                      protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+                                      1U);
+    raw = build_raw_message(&contract, 7U, custom_data, sizeof(custom_data));
+
+    tron_stream_decoder_init_raw(&decoder, raw.len);
+
+    assert_false(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+    assert_false(tron_stream_decoder_get_result(&decoder, &result));
+}
+
+static void test_rejects_invalid_any_type_url(void **state) {
+    (void) state;
+
+    const uint8_t owner[21] = {0x41};
+    const uint8_t contract_address[21] = {0x42};
+    const uint8_t trigger_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    const uint8_t custom_data[] = {0x99};
+    const uint8_t invalid_type_url[] = "type.googleapis.com/protocol.TransferContract";
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+    test_buffer_t any = {0};
+    test_buffer_t contract = {0};
+    test_buffer_t raw = {0};
+
+    const test_buffer_t trigger = build_trigger_message(owner,
+                                                        sizeof(owner),
+                                                        contract_address,
+                                                        sizeof(contract_address),
+                                                        1U,
+                                                        trigger_data,
+                                                        sizeof(trigger_data),
+                                                        0U,
+                                                        0U);
+    test_buffer_append_bytes_field(&any,
+                                   google_protobuf_Any_type_url_tag,
+                                   invalid_type_url,
+                                   sizeof(invalid_type_url) - 1U);
+    test_buffer_append_bytes_field(&any, google_protobuf_Any_value_tag, trigger.bytes, trigger.len);
     contract = build_contract_message(&any,
                                       protocol_Transaction_Contract_ContractType_TriggerSmartContract,
                                       1U);
@@ -1066,6 +1154,8 @@ int main(void) {
         cmocka_unit_test(test_rejects_data_before_addresses),
         cmocka_unit_test(test_rejects_duplicate_contract_parameter),
         cmocka_unit_test(test_rejects_duplicate_any_value),
+        cmocka_unit_test(test_rejects_missing_any_type_url),
+        cmocka_unit_test(test_rejects_invalid_any_type_url),
         cmocka_unit_test(test_rejects_duplicate_trigger_singleton_field),
         cmocka_unit_test(test_rejects_length_exceeding_remaining_bytes),
         cmocka_unit_test(test_truncated_terminal_varint_is_not_marked_done),

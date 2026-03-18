@@ -106,6 +106,19 @@ static void test_tron_varint_feed_rejects_invalid_tenth_byte(void **state) {
     assert_false(tron_varint_feed(&decoder, 0x02U, &done, &value));
 }
 
+static void test_tron_length_fits_remaining_uses_full_uint64_compare(void **state) {
+    (void) state;
+
+    tron_stream_decoder_t decoder;
+
+    memset(&decoder, 0, sizeof(decoder));
+    decoder.depth = 1U;
+    decoder.frames[0].remaining = UINT32_MAX;
+
+    assert_true(tron_length_fits_remaining(&decoder, UINT32_MAX));
+    assert_false(tron_length_fits_remaining(&decoder, (uint64_t) UINT32_MAX + 1U));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_tron_current_ctx_returns_tx_when_stack_empty),
@@ -115,6 +128,7 @@ int main(void) {
         cmocka_unit_test(test_tron_enter_submessage_rejects_invalid_action),
         cmocka_unit_test(test_tron_process_byte_handles_whitebox_error_modes),
         cmocka_unit_test(test_tron_varint_feed_rejects_invalid_tenth_byte),
+        cmocka_unit_test(test_tron_length_fits_remaining_uses_full_uint64_compare),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
