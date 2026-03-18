@@ -618,6 +618,7 @@ static void test_rejects_invalid_wire_type_and_overlong_varints(void **state) {
     (void) state;
 
     const uint8_t invalid_zero_tag[] = {0x00U};
+    const uint8_t invalid_large_tag[] = {0x88U, 0x80U, 0x80U, 0x80U, 0x80U, 0x01U};
     const uint8_t invalid_wire[] = {0x0EU};
     const uint8_t invalid_length[] = {
         0x0AU,
@@ -637,6 +638,10 @@ static void test_rejects_invalid_wire_type_and_overlong_varints(void **state) {
 
     tron_stream_decoder_init(&decoder, sizeof(invalid_zero_tag));
     assert_false(tron_stream_decoder_feed(&decoder, invalid_zero_tag, sizeof(invalid_zero_tag)));
+    assert_false(tron_stream_decoder_is_done(&decoder));
+
+    tron_stream_decoder_init(&decoder, sizeof(invalid_large_tag));
+    assert_false(tron_stream_decoder_feed(&decoder, invalid_large_tag, sizeof(invalid_large_tag)));
     assert_false(tron_stream_decoder_is_done(&decoder));
 
     tron_stream_decoder_init(&decoder, sizeof(invalid_wire));
