@@ -543,6 +543,7 @@ static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
     assert_memory_equal(result.data_prefix, trigger_data, sizeof(trigger_data));
     assert_true(result.has_custom_data);
     assert_int_equal(result.custom_data_len, sizeof(custom_data));
+    assert_int_equal(result.custom_data_prefix_len, sizeof(custom_data));
     assert_memory_equal(result.custom_data_prefix, custom_data, sizeof(custom_data));
 }
 

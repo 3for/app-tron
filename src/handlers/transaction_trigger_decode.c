@@ -14,6 +14,17 @@ static size_t min_size(size_t a, size_t b) {
     return (a < b) ? a : b;
 }
 
+static void tron_reset_bytes_state(tron_stream_decoder_t *dec) {
+    dec->capture_buf = NULL;
+    dec->capture_cap = 0;
+    dec->capture_len = 0;
+    dec->validating_type_url = false;
+    dec->type_url_offset = 0;
+    dec->in_trigger_data = false;
+    dec->trigger_data_total_len = 0;
+    dec->trigger_data_offset = 0;
+}
+
 /* ---------------- Streaming / APDU-friendly decoder ----------------
  *
  * Nanopb's pb_decode() cannot pause/resume across multiple APDU frames.
@@ -341,14 +352,7 @@ static bool tron_process_length(tron_stream_decoder_t *dec, size_t len) {
     }
 
     /* Otherwise treat it as a bytes field and skip/capture. */
-    dec->capture_buf = NULL;
-    dec->capture_cap = 0;
-    dec->capture_len = 0;
-    dec->validating_type_url = false;
-    dec->type_url_offset = 0;
-    dec->in_trigger_data = false;
-    dec->trigger_data_total_len = 0;
-    dec->trigger_data_offset = 0;
+    tron_reset_bytes_state(dec);
     if (!tron_start_capture_if_needed(dec, len)) {
         return false;
     }
@@ -395,10 +399,12 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                         break;
                     case PB_WT_32BIT:
                         dec->pending_action = TRON_ACT_SKIP;
+                        tron_reset_bytes_state(dec);
                         tron_start_bytes(dec, 4U);
                         break;
                     case PB_WT_64BIT:
                         dec->pending_action = TRON_ACT_SKIP;
+                        tron_reset_bytes_state(dec);
                         tron_start_bytes(dec, 8U);
                         break;
                     default:

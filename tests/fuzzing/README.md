@@ -57,7 +57,7 @@ From the repository root:
 ```sh
 mkdir -p tests/fuzzing/out tests/fuzzing/corpus
 
-docker build -t app-tron-transaction-trigger-fuzz \
+docker build --no-cache -t app-tron-transaction-trigger-fuzz \
   -f .clusterfuzzlite/Dockerfile .
 ```
 
