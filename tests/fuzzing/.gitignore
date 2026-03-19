@@ -1,0 +1,7 @@
+build/
+corpus/
+out/
+default.profdata
+default.profraw
+*.profraw
+report.html
