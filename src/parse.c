@@ -919,7 +919,11 @@ static bool asset_info_is_set(int index) {
     return tmpCtx.transactionContext.assetSet[index];
 }
 
-int get_asset_index_by_addr(const uint8_t *addr) {
+static int get_asset_index_by_canonical_addr(const uint8_t *addr) {
+    if (addr == NULL) {
+        return -1;
+    }
+
     // Works for ERC-20 & NFT tokens since both structs in the union have the
     // contract address aligned
     for (int i = 0; i < MAX_ASSETS; i++) {
@@ -930,6 +934,17 @@ int get_asset_index_by_addr(const uint8_t *addr) {
         }
     }
     return -1;
+}
+
+int get_asset_index_by_addr(const uint8_t *addr) {
+    int index = get_asset_index_by_canonical_addr(addr);
+
+    if ((index == -1) && (addr != NULL) && (addr[0] == ADD_PRE_FIX_BYTE_MAINNET)) {
+        PRINTF("Retry asset lookup after stripping TRON 0x41 prefix\n");
+        index = get_asset_index_by_canonical_addr(addr + 1);
+    }
+
+    return index;
 }
 
 extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
