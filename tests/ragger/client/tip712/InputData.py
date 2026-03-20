@@ -18,7 +18,7 @@ import base58
 from pathlib import Path
 
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}")
-from address import to_tvm_address
+from address import to_raw_address, to_tvm_address
 
 
 class TrustedNameType(IntEnum):
@@ -328,7 +328,7 @@ def send_filtering_token(token_idx: int):
         token = filtering_tokens[token_idx]
         if not token["sent"]:
             provide_token_metadata(token["ticker"],
-                                   bytes.fromhex(token["addr"][2:]),
+                                   to_raw_address(token["addr"]),
                                    token["decimals"], token["chain_id"])
             token["sent"] = True
 

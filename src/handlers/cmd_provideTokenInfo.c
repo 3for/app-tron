@@ -30,18 +30,25 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if ((tickerLength + 1) > sizeof(token->ticker)) {
         return APDU_RESPONSE_INVALID_DATA;
     }
-    if (dataLength < tickerLength + 20 + 4 + 4) {
+    if (dataLength < tickerLength + TRON_ADDRESS_SIZE + 4 + 4) {
         return APDU_RESPONSE_INVALID_DATA;
     }
 
-    cx_hash_sha256(workBuffer + offset, tickerLength + 20 + 4 + 4, hash, 32);
+    cx_hash_sha256(workBuffer + offset, tickerLength + TRON_ADDRESS_SIZE + 4 + 4, hash, 32);
     memmove(token->ticker, workBuffer + offset, tickerLength);
     token->ticker[tickerLength] = '\0';
     offset += tickerLength;
     dataLength -= tickerLength;
-    memmove(token->address, workBuffer + offset, 20);
-    offset += 20;
-    dataLength -= 20;
+    if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return APDU_RESPONSE_INVALID_DATA;
+    }
+    // The input must include the 0x41 prefix, 
+    // but internally only the last 20 bytes (the canonical EVM address) are retained.
+    // So the existing `get_asset_info_by_addr()` and the UI/token comparison logic 
+    // do not need to be refactored.
+    memmove(token->address, workBuffer + offset + 1, ADDRESS_LENGTH);
+    offset += TRON_ADDRESS_SIZE;
+    dataLength -= TRON_ADDRESS_SIZE;
     // TODO: 4 bytes for this is overkill
     token->decimals = U4BE(workBuffer, offset);
     offset += 4;
