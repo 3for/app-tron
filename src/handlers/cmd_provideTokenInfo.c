@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include "io.h"
 #include "public_keys.h"
 #include "common_utils.h"
 #include "parse.h"
@@ -23,15 +24,15 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
 
     if (dataLength < 1) {
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
     }
     tickerLength = workBuffer[offset++];
     dataLength--;
     if ((tickerLength + 1) > sizeof(token->ticker)) {
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
     }
     if (dataLength < tickerLength + TRON_ADDRESS_SIZE + 4 + 4) {
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
     }
 
     cx_hash_sha256(workBuffer + offset, tickerLength + TRON_ADDRESS_SIZE + 4 + 4, hash, 32);
@@ -40,7 +41,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     offset += tickerLength;
     dataLength -= tickerLength;
     if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
     }
     // The input must include the 0x41 prefix, 
     // but internally only the last 20 bytes (the canonical EVM address) are retained.
@@ -57,7 +58,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     chain_id = U4BE(workBuffer, offset);
     if (chainConfig->chainId != chain_id) {
         UNSUPPORTED_CHAIN_ID_MSG(chain_id);
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
     }
     offset += 4;
     dataLength -= 4;
@@ -73,12 +74,10 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if (error != CX_OK) {
         PRINTF("Invalid token signature\n");
 #ifndef HAVE_BYPASS_SIGNATURES
-        return APDU_RESPONSE_INVALID_DATA;
+        return io_send_sw(E_INCORRECT_DATA);
 #endif
     }
     G_io_apdu_buffer[0] = tmpCtx.transactionContext.currentAssetIndex;
     validate_current_asset_info();
-    U2BE_ENCODE(G_io_apdu_buffer, 1, APDU_RESPONSE_OK);
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 3);
-    return 0;
+    return io_send_response_pointer(G_io_apdu_buffer, 1, E_OK);
 }
