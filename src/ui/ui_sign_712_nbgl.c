@@ -21,6 +21,7 @@ nbgl_warning_t warning;
 extern void reset_app_context();
 
 static void message_progress(bool confirm) {
+#ifdef SCREEN_SIZE_WALLET
     char *buf;
     size_t buf_size;
     size_t shift_off;
@@ -37,6 +38,7 @@ static void message_progress(bool confirm) {
             pair_idx = 1;
         }
     }
+#endif
     if (confirm) {
         if (ui_712_next_field() == TIP712_NO_MORE_FIELD) {
             ui_712_switch_to_sign();
@@ -54,6 +56,7 @@ static void review_skip(void) {
 #endif  // SCREEN_SIZE_WALLET
 
 static void message_update(bool confirm) {
+#ifdef SCREEN_SIZE_WALLET
     char *buf;
     size_t buf_size;
     size_t buf_off;
@@ -61,8 +64,10 @@ static void message_update(bool confirm) {
     bool skippable;
 
     buf = get_ui_pairs_buffer(&buf_size);
+#endif
     if (confirm) {
         if (!review_skipped) {
+#ifdef SCREEN_SIZE_WALLET
             buf_off = strlen(strings.tmp.tmp2) + 1;
             LEDGER_ASSERT((buf_idx + buf_off) < buf_size, "UI pairs buffer overflow");
             pairs[pair_idx].item = memmove(buf + buf_idx, strings.tmp.tmp2, buf_off);
@@ -75,12 +80,21 @@ static void message_update(bool confirm) {
             skippable = warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN);
             pairs_list.nbPairs =
                 nbgl_useCaseGetNbTagValuesInPageExt(pair_idx, &pairs_list, 0, skippable, &flag);
+#else
+            pairs[0].item = strings.tmp.tmp2;
+            pairs[0].value = strings.tmp.tmp;
+            pairs_list.nbPairs = 1;
+#endif
         }
+#ifdef SCREEN_SIZE_WALLET
         if (!review_skipped && ((pair_idx == ARRAYLEN(pairs)) || (pairs_list.nbPairs < pair_idx))) {
             nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, skip_callback);
         } else {
             message_progress(true);
         }
+#else
+        nbgl_useCaseReviewStreamingContinueExt(&pairs_list, message_progress, NULL);
+#endif
     } else {
         ui_typed_message_review_choice(false);
     }

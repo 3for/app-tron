@@ -19,7 +19,7 @@ ifeq ($(BOLOS_SDK),)
 $(error Environment variable BOLOS_SDK is not set)
 endif
 
-include $(BOLOS_SDK)/Makefile.defines
+include $(BOLOS_SDK)/Makefile.target
 
 APPNAME = Tron
 
@@ -50,6 +50,7 @@ ICON_APEX_P = icons/apex_app_tron.png
 
 ENABLE_BLUETOOTH = 1
 ENABLE_SWAP = 1
+ENABLE_NBGL_FOR_NANO_DEVICES = 1
 ENABLE_NBGL_QRCODE = 1
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations

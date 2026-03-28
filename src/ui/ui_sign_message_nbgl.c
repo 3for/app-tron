@@ -1,6 +1,8 @@
 #ifdef HAVE_NBGL
-#include <nbgl_page.h>
+#include <string.h>
 #include "glyphs.h"
+#include "nbgl_layout.h"
+#include "nbgl_obj.h"
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
@@ -9,6 +11,12 @@
 
 #define TEXT_REVIEW_TIP191 REVIEW(TEXT_MESSAGE)
 #define TEXT_SIGN_TIP191   SIGN(TEXT_MESSAGE)
+
+#ifdef SCREEN_SIZE_WALLET
+#define APP_MESSAGE_FONT LARGE_MEDIUM_FONT
+#else
+#define APP_MESSAGE_FONT BAGL_FONT_OPEN_SANS_REGULAR_11px_1bpp
+#endif
 
 char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
 
@@ -55,9 +63,9 @@ static bool ui_191_update_display_buffer(void) {
     strlcat(g_stax_shared_buffer + g_display_buffer_idx,
             strings.tmp.tmp + g_rcv_buffer_idx,
             sizeof(g_stax_shared_buffer) - g_display_buffer_idx);
-    reached = nbgl_getTextMaxLenInNbLines(LARGE_MEDIUM_FONT,
+    reached = nbgl_getTextMaxLenInNbLines(APP_MESSAGE_FONT,
                                           (char *) g_stax_shared_buffer,
-                                          SCREEN_WIDTH - (2 * BORDER_MARGIN),
+                                          AVAILABLE_WIDTH,
                                           NB_MAX_LINES_IN_REVIEW,
                                           &len,
                                           false);

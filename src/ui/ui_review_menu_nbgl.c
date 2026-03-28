@@ -27,6 +27,7 @@
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 #include "ui_idle_menu.h"
+#include "ui_nbgl.h"
 #include "trusted_name.h"
 
 // Macros
@@ -62,12 +63,8 @@ typedef struct {
 
 // Static variables
 static nbgl_layoutTagValueList_t pairList;
-static nbgl_pageInfoLongPress_t infoLongPress;
+static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
-static char clearSignPluginTitleMsg[SHARED_CTX_FIELD_1_SIZE];
-static char clearSignPluginFinishMsg[SHARED_CTX_FIELD_1_SIZE];
-static char clearSignPluginUiTitles[MAX_EXTERNAL_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_2_SIZE];
-static char clearSignPluginUiMsgs[MAX_EXTERNAL_PLUGIN_UI_FIELDS][SHARED_CTX_FIELD_1_SIZE];
 
 // Static functions declarations
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -104,7 +101,7 @@ static void customContractWarningChoice(bool accept) {
 }
 
 static void displayDataWarning(void) {
-    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
                        "Continue",
@@ -113,7 +110,7 @@ static void displayDataWarning(void) {
 }
 
 static void displayCustomContractWarning(void) {
-    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nCustom Contract\nProceed with care",
                        "Reject if you're not sure",
                        "Continue",
@@ -135,6 +132,10 @@ static void displayTransaction(void) {
 static bool prepareClearSignCustomContractPluginUi(void) {
     uint8_t pluginUiItems = 0;
     uint8_t fieldIndex = 0;
+    const char *title_msg;
+    const char *finish_msg;
+    const char *item_title;
+    const char *item_msg;
 
     if (!external_plugin_get_cached_ui_items_count(&pluginUiItems)) {
         return false;
@@ -144,33 +145,22 @@ static bool prepareClearSignCustomContractPluginUi(void) {
         return false;
     }
 
-    memset(clearSignPluginTitleMsg, 0, sizeof(clearSignPluginTitleMsg));
-    memset(clearSignPluginFinishMsg, 0, sizeof(clearSignPluginFinishMsg));
-    if (!external_plugin_get_cached_title_msg(clearSignPluginTitleMsg,
-                                              sizeof(clearSignPluginTitleMsg))) {
-        return false;
-    }
-    if (!external_plugin_get_cached_finish_msg(clearSignPluginFinishMsg,
-                                               sizeof(clearSignPluginFinishMsg))) {
+    title_msg = external_plugin_get_cached_title_msg_ref();
+    finish_msg = external_plugin_get_cached_finish_msg_ref();
+    if ((title_msg == NULL) || (finish_msg == NULL)) {
         return false;
     }
 
-    txInfos.flowTitle = clearSignPluginTitleMsg;
+    txInfos.flowTitle = title_msg;
     txInfos.flowSubtitle = NULL;
-    infoLongPress.text = clearSignPluginFinishMsg;
+    infoLongPress.text = finish_msg;
 
     for (uint8_t i = 0; i < pluginUiItems; i++) {
-        memset(clearSignPluginUiTitles[i], 0, sizeof(clearSignPluginUiTitles[i]));
-        memset(clearSignPluginUiMsgs[i], 0, sizeof(clearSignPluginUiMsgs[i]));
-        if (!external_plugin_get_cached_contract_ui(i,
-                                                    clearSignPluginUiTitles[i],
-                                                    sizeof(clearSignPluginUiTitles[i]),
-                                                    clearSignPluginUiMsgs[i],
-                                                    sizeof(clearSignPluginUiMsgs[i]))) {
+        if (!external_plugin_get_cached_contract_ui_ref(i, &item_title, &item_msg)) {
             return false;
         }
-        txInfos.fields[fieldIndex].item = clearSignPluginUiTitles[i];
-        txInfos.fields[fieldIndex++].value = clearSignPluginUiMsgs[i];
+        txInfos.fields[fieldIndex].item = item_title;
+        txInfos.fields[fieldIndex++].value = item_msg;
     }
 
     txInfos.fields[fieldIndex].item = "From Address";

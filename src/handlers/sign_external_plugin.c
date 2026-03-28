@@ -444,6 +444,22 @@ bool external_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_l
     return true;
 }
 
+const char *external_plugin_get_cached_title_msg_ref(void) {
+    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_titleMsg[0] == '\0') {
+        return NULL;
+    }
+
+    return external_plugin_ui_cache.g_titleMsg;
+}
+
+const char *external_plugin_get_cached_finish_msg_ref(void) {
+    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_finishMsg[0] == '\0') {
+        return NULL;
+    }
+
+    return external_plugin_ui_cache.g_finishMsg;
+}
+
 static bool external_plugin_query_contract_ui_raw(uint8_t screen_index,
                                                   char *title,
                                                   size_t title_len,
@@ -500,6 +516,25 @@ bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
 
     strlcpy(title, external_plugin_ui_cache.title[screen_index], title_len);
     strlcpy(out_msg, external_plugin_ui_cache.msg[screen_index], out_msg_len);
+    return true;
+}
+
+bool external_plugin_get_cached_contract_ui_ref(uint8_t screen_index,
+                                                const char **title,
+                                                const char **out_msg) {
+    if ((title == NULL) || (out_msg == NULL)) {
+        return false;
+    }
+
+    *title = NULL;
+    *out_msg = NULL;
+
+    if (!external_plugin_ui_cache.ready || (screen_index >= external_plugin_ui_cache.item_count)) {
+        return false;
+    }
+
+    *title = external_plugin_ui_cache.title[screen_index];
+    *out_msg = external_plugin_ui_cache.msg[screen_index];
     return true;
 }
 
