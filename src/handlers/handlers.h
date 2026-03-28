@@ -98,3 +98,8 @@ bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
                                             size_t title_len,
                                             char *out_msg,
                                             size_t out_msg_len);
+const char *external_plugin_get_cached_title_msg_ref(void);
+const char *external_plugin_get_cached_finish_msg_ref(void);
+bool external_plugin_get_cached_contract_ui_ref(uint8_t screen_index,
+                                                const char **title,
+                                                const char **out_msg);

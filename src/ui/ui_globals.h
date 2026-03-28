@@ -32,9 +32,9 @@
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 
 #ifdef HAVE_NBGL
-#if LARGE_ICON_SIZE == 64
+#if defined(LARGE_ICON_SIZE) && (LARGE_ICON_SIZE == 64)
 #define APP_TRON_ICON C_app_tron_64px
-#elif LARGE_ICON_SIZE == 48
+#elif defined(LARGE_ICON_SIZE) && (LARGE_ICON_SIZE == 48)
 #define APP_TRON_ICON C_app_tron_48px
 #else
 #define APP_TRON_ICON C_app_tron_48px
