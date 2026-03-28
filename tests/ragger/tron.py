@@ -264,12 +264,21 @@ class TronClient:
                  text: str = "",
                  warning_approve: bool = False):
         if self._firmware.is_nano:
+            path_name = ""
+            screen_change_before_first_instruction = True
+            if warning_approve:
+                self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
+                                                     str(snappath) + "/part1",
+                                                     [NavInsID.BOTH_CLICK])
+                path_name = "/part2"
+                screen_change_before_first_instruction = False
             self._navigator.navigate_until_text_and_compare(
                 NavIns(NavInsID.RIGHT_CLICK), [NavIns(NavInsID.BOTH_CLICK)],
                 text,
                 ROOT_SCREENSHOT_PATH,
-                snappath,
-                screen_change_before_first_instruction=True)
+                str(snappath) + path_name,
+                screen_change_before_first_instruction=
+                screen_change_before_first_instruction)
         else:
             path_name = ""
             screen_change_before_first_instruction = True

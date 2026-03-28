@@ -73,16 +73,16 @@ static void reviewStart(void);
 static void displayTransaction(void);
 static void displayDataWarning(void);
 static void displayCustomContractWarning(void);
-static void dataWarningChoice(bool reject);
+static void continueDataWarning(void);
 static void customContractWarningChoice(bool reject);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static bool prepareClearSignCustomContractPluginUi(void);
 
-static void dataWarningChoice(bool accept) {
+static void customContractWarningChoice(bool accept) {
     if (accept) {
-        if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
-            displayCustomContractWarning();
+        if (txInfos.warnings[DATA_WARNING] == true) {
+            displayDataWarning();
         } else {
             displayTransaction();
         }
@@ -92,33 +92,21 @@ static void dataWarningChoice(bool accept) {
     }
 }
 
-static void customContractWarningChoice(bool accept) {
-    if (accept) {
-        displayTransaction();
-    } else {
-        ui_callback_tx_cancel(false);
-        nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
-    }
+static void continueDataWarning(void) {
+    displayTransaction();
 }
 
 static void displayDataWarning(void) {
-#if !defined(SCREEN_SIZE_WALLET)
-    if (txInfos.state == APPROVAL_TRANSFER) {
-        nbgl_useCaseChoice(&ICON_APP_WARNING,
-                           "Data\nPresent",
-                           NULL,
-                           "Continue",
-                           "Reject transaction",
-                           dataWarningChoice);
-        return;
-    }
-#endif
+#ifdef SCREEN_SIZE_WALLET
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
                        "Continue",
                        "Reject transaction",
                        dataWarningChoice);
+#else
+    nbgl_useCaseAction(&ICON_APP_WARNING, "Data Present", "Continue", continueDataWarning);
+#endif
 }
 
 static void displayCustomContractWarning(void) {
@@ -183,10 +171,10 @@ static bool prepareClearSignCustomContractPluginUi(void) {
 }
 
 static void reviewStart() {
-    if (txInfos.warnings[DATA_WARNING] == true) {
-        displayDataWarning();
-    } else if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
+    if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
         displayCustomContractWarning();
+    } else if (txInfos.warnings[DATA_WARNING] == true) {
+        displayDataWarning();
     } else {
         displayTransaction();
     }
