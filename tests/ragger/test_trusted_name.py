@@ -24,7 +24,8 @@ ALGO_ID = 1
 NONCE = 21
 GAS_PRICE = 13
 GAS_LIMIT = 21000
-AMOUNT = 1.22
+# TRX, decimal 10^6
+AMOUNT = 1_220_000
 
 
 def common(firmware: Firmware,
@@ -61,7 +62,7 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": ADDR,
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": CHAIN_ID
     },
                                      test_name,
@@ -108,7 +109,7 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": bytes(addr),
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": CHAIN_ID
     },
                                      test_name,
@@ -139,7 +140,7 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": ADDR,
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": 5
     },
                                      test_name,
@@ -168,7 +169,7 @@ def test_trusted_name_v1_unknown_chain(
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": ADDR,
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": 9
     },
                                      test_name,
@@ -254,7 +255,7 @@ def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": ADDR,
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": CHAIN_ID
     },
                                      test_name,
@@ -287,7 +288,7 @@ def test_trusted_name_v2_wrong_chainid(
         "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
         "gas": GAS_LIMIT,
         "to": ADDR,
-        "value": Web3.to_wei(AMOUNT, "ether"),
+        "value": AMOUNT,
         "chainId": CHAIN_ID + 1,
     },
                                      test_name,

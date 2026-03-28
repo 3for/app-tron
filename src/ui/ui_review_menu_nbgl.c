@@ -59,6 +59,7 @@ typedef struct {
     ui_approval_state_t state;
     const char *flowTitle;
     const char *flowSubtitle;
+    const nbgl_icon_details_t *flowIcon;
 } nbgl_tx_infos_t;
 
 // Static variables
@@ -101,6 +102,17 @@ static void customContractWarningChoice(bool accept) {
 }
 
 static void displayDataWarning(void) {
+#if !defined(SCREEN_SIZE_WALLET)
+    if (txInfos.state == APPROVAL_TRANSFER) {
+        nbgl_useCaseChoice(&ICON_APP_WARNING,
+                           "Data\nPresent",
+                           NULL,
+                           "Continue",
+                           "Reject transaction",
+                           dataWarningChoice);
+        return;
+    }
+#endif
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
@@ -122,7 +134,7 @@ static void displayTransaction(void) {
     // Start review
     nbgl_useCaseReview(TYPE_TRANSACTION,
                        &pairList,
-                       &APP_TRON_ICON,
+                       txInfos.flowIcon,
                        txInfos.flowTitle,
                        txInfos.flowSubtitle,
                        infoLongPress.text,
@@ -224,6 +236,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 
     txInfos.warnings[DATA_WARNING] = data_warning;
     txInfos.flowTitle = "Review transaction";
+    txInfos.flowIcon = &APP_TRON_ICON;
     txInfos.state = state;
 
     infoLongPress.text = "Sign transaction";
@@ -235,11 +248,20 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
     e_name_source source = TN_SOURCE_ENS;
+    bool trusted_name_loaded = has_trusted_name();
     bool trusted_name_match =
         get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
     PRINTF("### trusted_name_match:%d\n", trusted_name_match);
+    if (trusted_name_loaded) {
+        txInfos.flowIcon = &APP_TRON_HOME_ICON;
+        infoLongPress.icon = &APP_TRON_HOME_ICON;
+    }
     switch (state) {
         case APPROVAL_TRANSFER:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelTxAmount;
             txInfos.fields[0].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[1].item = "Token";

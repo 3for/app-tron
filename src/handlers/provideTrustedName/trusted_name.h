@@ -62,6 +62,7 @@ const char *get_trusted_name(uint8_t type_count,
                              const e_name_source *sources,
                              const uint64_t *chain_id,
                              const uint8_t *addr);
+bool has_trusted_name(void);
 
 extern char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 

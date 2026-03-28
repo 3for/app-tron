@@ -52,6 +52,10 @@ typedef enum {
 static s_trusted_name_info g_trusted_name_info = {0};
 char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 
+bool has_trusted_name(void) {
+    return g_trusted_name_info.valid;
+}
+
 static bool matching_type(e_name_type type, uint8_t type_count, const e_name_type *types) {
     for (int i = 0; i < type_count; ++i) {
         if (type == types[i]) return true;
@@ -630,6 +634,7 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
     }
 
     memcpy(&g_trusted_name_info, &context->trusted_name, sizeof(g_trusted_name_info));
+    g_trusted_name_info.valid = true;
 
     PRINTF("Registered : %s => %.*h\n",
            g_trusted_name_info.name,
