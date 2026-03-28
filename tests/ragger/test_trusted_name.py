@@ -66,8 +66,7 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
         "chainId": CHAIN_ID
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 def test_trusted_name_v1_wrong_challenge(firmware: Firmware,
@@ -113,8 +112,7 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
         "chainId": CHAIN_ID
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -144,8 +142,7 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
         "chainId": 5
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -173,8 +170,7 @@ def test_trusted_name_v1_unknown_chain(
         "chainId": 9
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 def test_trusted_name_v1_name_too_long(firmware: Firmware,
@@ -259,8 +255,7 @@ def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
         "chainId": CHAIN_ID
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -292,8 +287,7 @@ def test_trusted_name_v2_wrong_chainid(
         "chainId": CHAIN_ID + 1,
     },
                                      test_name,
-                                     end_text,
-                                     warning_approve=True)
+                                     end_text)
 
 
 def test_trusted_name_v2_missing_challenge(firmware: Firmware,
