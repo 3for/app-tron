@@ -121,7 +121,11 @@ void ui_712_start_unfiltered(void) {
     ui_712_start_common();
     warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
     nbgl_useCaseAdvancedReviewStreamingStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
+#if !defined(SCREEN_SIZE_WALLET)
+                                             &APP_TRON_HOME_ICON,
+#else
                                              &ICON_APP_REVIEW,
+#endif
                                              "Review typed message",
                                              NULL,
                                              &warning,
@@ -132,13 +136,21 @@ void ui_712_start(void) {
     ui_712_start_common();
     if (warning.predefinedSet == 0) {
         nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE,
+#if !defined(SCREEN_SIZE_WALLET)
+                                         &APP_TRON_HOME_ICON,
+#else
                                          &ICON_APP_REVIEW,
+#endif
                                          "Review typed message",
                                          NULL,
                                          message_update);
     } else {
         nbgl_useCaseAdvancedReviewStreamingStart(TYPE_MESSAGE,
+#if !defined(SCREEN_SIZE_WALLET)
+                                                 &APP_TRON_HOME_ICON,
+#else
                                                  &ICON_APP_REVIEW,
+#endif
                                                  "Review typed message",
                                                  NULL,
                                                  &warning,

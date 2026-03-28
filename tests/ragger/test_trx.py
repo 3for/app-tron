@@ -711,7 +711,7 @@ class TestTRX():
         with backend.exchange_async(CLA, InsType.SIGN_PERSONAL_MESSAGE, 0x00,
                                     0x00, data):
             if firmware.is_nano:
-                text = "message"
+                text = "Sign message"
             else:
                 text = "Hold to sign"
             client.navigate(Path(currentframe().f_code.co_name), text)
@@ -759,7 +759,7 @@ class TestTRX():
         with backend.exchange_async(CLA, InsType.SIGN_TIP_712_MESSAGE, 0x00,
                                     0x00, data):
             if firmware.is_nano:
-                text = "message"
+                text = "Sign message"
             else:
                 text = "Hold to sign"
             client.navigate(Path(currentframe().f_code.co_name), text)
@@ -800,7 +800,7 @@ class TestTRX():
         with backend.exchange_async(CLA, InsType.GET_ECDH_SECRET, 0x00, 0x01,
                                     data):
             if firmware.is_nano:
-                text = "Accept"
+                text = "Sign transaction"
             else:
                 text = "Hold to sign"
             client.navigate(Path(currentframe().f_code.co_name), text)
@@ -925,7 +925,7 @@ class TestTRX():
             with backend.exchange_async(apdu[0], apdu[1], apdu[2], apdu[3],
                                         apdu[4:]):
                 if firmware.is_nano:
-                    text = "message"
+                    text = "Sign message"
                 else:
                     text = "Hold to sign"
                 client.navigate(Path(currentframe().f_code.co_name), text)
