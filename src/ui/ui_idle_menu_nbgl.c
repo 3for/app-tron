@@ -29,6 +29,9 @@
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
+#if !defined(SCREEN_SIZE_WALLET)
+    SWITCH_TRUNCATE_ADDRESS_TOKEN,
+#endif
     SWITCH_ALLOW_HASH_TX_TOKEN,
     SWITCH_TIP712_VERBOSE_TOKEN,
 };
@@ -36,6 +39,9 @@ enum {
 enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
+#if !defined(SCREEN_SIZE_WALLET)
+    TRUNCATE_ADDRESS_ID,
+#endif
     HASH_TX_ID,
     // change to make same order for bagl and nbgl
     TIP712_VERBOSE_ID,
@@ -51,6 +57,9 @@ static const char* const infoContents[] = {APPVERSION, "Ledger", "Ledger (c) 202
 static uint8_t settings[NB_SETTINGS_SWITCHES] = {
     S_DATA_ALLOWED,
     S_CUSTOM_CONTRACT,
+#if !defined(SCREEN_SIZE_WALLET)
+    S_TRUNCATE_ADDRESS,
+#endif
     S_SIGN_BY_HASH,
     // change to match above token order
     S_VERBOSE_TIP712,
@@ -67,11 +76,18 @@ static void settingsControlsCallback(int token, uint8_t index, int page) {
     switch (token) {
         case SWITCH_ALLOW_TX_DATA_TOKEN:
         case SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN:
+#if !defined(SCREEN_SIZE_WALLET)
+        case SWITCH_TRUNCATE_ADDRESS_TOKEN:
+#endif
         case SWITCH_ALLOW_HASH_TX_TOKEN:
             SETTING_TOGGLE(settings[SETTING_IDX(token)]);
             switches[TX_DATA_ID].initState = (HAS_SETTING(S_DATA_ALLOWED)) ? ON_STATE : OFF_STATE;
             switches[CSTM_CONTRACTS_ID].initState =
                 (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
+#if !defined(SCREEN_SIZE_WALLET)
+            switches[TRUNCATE_ADDRESS_ID].initState =
+                (HAS_SETTING(S_TRUNCATE_ADDRESS)) ? ON_STATE : OFF_STATE;
+#endif
             switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
             break;
         case SWITCH_TIP712_VERBOSE_TOKEN:
@@ -116,20 +132,31 @@ void ui_idle(void) {
     switches[CSTM_CONTRACTS_ID].tuneId = TUNE_TAP_CASUAL;
     switches[CSTM_CONTRACTS_ID].initState = (HAS_SETTING(S_CUSTOM_CONTRACT)) ? ON_STATE : OFF_STATE;
 
+#if !defined(SCREEN_SIZE_WALLET)
+    switches[TRUNCATE_ADDRESS_ID].text = "Truncate Address";
+    switches[TRUNCATE_ADDRESS_ID].subText = "Display truncated\naddresses";
+    switches[TRUNCATE_ADDRESS_ID].token = SWITCH_TRUNCATE_ADDRESS_TOKEN;
+    switches[TRUNCATE_ADDRESS_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[TRUNCATE_ADDRESS_ID].initState = (HAS_SETTING(S_TRUNCATE_ADDRESS)) ? ON_STATE : OFF_STATE;
+
+    switches[HASH_TX_ID].text = "Sign by Hash";
+    switches[HASH_TX_ID].subText = "Allow hash-only\ntransactions";
+#else
     switches[HASH_TX_ID].text = "Blind signing";
     switches[HASH_TX_ID].subText = "Allow transaction blind signing";
+#endif
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = (HAS_SETTING(S_SIGN_BY_HASH)) ? ON_STATE : OFF_STATE;
 
     switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
-    switches[TIP712_VERBOSE_ID].subText = "Display raw content from TIP712 messages.";
+    switches[TIP712_VERBOSE_ID].subText = "Displays raw content of TIP712 messages";
     switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
 
     nbgl_useCaseHomeAndSettings(APPNAME,
-                                &APP_TRON_ICON,
+                                &APP_TRON_HOME_ICON,
                                 NULL,
                                 INIT_HOME_PAGE,
                                 &settingContents,

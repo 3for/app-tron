@@ -32,7 +32,7 @@ def common(scenario_navigator: NavigateWithScenario, test_name: str,
     try:
         with app_client.personal_sign_full_display(BIP32_PATH, msg):
             if firmware.is_nano:
-                text = "message"
+                text = "Sign message"
             else:
                 text = "Hold to sign"
             app_client.navigate(test_name, text)

@@ -5,6 +5,7 @@ from ragger.backend import SpeculosBackend, BackendInterface
 from ragger.navigator import NavInsID, NavIns
 from pathlib import Path
 import re
+from settings import SettingID, get_settings_moves
 
 ###########################
 ### CONFIGURATION START ###
@@ -18,72 +19,11 @@ configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 @pytest.fixture(scope="class")
 def configuration(backend: BackendInterface, navigator, firmware):
     if type(backend) is SpeculosBackend:
-        if firmware.device == "flex":
-            instructions = [
-                # Go to settings menu.
-                NavIns(NavInsID.USE_CASE_HOME_SETTINGS),
-                # Allow data in TXs
-                NavIns(NavInsID.TOUCH, (200, 150)),
-                # Allow custom contracts
-                NavIns(NavInsID.TOUCH, (200, 300)),
-                NavIns(NavInsID.USE_CASE_SETTINGS_NEXT),
-                # Allow sign by hash
-                NavIns(NavInsID.TOUCH, (200, 150)),
-
-                # Go back to main menu.
-                NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT),
-            ]
-        elif firmware.device == "stax":
-            instructions = [
-                # Go to settings menu.
-                NavIns(NavInsID.USE_CASE_HOME_SETTINGS),
-                # Allow data in TXs
-                NavIns(NavInsID.TOUCH, (200, 150)),
-                # Allow custom contracts
-                NavIns(NavInsID.TOUCH, (200, 300)),
-                # Allow sign by hash
-                NavIns(NavInsID.TOUCH, (200, 450)),
-                # Go back to main menu.
-                NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT),
-            ]
-        elif firmware.device.startswith("apex_p"):
-            instructions = [
-                # Go to settings menu.
-                NavIns(NavInsID.USE_CASE_HOME_SETTINGS),
-                # Allow data in TXs
-                NavIns(NavInsID.TOUCH, (150, 110)),
-                # Allow custom contracts
-                NavIns(NavInsID.TOUCH, (150, 220)),
-                NavIns(NavInsID.USE_CASE_SETTINGS_NEXT),
-                # Allow sign by hash
-                NavIns(NavInsID.TOUCH, (150, 110)),
-                # Go back to main menu.
-                NavIns(NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT),
-            ]
-        else:
-            instructions = [
-                # Go to settings main menu
-                NavInsID.RIGHT_CLICK,
-                NavInsID.RIGHT_CLICK,
-                NavInsID.BOTH_CLICK,
-                # Allow data in TXs
-                NavInsID.BOTH_CLICK,
-                # Allow custom contracts
-                NavInsID.RIGHT_CLICK,
-                NavInsID.BOTH_CLICK,
-                # Allow sign by hash
-                NavInsID.RIGHT_CLICK,
-                NavInsID.RIGHT_CLICK,
-                NavInsID.BOTH_CLICK,
-            ]
-
-            # Skip one step
-            instructions += [NavInsID.RIGHT_CLICK]
-            instructions += [
-                # Go back to main menu
-                NavInsID.RIGHT_CLICK,
-                NavInsID.BOTH_CLICK
-            ]
+        instructions = get_settings_moves(backend.device, [
+            SettingID.DATA_ALLOWED,
+            SettingID.CUSTOM_CONTRACT,
+            SettingID.SIGN_BY_HASH,
+        ])
 
         navigator.navigate(instructions,
                            screen_change_before_first_instruction=False)
