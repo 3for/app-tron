@@ -43,7 +43,7 @@ class Test_GET_PUBLIC_KEY():
         with client.send_async_get_public_key_confirm(TRX_PATH, True):
             if firmware.is_nano:
                 navigator.navigate_until_text_and_compare(
-                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Approve",
+                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
                     ROOT_SCREENSHOT_PATH, test_name)
             else:
                 instructions = [
@@ -72,7 +72,7 @@ class Test_GET_PUBLIC_KEY():
         with client.send_async_get_public_key_confirm(TRX_PATH, False):
             if firmware.is_nano:
                 navigator.navigate_until_text_and_compare(
-                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Approve",
+                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
                     ROOT_SCREENSHOT_PATH, test_name)
             else:
                 navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH, test_name,

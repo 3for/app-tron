@@ -39,6 +39,12 @@
 #else
 #define APP_TRON_ICON C_app_tron_48px
 #endif  // LARGE_ICON_SIZE
+
+#if !defined(SCREEN_SIZE_WALLET)
+#define APP_TRON_HOME_ICON C_icon
+#else
+#define APP_TRON_HOME_ICON APP_TRON_ICON
+#endif
 #endif  // HAVE_NBGL
 
 extern volatile uint8_t customContractField;

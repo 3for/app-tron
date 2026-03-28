@@ -509,7 +509,7 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     if (state == APPROVAL_VERIFY_ADDRESS) {
         nbgl_useCaseAddressReview(toAddress,
                                   NULL,
-                                  &APP_TRON_ICON,
+                                  &APP_TRON_HOME_ICON,
                                   "Verify Tron\naddress",
                                   NULL,
                                   display_address_callback);
