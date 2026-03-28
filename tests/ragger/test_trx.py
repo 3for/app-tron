@@ -227,7 +227,7 @@ class TestTRX():
             if text_index == 0:
                 text = "Sign"
             elif text_index == 1:
-                text = "Accept"
+                    text = "Sign transaction"
         else:
             if text_index == 0 or text_index == 1:
                 text = "Hold to sign"

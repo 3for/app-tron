@@ -275,6 +275,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 2;
             break;
         case APPROVAL_WITNESSCREATE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = fromAddress;
             txInfos.fields[1].item = stringLabelUrl;
@@ -293,6 +297,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nUpdate Permission";
             break;
         case APPROVAL_EXCHANGE_CREATE:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "Token 1";
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = "Amount 1";
@@ -308,6 +316,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nExchange";
             break;
         case APPROVAL_EXCHANGE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "Exchange ID";
             txInfos.fields[0].value = toAddress;
             txInfos.fields[1].item = "Token pair";
@@ -321,6 +333,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 5;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "Action";
             txInfos.fields[0].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[1].item = "Exchange ID";
@@ -334,6 +350,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 5;
             break;
         case APPROVAL_WITNESSVOTE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             if (votes_count > MAX_TX_FIELDS - 2) {
                 THROW(E_INCORRECT_DATA);
             }
@@ -352,6 +372,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nVote";
             break;
         case APPROVAL_FREEZEASSET_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
