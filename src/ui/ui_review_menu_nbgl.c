@@ -74,11 +74,14 @@ static void displayTransaction(void);
 static void displayDataWarning(void);
 static void displayCustomContractWarning(void);
 static void continueDataWarning(void);
-static void customContractWarningChoice(bool reject);
+#ifdef SCREEN_SIZE_WALLET
+static void customContractWarningChoice(bool accept);
+#endif
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static bool prepareClearSignCustomContractPluginUi(void);
 
+#ifdef SCREEN_SIZE_WALLET
 static void customContractWarningChoice(bool accept) {
     if (accept) {
         if (txInfos.warnings[DATA_WARNING] == true) {
@@ -90,6 +93,11 @@ static void customContractWarningChoice(bool accept) {
         ui_callback_tx_cancel(false);
         nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
     }
+}
+#endif
+
+static void continueCustomContractWarning(void) {
+    displayTransaction();
 }
 
 static void continueDataWarning(void) {
@@ -110,12 +118,16 @@ static void displayDataWarning(void) {
 }
 
 static void displayCustomContractWarning(void) {
+#ifdef SCREEN_SIZE_WALLET
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "WARNING\nCustom Contract\nProceed with care",
                        "Reject if you're not sure",
                        "Continue",
                        "Reject transaction",
                        customContractWarningChoice);
+#else
+    nbgl_useCaseAction(&ICON_APP_WARNING, "Custom Contract", "Continue", continueCustomContractWarning);
+#endif
 }
 
 static void displayTransaction(void) {
@@ -268,6 +280,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 4;
             break;
         case APPROVAL_SIMPLE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelHash;
             txInfos.fields[0].value = fullHash;
             txInfos.fields[1].item = stringLabelSenderAddress;
@@ -288,6 +304,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nCreate Witness";
             break;
         case APPROVAL_PERMISSION_UPDATE:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelHash;
             txInfos.fields[0].value = fullHash;
             txInfos.fields[1].item = stringLabelSenderAddress;
@@ -389,6 +409,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nFreeze";
             break;
         case APPROVAL_UNFREEZEASSET_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = "Delegated To";
@@ -400,6 +424,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nUnfreeze";
             break;
         case APPROVAL_WITHDRAWBALANCE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = fromAddress;
             pairList.nbPairs = 1;
@@ -407,6 +435,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nClaim Rewards";
             break;
         case APPROVAL_SIGN_PERSONAL_MESSAGE:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "Message hash";
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = "Sign with";
@@ -416,6 +448,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign message";
             break;
         case APPROVAL_SIGN_TIP72_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "Domain hash";
             txInfos.fields[0].value = format_hash(tmpCtx.messageSigningContext712.domainHash,
                                                   strings.tmp.tmp,
@@ -431,6 +467,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign message";
             break;
         case APPROVAL_CUSTOM_CONTRACT:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.warnings[CUSTOM_CONTRACT_WARNING] = true;
             txInfos.fields[0].item = "Contract";
             txInfos.fields[0].value = fullContract;
@@ -453,6 +493,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = "ECDH Address";
             txInfos.fields[0].value = fromAddress;
             txInfos.fields[1].item = "Shared With";
@@ -462,6 +506,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nShare ECDH Secret";
             break;
         case APPROVAL_FREEZEASSETV2_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
@@ -475,6 +523,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nFreezeV2";
             break;
         case APPROVAL_UNFREEZEASSETV2_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
@@ -488,6 +540,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nUnfreezeV2";
             break;
         case APPROVAL_DELEGATE_RESOURCE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
@@ -503,6 +559,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nDelegate";
             break;
         case APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
@@ -516,6 +576,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nUndelegate";
             break;
         case APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = fromAddress;
             pairList.nbPairs = 1;
