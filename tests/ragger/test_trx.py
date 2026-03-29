@@ -64,7 +64,10 @@ def autonext(device: Device, navigator: Navigator,
 
     moves = []
     if device.is_nano:
-        moves = [NavInsID.RIGHT_CLICK]
+        if autonext_idx == 0 and unfiltered_flow:
+            moves = [NavInsID.BOTH_CLICK]
+        else:
+            moves = [NavInsID.RIGHT_CLICK]
     else:
         if autonext_idx == 0 and unfiltered_flow:
             moves = [NavInsID.USE_CASE_CHOICE_REJECT]
@@ -111,34 +114,36 @@ def tip712_new_common(device: Device,
 
     autonext_idx = 0
     default_screenshot_path = Path(__file__).parent.resolve()
-    assert InputData.process_data(
-        client, builder, json_data, filters,
-        partial(autonext, device, navigator, default_screenshot_path),
-        golden_run)
+    try:
+        assert InputData.process_data(
+            client, builder, json_data, filters,
+            partial(autonext, device, navigator, default_screenshot_path),
+            golden_run)
 
-    with client.exchange_async_raw(
-            builder.tip712_sign_new(client.getAccount(0)['path'])):
-        if device.is_nano:
-            nav_ins = NavInsID.RIGHT_CLICK
-            val_ins = NavInsID.BOTH_CLICK
-            text = "Sign message"
-        else:
-            nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
-            val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
-            text = "Hold to sign"
-        if snapshots_dirname is not None:
-            navigator.navigate_until_text_and_compare(
-                nav_ins, [val_ins],
-                text,
-                default_screenshot_path,
-                snapshots_dirname,
-                snap_start_idx=autonext_idx)
-        else:
-            navigator.navigate_until_text(nav_ins, [val_ins], text)
-    # reset values
-    unfiltered_flow = False
-    skip_flow = False
-    snapshots_dirname = None
+        with client.exchange_async_raw(
+                builder.tip712_sign_new(client.getAccount(0)['path'])):
+            if device.is_nano:
+                nav_ins = NavInsID.RIGHT_CLICK
+                val_ins = NavInsID.BOTH_CLICK
+                text = "Sign message"
+            else:
+                nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
+                val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
+                text = "Hold to sign"
+            if snapshots_dirname is not None:
+                navigator.navigate_until_text_and_compare(
+                    nav_ins, [val_ins],
+                    text,
+                    default_screenshot_path,
+                    snapshots_dirname,
+                    snap_start_idx=autonext_idx)
+            else:
+                navigator.navigate_until_text(nav_ins, [val_ins], text)
+    finally:
+        InputData.disable_autonext()
+        unfiltered_flow = False
+        skip_flow = False
+        snapshots_dirname = None
 
     return ResponseParser.signature(client._client.last_async_response.data)
 
@@ -1055,38 +1060,40 @@ class TestTRX():
 
         if not filters or verbose_raw:
             unfiltered_flow = True
-        if len(settings_to_toggle) > 0:
-            if device.is_nano:
-                settings_toggle_from_current_nano_home(
-                    backend, device, navigator, settings_to_toggle)
-            else:
-                settings_toggle(device, navigator, settings_to_toggle)
+        try:
+            if len(settings_to_toggle) > 0:
+                if device.is_nano:
+                    settings_toggle_from_current_nano_home(
+                        backend, device, navigator, settings_to_toggle)
+                else:
+                    settings_toggle(device, navigator, settings_to_toggle)
 
-        with open(input_file, encoding="utf-8") as file:
-            data = json.load(file)
-            extra_left = test_path.endswith(
-                '01-addresses_array_mail') and verbose_raw and filters is None
-            vrs = tip712_new_common(
-                device,
-                navigator,
-                default_screenshot_path,
-                client,
-                cmd_builder,
-                data,
-                filters,
-                verbose_raw,
-                golden_run,
-                #False,
-                extra_left=extra_left)
-            recovered_addr = recover_message(data, vrs)
+            with open(input_file, encoding="utf-8") as file:
+                data = json.load(file)
+                extra_left = test_path.endswith(
+                    '01-addresses_array_mail') and verbose_raw and filters is None
+                vrs = tip712_new_common(
+                    device,
+                    navigator,
+                    default_screenshot_path,
+                    client,
+                    cmd_builder,
+                    data,
+                    filters,
+                    verbose_raw,
+                    golden_run,
+                    #False,
+                    extra_left=extra_left)
+                recovered_addr = recover_message(data, vrs)
 
-        assert recovered_addr == get_wallet_addr(client)
-        if len(settings_to_toggle) > 0:
-            if device.is_nano:
-                settings_toggle_from_current_nano_home(
-                    backend, device, navigator, settings_to_toggle)
-            else:
-                settings_toggle(device, navigator, settings_to_toggle)
+            assert recovered_addr == get_wallet_addr(client)
+        finally:
+            if len(settings_to_toggle) > 0:
+                if device.is_nano:
+                    settings_toggle_from_current_nano_home(
+                        backend, device, navigator, settings_to_toggle)
+                else:
+                    settings_toggle(device, navigator, settings_to_toggle)
 
     def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
