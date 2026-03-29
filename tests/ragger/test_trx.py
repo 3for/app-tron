@@ -32,7 +32,7 @@ from ragger.backend.interface import RaisePolicy
 from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 
-from settings import settings_toggle, SettingID
+from settings import settings_toggle, SettingID, get_device_settings
 from client.command_builder import CommandBuilder
 import keychain
 import response_parser as ResponseParser
@@ -162,6 +162,51 @@ def get_wallet_addr(client: TronClient) -> bytes:
 
 def tip712_json_path() -> str:
     return f"{os.path.dirname(__file__)}/tip712_input_files"
+
+
+def current_screen_texts(backend: BackendInterface) -> list[str]:
+    content = backend.get_current_screen_content()
+    if isinstance(content, dict):
+        return [
+            event.get("text", "").strip()
+            for event in content.get("events", [])
+            if event.get("text", "").strip()
+        ]
+    if isinstance(content, list):
+        return [str(item).strip() for item in content if str(item).strip()]
+    return []
+
+
+def settings_toggle_from_settings_home(device: Device,
+                                       navigator: Navigator,
+                                       to_toggle: list[SettingID]):
+    moves = [NavInsID.BOTH_CLICK]
+    for setting in get_device_settings(device):
+        if setting in to_toggle:
+            moves += [NavInsID.BOTH_CLICK]
+        moves += [NavInsID.RIGHT_CLICK]
+    moves += [NavInsID.BOTH_CLICK]
+    navigator.navigate(moves, screen_change_before_first_instruction=False)
+
+
+def settings_toggle_from_current_nano_home(backend: BackendInterface,
+                                           device: Device,
+                                           navigator: Navigator,
+                                           to_toggle: list[SettingID]):
+    texts = current_screen_texts(backend)
+    normalized_texts = [text.lower() for text in texts]
+
+    if any("settings" in text for text in normalized_texts):
+        settings_toggle_from_settings_home(device, navigator, to_toggle)
+        return
+
+    if any("quit" in text for text in normalized_texts):
+        navigator.navigate([NavInsID.LEFT_CLICK],
+                           screen_change_before_first_instruction=False)
+        settings_toggle_from_settings_home(device, navigator, to_toggle)
+        return
+
+    settings_toggle(device, navigator, to_toggle)
 
 
 def input_files() -> list[str]:
@@ -1011,7 +1056,11 @@ class TestTRX():
         if not filters or verbose_raw:
             unfiltered_flow = True
         if len(settings_to_toggle) > 0:
-            settings_toggle(device, navigator, settings_to_toggle)
+            if device.is_nano:
+                settings_toggle_from_current_nano_home(
+                    backend, device, navigator, settings_to_toggle)
+            else:
+                settings_toggle(device, navigator, settings_to_toggle)
 
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
@@ -1033,7 +1082,11 @@ class TestTRX():
 
         assert recovered_addr == get_wallet_addr(client)
         if len(settings_to_toggle) > 0:
-            settings_toggle(device, navigator, settings_to_toggle)
+            if device.is_nano:
+                settings_toggle_from_current_nano_home(
+                    backend, device, navigator, settings_to_toggle)
+            else:
+                settings_toggle(device, navigator, settings_to_toggle)
 
     def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
                                            backend: BackendInterface,
@@ -1160,7 +1213,11 @@ class TestTRX():
         device = backend.device
 
         setting_id = SettingID.SIGN_BY_HASH
-        settings_toggle(device, navigator, [setting_id])
+        if device.is_nano:
+            settings_toggle_from_current_nano_home(backend, device, navigator,
+                                                   [setting_id])
+        else:
+            settings_toggle(device, navigator, [setting_id])
         cmd_builder = CommandBuilder()
         with pytest.raises(ExceptionRAPDU) as e:
             tip712_new_common(device, navigator, default_screenshot_path,
@@ -1181,7 +1238,11 @@ class TestTRX():
         elif firmware == Firmware.APEX_P:
             navigator.navigate([NavIns(NavInsID.TOUCH, (100, 350))],
                                screen_change_before_first_instruction=True)
-        settings_toggle(device, navigator, [setting_id])
+        if device.is_nano:
+            settings_toggle_from_current_nano_home(backend, device, navigator,
+                                                   [setting_id])
+        else:
+            settings_toggle(device, navigator, [setting_id])
 
     def test_trx_tip712_skip(self, firmware: Firmware,
                              backend: BackendInterface, navigator: Navigator,
