@@ -73,19 +73,15 @@ static void reviewStart(void);
 static void displayTransaction(void);
 static void displayDataWarning(void);
 static void displayCustomContractWarning(void);
-static void continueDataWarning(void);
-#ifdef SCREEN_SIZE_WALLET
-static void customContractWarningChoice(bool accept);
-#endif
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static bool prepareClearSignCustomContractPluginUi(void);
 
 #ifdef SCREEN_SIZE_WALLET
-static void customContractWarningChoice(bool accept) {
+static void dataWarningChoice(bool accept) {
     if (accept) {
-        if (txInfos.warnings[DATA_WARNING] == true) {
-            displayDataWarning();
+        if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
+            displayCustomContractWarning();
         } else {
             displayTransaction();
         }
@@ -94,8 +90,16 @@ static void customContractWarningChoice(bool accept) {
         nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
     }
 }
-#endif
 
+static void customContractWarningChoice(bool accept) {
+    if (accept) {
+        displayTransaction();
+    } else {
+        ui_callback_tx_cancel(false);
+        nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
+    }
+}
+#else
 static void continueCustomContractWarning(void) {
     displayTransaction();
 }
@@ -103,10 +107,11 @@ static void continueCustomContractWarning(void) {
 static void continueDataWarning(void) {
     displayTransaction();
 }
+#endif
 
 static void displayDataWarning(void) {
 #ifdef SCREEN_SIZE_WALLET
-    nbgl_useCaseChoice(&ICON_APP_WARNING,
+    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
                        "WARNING\nThis transaction\ncontains\nextra data",
                        "Reject if you're not sure",
                        "Continue",
@@ -119,7 +124,7 @@ static void displayDataWarning(void) {
 
 static void displayCustomContractWarning(void) {
 #ifdef SCREEN_SIZE_WALLET
-    nbgl_useCaseChoice(&ICON_APP_WARNING,
+    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
                        "WARNING\nCustom Contract\nProceed with care",
                        "Reject if you're not sure",
                        "Continue",
@@ -183,10 +188,10 @@ static bool prepareClearSignCustomContractPluginUi(void) {
 }
 
 static void reviewStart() {
-    if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
-        displayCustomContractWarning();
-    } else if (txInfos.warnings[DATA_WARNING] == true) {
+    if (txInfos.warnings[DATA_WARNING] == true) {
         displayDataWarning();
+    } else if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
+        displayCustomContractWarning();
     } else {
         displayTransaction();
     }
