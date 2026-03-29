@@ -125,11 +125,7 @@ void ui_191_start(void) {
     g_skipped = false;
 
     nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE | SKIPPABLE_OPERATION,
-#if !defined(SCREEN_SIZE_WALLET)
-                                     &APP_TRON_HOME_ICON,
-#else
                                      &ICON_APP_REVIEW,
-#endif
                                      TEXT_REVIEW_TIP191,
                                      NULL,
                                      ui_191_data_cb);
