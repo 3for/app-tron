@@ -12,11 +12,11 @@ from settings import SettingID, get_settings_moves
 ###########################
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-configuration.OPTIONAL.BACKEND_SCOPE = "class"
+configuration.OPTIONAL.BACKEND_SCOPE = "function"
 configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="function")
 def configuration(backend: BackendInterface, navigator, firmware):
     if type(backend) is SpeculosBackend:
         instructions = get_settings_moves(backend.device, [
