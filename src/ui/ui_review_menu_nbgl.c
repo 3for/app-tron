@@ -199,20 +199,23 @@ static void reviewStart() {
 
 static void reviewChoice(bool confirm) {
     bool ret;
+    nbgl_reviewStatusType_t success_status = STATUS_TYPE_TRANSACTION_SIGNED;
 
     if (confirm) {
         if (txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) {
             ret = ui_callback_signMessage_ok(false);
+            success_status = STATUS_TYPE_MESSAGE_SIGNED;
         } else if (txInfos.state == APPROVAL_SHARED_ECDH_SECRET) {
             ret = ui_callback_ecdh_ok(false);
         } else if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
             ret = ui_callback_signMessage712_v0_ok(false);
+            success_status = STATUS_TYPE_MESSAGE_SIGNED;
         } else {
             ret = ui_callback_tx_ok(false);
         }
 
         if (ret) {
-            nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_SIGNED, ui_idle);
+            nbgl_useCaseReviewStatus(success_status, ui_idle);
         } else {
             nbgl_useCaseStatus("Transaction failure", false, ui_idle);
         }
