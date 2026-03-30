@@ -9,6 +9,7 @@ from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
 from ragger.firmware import Firmware
 from tron import CLA, Errors, InsType, TronClient
+from client.tip712.InputData import send_coin_meta_certificate
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
 if PROTO_PATH not in sys.path:
@@ -92,6 +93,7 @@ def test_set_external_plugin_rejects_short_payload(backend: BackendInterface):
 
 def test_set_external_plugin_returns_plugin_not_found(
         tron_client: TronClient, trc20_contract_address: bytes):
+    send_coin_meta_certificate(tron_client)
     assert_plugin_not_found_or_speculos_crash(
         tron_client,
         build_signed_external_plugin_setup(MISSING_PLUGIN_NAME,

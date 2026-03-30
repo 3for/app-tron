@@ -2,10 +2,8 @@
 import pytest
 from ragger.conftest import configuration
 from ragger.backend import SpeculosBackend, BackendInterface
-from ragger.navigator import NavInsID, NavIns
 from pathlib import Path
-import re
-from settings import SettingID, get_settings_moves
+from settings import SettingID, get_device_settings, get_enabled_settings, get_settings_moves
 
 ###########################
 ### CONFIGURATION START ###
@@ -19,14 +17,25 @@ configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 @pytest.fixture(scope="function")
 def configuration(backend: BackendInterface, navigator, firmware):
     if type(backend) is SpeculosBackend:
-        instructions = get_settings_moves(backend.device, [
+        desired_enabled = {
             SettingID.DATA_ALLOWED,
             SettingID.CUSTOM_CONTRACT,
             SettingID.SIGN_BY_HASH,
-        ])
+        }
+        current_enabled = get_enabled_settings(backend, backend.device)
+        to_toggle = [
+            setting for setting in get_device_settings(backend.device)
+            if (setting in current_enabled) != (setting in desired_enabled)
+        ]
 
-        navigator.navigate(instructions,
-                           screen_change_before_first_instruction=False)
+        if to_toggle:
+            navigator.navigate(get_settings_moves(backend.device, to_toggle),
+                               screen_change_before_first_instruction=False)
+
+        final_enabled = get_enabled_settings(backend, backend.device)
+        assert final_enabled == desired_enabled, (
+            f"Unexpected settings after configuration: {sorted(s.name for s in final_enabled)}"
+        )
 
 
 @pytest.fixture(name="app_version")
