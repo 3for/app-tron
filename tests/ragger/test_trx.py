@@ -54,45 +54,57 @@ snapshots_dirname: Optional[str] = None
 WALLET_ADDR: Optional[bytes] = None
 unfiltered_flow: bool = False
 skip_flow: bool = False
+autonext_running: bool = False
 
 
 def autonext(device: Device, navigator: Navigator,
              default_screenshot_path: Path):
     global autonext_idx
+    global autonext_running
 
-    moves = []
-    if device.is_nano:
-        if autonext_idx == 0 and unfiltered_flow:
-            moves = [NavInsID.BOTH_CLICK]
-        else:
-            moves = [NavInsID.RIGHT_CLICK]
-    else:
-        if autonext_idx == 0 and unfiltered_flow:
-            moves = [NavInsID.USE_CASE_CHOICE_REJECT]
-        else:
-            if autonext_idx == 2 and skip_flow:
-                InputData.disable_autonext()  # so the timer stops firing
-                moves = [
-                    # Ragger does not handle the skip button
-                    NavIns(NavInsID.TOUCH,
-                           POSITIONS["RightHeader"][device.type]),
-                    NavInsID.USE_CASE_CHOICE_CONFIRM,
-                ]
+    # SIGALRM can fire again while we are still comparing/capturing the
+    # previous screen, which would re-enter this handler with the same
+    # snapshot index and desynchronize the whole sequence.
+    if autonext_running:
+        return
+    autonext_running = True
+
+    try:
+        moves = []
+        if device.is_nano:
+            if autonext_idx == 0 and unfiltered_flow:
+                moves = [NavInsID.BOTH_CLICK]
             else:
-                moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
-    if snapshots_dirname is not None:
-        navigator.navigate_and_compare(
-            default_screenshot_path,
-            snapshots_dirname,
-            moves,
-            screen_change_before_first_instruction=False,
-            screen_change_after_last_instruction=False,
-            snap_start_idx=autonext_idx)
-    else:
-        navigator.navigate(moves,
-                           screen_change_before_first_instruction=False,
-                           screen_change_after_last_instruction=False)
-    autonext_idx += len(moves)
+                moves = [NavInsID.RIGHT_CLICK]
+        else:
+            if autonext_idx == 0 and unfiltered_flow:
+                moves = [NavInsID.USE_CASE_CHOICE_REJECT]
+            else:
+                if autonext_idx == 2 and skip_flow:
+                    InputData.disable_autonext()  # so the timer stops firing
+                    moves = [
+                        # Ragger does not handle the skip button
+                        NavIns(NavInsID.TOUCH,
+                               POSITIONS["RightHeader"][device.type]),
+                        NavInsID.USE_CASE_CHOICE_CONFIRM,
+                    ]
+                else:
+                    moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
+        if snapshots_dirname is not None:
+            navigator.navigate_and_compare(
+                default_screenshot_path,
+                snapshots_dirname,
+                moves,
+                screen_change_before_first_instruction=False,
+                screen_change_after_last_instruction=False,
+                snap_start_idx=autonext_idx)
+        else:
+            navigator.navigate(moves,
+                               screen_change_before_first_instruction=False,
+                               screen_change_after_last_instruction=False)
+        autonext_idx += len(moves)
+    finally:
+        autonext_running = False
 
 
 def tip712_new_common(device: Device,
@@ -109,8 +121,10 @@ def tip712_new_common(device: Device,
     global unfiltered_flow
     global skip_flow
     global snapshots_dirname
+    global autonext_running
 
     autonext_idx = 0
+    autonext_running = False
     default_screenshot_path = Path(__file__).parent.resolve()
     try:
         assert InputData.process_data(
