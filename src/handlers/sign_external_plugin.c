@@ -132,6 +132,7 @@ static bool call_external_plugin(uint32_t message, void *parameters) {
             os_lib_call(params);
         }
         CATCH_OTHER(e) {
+            (void) e;
             PRINTF("External plugin call failed (%d)\n", e);
             dataContext.tokenContext.pluginStatus = TRON_PLUGIN_RESULT_UNAVAILABLE;
             CLOSE_TRY;

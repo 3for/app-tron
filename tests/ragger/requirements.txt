@@ -1,5 +1,8 @@
 pytest
-protobuf==3.20.3
+# The container venv inherits system site-packages, so a strict protobuf pin
+# can trigger a partial uninstall of the preinstalled version and abort the
+# rest of the test dependency install.
+protobuf>=3.20.3,<6
 base58==1.0.3
 crypto==1.4.1
 # eth-keys==0.3.1

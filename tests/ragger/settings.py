@@ -2,6 +2,7 @@ from enum import Enum, auto
 from typing import Union
 from ledgered.devices import Device, DeviceType
 
+from ragger.backend import BackendInterface
 from ragger.navigator import Navigator, NavInsID, NavIns
 
 
@@ -12,6 +13,18 @@ class SettingID(Enum):
     TRUNCATE_ADDRESS = auto()
     SIGN_BY_HASH = auto()
     VERBOSE_TIP712 = auto()
+
+
+SETTING_BITS = {
+    SettingID.DATA_ALLOWED: 0,
+    SettingID.CUSTOM_CONTRACT: 1,
+    SettingID.TRUNCATE_ADDRESS: 2,
+    SettingID.SIGN_BY_HASH: 3,
+    SettingID.VERBOSE_TIP712: 4,
+}
+
+APP_CLA = 0xE0
+GET_APP_CONFIGURATION_INS = 0x06
 
 
 # Settings Positions per device. Returns the tuple (page, x, y)
@@ -60,6 +73,16 @@ def get_device_settings(device: Device) -> list[SettingID]:
         SettingID.SIGN_BY_HASH,
         SettingID.VERBOSE_TIP712,
     ]
+
+
+def get_enabled_settings(backend: BackendInterface,
+                         device: Device) -> set[SettingID]:
+    response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
+    enabled_mask = response.data[0]
+    return {
+        setting for setting in get_device_settings(device)
+        if enabled_mask & (1 << SETTING_BITS[setting])
+    }
 
 
 def get_settings_moves(
