@@ -49,6 +49,7 @@ int apdu_dispatcher(const command_t *cmd) {
 
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
+            forget_known_assets();
             // Request Public Key
             return handleGetPublicKey(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
@@ -69,6 +70,7 @@ int apdu_dispatcher(const command_t *cmd) {
             return handleECDHSecret(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY:
+            forget_known_assets();
             return handleSignPersonalMessageFullDisplay(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_PERSONAL_MESSAGE:
@@ -77,6 +79,7 @@ int apdu_dispatcher(const command_t *cmd) {
         case INS_SIGN_TIP_712_MESSAGE:
             switch (cmd->p2) {
                 case P2_TIP712_LEGACY_IMPLEM:
+                    forget_known_assets();
                     return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
                 case P2_TIP712_FULL_IMPLEM:
