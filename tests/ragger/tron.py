@@ -262,7 +262,8 @@ class TronClient:
     def navigate(self,
                  snappath: Path = None,
                  text: str = "",
-                 warning_approve: bool = False):
+                 warning_approve: bool = False,
+                 warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM):
         if self._firmware.is_nano:
             path_name = ""
             screen_change_before_first_instruction = True
@@ -283,22 +284,9 @@ class TronClient:
             path_name = ""
             screen_change_before_first_instruction = True
             if warning_approve:
-                # Use custom touch coordinates to account for warning approve
-                # button position.
-                instructions = [
-                    NavIns(
-                        NavInsID.TOUCH,
-                        (200 if self._firmware.device.startswith("stax") else
-                         200 if self._firmware.device.startswith("flex") else
-                         150 if self._firmware.device.startswith("apex") else
-                         200, 545 if self._firmware.device.startswith("stax")
-                         else 445 if self._firmware.device.startswith("flex")
-                         else 315 if self._firmware.device.startswith(
-                             "apex") else 545)),
-                ]
                 self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
                                                      str(snappath) + "/part1",
-                                                     instructions)
+                                                     [warning_instruction])
                 path_name = "/part2"
                 screen_change_before_first_instruction = False
             self._navigator.navigate_until_text_and_compare(

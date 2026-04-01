@@ -225,6 +225,9 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     if (!HAS_SETTING(S_VERBOSE_TIP712)) {
         ui_712_set_title("Contract", 8);
         ui_712_set_value(name, name_len);
+        if (!ui_712_prepare_current_pair()) {
+            return false;
+        }
         ui_712_redraw_generic_step();
     }
     return true;

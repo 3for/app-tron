@@ -136,6 +136,7 @@ def tip712_new_common(device: Device,
 
         with client.exchange_async_raw(
                 builder.tip712_sign_new(client.getAccount(0)['path'])):
+            warning_approve = unfiltered_flow
             if device.is_nano:
                 nav_ins = NavInsID.RIGHT_CLICK
                 val_ins = NavInsID.BOTH_CLICK
@@ -145,13 +146,18 @@ def tip712_new_common(device: Device,
                 val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
                 text = "Hold to sign"
             if snapshots_dirname is not None:
-                navigator.navigate_until_text_and_compare(
-                    nav_ins, [val_ins],
-                    text,
-                    default_screenshot_path,
-                    snapshots_dirname,
-                    snap_start_idx=autonext_idx)
+                client.navigate(snapshots_dirname,
+                                text,
+                                warning_approve=warning_approve,
+                                warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
             else:
+                if warning_approve:
+                    if device.is_nano:
+                        navigator.navigate([NavInsID.BOTH_CLICK],
+                                           screen_change_before_first_instruction=False)
+                    else:
+                        navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                                           screen_change_before_first_instruction=False)
                 navigator.navigate_until_text(nav_ins, [val_ins], text)
     finally:
         InputData.disable_autonext()

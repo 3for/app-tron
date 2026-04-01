@@ -63,3 +63,30 @@ void *mem_alloc_and_align(size_t size, size_t alignment) {
     mem_align(alignment);
     return mem_alloc(size);
 }
+
+/**
+ * Reverse-allocate and align, required when reverse-buffer allocations are
+ * later dereferenced as structures or structure arrays.
+ *
+ * @param[in] size the size of the data we want to allocate in memory
+ * @param[in] alignment the byte alignment needed
+ *
+ * @return pointer to the memory area, \ref NULL if the allocation failed
+ */
+void *mem_rev_alloc_and_align(size_t size, size_t alignment) {
+    uintptr_t start;
+    size_t padding = 0;
+    size_t total_size;
+
+    if (alignment > 1) {
+        start = (uintptr_t) mem_rev_alloc(0);
+        start -= size;
+        padding = start % alignment;
+    }
+
+    if (__builtin_add_overflow(size, padding, &total_size)) {
+        return NULL;
+    }
+
+    return mem_rev_alloc(total_size);
+}
