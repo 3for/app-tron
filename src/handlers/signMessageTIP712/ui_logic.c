@@ -1,7 +1,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include "ui_logic.h"
+#include "mem.h"
 #include "mem_utils.h"
 #include "os_io.h"
 #include "context_712.h"  // tip712_context_deinit
@@ -46,6 +49,15 @@ typedef struct {
     e_amount_join_state state;
 } s_amount_context;
 
+#ifdef HAVE_NBGL
+typedef struct ui_712_pair_s {
+    struct ui_712_pair_s *next;
+    const char *raw_key;
+    const char *key;
+    const char *value;
+} s_ui_712_pair;
+#endif
+
 typedef struct {
     bool shown;
     bool end_reached;
@@ -62,12 +74,130 @@ typedef struct {
     uint8_t tn_source_count;
     e_name_type tn_types[TN_TYPE_COUNT];
     e_name_source tn_sources[TN_SOURCE_COUNT];
-#ifdef SCREEN_SIZE_WALLET
-    char ui_pairs_buffer[(SHARED_CTX_FIELD_1_SIZE + SHARED_CTX_FIELD_2_SIZE) * 2];
+#ifdef HAVE_NBGL
+    s_ui_712_pair *ui_pairs;
+    s_ui_712_pair *ui_pairs_tail;
+    uint16_t ui_pairs_count;
+    uint16_t ui_pairs_consecutive_identical_count;
 #endif
 } t_ui_context;
 
 static t_ui_context *ui_ctx = NULL;
+
+#ifdef HAVE_NBGL
+static char *ui_712_alloc_review_string(const char *src, size_t length) {
+    char *dst = mem_rev_alloc(length + 1);
+
+    if (dst == NULL) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return NULL;
+    }
+
+    memcpy(dst, src, length);
+    dst[length] = '\0';
+    return dst;
+}
+
+static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
+    size_t key_length;
+    char suffix_buffer[6];
+    int suffix_length;
+    char *dst;
+
+    key_length = strlen(key);
+    if (suffix == 0) {
+        return ui_712_alloc_review_string(key, key_length);
+    }
+
+    suffix_length = snprintf(suffix_buffer, sizeof(suffix_buffer), "%u", suffix);
+    if ((suffix_length <= 0) || ((size_t) suffix_length >= sizeof(suffix_buffer))) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return NULL;
+    }
+
+    dst = mem_rev_alloc(key_length + 1 + (size_t) suffix_length + 1);
+    if (dst == NULL) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return NULL;
+    }
+
+    snprintf(dst, key_length + 1 + (size_t) suffix_length + 1, "%s-%u", key, suffix);
+    return dst;
+}
+
+static bool ui_712_push_pair(const char *key, const char *value) {
+    s_ui_712_pair *pair;
+    size_t key_length;
+    uint16_t key_suffix = 0;
+
+    if ((ui_ctx == NULL) || (key == NULL) || (value == NULL)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+
+    key_length = strlen(key);
+    if (key_length == 0) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+
+    if ((ui_ctx->ui_pairs_tail != NULL) && (strcmp(ui_ctx->ui_pairs_tail->raw_key, key) == 0) &&
+        (strcmp(ui_ctx->ui_pairs_tail->value, value) == 0)) {
+        // Only identical adjacent key/value pages are renamed into a numbered
+        // run: "key-1", "key-2", "key-3", etc.
+        if (ui_ctx->ui_pairs_consecutive_identical_count == 1) {
+            ui_ctx->ui_pairs_tail->key = ui_712_alloc_review_key(key, 1);
+            if (ui_ctx->ui_pairs_tail->key == NULL) {
+                return false;
+            }
+        }
+        ui_ctx->ui_pairs_consecutive_identical_count += 1;
+        key_suffix = ui_ctx->ui_pairs_consecutive_identical_count;
+    } else {
+        ui_ctx->ui_pairs_consecutive_identical_count = 1;
+    }
+
+    pair = MEM_REV_ALLOC_AND_ALIGN_TYPE(*pair);
+    if (pair == NULL) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return false;
+    }
+    explicit_bzero(pair, sizeof(*pair));
+
+    pair->raw_key = ui_712_alloc_review_string(key, key_length);
+    if (pair->raw_key == NULL) {
+        return false;
+    }
+
+    pair->key = ui_712_alloc_review_key(key, key_suffix);
+    if (pair->key == NULL) {
+        return false;
+    }
+
+    pair->value = ui_712_alloc_review_string(value, strlen(value));
+    if (pair->value == NULL) {
+        return false;
+    }
+
+    if (ui_ctx->ui_pairs == NULL) {
+        ui_ctx->ui_pairs = pair;
+    } else {
+        ui_ctx->ui_pairs_tail->next = pair;
+    }
+    ui_ctx->ui_pairs_tail = pair;
+    ui_ctx->ui_pairs_count += 1;
+    return true;
+}
+
+#endif
+
+bool ui_712_prepare_current_pair(void) {
+#ifdef HAVE_NBGL
+    return ui_712_push_pair(strings.tmp.tmp2, strings.tmp.tmp);
+#else
+    return true;
+#endif
+}
 
 /**
  * Checks on the UI context to determine if the next TIP 712 field should be shown
@@ -175,7 +305,14 @@ bool ui_712_redraw_generic_step(void) {
         }
         ui_ctx->shown = true;
     } else {
+#ifndef HAVE_NBGL
         ui_712_switch_to_message();
+#endif
+    }
+
+    if (!ui_ctx->end_reached) {
+        handle_tip712_return_code(true);
+        explicit_bzero(&strings, sizeof(strings));
     }
     return true;
 }
@@ -226,13 +363,16 @@ bool ui_712_review_struct(const void *struct_ptr) {
     if ((struct_name = get_struct_name(struct_ptr, &struct_name_length)) != NULL) {
         ui_712_set_value(struct_name, struct_name_length);
     }
+    if (!ui_712_prepare_current_pair()) {
+        return false;
+    }
     return ui_712_redraw_generic_step();
 }
 
 /**
  * Show the hash of the message on the generic UI step
  */
-void ui_712_message_hash(void) {
+bool ui_712_message_hash(void) {
     const char *title = "Message hash";
 
     ui_712_set_title(title, strlen(title));
@@ -241,7 +381,10 @@ void ui_712_message_hash(void) {
                        tmpCtx.messageSigningContext712.messageHash,
                        KECCAK256_HASH_BYTESIZE);
     ui_ctx->end_reached = true;
-    ui_712_redraw_generic_step();
+    if (!ui_712_prepare_current_pair()) {
+        return false;
+    }
+    return ui_712_redraw_generic_step();
 }
 
 /**
@@ -680,6 +823,9 @@ bool ui_712_feed_to_display(const void *field_ptr,
 
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
+        if (!ui_712_prepare_current_pair()) {
+            return false;
+        }
         if (!ui_712_redraw_generic_step()) return false;
     }
     return true;
@@ -694,6 +840,10 @@ void ui_712_end_sign(void) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return;
     }
+#ifdef HAVE_NBGL
+    ui_ctx->end_reached = true;
+    ui_712_switch_to_sign();
+#else
 #ifdef SCREEN_SIZE_WALLET
     if (true) {
 #else
@@ -702,6 +852,7 @@ void ui_712_end_sign(void) {
         ui_ctx->end_reached = true;
         ui_712_switch_to_sign();
     }
+#endif
 }
 
 /**
@@ -937,15 +1088,42 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
     memcpy(ui_ctx->tn_sources, sources, source_count);
 }
 
-#ifdef SCREEN_SIZE_WALLET
-/*
- * Get UI pairs buffer
- *
- * @param[out] size buffer size
- * @return pointer to the buffer
- */
-char *get_ui_pairs_buffer(size_t *size) {
-    *size = sizeof(ui_ctx->ui_pairs_buffer);
-    return ui_ctx->ui_pairs_buffer;
-}
+uint16_t ui_712_pairs_count(void) {
+#ifdef HAVE_NBGL
+    if (ui_ctx == NULL) {
+        return 0;
+    }
+    return ui_ctx->ui_pairs_count;
+#else
+    return 0;
 #endif
+}
+
+bool ui_712_get_pair(uint16_t index, const char **item, const char **value) {
+#ifdef HAVE_NBGL
+    s_ui_712_pair *pair;
+    uint16_t i;
+
+    if ((ui_ctx == NULL) || (item == NULL) || (value == NULL)) {
+        return false;
+    }
+
+    pair = ui_ctx->ui_pairs;
+    for (i = 0; (pair != NULL) && (i < index); i++) {
+        pair = pair->next;
+    }
+
+    if ((pair == NULL) || (pair->key == NULL) || (pair->value == NULL)) {
+        return false;
+    }
+
+    *item = pair->key;
+    *value = pair->value;
+    return true;
+#else
+    UNUSED(index);
+    UNUSED(item);
+    UNUSED(value);
+    return false;
+#endif
+}

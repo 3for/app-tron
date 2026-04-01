@@ -26,7 +26,8 @@ unsigned int ui_712_approve(bool);
 unsigned int ui_712_reject(bool);
 void ui_712_set_title(const char *str, size_t length);
 void ui_712_set_value(const char *str, size_t length);
-void ui_712_message_hash(void);
+bool ui_712_message_hash(void);
+bool ui_712_prepare_current_pair(void);
 bool ui_712_redraw_generic_step(void);
 void ui_712_flag_field(bool show,
                        bool name_provided,
@@ -52,6 +53,5 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources);
-#ifdef SCREEN_SIZE_WALLET
-char *get_ui_pairs_buffer(size_t *size);
-#endif
+uint16_t ui_712_pairs_count(void);
+bool ui_712_get_pair(uint16_t index, const char **item, const char **value);

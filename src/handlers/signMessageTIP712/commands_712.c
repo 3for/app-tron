@@ -19,6 +19,7 @@
 // APDUs P1
 #define P1_COMPLETE 0x00
 #define P1_PARTIAL  0xFF
+#define P1_DISCARDED 0x01
 
 // APDUs P2
 #define P2_DEF_NAME               0x00
@@ -217,19 +218,19 @@ int handleTIP712Filtering(uint8_t p1,
             }
             break;
         case P2_FILT_CONTRACT_NAME:
-            ret = filtering_trusted_name(workBuffer, dataLength, p1 == 1, &path_crc);
+            ret = filtering_trusted_name(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_DATE_TIME:
-            ret = filtering_date_time(workBuffer, dataLength, p1 == 1, &path_crc);
+            ret = filtering_date_time(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_TOKEN:
-            ret = filtering_amount_join_token(workBuffer, dataLength, p1 == 1, &path_crc);
+            ret = filtering_amount_join_token(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_VALUE:
-            ret = filtering_amount_join_value(workBuffer, dataLength, p1 == 1, &path_crc);
+            ret = filtering_amount_join_value(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_RAW_FIELD:
-            ret = filtering_raw_field(workBuffer, dataLength, p1 == 1, &path_crc);
+            ret = filtering_raw_field(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         default:
             PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
@@ -260,6 +261,7 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     bool ret = false;
     UNUSED(p1);
     UNUSED(p2);
+
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
@@ -274,19 +276,24 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) != 0) {
+    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) < 0) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+    } else {
+        ret = true;
 #ifndef SCREEN_SIZE_WALLET
         if (!HAS_SETTING(S_VERBOSE_TIP712) &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
-            ui_712_message_hash();
+            ret = ui_712_message_hash();
         }
 #endif
-        ret = true;
-        ui_712_end_sign();
+        if (ret) {
+            ui_712_end_sign();
+        }
     }
+
     if (!ret) {
-        apdu_reply(false);
-        return apdu_response_code;
+        handle_tip712_return_code(false);
+        return 0;
     }
 
     return APDU_NO_RESPONSE;
