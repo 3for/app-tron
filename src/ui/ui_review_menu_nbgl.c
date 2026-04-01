@@ -136,8 +136,15 @@ static void displayCustomContractWarning(void) {
 }
 
 static void displayTransaction(void) {
+    nbgl_operationType_t operationType = TYPE_TRANSACTION;
+
+    if ((txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) ||
+        (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION)) {
+        operationType = TYPE_MESSAGE;
+    }
+
     // Start review
-    nbgl_useCaseReview(TYPE_TRANSACTION,
+    nbgl_useCaseReview(operationType,
                        &pairList,
                        txInfos.flowIcon,
                        txInfos.flowTitle,
@@ -225,12 +232,18 @@ static void reviewChoice(bool confirm) {
 }
 
 static void rejectChoice(void) {
+    nbgl_reviewStatusType_t reject_status = STATUS_TYPE_TRANSACTION_REJECTED;
+
     if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
         ui_callback_signMessage712_v0_cancel(false);
+        reject_status = STATUS_TYPE_MESSAGE_REJECTED;
     } else {
         ui_callback_tx_cancel(false);
+        if (txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) {
+            reject_status = STATUS_TYPE_MESSAGE_REJECTED;
+        }
     }
-    nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
+    nbgl_useCaseReviewStatus(reject_status, ui_idle);
 }
 
 static char *format_hash(const uint8_t *hash, char *buffer, size_t buffer_size, size_t offset) {
