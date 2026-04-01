@@ -56,6 +56,7 @@ caller_app_t *caller_app = NULL;
 extern void roll_challenge(void);
 
 void reset_app_context() {
+    cleanupSignPersonalMessageFullDisplay();
     appState = APP_STATE_IDLE;
     G_called_from_swap = false;
     G_swap_response_ready = false;

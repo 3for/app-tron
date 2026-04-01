@@ -139,7 +139,7 @@ void feed_display(void) {
     /* ---------- UI state handling ---------- */
     if ((remaining_ui_191_buffer_length() == 0) || (txContent.dataBytes == 0)) {
         if (!states191.ui_started) {
-            ui_191_start();
+            ui_191_start(UI_191_BUFFER);
             states191.ui_started = true;
         } else {
             ui_191_switch_to_message();
