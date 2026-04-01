@@ -28,5 +28,6 @@ void ui_settings(void);
 #endif
 
 extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
+extern nbgl_warning_t warning;
 
 #endif
