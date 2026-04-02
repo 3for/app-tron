@@ -140,7 +140,7 @@ def tip712_new_common(device: Device,
             if device.is_nano:
                 nav_ins = NavInsID.RIGHT_CLICK
                 val_ins = NavInsID.BOTH_CLICK
-                text = "Sign message"
+                text = "Accept risk and" if warning_approve else "Sign message"
             else:
                 nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
                 val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM

@@ -86,12 +86,22 @@ void ui_712_switch_to_sign(void) {
     }
 
 #ifdef SCREEN_SIZE_WALLET
+    const char *sign_label = TEXT_SIGN_TIP712;
+
+    if (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN)) {
+        sign_label = TEXT_BLIND_SIGN_TIP712;
+    }
+
     if ((ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC) || HAS_SETTING(S_VERBOSE_TIP712)) {
         operation_type |= SKIPPABLE_OPERATION;
     }
-    strlcpy(g_stax_shared_buffer, "Sign typed message?", sizeof(g_stax_shared_buffer));
+    strlcpy(g_stax_shared_buffer, sign_label, sizeof(g_stax_shared_buffer));
 #else
-    strlcpy(g_stax_shared_buffer, "Sign message", sizeof(g_stax_shared_buffer));
+    if (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN)) {
+        strlcpy(g_stax_shared_buffer, "Accept risk and sign", sizeof(g_stax_shared_buffer));
+    } else {
+        strlcpy(g_stax_shared_buffer, "Sign message", sizeof(g_stax_shared_buffer));
+    }
 #endif
 
     nbgl_useCaseAdvancedReview(operation_type,
