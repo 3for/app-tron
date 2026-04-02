@@ -1,6 +1,6 @@
 # Snapshot Docx Generation
 
-Use [generate_nanox_docx.py](/Users/lanyu/zyd/ledger/dev-plugin/app-tron/doc/generate_nanox_docx.py) to build `.docx` galleries from ragger snapshot directories.
+Use generate_nanox_docx.py to build `.docx` galleries from ragger snapshot directories.
 
 ## Commands
 
