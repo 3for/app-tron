@@ -43,7 +43,7 @@ enum {
     TRUNCATE_ADDRESS_ID,
 #endif
     HASH_TX_ID,
-    // change to make same order for bagl and nbgl
+    // Keep the settings order stable across device families.
     TIP712_VERBOSE_ID,
     SETTINGS_SWITCHES_NB
 };
