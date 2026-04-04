@@ -97,25 +97,10 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    0,
                                    tmpCtx.transactionContext.hash,
                                    32));
-#ifdef HAVE_BAGL
-#define HASH_LENGTH 4
-        format_hex(tmpCtx.transactionContext.hash,
-                   HASH_LENGTH / 2,
-                   fullContract,
-                   sizeof(fullContract));
-        fullContract[HASH_LENGTH] = '.';
-        fullContract[HASH_LENGTH + 1] = '.';
-        fullContract[HASH_LENGTH + 2] = '.';
-        format_hex(tmpCtx.transactionContext.hash + 32 - HASH_LENGTH / 2,
-                   HASH_LENGTH / 2,
-                   fullContract + HASH_LENGTH + 3,
-                   sizeof(fullContract) - (HASH_LENGTH + 3));
-#else
         format_hex(tmpCtx.transactionContext.hash,
                    sizeof(tmpCtx.transactionContext.hash),
                    fullContract,
                    sizeof(fullContract));
-#endif
         publicKeyContext_t tmp_public_key_ctx;
         if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                                  fromAddress,
