@@ -14,8 +14,6 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  ********************************************************************************/
-#ifdef HAVE_NBGL
-
 #include "os.h"
 #include "ui_idle_menu.h"
 #include "glyphs.h"
@@ -198,5 +196,3 @@ void ui_error_blind_signing(void) {
 //     get_appname_and_tagline(&appname, &tagline);
 //     prepare_and_display_home(appname, tagline, 0);
 // }
-
-#endif  // HAVE_NBGL

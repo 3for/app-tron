@@ -1,4 +1,3 @@
-#ifdef HAVE_NBGL
 #include <string.h>
 
 #include "app_errors.h"
@@ -130,5 +129,3 @@ void ui_typed_message_review_choice(bool confirm) {
         nbgl_useCaseReviewStatus(STATUS_TYPE_MESSAGE_REJECTED, ui_message_712_rejected);
     }
 }
-
-#endif  // HAVE_NBGL

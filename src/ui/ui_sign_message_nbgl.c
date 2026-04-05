@@ -1,4 +1,3 @@
-#ifdef HAVE_NBGL
 #include <string.h>
 #include "glyphs.h"
 #include "nbgl_use_case.h"
@@ -71,5 +70,3 @@ void ui_191_switch_to_sign(void) {
 void ui_191_switch_to_question(void) {
     ui_191_show_message();
 }
-
-#endif

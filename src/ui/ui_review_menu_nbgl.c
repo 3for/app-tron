@@ -14,7 +14,6 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  ********************************************************************************/
-#ifdef HAVE_NBGL
 #include <stdbool.h>
 #include <sys/types.h>
 #include <string.h>
@@ -641,4 +640,3 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
         reviewStart();
     }
 }
-#endif  // HAVE_NBGL
