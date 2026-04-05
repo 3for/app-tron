@@ -22,11 +22,8 @@
 #include "crypto_helpers.h"
 #include "ui_idle_menu.h"
 #include "app_errors.h"
-
-#ifdef HAVE_NBGL
 #include "nbgl_use_case.h"
 #include "ui_logic.h"
-#endif
 
 volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID

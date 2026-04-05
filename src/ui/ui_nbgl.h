@@ -1,4 +1,3 @@
-#ifdef HAVE_NBGL
 #define TEXT_MESSAGE "message"
 
 #ifdef SCREEN_SIZE_WALLET
@@ -29,5 +28,3 @@ void ui_settings(void);
 
 extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
 extern nbgl_warning_t warning;
-
-#endif

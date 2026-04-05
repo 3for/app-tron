@@ -49,14 +49,12 @@ typedef struct {
     e_amount_join_state state;
 } s_amount_context;
 
-#ifdef HAVE_NBGL
 typedef struct ui_712_pair_s {
     struct ui_712_pair_s *next;
     const char *raw_key;
     const char *key;
     const char *value;
 } s_ui_712_pair;
-#endif
 
 typedef struct {
     bool shown;
@@ -74,17 +72,14 @@ typedef struct {
     uint8_t tn_source_count;
     e_name_type tn_types[TN_TYPE_COUNT];
     e_name_source tn_sources[TN_SOURCE_COUNT];
-#ifdef HAVE_NBGL
     s_ui_712_pair *ui_pairs;
     s_ui_712_pair *ui_pairs_tail;
     uint16_t ui_pairs_count;
     uint16_t ui_pairs_consecutive_identical_count;
-#endif
 } t_ui_context;
 
 static t_ui_context *ui_ctx = NULL;
 
-#ifdef HAVE_NBGL
 static char *ui_712_alloc_review_string(const char *src, size_t length) {
     char *dst = mem_rev_alloc(length + 1);
 
@@ -189,14 +184,8 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     return true;
 }
 
-#endif
-
 bool ui_712_prepare_current_pair(void) {
-#ifdef HAVE_NBGL
     return ui_712_push_pair(strings.tmp.tmp2, strings.tmp.tmp);
-#else
-    return true;
-#endif
 }
 
 /**
@@ -305,9 +294,7 @@ bool ui_712_redraw_generic_step(void) {
         }
         ui_ctx->shown = true;
     } else {
-#ifndef HAVE_NBGL
         ui_712_switch_to_message();
-#endif
     }
 
     if (!ui_ctx->end_reached) {
@@ -840,19 +827,8 @@ void ui_712_end_sign(void) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return;
     }
-#ifdef HAVE_NBGL
     ui_ctx->end_reached = true;
     ui_712_switch_to_sign();
-#else
-#ifdef SCREEN_SIZE_WALLET
-    if (true) {
-#else
-    if (HAS_SETTING(S_VERBOSE_TIP712) || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
-#endif
-        ui_ctx->end_reached = true;
-        ui_712_switch_to_sign();
-    }
-#endif
 }
 
 /**
@@ -1089,18 +1065,13 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
 }
 
 uint16_t ui_712_pairs_count(void) {
-#ifdef HAVE_NBGL
     if (ui_ctx == NULL) {
         return 0;
     }
     return ui_ctx->ui_pairs_count;
-#else
-    return 0;
-#endif
 }
 
 bool ui_712_get_pair(uint16_t index, const char **item, const char **value) {
-#ifdef HAVE_NBGL
     s_ui_712_pair *pair;
     uint16_t i;
 
@@ -1120,10 +1091,4 @@ bool ui_712_get_pair(uint16_t index, const char **item, const char **value) {
     *item = pair->key;
     *value = pair->value;
     return true;
-#else
-    UNUSED(index);
-    UNUSED(item);
-    UNUSED(value);
-    return false;
-#endif
 }

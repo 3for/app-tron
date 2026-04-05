@@ -385,28 +385,22 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             memset(G_io_apdu_buffer, 0, 200);
             txContent.amount[0] = 0;
             votes_count = contract->votes_count;
-#if defined(HAVE_NBGL)
             uint32_t total_votes = 0;
-#endif
 
             for (int i = 0; i < contract->votes_count; i++) {
                 getBase58FromAddress(contract->votes[i].vote_address,
                                      fullContract,
                                      HAS_SETTING(S_TRUNCATE_ADDRESS));
-#if defined(HAVE_NBGL)
                 total_votes += (unsigned int) contract->votes[i].vote_count;
-#endif
                 fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) fullContract, i);
                 fillVoteAmountSlot((void *) G_io_apdu_buffer, contract->votes[i].vote_count, i);
             }
 
-#if defined(HAVE_NBGL)
             snprintf((char *) fullContract,
                      sizeof(fullContract),
                      "%d: %u",
                      contract->votes_count,
                      total_votes);
-#endif
 
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
 

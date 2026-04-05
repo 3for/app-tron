@@ -243,18 +243,32 @@ def input_files() -> list[str]:
     # return ['/app/tests/tip712_input_files/01-addresses_array_mail-data.json']
 
 
-@pytest.fixture(name="input_file", params=input_files())
-def input_file_fixture(request) -> str:
-    return Path(request.param)
+def tip712_new_cases():
+    cases = []
+    for file in input_files():
+        input_file = Path(file)
+        test_path = Path(input_file.parent) / '-'.join(input_file.stem.split('-')[:-1])
+        filterfile = Path(f"{test_path}-filter.json")
+
+        cases.append(pytest.param((input_file, False)))
+        if filterfile.exists():
+            cases.append(pytest.param((input_file, True)))
+        else:
+            cases.append(
+                pytest.param(
+                    (input_file, True),
+                    marks=pytest.mark.skip(
+                        reason=f"{filterfile.name}: No such file or directory")))
+    return cases
+
+
+@pytest.fixture(name="tip712_case", params=tip712_new_cases())
+def tip712_case_fixture(request) -> tuple[Path, bool]:
+    return request.param
 
 
 @pytest.fixture(name="verbose_raw", params=[True, False])
 def verbose_raw_fixture(request) -> bool:
-    return request.param
-
-
-@pytest.fixture(name="filtering", params=[False, True])
-def filtering_fixture(request) -> bool:
     return request.param
 
 
@@ -1045,8 +1059,8 @@ class TestTRX():
 
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
-                            default_screenshot_path: Path, input_file: Path,
-                            verbose_raw: bool, filtering: bool,
+                            default_screenshot_path: Path, tip712_case: tuple[Path, bool],
+                            verbose_raw: bool,
                             golden_run: bool, test_name: str):
 
         global unfiltered_flow
@@ -1055,6 +1069,7 @@ class TestTRX():
         settings_to_toggle: list[SettingID] = []
         client = TronClient(backend, firmware, navigator)
         device = backend.device
+        input_file, filtering = tip712_case
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
         cmd_builder = CommandBuilder()
