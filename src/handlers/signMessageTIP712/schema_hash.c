@@ -3,6 +3,7 @@
 #include "typed_data.h"
 #include "format_hash_field_type.h"
 #include "context_712.h"
+#include "app_errors.h"
 
 // the SDK does not define a SHA-224 type, define it here so it's easier
 // to understand in the code
@@ -33,13 +34,25 @@ bool compute_schema_hash(void) {
     hash_byte('{', (cx_hash_t *) &hash_ctx);
     while (structs_count-- > 0) {
         name = get_struct_name(struct_ptr, &name_length);
+        if (name == NULL) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
         hash_byte('"', (cx_hash_t *) &hash_ctx);
         hash_nbytes((uint8_t *) name, name_length, (cx_hash_t *) &hash_ctx);
         hash_nbytes((uint8_t *) "\":[", 3, (cx_hash_t *) &hash_ctx);
         field_ptr = get_struct_fields_array(struct_ptr, &fields_count);
+        if (field_ptr == NULL) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
         while (fields_count-- > 0) {
             hash_nbytes((uint8_t *) "{\"name\":\"", 9, (cx_hash_t *) &hash_ctx);
             name = get_struct_field_keyname(field_ptr, &name_length);
+            if (name == NULL) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             hash_nbytes((uint8_t *) name, name_length, (cx_hash_t *) &hash_ctx);
             hash_nbytes((uint8_t *) "\",\"type\":\"", 10, (cx_hash_t *) &hash_ctx);
             if (!format_hash_field_type(field_ptr, (cx_hash_t *) &hash_ctx)) {
@@ -50,12 +63,20 @@ bool compute_schema_hash(void) {
                 hash_byte(',', (cx_hash_t *) &hash_ctx);
             }
             field_ptr = get_next_struct_field(field_ptr);
+            if ((fields_count > 0) && (field_ptr == NULL)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
         }
         hash_byte(']', (cx_hash_t *) &hash_ctx);
         if (structs_count > 0) {
             hash_byte(',', (cx_hash_t *) &hash_ctx);
         }
         struct_ptr = get_next_struct(struct_ptr);
+        if ((structs_count > 0) && (struct_ptr == NULL)) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
     }
     hash_byte('}', (cx_hash_t *) &hash_ctx);
 

@@ -28,6 +28,10 @@ static bool encode_and_hash_field(const void *const field_ptr) {
 
     // field name
     name = get_struct_field_keyname(field_ptr, &length);
+    if (name == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     hash_nbytes((uint8_t *) name, length, (cx_hash_t *) &global_sha3);
     return true;
 }
@@ -47,12 +51,20 @@ static bool encode_and_hash_type(const void *const struct_ptr) {
 
     // struct name
     struct_name = get_struct_name(struct_ptr, &struct_name_length);
+    if (struct_name == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     hash_nbytes((uint8_t *) struct_name, struct_name_length, (cx_hash_t *) &global_sha3);
 
     // opening struct parentheses
     hash_byte('(', (cx_hash_t *) &global_sha3);
 
     field_ptr = get_struct_fields_array(struct_ptr, &fields_count);
+    if (field_ptr == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     for (uint8_t idx = 0; idx < fields_count; ++idx) {
         // comma separating struct fields
         if (idx > 0) {
@@ -64,6 +76,10 @@ static bool encode_and_hash_type(const void *const struct_ptr) {
         }
 
         field_ptr = get_next_struct_field(field_ptr);
+        if (((idx + 1) < fields_count) && (field_ptr == NULL)) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
     }
     // closing struct parentheses
     hash_byte(')', (cx_hash_t *) &global_sha3);
@@ -89,6 +105,10 @@ static void sort_dependencies(uint8_t deps_count, const void **deps) {
         for (size_t idx = 0; (idx + 1) < deps_count; ++idx) {
             name1 = get_struct_name(*(deps + idx), &namelen1);
             name2 = get_struct_name(*(deps + idx + 1), &namelen2);
+            if ((name1 == NULL) || (name2 == NULL)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return;
+            }
 
             str_cmp_result = strncmp(name1, name2, MIN(namelen1, namelen2));
             if ((str_cmp_result > 0) || ((str_cmp_result == 0) && (namelen1 > namelen2))) {
@@ -114,49 +134,71 @@ static const void **get_struct_dependencies(uint8_t *const deps_count,
                                             const void **first_dep,
                                             const void *const struct_ptr) {
     uint8_t fields_count;
+    uint8_t pending_count = 0;
     const void *field_ptr;
+    const void *pending[UINT8_MAX];
     const char *arg_structname;
     uint8_t arg_structname_length;
     const void *arg_struct_ptr;
     size_t dep_idx;
     const void **new_dep;
 
-    field_ptr = get_struct_fields_array(struct_ptr, &fields_count);
-    for (uint8_t idx = 0; idx < fields_count; ++idx) {
-        if (struct_field_type(field_ptr) == TYPE_CUSTOM) {
-            // get struct name
-            arg_structname = get_struct_field_typename(field_ptr, &arg_structname_length);
-            // from its name, get the pointer to its definition
-            if ((arg_struct_ptr = get_structn(arg_structname, arg_structname_length)) == NULL) {
-                PRINTF("Error: could not find TIP-712 dependency struct \"");
-                for (int i = 0; i < arg_structname_length; ++i) PRINTF("%c", arg_structname[i]);
-                PRINTF("\" during type_hash\n");
-                return NULL;
-            }
+    pending[pending_count++] = struct_ptr;
+    while (pending_count > 0) {
+        const void *current_struct_ptr = pending[--pending_count];
 
-            // check if it is not already present in the dependencies array
-            for (dep_idx = 0; dep_idx < *deps_count; ++dep_idx) {
-                // it's a match!
-                if (*(first_dep + dep_idx) == arg_struct_ptr) {
-                    break;
-                }
-            }
-            // if it's not present in the array, add it and recurse into it
-            if (dep_idx == *deps_count) {
-                *deps_count += 1;
-                if ((new_dep = MEM_ALLOC_AND_ALIGN_TYPE(void *)) == NULL) {
-                    apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        field_ptr = get_struct_fields_array(current_struct_ptr, &fields_count);
+        if (field_ptr == NULL) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return NULL;
+        }
+        for (uint8_t idx = 0; idx < fields_count; ++idx) {
+            if (struct_field_type(field_ptr) == TYPE_CUSTOM) {
+                // get struct name
+                arg_structname = get_struct_field_typename(field_ptr, &arg_structname_length);
+                if (arg_structname == NULL) {
+                    apdu_response_code = APDU_RESPONSE_INVALID_DATA;
                     return NULL;
                 }
-                if (*deps_count == 1) {
-                    first_dep = new_dep;
+                // from its name, get the pointer to its definition
+                if ((arg_struct_ptr = get_structn(arg_structname, arg_structname_length)) == NULL) {
+                    PRINTF("Error: could not find TIP-712 dependency struct \"");
+                    for (int i = 0; i < arg_structname_length; ++i) PRINTF("%c", arg_structname[i]);
+                    PRINTF("\" during type_hash\n");
+                    return NULL;
                 }
-                *new_dep = arg_struct_ptr;
-                // TODO: Move away from recursive calls
-                get_struct_dependencies(deps_count, first_dep, arg_struct_ptr);
+
+                // check if it is not already present in the dependencies array
+                for (dep_idx = 0; dep_idx < *deps_count; ++dep_idx) {
+                    // it's a match!
+                    if (*(first_dep + dep_idx) == arg_struct_ptr) {
+                        break;
+                    }
+                }
+                // if it's not present in the array, add it and inspect it later
+                if (dep_idx == *deps_count) {
+                    if (*deps_count == UINT8_MAX) {
+                        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                        return NULL;
+                    }
+                    if ((new_dep = MEM_ALLOC_AND_ALIGN_TYPE(void *)) == NULL) {
+                        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+                        return NULL;
+                    }
+                    if (*deps_count == 0) {
+                        first_dep = new_dep;
+                    }
+                    *new_dep = arg_struct_ptr;
+                    *deps_count += 1;
+                    pending[pending_count++] = arg_struct_ptr;
+                }
+            }
+            field_ptr = get_next_struct_field(field_ptr);
+            if (((idx + 1) < fields_count) && (field_ptr == NULL)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return NULL;
             }
         }
-        field_ptr = get_next_struct_field(field_ptr);
     }
     return first_dep;
 }

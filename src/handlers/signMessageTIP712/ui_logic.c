@@ -225,7 +225,11 @@ static void ui_712_set_buf(const char *src,
                            char *dst,
                            size_t dst_length,
                            bool explicit_trunc) {
-    uint8_t cpy_length;
+    size_t cpy_length;
+
+    if ((src == NULL) || (dst == NULL) || (dst_length == 0)) {
+        return;
+    }
 
     if (src_length < dst_length) {
         cpy_length = src_length;
@@ -234,7 +238,7 @@ static void ui_712_set_buf(const char *src,
     }
     memcpy(dst, src, cpy_length);
     dst[cpy_length] = '\0';
-    if (explicit_trunc && (cpy_length < src_length)) {
+    if (explicit_trunc && (cpy_length < src_length) && (dst_length > 4) && (cpy_length >= 3)) {
         memcpy(dst + cpy_length - 3, "...", 3);
     }
 }
@@ -647,6 +651,10 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
             break;
 
         case AMOUNT_JOIN_STATE_VALUE:
+            if (length > sizeof(ui_ctx->amount.joins[ui_ctx->amount.idx].value)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             memcpy(ui_ctx->amount.joins[ui_ctx->amount.idx].value, data, length);
             ui_ctx->amount.joins[ui_ctx->amount.idx].value_length = length;
             ui_ctx->amount.joins[ui_ctx->amount.idx].flags |= AMOUNT_JOIN_FLAG_VALUE;
@@ -962,7 +970,9 @@ void ui_712_queue_struct_to_review(void) {
 #else
     if (HAS_SETTING(S_VERBOSE_TIP712)) {
 #endif
-        ui_ctx->structs_to_review += 1;
+        if ((ui_ctx != NULL) && (ui_ctx->structs_to_review < UINT8_MAX)) {
+            ui_ctx->structs_to_review += 1;
+        }
     }
 }
 
@@ -972,7 +982,7 @@ void ui_712_queue_struct_to_review(void) {
  * @return if the counter could be incremented
  */
 bool ui_712_filters_counter_incr(void) {
-    if (ui_ctx->filters_received > ui_ctx->filters_to_process) {
+    if ((ui_ctx == NULL) || (ui_ctx->filters_received >= ui_ctx->filters_to_process)) {
         return false;
     }
     ui_ctx->filters_received += 1;
@@ -980,12 +990,22 @@ bool ui_712_filters_counter_incr(void) {
 }
 
 void ui_712_token_join_prepare_addr_check(uint8_t index) {
+    if ((ui_ctx == NULL) || (index >= MAX_ASSETS)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return;
+    }
     ui_ctx->amount.idx = index;
     ui_ctx->amount.state = AMOUNT_JOIN_STATE_TOKEN;
 }
 
 void ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length) {
-    uint8_t cpy_len = MIN(sizeof(ui_ctx->amount.joins[index].name), name_length);
+    uint8_t cpy_len;
+
+    if ((ui_ctx == NULL) || (name == NULL) || (index >= MAX_ASSETS)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return;
+    }
+    cpy_len = MIN(sizeof(ui_ctx->amount.joins[index].name), name_length);
 
     ui_ctx->amount.idx = index;
     ui_ctx->amount.state = AMOUNT_JOIN_STATE_VALUE;
@@ -1020,12 +1040,20 @@ bool ui_712_show_raw_key(const void *field_ptr) {
  * @return if the path was pushed or not (in case it was already present)
  */
 bool ui_712_push_new_filter_path(uint32_t path_crc) {
+    if (ui_ctx == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     // check if already present
     for (int i = 0; i < ui_ctx->filters_received; ++i) {
         if (ui_ctx->filters_crc[i] == path_crc) {
             PRINTF("TIP-712 path CRC (%x) already found at index %u!\n", path_crc, i);
             return false;
         }
+    }
+    if (ui_ctx->filters_received >= MAX_FILTERS) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
     }
     PRINTF("Pushing new TIP-712 path CRC (%x) at index %u\n", path_crc, ui_ctx->filters_received);
     ui_ctx->filters_crc[ui_ctx->filters_received] = path_crc;
@@ -1039,7 +1067,12 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
  * @param[in] length the path length
  */
 void ui_712_set_discarded_path(const char *path, uint8_t length) {
+    if ((ui_ctx == NULL) || (path == NULL) || (length >= sizeof(ui_ctx->discarded_path))) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return;
+    }
     memcpy(ui_ctx->discarded_path, path, length);
+    ui_ctx->discarded_path[length] = '\0';
     ui_ctx->discarded_path_length = length;
 }
 
@@ -1050,6 +1083,9 @@ void ui_712_set_discarded_path(const char *path, uint8_t length) {
  * @return filter path
  */
 const char *ui_712_get_discarded_path(uint8_t *length) {
+    if ((ui_ctx == NULL) || (length == NULL)) {
+        return NULL;
+    }
     *length = ui_ctx->discarded_path_length;
     return ui_ctx->discarded_path;
 }
@@ -1058,10 +1094,15 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources) {
+    if ((ui_ctx == NULL) || (type_count > TN_TYPE_COUNT) || (source_count > TN_SOURCE_COUNT) ||
+        ((type_count > 0) && (types == NULL)) || ((source_count > 0) && (sources == NULL))) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return;
+    }
     ui_ctx->tn_type_count = type_count;
-    memcpy(ui_ctx->tn_types, types, type_count);
+    memcpy(ui_ctx->tn_types, types, type_count * sizeof(*types));
     ui_ctx->tn_source_count = source_count;
-    memcpy(ui_ctx->tn_sources, sources, source_count);
+    memcpy(ui_ctx->tn_sources, sources, source_count * sizeof(*sources));
 }
 
 uint16_t ui_712_pairs_count(void) {

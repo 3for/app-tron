@@ -47,7 +47,7 @@ static const void *get_nth_field_from(const s_path *path, uint8_t *fields_count_
             *fields_count_ptr = fields_count;
         }
         // check if the index at this depth makes sense
-        if (path->depths[depth] > fields_count) {
+        if (path->depths[depth] >= fields_count) {
             return NULL;
         }
 
@@ -310,9 +310,12 @@ static bool array_depth_list_pop(void) {
  */
 static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash) {
     uint8_t fields_count;
+    uint8_t seen_struct_count = 0;
+    bool should_stop_at_array;
     const void *struct_ptr;
     const void *starting_field_ptr;
     const void *field_ptr;
+    const void *seen_structs[MAX_PATH_DEPTH];
     const char *typename;
     uint8_t typename_len;
     uint8_t hash[KECCAK256_HASH_BYTESIZE];
@@ -328,17 +331,37 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
         // check if we meet one of the given conditions
         if (((field_ptr == starting_field_ptr) && skip_if_array) ||
             ((field_ptr != starting_field_ptr) && stop_at_array)) {
+            should_stop_at_array = struct_field_is_array(field_ptr);
             // only if it is the first iteration of that array depth
-            if ((path_struct->array_depths[path_struct->array_depth_count - 1].index == 0) &&
-                struct_field_is_array(field_ptr)) {
+            if (should_stop_at_array &&
+                ((path_struct->array_depth_count == 0) ||
+                 (path_struct->array_depths[path_struct->array_depth_count - 1].index == 0))) {
                 break;
             }
         }
         typename = get_struct_field_typename(field_ptr, &typename_len);
+        if (typename == NULL) {
+            return false;
+        }
         if ((struct_ptr = get_structn(typename, typename_len)) == NULL) {
             return false;
         }
+        for (uint8_t idx = 0; idx < seen_struct_count; ++idx) {
+            if (seen_structs[idx] == struct_ptr) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+        }
+        if (seen_struct_count == MAX_PATH_DEPTH) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
+        seen_structs[seen_struct_count++] = struct_ptr;
         if ((field_ptr = get_struct_fields_array(struct_ptr, &fields_count)) == NULL) {
+            return false;
+        }
+        if (fields_count == 0) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             return false;
         }
 
@@ -363,7 +386,10 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
         //       an empty array of structs in which case we don't want to show it but the
         //       size is only known later
         // ui_712_queue_struct_to_review();
-        path_depth_list_push();
+        if (!path_depth_list_push()) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
     }
     return true;
 }
@@ -513,7 +539,7 @@ bool path_new_array_depth(const uint8_t *const data, uint8_t length) {
     if (array_size == 0) {
         backup_path();
     }
-    if (!path_update(false, array_size > 0, array_size > 0)) {
+    if (!path_update(array_size == 0, array_size > 0, array_size > 0)) {
         return false;
     }
     array_depth_count_bak = path_struct->array_depth_count;
@@ -552,14 +578,25 @@ bool path_new_array_depth(const uint8_t *const data, uint8_t length) {
 
         if (array_size > 0) {
             memcpy(hash_ctx, old_ctx, sizeof(*old_ctx));
+            CX_CHECK(cx_keccak_init_no_throw(old_ctx, 256));
         } else {
             CX_CHECK(cx_keccak_init_no_throw(hash_ctx, 256));
         }
-        CX_CHECK(cx_keccak_init_no_throw(old_ctx, 256));
     }
     if (array_size == 0) {
+        uint8_t guard = 0;
         do {
-            path_advance(false);
+            uint8_t prev_array_depth_count = path_struct->array_depth_count;
+
+            if (guard++ > (MAX_PATH_DEPTH + MAX_ARRAY_DEPTH)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            (void) path_advance(false);
+            if (path_struct->array_depth_count == prev_array_depth_count) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
         } while (path_struct->array_depth_count > array_depth_count_bak);
     }
 
@@ -584,6 +621,10 @@ static bool path_advance_in_struct(void) {
     if ((get_field(&fields_count)) == NULL) {
         return false;
     }
+    if (fields_count == 0) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     if (path_struct->depth_count > 0) {
         *depth += 1;
         end_reached = (*depth == fields_count);
@@ -606,12 +647,20 @@ static bool path_advance_in_array(void) {
     if (path_struct == NULL) {
         return false;
     }
+    if (path_struct->array_depth_count == 0) {
+        return true;
+    }
     do {
         end_reached = false;
         arr_depth = &path_struct->array_depths[path_struct->array_depth_count - 1];
 
         if ((path_struct->array_depth_count > 0) &&
             (arr_depth->path_index == (path_struct->depth_count - 1))) {
+            if (arr_depth->size == 0) {
+                array_depth_list_pop();
+                end_reached = true;
+                continue;
+            }
             arr_depth->index += 1;
             if (arr_depth->index == arr_depth->size) {
                 array_depth_list_pop();
@@ -631,8 +680,13 @@ static bool path_advance_in_array(void) {
  */
 bool path_advance(bool do_typehash) {
     bool end_reached;
+    uint8_t guard = 0;
 
     do {
+        if (guard++ > (MAX_PATH_DEPTH + MAX_ARRAY_DEPTH)) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
         if (path_advance_in_array()) {
             end_reached = path_advance_in_struct();
         } else {

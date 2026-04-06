@@ -178,6 +178,10 @@ static bool field_hash_domain_special_fields(const void *const field_ptr,
     uint8_t keylen;
 
     key = get_struct_field_keyname(field_ptr, &keylen);
+    if (key == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     // copy contract address into context
     if (strncmp(key, "verifyingContract", keylen) == 0) {
         if (data_length != sizeof(tip712_context->contract_addr)) {
