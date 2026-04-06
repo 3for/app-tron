@@ -338,9 +338,11 @@ bool filtering_trusted_name(const uint8_t *payload,
     uint8_t name_len;
     const char *name;
     uint8_t type_count;
-    e_name_type *types;
+    const uint8_t *type_bytes;
+    e_name_type types[TN_TYPE_COUNT];
     uint8_t source_count;
-    e_name_source *sources;
+    const uint8_t *source_bytes;
+    e_name_source sources[TN_SOURCE_COUNT];
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
@@ -370,7 +372,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     if ((offset + type_count) > length) {
         return false;
     }
-    types = (e_name_type *) &payload[offset];
+    type_bytes = &payload[offset];
     offset += type_count;
     if ((offset + sizeof(source_count)) > length) {
         return false;
@@ -382,7 +384,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     if ((offset + source_count) > length) {
         return false;
     }
-    sources = (e_name_source *) &payload[offset];
+    source_bytes = &payload[offset];
     offset += source_count;
     //
     if ((offset + sizeof(sig_len)) > length) {
@@ -394,6 +396,20 @@ bool filtering_trusted_name(const uint8_t *payload,
     }
     sig = &payload[offset];
 
+    for (uint8_t i = 0; i < type_count; i++) {
+        if ((type_bytes[i] < TN_TYPE_ACCOUNT) || (type_bytes[i] >= _TN_TYPE_COUNT_)) {
+            return false;
+        }
+        types[i] = (e_name_type) type_bytes[i];
+    }
+
+    for (uint8_t i = 0; i < source_count; i++) {
+        if (source_bytes[i] >= TN_SOURCE_COUNT) {
+            return false;
+        }
+        sources[i] = (e_name_source) source_bytes[i];
+    }
+
     // Verification
     cx_sha256_t hash_ctx;
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_TRUSTED_NAME)) {
@@ -401,8 +417,8 @@ bool filtering_trusted_name(const uint8_t *payload,
     }
     hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    hash_nbytes(types, type_count, (cx_hash_t *) &hash_ctx);
-    hash_nbytes(sources, source_count, (cx_hash_t *) &hash_ctx);
+    hash_nbytes(type_bytes, type_count, (cx_hash_t *) &hash_ctx);
+    hash_nbytes(source_bytes, source_count, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }

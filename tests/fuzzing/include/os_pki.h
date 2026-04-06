@@ -1,0 +1,3 @@
+#pragma once
+
+#define CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META 8

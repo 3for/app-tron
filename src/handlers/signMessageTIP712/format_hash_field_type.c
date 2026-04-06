@@ -96,6 +96,10 @@ bool format_hash_field_type(const void *const field_ptr, cx_hash_t *hash_ctx) {
 
     // field type name
     name = get_struct_field_typename(field_ptr, &length);
+    if (name == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     hash_nbytes((uint8_t *) name, length, hash_ctx);
 
     // field type size

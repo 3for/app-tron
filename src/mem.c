@@ -110,3 +110,22 @@ void mem_rev_dealloc(size_t size) {
         mem_rev_idx -= size;
     }
 }
+
+bool mem_contains(const void *ptr, size_t size) {
+    uintptr_t start;
+    uintptr_t base = (uintptr_t) &mem_buffer[0];
+    uintptr_t limit = base + mem_idx;
+
+    if (ptr == NULL) {
+        return false;
+    }
+
+    start = (uintptr_t) ptr;
+    if ((start < base) || (start > limit)) {
+        return false;
+    }
+    if (size > (limit - start)) {
+        return false;
+    }
+    return true;
+}

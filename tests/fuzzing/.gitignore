@@ -1,4 +1,5 @@
 build/
+build-local/
 corpus/
 out/
 default.profdata

@@ -9,6 +9,14 @@
 
 static s_typed_data *typed_data = NULL;
 
+static bool is_valid_typed_data_ptr(const void *ptr, size_t size) {
+    if (!mem_contains(ptr, size)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+    return true;
+}
+
 /**
  * Initialize the typed data context
  *
@@ -122,13 +130,24 @@ static const uint8_t *field_skip_keyname(const uint8_t *field_ptr, const uint8_t
  * @return pointer to data
  */
 const void *get_array_in_mem(const void *ptr, uint8_t *const array_size) {
+    uint8_t size;
+
     if (ptr == NULL) {
         return NULL;
     }
-    if (array_size) {
-        *array_size = *(uint8_t *) ptr;
+    if (!is_valid_typed_data_ptr(ptr, sizeof(uint8_t))) {
+        return NULL;
     }
-    return (ptr + sizeof(*array_size));
+
+    size = *(const uint8_t *) ptr;
+    if (!mem_contains((const uint8_t *) ptr + sizeof(uint8_t), size)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return NULL;
+    }
+    if (array_size != NULL) {
+        *array_size = size;
+    }
+    return ((const uint8_t *) ptr + sizeof(uint8_t));
 }
 
 /**
@@ -371,7 +390,9 @@ const uint8_t *get_struct_fields_array(const uint8_t *const struct_ptr, uint8_t 
         return NULL;
     }
     ptr = struct_ptr;
-    get_struct_name(struct_ptr, &name_length);
+    if (get_struct_name(struct_ptr, &name_length) == NULL) {
+        return NULL;
+    }
     ptr += (sizeof(name_length) + name_length);  // skip length
     return get_array_in_mem(ptr, length);
 }
@@ -391,8 +412,14 @@ const uint8_t *get_next_struct(const uint8_t *const struct_ptr) {
         return NULL;
     }
     ptr = get_struct_fields_array(struct_ptr, &fields_count);
+    if (ptr == NULL) {
+        return NULL;
+    }
     while (fields_count-- > 0) {
         ptr = get_next_struct_field(ptr);
+        if (ptr == NULL) {
+            return NULL;
+        }
     }
     return ptr;
 }
@@ -404,6 +431,10 @@ const uint8_t *get_next_struct(const uint8_t *const struct_ptr) {
  * @return pointer to the first struct
  */
 const uint8_t *get_structs_array(uint8_t *const length) {
+    if ((typed_data == NULL) || (typed_data->structs_array == NULL)) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return NULL;
+    }
     return get_array_in_mem(typed_data->structs_array, length);
 }
 
@@ -425,12 +456,21 @@ const uint8_t *get_structn(const char *const name, const uint8_t length) {
         return NULL;
     }
     struct_ptr = get_structs_array(&structs_count);
+    if (struct_ptr == NULL) {
+        return NULL;
+    }
     while (structs_count-- > 0) {
         struct_name = get_struct_name(struct_ptr, &name_length);
+        if (struct_name == NULL) {
+            return NULL;
+        }
         if ((length == name_length) && (memcmp(name, struct_name, length) == 0)) {
             return struct_ptr;
         }
         struct_ptr = get_next_struct(struct_ptr);
+        if ((structs_count > 0) && (struct_ptr == NULL)) {
+            return NULL;
+        }
     }
     apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     return NULL;
