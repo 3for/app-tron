@@ -16,6 +16,14 @@
 
 static s_field_hashing *fh = NULL;
 
+static bool field_name_matches(const char *name,
+                               uint8_t name_length,
+                               const char *expected,
+                               size_t expected_length) {
+    return (name != NULL) && (name_length == expected_length) &&
+           (memcmp(name, expected, expected_length) == 0);
+}
+
 /**
  * Initialize the field hash context
  *
@@ -183,14 +191,17 @@ static bool field_hash_domain_special_fields(const void *const field_ptr,
         return false;
     }
     // copy contract address into context
-    if (strncmp(key, "verifyingContract", keylen) == 0) {
+    if (field_name_matches(key,
+                           keylen,
+                           "verifyingContract",
+                           sizeof("verifyingContract") - 1U)) {
         if (data_length != sizeof(tip712_context->contract_addr)) {
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             PRINTF("Unexpected verifyingContract length!\n");
             return false;
         }
         memcpy(tip712_context->contract_addr, data, data_length);
-    } else if (strncmp(key, "chainId", keylen) == 0) {
+    } else if (field_name_matches(key, keylen, "chainId", sizeof("chainId") - 1U)) {
         tip712_context->chain_id = u64_from_BE(data, data_length);
     }
     return true;
