@@ -151,10 +151,16 @@ static bool check_token_index(uint8_t idx) {
  */
 static bool check_typename(const char *expected) {
     uint8_t typename_len = 0;
+    size_t expected_len;
     const char *typename;
 
     typename = get_struct_field_typename(path_get_field(), &typename_len);
-    if ((typename_len != strlen(expected)) || (strncmp(typename, expected, typename_len) != 0)) {
+    if ((typename == NULL) || (expected == NULL)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+    expected_len = strlen(expected);
+    if (((size_t) typename_len != expected_len) || (memcmp(typename, expected, expected_len) != 0)) {
         PRINTF("Error: expected field of type \"%s\" but got \"", expected);
         for (int i = 0; i < typename_len; ++i) PRINTF("%c", typename[i]);
         PRINTF("\" instead.\n");

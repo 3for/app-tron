@@ -437,8 +437,8 @@ bool path_set_root(const char *const struct_name, uint8_t name_length) {
 
     // init array levels at 0
     path_struct->array_depth_count = 0;
-    if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
-        (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
+    if ((struct_name != NULL) && (name_length == (sizeof(DOMAIN_STRUCT_NAME) - 1U)) &&
+        (memcmp(struct_name, DOMAIN_STRUCT_NAME, sizeof(DOMAIN_STRUCT_NAME) - 1U) == 0)) {
         path_struct->root_type = ROOT_DOMAIN;
     } else {
         path_struct->root_type = ROOT_MESSAGE;

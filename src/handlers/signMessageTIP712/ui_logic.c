@@ -80,6 +80,57 @@ typedef struct {
 
 static t_ui_context *ui_ctx = NULL;
 
+static bool ui_712_bounded_strlen(const char *str, size_t max_len, size_t *out_len) {
+    size_t length;
+
+    if ((str == NULL) || (out_len == NULL)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+
+    length = strnlen(str, max_len);
+    if (length >= max_len) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+
+    *out_len = length;
+    return true;
+}
+
+static bool ui_712_bounded_streq(const char *lhs,
+                                 size_t lhs_max_len,
+                                 const char *rhs,
+                                 size_t rhs_max_len) {
+    size_t lhs_len;
+    size_t rhs_len;
+
+    if (!ui_712_bounded_strlen(lhs, lhs_max_len, &lhs_len) ||
+        !ui_712_bounded_strlen(rhs, rhs_max_len, &rhs_len)) {
+        return false;
+    }
+
+    return (lhs_len == rhs_len) && (memcmp(lhs, rhs, lhs_len) == 0);
+}
+
+static bool ui_712_copy_bounded_string(char *dst,
+                                       size_t dst_size,
+                                       const char *src,
+                                       size_t src_max_len) {
+    size_t src_len;
+
+    if ((dst == NULL) || (src == NULL) || (dst_size == 0U)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+    if (!ui_712_bounded_strlen(src, src_max_len, &src_len)) {
+        return false;
+    }
+    memcpy(dst, src, MIN(dst_size - 1U, src_len));
+    dst[MIN(dst_size - 1U, src_len)] = '\0';
+    return true;
+}
+
 static char *ui_712_alloc_review_string(const char *src, size_t length) {
     char *dst = mem_rev_alloc(length + 1);
 
@@ -99,7 +150,9 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
     int suffix_length;
     char *dst;
 
-    key_length = strlen(key);
+    if (!ui_712_bounded_strlen(key, sizeof(strings.tmp.tmp2), &key_length)) {
+        return NULL;
+    }
     if (suffix == 0) {
         return ui_712_alloc_review_string(key, key_length);
     }
@@ -123,6 +176,7 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
 static bool ui_712_push_pair(const char *key, const char *value) {
     s_ui_712_pair *pair;
     size_t key_length;
+    size_t value_length;
     uint16_t key_suffix = 0;
 
     if ((ui_ctx == NULL) || (key == NULL) || (value == NULL)) {
@@ -130,14 +184,24 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         return false;
     }
 
-    key_length = strlen(key);
+    if (!ui_712_bounded_strlen(key, sizeof(strings.tmp.tmp2), &key_length) ||
+        !ui_712_bounded_strlen(value, sizeof(strings.tmp.tmp), &value_length)) {
+        return false;
+    }
     if (key_length == 0) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
 
-    if ((ui_ctx->ui_pairs_tail != NULL) && (strcmp(ui_ctx->ui_pairs_tail->raw_key, key) == 0) &&
-        (strcmp(ui_ctx->ui_pairs_tail->value, value) == 0)) {
+    if ((ui_ctx->ui_pairs_tail != NULL) &&
+        ui_712_bounded_streq(ui_ctx->ui_pairs_tail->raw_key,
+                             sizeof(strings.tmp.tmp2),
+                             key,
+                             sizeof(strings.tmp.tmp2)) &&
+        ui_712_bounded_streq(ui_ctx->ui_pairs_tail->value,
+                             sizeof(strings.tmp.tmp),
+                             value,
+                             sizeof(strings.tmp.tmp))) {
         // Only identical adjacent key/value pages are renamed into a numbered
         // run: "key-1", "key-2", "key-3", etc.
         if (ui_ctx->ui_pairs_consecutive_identical_count == 1) {
@@ -169,7 +233,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         return false;
     }
 
-    pair->value = ui_712_alloc_review_string(value, strlen(value));
+    pair->value = ui_712_alloc_review_string(value, value_length);
     if (pair->value == NULL) {
         return false;
     }
@@ -387,9 +451,14 @@ bool ui_712_message_hash(void) {
  */
 static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
     size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len = strlen(strings.tmp.tmp);
+    size_t cur_len;
+
+    if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
+        return;
+    }
 
     memcpy(strings.tmp.tmp + cur_len, data, MIN(max_len - cur_len, length));
+    strings.tmp.tmp[MIN(max_len, cur_len + (size_t) length)] = '\0';
     // truncated
     if (last && ((max_len - cur_len) < length)) {
         memcpy(strings.tmp.tmp + max_len - 3, "...", 3);
@@ -461,6 +530,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
     }
     str = *data ? true_str : false_str;
     memcpy(strings.tmp.tmp, str, MIN(max_len, strlen(str)));
+    strings.tmp.tmp[MIN(max_len, strlen(str))] = '\0';
     return true;
 }
 
@@ -475,7 +545,11 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first, bool last) {
     size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len = strlen(strings.tmp.tmp);
+    size_t cur_len;
+
+    if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
+        return false;
+    }
 
     if (first) {
         memcpy(strings.tmp.tmp, "0x", MIN(max_len, 2));
@@ -587,20 +661,39 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_amount_join(void) {
     const tokenDefinition_t *token = NULL;
+    const char *ticker = "???";
+    size_t current_length;
+    size_t ticker_length;
 
     if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
+    if ((token != NULL) && (token->ticker[0] != '\0')) {
+        ticker = token->ticker;
+    }
     if ((ui_ctx->amount.joins[ui_ctx->amount.idx].value_length == INT256_LENGTH) &&
         ismaxint(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
                  ui_ctx->amount.joins[ui_ctx->amount.idx].value_length)) {
-        strlcpy(strings.tmp.tmp, "Unlimited ", sizeof(strings.tmp.tmp));
-        strlcat(strings.tmp.tmp, (token != NULL) ? token->ticker : "???", sizeof(strings.tmp.tmp));
+        if (!ui_712_copy_bounded_string(strings.tmp.tmp,
+                                        sizeof(strings.tmp.tmp),
+                                        "Unlimited ",
+                                        sizeof("Unlimited "))) {
+            return false;
+        }
+        if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
+            !ui_712_bounded_strlen(ticker, MAX_TOKEN_LENGTH, &ticker_length)) {
+            return false;
+        }
+        memcpy(strings.tmp.tmp + current_length,
+               ticker,
+               MIN(sizeof(strings.tmp.tmp) - current_length - 1U, ticker_length));
+        strings.tmp.tmp[current_length +
+                        MIN(sizeof(strings.tmp.tmp) - current_length - 1U, ticker_length)] = '\0';
     } else {
         if (!amountToString(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
                             ui_ctx->amount.joins[ui_ctx->amount.idx].value_length,
                             (token != NULL) ? token->decimals : 0,
-                            (token != NULL) ? token->ticker : "???",
+                            ticker,
                             strings.tmp.tmp,
                             sizeof(strings.tmp.tmp))) {
             return false;
@@ -685,7 +778,12 @@ static bool ui_712_format_trusted_name(const uint8_t *data, uint8_t length) {
                          ui_ctx->tn_sources,
                          &tip712_context->chain_id,
                          data) != NULL) {
-        strlcpy(strings.tmp.tmp, g_trusted_name, sizeof(strings.tmp.tmp));
+        if (!ui_712_copy_bounded_string(strings.tmp.tmp,
+                                        sizeof(strings.tmp.tmp),
+                                        g_trusted_name,
+                                        sizeof(g_trusted_name))) {
+            return false;
+        }
     }
     return true;
 }
@@ -740,12 +838,15 @@ bool ui_712_feed_to_display(const void *field_ptr,
                             uint8_t length,
                             bool first,
                             bool last) {
+    size_t current_length;
+
     if (ui_ctx == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
 
-    if (first && (strlen(strings.tmp.tmp) > 0)) {
+    if (first && (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
+                  (current_length > 0))) {
         return false;
     }
 

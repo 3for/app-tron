@@ -110,7 +110,7 @@ static void sort_dependencies(uint8_t deps_count, const void **deps) {
                 return;
             }
 
-            str_cmp_result = strncmp(name1, name2, MIN(namelen1, namelen2));
+            str_cmp_result = memcmp(name1, name2, MIN(namelen1, namelen2));
             if ((str_cmp_result > 0) || ((str_cmp_result == 0) && (namelen1 > namelen2))) {
                 tmp_ptr = *(deps + idx);
                 *(deps + idx) = *(deps + idx + 1);

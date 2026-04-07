@@ -17,8 +17,18 @@ static inline void fuzz_explicit_bzero(void *buf, size_t len) {
 #define explicit_bzero(buf, len) fuzz_explicit_bzero((buf), (len))
 
 #if !defined(__APPLE__)
+enum { FUZZ_STRL_SOURCE_LIMIT = 4096 };
+
+static inline size_t fuzz_bounded_src_len(const char *src) {
+    return (src == NULL) ? 0U : strnlen(src, FUZZ_STRL_SOURCE_LIMIT);
+}
+
 static inline size_t fuzz_strlcpy(char *dst, const char *src, size_t dstsize) {
-    size_t src_len = strlen(src);
+    size_t src_len = fuzz_bounded_src_len(src);
+
+    if ((dst == NULL) || (src == NULL)) {
+        return 0U;
+    }
 
     if (dstsize != 0U) {
         size_t copy_len = (src_len >= dstsize) ? (dstsize - 1U) : src_len;
@@ -30,8 +40,15 @@ static inline size_t fuzz_strlcpy(char *dst, const char *src, size_t dstsize) {
 }
 
 static inline size_t fuzz_strlcat(char *dst, const char *src, size_t dstsize) {
-    size_t dst_len = strnlen(dst, dstsize);
-    size_t src_len = strlen(src);
+    size_t dst_len;
+    size_t src_len;
+
+    if ((dst == NULL) || (src == NULL)) {
+        return 0U;
+    }
+
+    dst_len = strnlen(dst, dstsize);
+    src_len = fuzz_bounded_src_len(src);
 
     if (dst_len == dstsize) {
         return dstsize + src_len;
