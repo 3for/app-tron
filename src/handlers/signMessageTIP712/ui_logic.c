@@ -52,8 +52,10 @@ typedef struct {
 typedef struct ui_712_pair_s {
     struct ui_712_pair_s *next;
     const char *raw_key;
+    size_t raw_key_length;
     const char *key;
     const char *value;
+    size_t value_length;
 } s_ui_712_pair;
 
 typedef struct {
@@ -96,21 +98,6 @@ static bool ui_712_bounded_strlen(const char *str, size_t max_len, size_t *out_l
 
     *out_len = length;
     return true;
-}
-
-static bool ui_712_bounded_streq(const char *lhs,
-                                 size_t lhs_max_len,
-                                 const char *rhs,
-                                 size_t rhs_max_len) {
-    size_t lhs_len;
-    size_t rhs_len;
-
-    if (!ui_712_bounded_strlen(lhs, lhs_max_len, &lhs_len) ||
-        !ui_712_bounded_strlen(rhs, rhs_max_len, &rhs_len)) {
-        return false;
-    }
-
-    return (lhs_len == rhs_len) && (memcmp(lhs, rhs, lhs_len) == 0);
 }
 
 static bool ui_712_copy_bounded_string(char *dst,
@@ -194,14 +181,10 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     }
 
     if ((ui_ctx->ui_pairs_tail != NULL) &&
-        ui_712_bounded_streq(ui_ctx->ui_pairs_tail->raw_key,
-                             sizeof(strings.tmp.tmp2),
-                             key,
-                             sizeof(strings.tmp.tmp2)) &&
-        ui_712_bounded_streq(ui_ctx->ui_pairs_tail->value,
-                             sizeof(strings.tmp.tmp),
-                             value,
-                             sizeof(strings.tmp.tmp))) {
+        (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
+        (ui_ctx->ui_pairs_tail->value_length == value_length) &&
+        (memcmp(ui_ctx->ui_pairs_tail->raw_key, key, key_length) == 0) &&
+        (memcmp(ui_ctx->ui_pairs_tail->value, value, value_length) == 0)) {
         // Only identical adjacent key/value pages are renamed into a numbered
         // run: "key-1", "key-2", "key-3", etc.
         if (ui_ctx->ui_pairs_consecutive_identical_count == 1) {
@@ -227,6 +210,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     if (pair->raw_key == NULL) {
         return false;
     }
+    pair->raw_key_length = key_length;
 
     pair->key = ui_712_alloc_review_key(key, key_suffix);
     if (pair->key == NULL) {
@@ -237,6 +221,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     if (pair->value == NULL) {
         return false;
     }
+    pair->value_length = value_length;
 
     if (ui_ctx->ui_pairs == NULL) {
         ui_ctx->ui_pairs = pair;
@@ -661,6 +646,7 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_amount_join(void) {
     const tokenDefinition_t *token = NULL;
+    char ticker_buf[MAX_TICKER_LEN];
     const char *ticker = "???";
     size_t current_length;
     size_t ticker_length;
@@ -669,7 +655,13 @@ static bool ui_712_format_amount_join(void) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
     if ((token != NULL) && (token->ticker[0] != '\0')) {
-        ticker = token->ticker;
+        if (!ui_712_copy_bounded_string(ticker_buf,
+                                        sizeof(ticker_buf),
+                                        token->ticker,
+                                        sizeof(token->ticker))) {
+            return false;
+        }
+        ticker = ticker_buf;
     }
     if ((ui_ctx->amount.joins[ui_ctx->amount.idx].value_length == INT256_LENGTH) &&
         ismaxint(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
