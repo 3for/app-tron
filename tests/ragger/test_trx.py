@@ -36,6 +36,7 @@ if PROTO_PATH not in sys.path:
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
 
+
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
     '''Test TRX client.'''
@@ -55,7 +56,7 @@ class TestTRX():
             if text_index == 0:
                 text = "Sign"
             elif text_index == 1:
-                    text = "Sign transaction"
+                text = "Sign transaction"
         else:
             if text_index == 0 or text_index == 1:
                 text = "Hold to sign"

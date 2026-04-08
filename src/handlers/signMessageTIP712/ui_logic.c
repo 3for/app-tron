@@ -183,8 +183,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         return false;
     }
 
-    if ((ui_ctx->ui_pairs_tail != NULL) &&
-        (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
+    if ((ui_ctx->ui_pairs_tail != NULL) && (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
         (ui_ctx->ui_pairs_tail->value_length == value_length) &&
         (memcmp(ui_ctx->ui_pairs_tail->raw_key, key, key_length) == 0) &&
         (memcmp(ui_ctx->ui_pairs_tail->value, value, value_length) == 0)) {
@@ -897,8 +896,9 @@ bool ui_712_feed_to_display(const void *field_ptr,
         return false;
     }
 
-    if (first && (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
-                  (current_length > 0))) {
+    if (first &&
+        (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
+         (current_length > 0))) {
         return false;
     }
 

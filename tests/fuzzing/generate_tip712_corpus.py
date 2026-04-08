@@ -3,7 +3,6 @@ import copy
 import json
 from pathlib import Path
 
-
 OP_STRUCT_DEF = 0
 OP_FILTERING = 1
 OP_STRUCT_IMPL = 2
@@ -56,7 +55,8 @@ OUT_LEGACY_DIR = ROOT / "corpus" / "fuzz_tip712_legacy"
 
 def emit_command(op: int, p1: int, p2: int, payload: bytes = b"") -> bytes:
     if len(payload) > 0xFF:
-        raise ValueError(f"payload too large for single command: {len(payload)}")
+        raise ValueError(
+            f"payload too large for single command: {len(payload)}")
     return bytes([op, p1, p2, len(payload)]) + payload
 
 
@@ -99,7 +99,8 @@ def get_typesize(typename: str) -> tuple[str, int | None]:
     return base, None if suffix == "" else int(suffix)
 
 
-def parse_field_type(typename: str) -> tuple[str, int, int | None, list[int | None]]:
+def parse_field_type(
+        typename: str) -> tuple[str, int, int | None, list[int | None]]:
     typename, array_levels = get_array_levels(typename)
     typename, typesize = get_typesize(typename)
 
@@ -123,9 +124,7 @@ def parse_field_type(typename: str) -> tuple[str, int, int | None, list[int | No
     return typename, TIP712_FIELD_CUSTOM, None, array_levels
 
 
-def encode_struct_field(type_name: str,
-                        field_enum: int,
-                        type_size: int | None,
+def encode_struct_field(type_name: str, field_enum: int, type_size: int | None,
                         array_levels: list[int | None],
                         key_name: str) -> bytes:
     data = bytearray()
@@ -175,7 +174,8 @@ def encode_address(value: str) -> bytes:
 
 
 def encode_value(field_enum: int, type_size: int | None, value):
-    if field_enum in (TIP712_FIELD_INT, TIP712_FIELD_UINT, TIP712_FIELD_TRCTOKEN):
+    if field_enum in (TIP712_FIELD_INT, TIP712_FIELD_UINT,
+                      TIP712_FIELD_TRCTOKEN):
         if field_enum == TIP712_FIELD_TRCTOKEN:
             return encode_integer(value, 32)
         return encode_integer(value, type_size or 32)
@@ -195,8 +195,8 @@ def normalize_types(data_json: dict) -> dict:
     normalized = copy.deepcopy(data_json)
     for fields in normalized["types"].values():
         for field in fields:
-            field["type"], field["enum"], field["typesize"], field["array_lvls"] = parse_field_type(
-                field["type"])
+            field["type"], field["enum"], field["typesize"], field[
+                "array_lvls"] = parse_field_type(field["type"])
     return normalized
 
 
@@ -209,8 +209,10 @@ def iter_filter_paths(filters: dict | None) -> list[str]:
 def emit_filter(path: str, entry: dict, discarded: bool) -> bytes:
     discarded_flag = P1_DISCARDED if discarded else P1_COMPLETE
     if entry["type"] == "raw":
-        payload = bytes([len(entry["name"])]) + entry["name"].encode() + b"\x00"
-        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_RAW_FIELD, payload)
+        payload = bytes([len(entry["name"])
+                         ]) + entry["name"].encode() + b"\x00"
+        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_RAW_FIELD,
+                            payload)
     if entry["type"] == "trusted_name":
         name_types = entry["tn_type"]
         if name_types is None:
@@ -224,10 +226,12 @@ def emit_filter(path: str, entry: dict, discarded: bool) -> bytes:
         payload.append(len(name_sources))
         payload += bytes(name_sources)
         payload.append(0)
-        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_TRUSTED_NAME, bytes(payload))
+        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_TRUSTED_NAME,
+                            bytes(payload))
     if entry["type"] == "amount_join_token":
         payload = bytes([entry.get("token", 0xFF), 0])
-        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_AMOUNT_JOIN_TOKEN, payload)
+        return emit_command(OP_FILTERING, discarded_flag,
+                            P2_FILT_AMOUNT_JOIN_TOKEN, payload)
     if entry["type"] == "amount_join_value":
         token_idx = entry.get("token", 0xFF)
         payload = bytearray()
@@ -235,10 +239,13 @@ def emit_filter(path: str, entry: dict, discarded: bool) -> bytes:
         payload += entry["name"].encode()
         payload.append(token_idx)
         payload.append(0)
-        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_AMOUNT_JOIN_VALUE, bytes(payload))
+        return emit_command(OP_FILTERING, discarded_flag,
+                            P2_FILT_AMOUNT_JOIN_VALUE, bytes(payload))
     if entry["type"] == "datetime":
-        payload = bytes([len(entry["name"])]) + entry["name"].encode() + b"\x00"
-        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_DATETIME, payload)
+        payload = bytes([len(entry["name"])
+                         ]) + entry["name"].encode() + b"\x00"
+        return emit_command(OP_FILTERING, discarded_flag, P2_FILT_DATETIME,
+                            payload)
     raise ValueError(f"unsupported filter type {entry['type']}")
 
 
@@ -253,43 +260,39 @@ def emit_field_chunks(data: bytes) -> bytes:
     return bytes(chunks)
 
 
-def emit_discarded_filters(current_path: list[str], filters: dict | None) -> bytes:
+def emit_discarded_filters(current_path: list[str],
+                           filters: dict | None) -> bytes:
     if not filters:
         return b""
     prefix = ".".join(current_path) + ".[]"
     stream = bytearray()
     for path, entry in filters.get("fields", {}).items():
         if path.startswith(prefix):
-            stream += emit_command(OP_FILTERING,
-                                   P1_COMPLETE,
+            stream += emit_command(OP_FILTERING, P1_COMPLETE,
                                    P2_FILT_DISCARDED_PATH,
                                    bytes([len(path)]) + path.encode())
             stream += emit_filter(path, entry, True)
     return bytes(stream)
 
 
-def emit_struct_impl(types: dict,
-                     struct_name: str,
-                     data: dict,
-                     filters: dict | None,
-                     current_path: list[str]) -> bytes:
+def emit_struct_impl(types: dict, struct_name: str, data: dict,
+                     filters: dict | None, current_path: list[str]) -> bytes:
     stream = bytearray()
     for field in types[struct_name]:
-        stream += emit_field(types, field, data[field["name"]], filters, current_path)
+        stream += emit_field(types, field, data[field["name"]], filters,
+                             current_path)
     return bytes(stream)
 
 
-def emit_field(types: dict,
-               field: dict,
-               value,
-               filters: dict | None,
+def emit_field(types: dict, field: dict, value, filters: dict | None,
                current_path: list[str]) -> bytes:
     stream = bytearray()
     current_path.append(field["name"])
 
     if field["array_lvls"]:
         assert isinstance(value, list)
-        stream += emit_command(OP_STRUCT_IMPL, P1_COMPLETE, P2_ARRAY, bytes([len(value)]))
+        stream += emit_command(OP_STRUCT_IMPL, P1_COMPLETE, P2_ARRAY,
+                               bytes([len(value)]))
         if len(value) == 0:
             stream += emit_discarded_filters(current_path, filters)
         for subvalue in value:
@@ -297,22 +300,27 @@ def emit_field(types: dict,
             nested_field = dict(field)
             nested_field["array_lvls"] = field["array_lvls"][1:]
             if nested_field["array_lvls"]:
-                stream += emit_field(types, nested_field, subvalue, filters, current_path[:-1])
+                stream += emit_field(types, nested_field, subvalue, filters,
+                                     current_path[:-1])
             elif field["enum"] == TIP712_FIELD_CUSTOM:
-                stream += emit_struct_impl(types, field["type"], subvalue, filters, current_path)
+                stream += emit_struct_impl(types, field["type"], subvalue,
+                                           filters, current_path)
             else:
                 path = ".".join(current_path)
                 if filters and path in filters.get("fields", {}):
                     stream += emit_filter(path, filters["fields"][path], False)
-                stream += emit_field_chunks(encode_value(field["enum"], field["typesize"], subvalue))
+                stream += emit_field_chunks(
+                    encode_value(field["enum"], field["typesize"], subvalue))
             current_path.pop()
     elif field["enum"] == TIP712_FIELD_CUSTOM:
-        stream += emit_struct_impl(types, field["type"], value, filters, current_path)
+        stream += emit_struct_impl(types, field["type"], value, filters,
+                                   current_path)
     else:
         path = ".".join(current_path)
         if filters and path in filters.get("fields", {}):
             stream += emit_filter(path, filters["fields"][path], False)
-        stream += emit_field_chunks(encode_value(field["enum"], field["typesize"], value))
+        stream += emit_field_chunks(
+            encode_value(field["enum"], field["typesize"], value))
 
     current_path.pop()
     return bytes(stream)
@@ -332,34 +340,36 @@ def build_stream(data_json: dict,
         stream += emit_settings(settings)
 
     for struct_name, fields in types.items():
-        stream += emit_command(OP_STRUCT_DEF, P1_COMPLETE, P2_STRUCT_NAME, struct_name.encode())
+        stream += emit_command(OP_STRUCT_DEF, P1_COMPLETE, P2_STRUCT_NAME,
+                               struct_name.encode())
         for field in fields:
-            stream += emit_command(OP_STRUCT_DEF,
-                                   P1_COMPLETE,
-                                   P2_STRUCT_FIELD,
-                                   encode_struct_field(field["type"],
-                                                       field["enum"],
-                                                       field["typesize"],
-                                                       field["array_lvls"],
-                                                       field["name"]))
+            stream += emit_command(
+                OP_STRUCT_DEF, P1_COMPLETE, P2_STRUCT_FIELD,
+                encode_struct_field(field["type"], field["enum"],
+                                    field["typesize"], field["array_lvls"],
+                                    field["name"]))
 
     if filters:
-        stream += emit_command(OP_FILTERING, P1_COMPLETE, P2_FILT_ACTIVATE, b"")
+        stream += emit_command(OP_FILTERING, P1_COMPLETE, P2_FILT_ACTIVATE,
+                               b"")
 
-    stream += emit_command(OP_STRUCT_IMPL, P1_COMPLETE, P2_STRUCT_NAME, b"EIP712Domain")
+    stream += emit_command(OP_STRUCT_IMPL, P1_COMPLETE, P2_STRUCT_NAME,
+                           b"EIP712Domain")
     stream += emit_struct_impl(types, "EIP712Domain", domain, None, [])
 
     if filters:
         title = filters.get("name", domain["name"])
-        payload = bytes([len(title)]) + title.encode() + bytes([len(filters.get("fields", {})), 0])
-        stream += emit_command(OP_FILTERING, P1_COMPLETE, P2_FILT_MESSAGE_INFO, payload)
+        payload = bytes([len(title)]) + title.encode() + bytes(
+            [len(filters.get("fields", {})), 0])
+        stream += emit_command(OP_FILTERING, P1_COMPLETE, P2_FILT_MESSAGE_INFO,
+                               payload)
 
-    stream += emit_command(OP_STRUCT_IMPL,
-                           P1_COMPLETE,
-                           P2_STRUCT_NAME,
+    stream += emit_command(OP_STRUCT_IMPL, P1_COMPLETE, P2_STRUCT_NAME,
                            normalized["primaryType"].encode())
-    stream += emit_struct_impl(types, normalized["primaryType"], message, filters, [])
-    stream += emit_command(OP_SIGN, P1_COMPLETE, 0x01, pack_derivation_path(bip32_path))
+    stream += emit_struct_impl(types, normalized["primaryType"], message,
+                               filters, [])
+    stream += emit_command(OP_SIGN, P1_COMPLETE, 0x01,
+                           pack_derivation_path(bip32_path))
     return bytes(stream)
 
 
@@ -367,24 +377,60 @@ FILTERING_EMPTY_ARRAY = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Person": [
-                {"name": "name", "type": "string"},
-                {"name": "addr", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "addr",
+                    "type": "address"
+                },
             ],
             "Message": [
-                {"name": "title", "type": "string"},
-                {"name": "to", "type": "Person[]"},
+                {
+                    "name": "title",
+                    "type": "string"
+                },
+                {
+                    "name": "to",
+                    "type": "Person[]"
+                },
             ],
             "Root": [
-                {"name": "text", "type": "string"},
-                {"name": "subtext", "type": "string[]"},
-                {"name": "msg_list1", "type": "Message[]"},
-                {"name": "msg_list2", "type": "Message[]"},
+                {
+                    "name": "text",
+                    "type": "string"
+                },
+                {
+                    "name": "subtext",
+                    "type": "string[]"
+                },
+                {
+                    "name": "msg_list1",
+                    "type": "Message[]"
+                },
+                {
+                    "name": "msg_list2",
+                    "type": "Message[]"
+                },
             ],
         },
         "primaryType": "Root",
@@ -397,17 +443,32 @@ FILTERING_EMPTY_ARRAY = {
         "message": {
             "text": "This is a test",
             "subtext": [],
-            "msg_list1": [{"title": "This is a test", "to": []}],
+            "msg_list1": [{
+                "title": "This is a test",
+                "to": []
+            }],
             "msg_list2": [],
         },
     },
     "filters": {
         "name": "Empty array filtering",
         "fields": {
-            "text": {"type": "raw", "name": "Text"},
-            "subtext.[]": {"type": "raw", "name": "Sub-Text"},
-            "msg_list1.[].to.[].addr": {"type": "raw", "name": "(1) Recipient addr"},
-            "msg_list2.[].to.[].addr": {"type": "raw", "name": "(2) Recipient addr"},
+            "text": {
+                "type": "raw",
+                "name": "Text"
+            },
+            "subtext.[]": {
+                "type": "raw",
+                "name": "Sub-Text"
+            },
+            "msg_list1.[].to.[].addr": {
+                "type": "raw",
+                "name": "(1) Recipient addr"
+            },
+            "msg_list2.[].to.[].addr": {
+                "type": "raw",
+                "name": "(2) Recipient addr"
+            },
         },
     },
 }
@@ -416,16 +477,40 @@ AMOUNT_JOIN = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Root": [
-                {"name": "token_from", "type": "address"},
-                {"name": "value_from", "type": "uint256"},
-                {"name": "token_to", "type": "address"},
-                {"name": "value_to", "type": "uint256"},
+                {
+                    "name": "token_from",
+                    "type": "address"
+                },
+                {
+                    "name": "value_from",
+                    "type": "uint256"
+                },
+                {
+                    "name": "token_to",
+                    "type": "address"
+                },
+                {
+                    "name": "value_to",
+                    "type": "uint256"
+                },
             ],
         },
         "primaryType": "Root",
@@ -445,10 +530,24 @@ AMOUNT_JOIN = {
     "filters": {
         "name": "Amount join test",
         "fields": {
-            "token_from": {"type": "amount_join_token", "token": 0},
-            "value_from": {"type": "amount_join_value", "name": "From", "token": 0},
-            "token_to": {"type": "amount_join_token", "token": 1},
-            "value_to": {"type": "amount_join_value", "name": "To", "token": 1},
+            "token_from": {
+                "type": "amount_join_token",
+                "token": 0
+            },
+            "value_from": {
+                "type": "amount_join_value",
+                "name": "From",
+                "token": 0
+            },
+            "token_to": {
+                "type": "amount_join_token",
+                "token": 1
+            },
+            "value_to": {
+                "type": "amount_join_value",
+                "name": "To",
+                "token": 1
+            },
         },
     },
 }
@@ -457,14 +556,32 @@ TRUSTED_NAME = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Root": [
-                {"name": "validator", "type": "address"},
-                {"name": "enable", "type": "bool"},
+                {
+                    "name": "validator",
+                    "type": "address"
+                },
+                {
+                    "name": "enable",
+                    "type": "bool"
+                },
             ],
         },
         "primaryType": "Root",
@@ -488,7 +605,10 @@ TRUSTED_NAME = {
                 "tn_type": [2, 1],
                 "tn_source": [1, 2],
             },
-            "enable": {"type": "raw", "name": "State"},
+            "enable": {
+                "type": "raw",
+                "name": "State"
+            },
         },
     },
 }
@@ -497,18 +617,48 @@ DATETIME_FILTER = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Transfer": [
-                {"name": "with", "type": "address"},
-                {"name": "value_recv", "type": "uint256"},
-                {"name": "token_send", "type": "address"},
-                {"name": "value_send", "type": "uint256"},
-                {"name": "token_recv", "type": "address"},
-                {"name": "expires", "type": "uint64"},
+                {
+                    "name": "with",
+                    "type": "address"
+                },
+                {
+                    "name": "value_recv",
+                    "type": "uint256"
+                },
+                {
+                    "name": "token_send",
+                    "type": "address"
+                },
+                {
+                    "name": "value_send",
+                    "type": "uint256"
+                },
+                {
+                    "name": "token_recv",
+                    "type": "address"
+                },
+                {
+                    "name": "expires",
+                    "type": "uint64"
+                },
             ],
         },
         "primaryType": "Transfer",
@@ -530,12 +680,32 @@ DATETIME_FILTER = {
     "filters": {
         "name": "Advanced Filtering",
         "fields": {
-            "value_send": {"type": "amount_join_value", "name": "Send", "token": 1},
-            "token_send": {"type": "amount_join_token", "token": 1},
-            "value_recv": {"type": "amount_join_value", "name": "Receive", "token": 0},
-            "token_recv": {"type": "amount_join_token", "token": 0},
-            "with": {"type": "raw", "name": "With"},
-            "expires": {"type": "datetime", "name": "Will Expire"},
+            "value_send": {
+                "type": "amount_join_value",
+                "name": "Send",
+                "token": 1
+            },
+            "token_send": {
+                "type": "amount_join_token",
+                "token": 1
+            },
+            "value_recv": {
+                "type": "amount_join_value",
+                "name": "Receive",
+                "token": 0
+            },
+            "token_recv": {
+                "type": "amount_join_token",
+                "token": 0
+            },
+            "with": {
+                "type": "raw",
+                "name": "With"
+            },
+            "expires": {
+                "type": "datetime",
+                "name": "Will Expire"
+            },
         },
     },
 }
@@ -544,17 +714,44 @@ PERMIT_AMOUNT_JOIN = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Permit": [
-                {"name": "owner", "type": "address"},
-                {"name": "spender", "type": "address"},
-                {"name": "value", "type": "uint256"},
-                {"name": "nonce", "type": "uint256"},
-                {"name": "deadline", "type": "uint256"},
+                {
+                    "name": "owner",
+                    "type": "address"
+                },
+                {
+                    "name": "spender",
+                    "type": "address"
+                },
+                {
+                    "name": "value",
+                    "type": "uint256"
+                },
+                {
+                    "name": "nonce",
+                    "type": "uint256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "uint256"
+                },
             ],
         },
         "primaryType": "Permit",
@@ -575,8 +772,14 @@ PERMIT_AMOUNT_JOIN = {
     "filters": {
         "name": "Permit filtering",
         "fields": {
-            "value": {"type": "amount_join_value", "name": "Send"},
-            "deadline": {"type": "datetime", "name": "Deadline"},
+            "value": {
+                "type": "amount_join_value",
+                "name": "Send"
+            },
+            "deadline": {
+                "type": "datetime",
+                "name": "Deadline"
+            },
         },
     },
 }
@@ -585,14 +788,32 @@ TRUSTED_NAME_FALLBACK = {
     "data": {
         "types": {
             "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "version",
+                    "type": "string"
+                },
+                {
+                    "name": "chainId",
+                    "type": "uint256"
+                },
+                {
+                    "name": "verifyingContract",
+                    "type": "address"
+                },
             ],
             "Root": [
-                {"name": "validator", "type": "address"},
-                {"name": "enable", "type": "bool"},
+                {
+                    "name": "validator",
+                    "type": "address"
+                },
+                {
+                    "name": "enable",
+                    "type": "bool"
+                },
             ],
         },
         "primaryType": "Root",
@@ -616,7 +837,10 @@ TRUSTED_NAME_FALLBACK = {
                 "tn_type": [2, 1],
                 "tn_source": [1, 2],
             },
-            "enable": {"type": "raw", "name": "State"},
+            "enable": {
+                "type": "raw",
+                "name": "State"
+            },
         },
     },
 }
@@ -648,50 +872,62 @@ def build_legacy_stream(settings: int,
     payload += pack_derivation_path(bip32_path)
     payload += domain_hash
     payload += message_hash
-    return bytes([settings & 0xFF, initial_app_state & 0xFF, p1 & 0xFF, p2 & 0xFF]) + payload
+    return bytes([
+        settings & 0xFF, initial_app_state & 0xFF, p1 & 0xFF, p2 & 0xFF
+    ]) + payload
 
 
 def main() -> None:
-    write_seed("00-simple-mail-sign-by-hash.bin",
-               build_stream(load_json("00-simple_mail-data.json"),
-                            settings=(1 << S_SIGN_BY_HASH)))
-    write_seed("01-simple-mail-verbose.bin",
-               build_stream(load_json("00-simple_mail-data.json"),
-                            settings=(1 << S_VERBOSE_TIP712)))
+    write_seed(
+        "00-simple-mail-sign-by-hash.bin",
+        build_stream(load_json("00-simple_mail-data.json"),
+                     settings=(1 << S_SIGN_BY_HASH)))
+    write_seed(
+        "01-simple-mail-verbose.bin",
+        build_stream(load_json("00-simple_mail-data.json"),
+                     settings=(1 << S_VERBOSE_TIP712)))
     write_seed("02-multidimensional-arrays.bin",
                build_stream(load_json("10-multidimensional_arrays-data.json")))
-    write_seed("03-filtering-empty-arrays.bin",
-               build_stream(FILTERING_EMPTY_ARRAY["data"], FILTERING_EMPTY_ARRAY["filters"]))
+    write_seed(
+        "03-filtering-empty-arrays.bin",
+        build_stream(FILTERING_EMPTY_ARRAY["data"],
+                     FILTERING_EMPTY_ARRAY["filters"]))
     write_seed("04-amount-join.bin",
                build_stream(AMOUNT_JOIN["data"], AMOUNT_JOIN["filters"]))
     write_seed("05-trusted-name.bin",
                build_stream(TRUSTED_NAME["data"], TRUSTED_NAME["filters"]))
-    write_seed("06-datetime-filter.bin",
-               build_stream(DATETIME_FILTER["data"], DATETIME_FILTER["filters"]))
-    write_seed("07-permit-amount-join.bin",
-               build_stream(PERMIT_AMOUNT_JOIN["data"], PERMIT_AMOUNT_JOIN["filters"]))
+    write_seed(
+        "06-datetime-filter.bin",
+        build_stream(DATETIME_FILTER["data"], DATETIME_FILTER["filters"]))
+    write_seed(
+        "07-permit-amount-join.bin",
+        build_stream(PERMIT_AMOUNT_JOIN["data"],
+                     PERMIT_AMOUNT_JOIN["filters"]))
     write_seed("08-long-string-partial.bin",
                build_stream(load_json("03-long_string-data.json")))
     write_seed("09-long-bytes-partial.bin",
                build_stream(load_json("04-long_bytes-data.json")))
     write_seed("10-signed-ints.bin",
                build_stream(load_json("05-signed_ints-data.json")))
-    write_seed("11-reset-replay.bin",
-               build_stream(load_json("00-simple_mail-data.json"),
-                            settings=(1 << S_SIGN_BY_HASH)) +
-               emit_reset() +
-               build_stream(TRUSTED_NAME_FALLBACK["data"],
-                            TRUSTED_NAME_FALLBACK["filters"],
-                            settings=(1 << S_VERBOSE_TIP712)))
-    write_seed("12-trusted-name-fallback.bin",
-               build_stream(TRUSTED_NAME_FALLBACK["data"], TRUSTED_NAME_FALLBACK["filters"]))
+    write_seed(
+        "11-reset-replay.bin",
+        build_stream(load_json("00-simple_mail-data.json"),
+                     settings=(1 << S_SIGN_BY_HASH)) + emit_reset() +
+        build_stream(TRUSTED_NAME_FALLBACK["data"],
+                     TRUSTED_NAME_FALLBACK["filters"],
+                     settings=(1 << S_VERBOSE_TIP712)))
+    write_seed(
+        "12-trusted-name-fallback.bin",
+        build_stream(TRUSTED_NAME_FALLBACK["data"],
+                     TRUSTED_NAME_FALLBACK["filters"]))
 
-    write_legacy_seed("00-simple-mail-sign-by-hash.bin",
-                      build_legacy_stream(settings=(1 << S_SIGN_BY_HASH),
-                                          initial_app_state=APP_STATE_IDLE,
-                                          bip32_path=DEFAULT_BIP32_PATH,
-                                          domain_hash=SIMPLE_MAIL_DOMAIN_HASH,
-                                          message_hash=SIMPLE_MAIL_MESSAGE_HASH))
+    write_legacy_seed(
+        "00-simple-mail-sign-by-hash.bin",
+        build_legacy_stream(settings=(1 << S_SIGN_BY_HASH),
+                            initial_app_state=APP_STATE_IDLE,
+                            bip32_path=DEFAULT_BIP32_PATH,
+                            domain_hash=SIMPLE_MAIL_DOMAIN_HASH,
+                            message_hash=SIMPLE_MAIL_MESSAGE_HASH))
 
 
 if __name__ == "__main__":

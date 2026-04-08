@@ -24,8 +24,8 @@ TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "00000000000000000000000000000000000000000000000000000000000f4240")
 MISSING_PLUGIN_NAME = "missingPlugin"
 SPECULOS_MISSING_PLUGIN_XFAIL_REASON = (
-    "Speculos crashes when checking presence of a missing external plugin"
-)
+    "Speculos crashes when checking presence of a missing external plugin")
+
 
 def build_trc20_transfer_tx(client: TronClient) -> bytes:
     return client.packContract(
@@ -36,8 +36,8 @@ def build_trc20_transfer_tx(client: TronClient) -> bytes:
                 client.address_hex(TRC20_CONTRACT_B58)),
             data=TRC20_TRANSFER_CALLDATA))
 
-def build_external_plugin_payload(plugin_name: str,
-                                  contract_address: bytes,
+
+def build_external_plugin_payload(plugin_name: str, contract_address: bytes,
                                   selector: bytes) -> bytes:
     payload = bytearray()
     payload.append(len(plugin_name))
@@ -45,6 +45,7 @@ def build_external_plugin_payload(plugin_name: str,
     payload += contract_address
     payload += selector
     return bytes(payload)
+
 
 def build_signed_external_plugin_setup(plugin_name: str,
                                        contract_address: bytes,
@@ -54,6 +55,7 @@ def build_signed_external_plugin_setup(plugin_name: str,
     signature = keychain.sign_data(keychain.Key.CAL, payload)
     return CommandBuilder().set_external_plugin(plugin_name, contract_address,
                                                 selector, signature)
+
 
 def assert_plugin_not_found_or_speculos_crash(client: TronClient,
                                               setup_apdu: bytes) -> None:
@@ -70,14 +72,17 @@ def assert_plugin_not_found_or_speculos_crash(client: TronClient,
 
     pytest.fail("external plugin lookup unexpectedly succeeded")
 
+
 @pytest.fixture(name="tron_client")
 def tron_client_fixture(firmware: Firmware,
                         backend: BackendInterface) -> TronClient:
     return TronClient(backend, firmware, None)
 
+
 @pytest.fixture(name="trc20_contract_address")
 def trc20_contract_address_fixture(tron_client: TronClient) -> bytes:
     return bytes.fromhex(tron_client.address_hex(TRC20_CONTRACT_B58))
+
 
 @pytest.fixture(name="trc20_transfer_tx")
 def trc20_transfer_tx_fixture(tron_client: TronClient) -> bytes:
