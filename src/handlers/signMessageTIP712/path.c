@@ -104,10 +104,16 @@ const void *path_get_nth_field_to_last(uint8_t n) {
     const void *field_ptr;
     const void *struct_ptr = NULL;
 
+    if ((path_struct == NULL) || (n == 0U) || (n > path_struct->depth_count)) {
+        return NULL;
+    }
+
     field_ptr = get_nth_field(NULL, path_struct->depth_count - n);
     if (field_ptr != NULL) {
         typename = get_struct_field_typename(field_ptr, &typename_len);
-        struct_ptr = get_structn(typename, typename_len);
+        if (typename != NULL) {
+            struct_ptr = get_structn(typename, typename_len);
+        }
     }
     return struct_ptr;
 }
@@ -612,12 +618,16 @@ end:
  */
 static bool path_advance_in_struct(void) {
     bool end_reached = true;
-    uint8_t *depth = &path_struct->depths[path_struct->depth_count - 1];
+    uint8_t *depth = NULL;
     uint8_t fields_count;
 
     if (path_struct == NULL) {
         return false;
     }
+    if (path_struct->depth_count == 0) {
+        return true;
+    }
+    depth = &path_struct->depths[path_struct->depth_count - 1];
     if ((get_field(&fields_count)) == NULL) {
         return false;
     }
@@ -651,6 +661,9 @@ static bool path_advance_in_array(void) {
         return true;
     }
     do {
+        if (path_struct->array_depth_count == 0) {
+            return true;
+        }
         end_reached = false;
         arr_depth = &path_struct->array_depths[path_struct->array_depth_count - 1];
 

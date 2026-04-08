@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,75 @@ const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
 static extraInfo_t fuzz_assets[MAX_ASSETS];
 static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
 
+static void seed_default_assets(void) {
+    static const uint8_t token_addrs[][ADDRESS_LENGTH] = {
+        {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+         0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+        {0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+         0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+        {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    };
+    static const char *const tickers[] = {"TOK11", "TOK22", "ZERO"};
+    static const uint8_t decimals[] = {18U, 6U, 0U};
+
+    memset(tmpCtx.transactionContext.extraInfo, 0, sizeof(tmpCtx.transactionContext.extraInfo));
+    memset(tmpCtx.transactionContext.assetSet, 0, sizeof(tmpCtx.transactionContext.assetSet));
+    tmpCtx.transactionContext.currentAssetIndex = 0;
+    memset(fuzz_assets, 0, sizeof(fuzz_assets));
+
+    for (size_t i = 0; i < ARRAY_SIZE(token_addrs); i++) {
+        memcpy(fuzz_assets[i].token.address, token_addrs[i], sizeof(token_addrs[i]));
+        memcpy(tmpCtx.transactionContext.extraInfo[i].token.address,
+               token_addrs[i],
+               sizeof(token_addrs[i]));
+        memcpy(fuzz_assets[i].token.ticker, tickers[i], strlen(tickers[i]) + 1U);
+        memcpy(tmpCtx.transactionContext.extraInfo[i].token.ticker,
+               tickers[i],
+               strlen(tickers[i]) + 1U);
+        fuzz_assets[i].token.decimals = decimals[i];
+        tmpCtx.transactionContext.extraInfo[i].token.decimals = decimals[i];
+        tmpCtx.transactionContext.assetSet[i] = true;
+    }
+}
+
 const chain_config_t *chainConfig = &fuzz_chain_config;
+
+static size_t fuzz_support_bounded_strlen(const char *src, size_t max_len) {
+    if (src == NULL) {
+        return 0U;
+    }
+    return strnlen(src, max_len);
+}
+
+static char fuzz_support_hex_digit(uint8_t value) {
+    static const char hex[] = "0123456789ABCDEF";
+
+    return hex[value & 0x0FU];
+}
+
+static bool fuzz_support_append_string(char *dst,
+                                       size_t dst_size,
+                                       const char *src,
+                                       size_t src_max_len) {
+    size_t dst_len;
+    size_t src_len;
+    size_t copy_len;
+
+    if ((dst == NULL) || (src == NULL) || (dst_size == 0U)) {
+        return false;
+    }
+
+    dst_len = strnlen(dst, dst_size);
+    if (dst_len >= dst_size) {
+        return false;
+    }
+    src_len = fuzz_support_bounded_strlen(src, src_max_len);
+    copy_len = MIN(dst_size - dst_len - 1U, src_len);
+    memcpy(dst + dst_len, src, copy_len);
+    dst[dst_len + copy_len] = '\0';
+    return copy_len == src_len;
+}
 
 void reset_app_context(void) {
     memset(&tmpCtx, 0, sizeof(tmpCtx));
@@ -40,11 +109,11 @@ void reset_app_context(void) {
     memset(&txContext, 0, sizeof(txContext));
     memset(&dataContext, 0, sizeof(dataContext));
     memset(&strings, 0, sizeof(strings));
-    memset(fuzz_assets, 0, sizeof(fuzz_assets));
     memset(g_trusted_name, 0, sizeof(g_trusted_name));
     apdu_response_code = APDU_RESPONSE_OK;
     appState = APP_STATE_IDLE;
     pluginType = PLUGIN_TYPE_NONE;
+    seed_default_assets();
 }
 
 void init_tip712_fuzz_environment(void) {
@@ -86,8 +155,7 @@ bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
 }
 
 void forget_known_assets(void) {
-    memset(fuzz_assets, 0, sizeof(fuzz_assets));
-    memset(tmpCtx.transactionContext.assetSet, 0, sizeof(tmpCtx.transactionContext.assetSet));
+    seed_default_assets();
 }
 
 extraInfo_t *get_current_asset_info(void) {
@@ -101,7 +169,7 @@ extraInfo_t *get_current_asset_info(void) {
 
 int get_asset_index_by_addr(const uint8_t *addr) {
     for (size_t i = 0; i < MAX_ASSETS; i++) {
-        if (memcmp(fuzz_assets[i].token.address, addr, TRON_ADDRESS_SIZE) == 0) {
+        if (memcmp(fuzz_assets[i].token.address, addr, ADDRESS_LENGTH) == 0) {
             return (int) i;
         }
     }
@@ -115,30 +183,6 @@ extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
 }
 
 void validate_current_asset_info(void) {}
-
-off_t read_bip32_path_712(const uint8_t *buffer,
-                          uint16_t length,
-                          messageSigningContext712_t *ctx_712) {
-    if ((buffer == NULL) || (ctx_712 == NULL) || (length < 1U)) {
-        return -1;
-    }
-
-    const uint8_t path_length = buffer[0];
-    if ((path_length == 0U) || (path_length > MAX_BIP32_PATH) ||
-        (length < (uint16_t) (1U + path_length * 4U))) {
-        return -1;
-    }
-
-    memset(ctx_712, 0, sizeof(*ctx_712));
-    ctx_712->pathLength = path_length;
-    for (uint8_t i = 0; i < path_length; i++) {
-        const uint8_t *entry = buffer + 1U + (size_t) i * 4U;
-        ctx_712->bip32Path[i] =
-            ((uint32_t) entry[0] << 24) | ((uint32_t) entry[1] << 16) |
-            ((uint32_t) entry[2] << 8) | (uint32_t) entry[3];
-    }
-    return (off_t) (1U + path_length * 4U);
-}
 
 int check_signature_with_pubkey(const char *tag,
                                 uint8_t *buffer,
@@ -165,13 +209,27 @@ const char *get_trusted_name(uint8_t type_count,
                              const e_name_source *sources,
                              const uint64_t *chain_id,
                              const uint8_t *addr) {
-    (void) type_count;
-    (void) types;
-    (void) source_count;
-    (void) sources;
-    (void) chain_id;
-    (void) addr;
-    return NULL;
+    if ((type_count == 0U) || (types == NULL) || (source_count == 0U) || (sources == NULL) ||
+        (chain_id == NULL) || (addr == NULL) || allzeroes(addr, ADDRESS_LENGTH)) {
+        return NULL;
+    }
+
+    if (sizeof(g_trusted_name) < sizeof("TN-0000-00")) {
+        return NULL;
+    }
+
+    g_trusted_name[0] = 'T';
+    g_trusted_name[1] = 'N';
+    g_trusted_name[2] = '-';
+    g_trusted_name[3] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U] >> 4);
+    g_trusted_name[4] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U]);
+    g_trusted_name[5] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U] >> 4);
+    g_trusted_name[6] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U]);
+    g_trusted_name[7] = '-';
+    g_trusted_name[8] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U] >> 4);
+    g_trusted_name[9] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U]);
+    g_trusted_name[10] = '\0';
+    return g_trusted_name;
 }
 
 bool has_trusted_name(void) {
@@ -215,10 +273,11 @@ bool amountToString(const uint8_t *amount,
     }
 
     if ((ticker != NULL) && (ticker[0] != '\0')) {
-        const size_t used = strlen(out_buffer);
+        const size_t used = strnlen(out_buffer, out_buffer_size);
         const size_t left = (used < out_buffer_size) ? (out_buffer_size - used) : 0U;
-        if ((left < 2U) || (strlcat(out_buffer, " ", out_buffer_size) >= out_buffer_size) ||
-            (strlcat(out_buffer, ticker, out_buffer_size) >= out_buffer_size)) {
+        if ((left < 2U) ||
+            !fuzz_support_append_string(out_buffer, out_buffer_size, " ", sizeof(" ") - 1U) ||
+            !fuzz_support_append_string(out_buffer, out_buffer_size, ticker, MAX_TICKER_LEN)) {
             return false;
         }
     }
@@ -235,9 +294,9 @@ bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
     if ((ethAddress == NULL) || (out58 == NULL) || (out58_len < 2U)) {
         return false;
     }
-    strlcpy(out58, "T", out58_len);
-    strlcat(out58, ethAddress, out58_len);
-    return true;
+    out58[0] = '\0';
+    return fuzz_support_append_string(out58, out58_len, "T", sizeof("T") - 1U) &&
+           fuzz_support_append_string(out58, out58_len, ethAddress, 42U);
 }
 
 uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {

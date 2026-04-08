@@ -24,6 +24,59 @@ static bool field_name_matches(const char *name,
            (memcmp(name, expected, expected_length) == 0);
 }
 
+static bool field_hash_validate_remaining_size(const void *field_ptr, uint16_t remaining_size) {
+    e_type field_type;
+    uint8_t type_size;
+
+    if (field_ptr == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
+
+    field_type = struct_field_type(field_ptr);
+    type_size = get_struct_field_typesize(field_ptr);
+    switch (field_type) {
+        case TYPE_SOL_INT:
+            if (remaining_size > type_size) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            break;
+        case TYPE_SOL_UINT:
+        case TYPE_SOL_TRCTOKEN:
+            if (remaining_size > INT256_LENGTH) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            break;
+        case TYPE_SOL_BYTES_FIX:
+            if (remaining_size != type_size) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            break;
+        case TYPE_SOL_ADDRESS:
+            if (remaining_size != ADDRESS_LENGTH) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            break;
+        case TYPE_SOL_BOOL:
+            if (remaining_size != 1U) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
+            break;
+        case TYPE_SOL_STRING:
+        case TYPE_SOL_BYTES_DYN:
+        case TYPE_CUSTOM:
+        default:
+            break;
+    }
+
+    return true;
+}
+
 /**
  * Initialize the field hash context
  *
@@ -62,9 +115,16 @@ static const uint8_t *field_hash_prepare(const void *const field_ptr,
     cx_err_t error = CX_INTERNAL_ERROR;
 
     field_type = struct_field_type(field_ptr);
-    fh->remaining_size = __builtin_bswap16(*(uint16_t *) &data[0]);  // network byte order
+    if ((data == NULL) || (data_length == NULL) || (*data_length < sizeof(uint16_t))) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return NULL;
+    }
+    fh->remaining_size = ((uint16_t) data[0] << 8) | data[1];
     data += sizeof(uint16_t);
     *data_length -= sizeof(uint16_t);
+    if (!IS_DYN(field_type) && !field_hash_validate_remaining_size(field_ptr, fh->remaining_size)) {
+        return NULL;
+    }
     fh->state = FHS_WAITING_FOR_MORE;
     if (IS_DYN(field_type)) {
         CX_CHECK(cx_keccak_init_no_throw(&global_sha3, 256));
@@ -262,6 +322,10 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
+    if (data == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     field_type = struct_field_type(field_ptr);
     // first packet for this frame
     if (first) {
@@ -274,6 +338,12 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         }
 
         data = field_hash_prepare(field_ptr, data, &data_length);
+        if (data == NULL) {
+            if (apdu_response_code == APDU_RESPONSE_OK) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            }
+            return false;
+        }
     }
     if (data_length > fh->remaining_size) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;

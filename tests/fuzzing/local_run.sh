@@ -2,6 +2,7 @@
 set -eu
 
 FUZZ_TARGET="${FUZZ_TARGET:-fuzz_tip712}"
+CORPUS_DIR="${CORPUS_DIR:-}"
 
 rm -rf build
 
@@ -13,7 +14,17 @@ if ! [ -f "./build/${FUZZ_TARGET}" ]; then
     exit 1
 fi
 
-mkdir -p corpus
+if [ -z "$CORPUS_DIR" ]; then
+    if [ -d "./corpus/${FUZZ_TARGET}" ]; then
+        CORPUS_DIR="./corpus/${FUZZ_TARGET}"
+    elif [[ "${FUZZ_TARGET}" == fuzz_tip712* ]] && [ -d "./corpus/fuzz_tip712" ]; then
+        CORPUS_DIR="./corpus/fuzz_tip712"
+    else
+        CORPUS_DIR="./corpus"
+    fi
+fi
+
+mkdir -p "$CORPUS_DIR"
 
 if command -v nproc >/dev/null 2>&1; then
     ncpus=$(nproc)
@@ -32,11 +43,11 @@ fi
 
 if "./build/${FUZZ_TARGET}" -help=1 >/dev/null 2>&1; then
     echo "Starting ${FUZZ_TARGET} in libFuzzer mode. Press Ctrl-C to stop."
-    "./build/${FUZZ_TARGET}" -max_len=8192 -jobs="$jobs" ./corpus
+    "./build/${FUZZ_TARGET}" -max_len=8192 -jobs="$jobs" "$CORPUS_DIR"
 else
     echo "Starting ${FUZZ_TARGET} in standalone replay mode."
-    echo "Populate ./corpus with seed files to replay them through the harness."
-    "./build/${FUZZ_TARGET}" ./corpus
+    echo "Populate ${CORPUS_DIR} with seed files to replay them through the harness."
+    "./build/${FUZZ_TARGET}" "$CORPUS_DIR"
 fi
 
 read -p "Would you like to compute coverage (y/n)? " -n 1 -r
@@ -58,9 +69,9 @@ fi
 rm -f default.profdata default.profraw
 
 if "./build/${FUZZ_TARGET}" -help=1 >/dev/null 2>&1; then
-    "./build/${FUZZ_TARGET}" -max_len=8192 -runs=0 ./corpus
+    "./build/${FUZZ_TARGET}" -max_len=8192 -runs=0 "$CORPUS_DIR"
 else
-    "./build/${FUZZ_TARGET}" ./corpus
+    "./build/${FUZZ_TARGET}" "$CORPUS_DIR"
 fi
 
 llvm-profdata merge -sparse *.profraw -o default.profdata
