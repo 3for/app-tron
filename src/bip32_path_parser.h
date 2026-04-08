@@ -21,7 +21,8 @@ static inline off_t read_bip32_path_words(const uint8_t *buffer,
     }
 
     path_length = *buffer++;
-    if ((path_length < 1U) || (path_length > max_bip32_path) || (length < (1U + 4U * path_length))) {
+    if ((path_length < 1U) || (path_length > max_bip32_path) ||
+        (length < (1U + 4U * path_length))) {
         return -1;
     }
 
@@ -31,5 +32,5 @@ static inline off_t read_bip32_path_words(const uint8_t *buffer,
         buffer += 4;
     }
 
-    return (off_t) (1U + 4U * path_length);
+    return (off_t)(1U + 4U * path_length);
 }

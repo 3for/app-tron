@@ -40,7 +40,8 @@ def configuration(backend: BackendInterface, navigator, firmware):
 
 @pytest.fixture(name="app_version")
 def app_version_fixture(request) -> tuple[int, int, int]:
-    with open(Path(__file__).parent.parent.parent / "VERSION", encoding="utf-8") as f:
+    with open(Path(__file__).parent.parent.parent / "VERSION",
+              encoding="utf-8") as f:
         parsed = {}
         first_line = f.readline().strip()
         parsed = [int(part) for part in first_line.split('.')]

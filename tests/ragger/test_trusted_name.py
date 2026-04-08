@@ -57,16 +57,15 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
     else:
         end_text = "Hold to sign"
 
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": CHAIN_ID
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": ADDR,
+            "value": AMOUNT,
+            "chainId": CHAIN_ID
+        }, test_name, end_text)
 
 
 def test_trusted_name_v1_wrong_challenge(firmware: Firmware,
@@ -103,16 +102,15 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
     else:
         end_text = "Hold to sign"
 
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": bytes(addr),
-        "value": AMOUNT,
-        "chainId": CHAIN_ID
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": bytes(addr),
+            "value": AMOUNT,
+            "chainId": CHAIN_ID
+        }, test_name, end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -133,16 +131,15 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": 5
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": ADDR,
+            "value": AMOUNT,
+            "chainId": 5
+        }, test_name, end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -161,16 +158,15 @@ def test_trusted_name_v1_unknown_chain(
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": 9
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": ADDR,
+            "value": AMOUNT,
+            "chainId": 9
+        }, test_name, end_text)
 
 
 def test_trusted_name_v1_name_too_long(firmware: Firmware,
@@ -246,16 +242,15 @@ def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
     else:
         end_text = "Hold to sign"
 
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": CHAIN_ID
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": ADDR,
+            "value": AMOUNT,
+            "chainId": CHAIN_ID
+        }, test_name, end_text)
 
 
 @pytest.mark.usefixtures('configuration')
@@ -278,16 +273,15 @@ def test_trusted_name_v2_wrong_chainid(
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
-    app_client.sign_for_trusted_name(app_client.getAccount(0)['path'], {
-        "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": CHAIN_ID + 1,
-    },
-                                     test_name,
-                                     end_text)
+    app_client.sign_for_trusted_name(
+        app_client.getAccount(0)['path'], {
+            "nonce": NONCE,
+            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gas": GAS_LIMIT,
+            "to": ADDR,
+            "value": AMOUNT,
+            "chainId": CHAIN_ID + 1,
+        }, test_name, end_text)
 
 
 def test_trusted_name_v2_missing_challenge(firmware: Firmware,

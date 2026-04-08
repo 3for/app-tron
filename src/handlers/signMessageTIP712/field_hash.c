@@ -251,10 +251,7 @@ static bool field_hash_domain_special_fields(const void *const field_ptr,
         return false;
     }
     // copy contract address into context
-    if (field_name_matches(key,
-                           keylen,
-                           "verifyingContract",
-                           sizeof("verifyingContract") - 1U)) {
+    if (field_name_matches(key, keylen, "verifyingContract", sizeof("verifyingContract") - 1U)) {
         if (data_length != sizeof(tip712_context->contract_addr)) {
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             PRINTF("Unexpected verifyingContract length!\n");

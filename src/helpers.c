@@ -114,11 +114,8 @@ int helper_send_response_pubkey(const publicKeyContext_t *pub_key_ctx) {
 }
 
 off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) {
-    off_t parsed = read_bip32_path_words(buffer,
-                                         length,
-                                         &path->length,
-                                         path->indices,
-                                         MAX_BIP32_PATH);
+    off_t parsed =
+        read_bip32_path_words(buffer, length, &path->length, path->indices, MAX_BIP32_PATH);
 
     if (parsed < 0) {
         PRINTF("Invalid path\n");
