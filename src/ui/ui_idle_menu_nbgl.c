@@ -135,7 +135,8 @@ void ui_idle(void) {
     switches[TRUNCATE_ADDRESS_ID].subText = "Display truncated\naddresses";
     switches[TRUNCATE_ADDRESS_ID].token = SWITCH_TRUNCATE_ADDRESS_TOKEN;
     switches[TRUNCATE_ADDRESS_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[TRUNCATE_ADDRESS_ID].initState = (HAS_SETTING(S_TRUNCATE_ADDRESS)) ? ON_STATE : OFF_STATE;
+    switches[TRUNCATE_ADDRESS_ID].initState =
+        (HAS_SETTING(S_TRUNCATE_ADDRESS)) ? ON_STATE : OFF_STATE;
 
     switches[HASH_TX_ID].text = "Sign by Hash";
     switches[HASH_TX_ID].subText = "Allow hash-only\ntransactions";

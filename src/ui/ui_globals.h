@@ -20,8 +20,8 @@
 #include <stdint.h>
 #include "../parse.h"
 
-#define VOTE_ADDRESS 0
-#define VOTE_ADDRESS_SIZE BASE58CHECK_ADDRESS_SIZE + 1
+#define VOTE_ADDRESS          0
+#define VOTE_ADDRESS_SIZE     BASE58CHECK_ADDRESS_SIZE + 1
 #define VOTE_AMOUNT           VOTE_ADDRESS_SIZE
 #define VOTE_AMOUNT_SIZE      15
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)

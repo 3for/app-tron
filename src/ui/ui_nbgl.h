@@ -1,9 +1,9 @@
 #define TEXT_MESSAGE "message"
 
 #ifdef SCREEN_SIZE_WALLET
-#define SIGN(msg)   "Sign " msg "?"
+#define SIGN(msg) "Sign " msg "?"
 #else
-#define SIGN(msg)   "Sign " msg
+#define SIGN(msg) "Sign " msg
 #endif
 #define REVIEW(msg) "Review " msg
 

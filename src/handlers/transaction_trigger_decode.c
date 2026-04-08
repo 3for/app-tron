@@ -5,8 +5,7 @@
 #include "core/Contract.pb.h"
 #include "google/protobuf/any.pb.h"
 
-static const uint8_t tron_trigger_type_url[] =
-    "type.googleapis.com/protocol.TriggerSmartContract";
+static const uint8_t tron_trigger_type_url[] = "type.googleapis.com/protocol.TriggerSmartContract";
 static const size_t tron_trigger_type_url_len = sizeof(tron_trigger_type_url) - 1U;
 static const uint32_t tron_max_field_number = 0x1FFFFFFFU;
 
@@ -314,7 +313,8 @@ static bool tron_length_fits_remaining(const tron_stream_decoder_t *dec, uint64_
 static bool tron_validate_length_field(const tron_stream_decoder_t *dec) {
     const tron_ctx_t ctx = tron_current_ctx(dec);
 
-    if (ctx == TRON_CTX_CONTRACT && dec->pending_tag == protocol_Transaction_Contract_parameter_tag) {
+    if (ctx == TRON_CTX_CONTRACT &&
+        dec->pending_tag == protocol_Transaction_Contract_parameter_tag) {
         return dec->result.has_contract_type &&
                dec->result.contract_type ==
                    protocol_Transaction_Contract_ContractType_TriggerSmartContract;
