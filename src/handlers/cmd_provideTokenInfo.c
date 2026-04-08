@@ -43,9 +43,9 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    // The input must include the 0x41 prefix, 
+    // The input must include the 0x41 prefix,
     // but internally only the last 20 bytes (the canonical EVM address) are retained.
-    // So the existing `get_asset_info_by_addr()` and the UI/token comparison logic 
+    // So the existing `get_asset_info_by_addr()` and the UI/token comparison logic
     // do not need to be refactored.
     memmove(token->address, workBuffer + offset + 1, ADDRESS_LENGTH);
     offset += TRON_ADDRESS_SIZE;

@@ -17,8 +17,8 @@
 #include "settings.h"
 
 // APDUs P1
-#define P1_COMPLETE 0x00
-#define P1_PARTIAL  0xFF
+#define P1_COMPLETE  0x00
+#define P1_PARTIAL   0xFF
 #define P1_DISCARDED 0x01
 
 // APDUs P2
@@ -224,10 +224,12 @@ int handleTIP712Filtering(uint8_t p1,
             ret = filtering_date_time(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_TOKEN:
-            ret = filtering_amount_join_token(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret =
+                filtering_amount_join_token(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_VALUE:
-            ret = filtering_amount_join_value(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret =
+                filtering_amount_join_value(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_RAW_FIELD:
             ret = filtering_raw_field(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
