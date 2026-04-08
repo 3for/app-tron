@@ -15,6 +15,7 @@
 #include "trusted_name.h"
 #include "ui_idle_menu.h"
 #include "ui_globals.h"
+#include "ui_review_menu.h"
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -39,11 +40,13 @@ static void seed_default_assets(void) {
          0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
         {0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
          0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+        {0xC1, 0x83, 0x60, 0x21, 0x7D, 0x8F, 0x7A, 0xB5, 0xE7, 0xC5,
+         0x16, 0x56, 0x67, 0x61, 0xEA, 0x12, 0xCE, 0x7F, 0x9D, 0x72},
         {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
     };
-    static const char *const tickers[] = {"TOK11", "TOK22", "ZERO"};
-    static const uint8_t decimals[] = {18U, 6U, 0U};
+    static const char *const tickers[] = {"TOK11", "TOK22", "ENS", "ZERO"};
+    static const uint8_t decimals[] = {18U, 6U, 18U, 0U};
 
     memset(tmpCtx.transactionContext.extraInfo, 0, sizeof(tmpCtx.transactionContext.extraInfo));
     memset(tmpCtx.transactionContext.assetSet, 0, sizeof(tmpCtx.transactionContext.assetSet));
@@ -132,6 +135,11 @@ uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool id
     return sw;
 }
 
+int io_send_sw(uint16_t sw) {
+    apdu_response_code = sw;
+    return sw;
+}
+
 void ui_idle(void) {}
 
 void ui_712_start(void) {}
@@ -143,6 +151,11 @@ void ui_712_start_unfiltered(void) {}
 void ui_712_switch_to_sign(void) {}
 
 void ui_error_blind_signing(void) {}
+
+void ux_flow_display(ui_approval_state_t state, bool warning) {
+    (void) state;
+    (void) warning;
+}
 
 bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     (void) display_menu;

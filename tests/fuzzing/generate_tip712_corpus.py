@@ -42,10 +42,16 @@ S_SIGN_BY_HASH = 3
 S_VERBOSE_TIP712 = 4
 
 DEFAULT_BIP32_PATH = "44'/195'/0'/0/0"
+APP_STATE_IDLE = 0
+SIMPLE_MAIL_DOMAIN_HASH = bytes.fromhex(
+    "6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59")
+SIMPLE_MAIL_MESSAGE_HASH = bytes.fromhex(
+    "eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8")
 
 ROOT = Path(__file__).resolve().parent
 TIP712_INPUTS = ROOT.parent / "ragger" / "tip712_input_files"
 OUT_DIR = ROOT / "corpus" / "fuzz_tip712"
+OUT_LEGACY_DIR = ROOT / "corpus" / "fuzz_tip712_legacy"
 
 
 def emit_command(op: int, p1: int, p2: int, payload: bytes = b"") -> bytes:
@@ -56,6 +62,10 @@ def emit_command(op: int, p1: int, p2: int, payload: bytes = b"") -> bytes:
 
 def emit_settings(settings: int) -> bytes:
     return bytes([OP_SET_SETTINGS, settings & 0xFF])
+
+
+def emit_reset() -> bytes:
+    return emit_command(OP_RESET, P1_COMPLETE, 0x00, b"")
 
 
 def pack_derivation_path(path: str) -> bytes:
@@ -150,6 +160,10 @@ def encode_integer(value, type_size: int) -> bytes:
 
     if value == 0:
         return b"\x00"
+    if value < 0:
+        width = max(type_size, 1)
+        value &= (1 << (width * 8)) - 1
+        return value.to_bytes(width, "big")
     data = value.to_bytes(max(type_size, 1), "big", signed=False)
     return data.lstrip(b"\x00")
 
@@ -212,13 +226,14 @@ def emit_filter(path: str, entry: dict, discarded: bool) -> bytes:
         payload.append(0)
         return emit_command(OP_FILTERING, discarded_flag, P2_FILT_TRUSTED_NAME, bytes(payload))
     if entry["type"] == "amount_join_token":
-        payload = bytes([entry["token"], 0])
+        payload = bytes([entry.get("token", 0xFF), 0])
         return emit_command(OP_FILTERING, discarded_flag, P2_FILT_AMOUNT_JOIN_TOKEN, payload)
     if entry["type"] == "amount_join_value":
+        token_idx = entry.get("token", 0xFF)
         payload = bytearray()
         payload.append(len(entry["name"]))
         payload += entry["name"].encode()
-        payload.append(entry["token"])
+        payload.append(token_idx)
         payload.append(0)
         return emit_command(OP_FILTERING, discarded_flag, P2_FILT_AMOUNT_JOIN_VALUE, bytes(payload))
     if entry["type"] == "datetime":
@@ -478,6 +493,134 @@ TRUSTED_NAME = {
     },
 }
 
+DATETIME_FILTER = {
+    "data": {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Transfer": [
+                {"name": "with", "type": "address"},
+                {"name": "value_recv", "type": "uint256"},
+                {"name": "token_send", "type": "address"},
+                {"name": "value_send", "type": "uint256"},
+                {"name": "token_recv", "type": "address"},
+                {"name": "expires", "type": "uint64"},
+            ],
+        },
+        "primaryType": "Transfer",
+        "domain": {
+            "name": "Advanced test",
+            "version": "1",
+            "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+            "chainId": 1151668124,
+        },
+        "message": {
+            "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            "value_recv": 10000000000000000,
+            "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "value_send": 24500000000000000000,
+            "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "expires": 1714559400,
+        },
+    },
+    "filters": {
+        "name": "Advanced Filtering",
+        "fields": {
+            "value_send": {"type": "amount_join_value", "name": "Send", "token": 1},
+            "token_send": {"type": "amount_join_token", "token": 1},
+            "value_recv": {"type": "amount_join_value", "name": "Receive", "token": 0},
+            "token_recv": {"type": "amount_join_token", "token": 0},
+            "with": {"type": "raw", "name": "With"},
+            "expires": {"type": "datetime", "name": "Will Expire"},
+        },
+    },
+}
+
+PERMIT_AMOUNT_JOIN = {
+    "data": {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Permit": [
+                {"name": "owner", "type": "address"},
+                {"name": "spender", "type": "address"},
+                {"name": "value", "type": "uint256"},
+                {"name": "nonce", "type": "uint256"},
+                {"name": "deadline", "type": "uint256"},
+            ],
+        },
+        "primaryType": "Permit",
+        "domain": {
+            "name": "ENS",
+            "version": "1",
+            "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "chainId": 1151668124,
+        },
+        "message": {
+            "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            "spender": "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",
+            "value": 4200000000000000000,
+            "nonce": 0,
+            "deadline": 1719756000,
+        },
+    },
+    "filters": {
+        "name": "Permit filtering",
+        "fields": {
+            "value": {"type": "amount_join_value", "name": "Send"},
+            "deadline": {"type": "datetime", "name": "Deadline"},
+        },
+    },
+}
+
+TRUSTED_NAME_FALLBACK = {
+    "data": {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "validator", "type": "address"},
+                {"name": "enable", "type": "bool"},
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 1151668124,
+        },
+        "message": {
+            "validator": "0x0000000000000000000000000000000000000000",
+            "enable": True,
+        },
+    },
+    "filters": {
+        "name": "Trusted name fallback test",
+        "fields": {
+            "validator": {
+                "type": "trusted_name",
+                "name": "Validator",
+                "tn_type": [2, 1],
+                "tn_source": [1, 2],
+            },
+            "enable": {"type": "raw", "name": "State"},
+        },
+    },
+}
+
 
 def load_json(name: str) -> dict:
     with (TIP712_INPUTS / name).open("r", encoding="utf-8") as handle:
@@ -487,6 +630,25 @@ def load_json(name: str) -> dict:
 def write_seed(name: str, payload: bytes) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / name).write_bytes(payload)
+
+
+def write_legacy_seed(name: str, payload: bytes) -> None:
+    OUT_LEGACY_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_LEGACY_DIR / name).write_bytes(payload)
+
+
+def build_legacy_stream(settings: int,
+                        initial_app_state: int,
+                        bip32_path: str,
+                        domain_hash: bytes,
+                        message_hash: bytes,
+                        p1: int = 0x00,
+                        p2: int = 0x00) -> bytes:
+    payload = bytearray()
+    payload += pack_derivation_path(bip32_path)
+    payload += domain_hash
+    payload += message_hash
+    return bytes([settings & 0xFF, initial_app_state & 0xFF, p1 & 0xFF, p2 & 0xFF]) + payload
 
 
 def main() -> None:
@@ -504,6 +666,32 @@ def main() -> None:
                build_stream(AMOUNT_JOIN["data"], AMOUNT_JOIN["filters"]))
     write_seed("05-trusted-name.bin",
                build_stream(TRUSTED_NAME["data"], TRUSTED_NAME["filters"]))
+    write_seed("06-datetime-filter.bin",
+               build_stream(DATETIME_FILTER["data"], DATETIME_FILTER["filters"]))
+    write_seed("07-permit-amount-join.bin",
+               build_stream(PERMIT_AMOUNT_JOIN["data"], PERMIT_AMOUNT_JOIN["filters"]))
+    write_seed("08-long-string-partial.bin",
+               build_stream(load_json("03-long_string-data.json")))
+    write_seed("09-long-bytes-partial.bin",
+               build_stream(load_json("04-long_bytes-data.json")))
+    write_seed("10-signed-ints.bin",
+               build_stream(load_json("05-signed_ints-data.json")))
+    write_seed("11-reset-replay.bin",
+               build_stream(load_json("00-simple_mail-data.json"),
+                            settings=(1 << S_SIGN_BY_HASH)) +
+               emit_reset() +
+               build_stream(TRUSTED_NAME_FALLBACK["data"],
+                            TRUSTED_NAME_FALLBACK["filters"],
+                            settings=(1 << S_VERBOSE_TIP712)))
+    write_seed("12-trusted-name-fallback.bin",
+               build_stream(TRUSTED_NAME_FALLBACK["data"], TRUSTED_NAME_FALLBACK["filters"]))
+
+    write_legacy_seed("00-simple-mail-sign-by-hash.bin",
+                      build_legacy_stream(settings=(1 << S_SIGN_BY_HASH),
+                                          initial_app_state=APP_STATE_IDLE,
+                                          bip32_path=DEFAULT_BIP32_PATH,
+                                          domain_hash=SIMPLE_MAIL_DOMAIN_HASH,
+                                          message_hash=SIMPLE_MAIL_MESSAGE_HASH))
 
 
 if __name__ == "__main__":
