@@ -32,5 +32,5 @@ static inline off_t read_bip32_path_words(const uint8_t *buffer,
         buffer += 4;
     }
 
-    return (off_t) (1U + 4U * path_length);
+    return (off_t)(1U + 4U * path_length);
 }
