@@ -85,8 +85,8 @@ static bool tron_varint_feed(tron_stream_decoder_t *dec,
     if (dec->varint_count >= 10U) return false;
     if (dec->varint_count == 9U && byte > 1U) return false;
 
-    dec->varint_value |= ((uint64_t) (byte & 0x7FU)) << dec->varint_shift;
-    dec->varint_shift = (uint8_t) (dec->varint_shift + 7U);
+    dec->varint_value |= ((uint64_t)(byte & 0x7FU)) << dec->varint_shift;
+    dec->varint_shift = (uint8_t)(dec->varint_shift + 7U);
     dec->varint_count++;
 
     if ((byte & 0x80U) == 0U) {
@@ -382,7 +382,7 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                 }
 
                 dec->pending_tag = (uint32_t) field_number;
-                dec->pending_wire = (pb_wire_type_t) (value & 0x07U);
+                dec->pending_wire = (pb_wire_type_t)(value & 0x07U);
 
                 /* Protobuf field numbers start at 1; tag 0 is always invalid. */
                 if (dec->pending_tag == 0U) {
