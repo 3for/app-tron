@@ -1,6 +1,9 @@
 build/
 build-local/
-corpus/
+corpus/*
+!corpus/fuzz_tip712/
+corpus/fuzz_tip712/*
+!corpus/fuzz_tip712/*.bin
 out/
 default.profdata
 default.profraw

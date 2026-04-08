@@ -181,6 +181,10 @@ static const void **get_struct_dependencies(uint8_t *const deps_count,
                         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
                         return NULL;
                     }
+                    if (pending_count >= ARRAY_SIZE(pending)) {
+                        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                        return NULL;
+                    }
                     if ((new_dep = MEM_ALLOC_AND_ALIGN_TYPE(void *)) == NULL) {
                         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
                         return NULL;
