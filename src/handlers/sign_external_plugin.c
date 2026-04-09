@@ -117,15 +117,15 @@ static void sync_partial_txcontent(const tron_decode_result_t *res, txContent_t 
 }
 
 static bool call_external_plugin(uint32_t message, void *parameters) {
-    unsigned int params[3];
+    uintptr_t params[3];
 
     if (pluginType != PLUGIN_TYPE_EXTERNAL || dataContext.tokenContext.pluginName[0] == '\0') {
         return true;
     }
 
-    params[0] = (unsigned int) (uintptr_t) dataContext.tokenContext.pluginName;
-    params[1] = (unsigned int) message;
-    params[2] = (unsigned int) (uintptr_t) parameters;
+    params[0] = (uintptr_t) dataContext.tokenContext.pluginName;
+    params[1] = (uintptr_t) message;
+    params[2] = (uintptr_t) parameters;
 
     BEGIN_TRY {
         TRY {
@@ -896,9 +896,25 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
                                32));
 
     if (txContent.permission_id > 0) {
+        size_t prefix_len = 0U;
+        int prefix_written;
+
         PRINTF("Set permission_id...\n");
-        snprintf((char *) fromAddress, 5, "P%d - ", txContent.permission_id);
-        getBase58FromAddress(txContent.account, fromAddress + 4, HAS_SETTING(S_TRUNCATE_ADDRESS));
+        prefix_written = snprintf((char *) fromAddress,
+                                  sizeof(fromAddress),
+                                  "P%d - ",
+                                  txContent.permission_id);
+        if ((prefix_written > 0) &&
+            ((size_t) prefix_written <=
+             (sizeof(fromAddress) - (BASE58CHECK_ADDRESS_SIZE + 1U)))) {
+            prefix_len = (size_t) prefix_written;
+        } else {
+            fromAddress[0] = '\0';
+        }
+
+        getBase58FromAddress(txContent.account,
+                             fromAddress + prefix_len,
+                             HAS_SETTING(S_TRUNCATE_ADDRESS));
     } else {
         PRINTF("Regular transaction...\n");
         getBase58FromAddress(txContent.account, fromAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
@@ -930,7 +946,13 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         customContractField |= (1 << 0x05);
         customContractField |= (1 << 0x06);
     } else if (txContent.amount[1] > 0) {
-        memcpy(toAddress, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+        size_t token_name_len = txContent.tokenNamesLength[0];
+
+        if (token_name_len >= sizeof(toAddress)) {
+            token_name_len = sizeof(toAddress) - 1U;
+        }
+        memcpy(toAddress, txContent.tokenNames[0], token_name_len);
+        toAddress[token_name_len] = '\0';
         print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
         customContractField |= (1 << 0x05);
         customContractField |= (1 << 0x06);
