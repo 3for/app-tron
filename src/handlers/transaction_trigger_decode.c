@@ -5,8 +5,7 @@
 #include "core/Contract.pb.h"
 #include "google/protobuf/any.pb.h"
 
-static const uint8_t tron_trigger_type_url[] =
-    "type.googleapis.com/protocol.TriggerSmartContract";
+static const uint8_t tron_trigger_type_url[] = "type.googleapis.com/protocol.TriggerSmartContract";
 static const size_t tron_trigger_type_url_len = sizeof(tron_trigger_type_url) - 1U;
 static const uint32_t tron_max_field_number = 0x1FFFFFFFU;
 
@@ -86,8 +85,8 @@ static bool tron_varint_feed(tron_stream_decoder_t *dec,
     if (dec->varint_count >= 10U) return false;
     if (dec->varint_count == 9U && byte > 1U) return false;
 
-    dec->varint_value |= ((uint64_t) (byte & 0x7FU)) << dec->varint_shift;
-    dec->varint_shift = (uint8_t) (dec->varint_shift + 7U);
+    dec->varint_value |= ((uint64_t)(byte & 0x7FU)) << dec->varint_shift;
+    dec->varint_shift = (uint8_t)(dec->varint_shift + 7U);
     dec->varint_count++;
 
     if ((byte & 0x80U) == 0U) {
@@ -314,7 +313,8 @@ static bool tron_length_fits_remaining(const tron_stream_decoder_t *dec, uint64_
 static bool tron_validate_length_field(const tron_stream_decoder_t *dec) {
     const tron_ctx_t ctx = tron_current_ctx(dec);
 
-    if (ctx == TRON_CTX_CONTRACT && dec->pending_tag == protocol_Transaction_Contract_parameter_tag) {
+    if (ctx == TRON_CTX_CONTRACT &&
+        dec->pending_tag == protocol_Transaction_Contract_parameter_tag) {
         return dec->result.has_contract_type &&
                dec->result.contract_type ==
                    protocol_Transaction_Contract_ContractType_TriggerSmartContract;
@@ -382,7 +382,7 @@ static bool tron_process_byte(tron_stream_decoder_t *dec, uint8_t byte) {
                 }
 
                 dec->pending_tag = (uint32_t) field_number;
-                dec->pending_wire = (pb_wire_type_t) (value & 0x07U);
+                dec->pending_wire = (pb_wire_type_t)(value & 0x07U);
 
                 /* Protobuf field numbers start at 1; tag 0 is always invalid. */
                 if (dec->pending_tag == 0U) {

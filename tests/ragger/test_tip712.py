@@ -123,18 +123,21 @@ def tip712_new_common(device: Device,
                 val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
                 text = "Hold to sign"
             if snapshots_dirname is not None:
-                client.navigate(snapshots_dirname,
-                                text,
-                                warning_approve=warning_approve,
-                                warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
+                client.navigate(
+                    snapshots_dirname,
+                    text,
+                    warning_approve=warning_approve,
+                    warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
             else:
                 if warning_approve:
                     if device.is_nano:
-                        navigator.navigate([NavInsID.BOTH_CLICK],
-                                           screen_change_before_first_instruction=False)
+                        navigator.navigate(
+                            [NavInsID.BOTH_CLICK],
+                            screen_change_before_first_instruction=False)
                     else:
-                        navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
-                                           screen_change_before_first_instruction=False)
+                        navigator.navigate(
+                            [NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False)
                 navigator.navigate_until_text(nav_ins, [val_ins], text)
     finally:
         InputData.disable_autonext()
@@ -178,8 +181,7 @@ def current_screen_texts(backend: BackendInterface) -> list[str]:
     return []
 
 
-def settings_toggle_from_settings_home(device: Device,
-                                       navigator: Navigator,
+def settings_toggle_from_settings_home(device: Device, navigator: Navigator,
                                        to_toggle: list[SettingID]):
     moves = [NavInsID.BOTH_CLICK]
     for setting in get_device_settings(device):
@@ -223,20 +225,23 @@ def tip712_new_cases():
     display_root = Path(tip712_json_path())
     for file in input_files():
         input_file = Path(file)
-        test_path = Path(input_file.parent) / '-'.join(input_file.stem.split('-')[:-1])
+        test_path = Path(input_file.parent) / '-'.join(
+            input_file.stem.split('-')[:-1])
         filterfile = Path(f"{test_path}-filter.json")
         case_id = f"{display_root / input_file.name}"
 
         cases.append(pytest.param((input_file, False), id=f"{case_id}-False"))
         if filterfile.exists():
-            cases.append(pytest.param((input_file, True), id=f"{case_id}-True"))
+            cases.append(pytest.param((input_file, True),
+                                      id=f"{case_id}-True"))
         else:
             cases.append(
                 pytest.param(
                     (input_file, True),
                     id=f"{case_id}-True",
                     marks=pytest.mark.skip(
-                        reason=f"{filterfile.name}: No such file or directory")))
+                        reason=f"{filterfile.name}: No such file or directory")
+                ))
     return cases
 
 
@@ -272,6 +277,7 @@ def filt_tn_types_fixture(request) -> list[InputData.TrustedNameType]:
 
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
+
     def test_trx_sign_tip712(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         domainHash = bytes.fromhex(
@@ -301,8 +307,8 @@ class TestTRX():
 
     def test_trx_tip712_new(self, firmware: Firmware,
                             backend: BackendInterface, navigator: Navigator,
-                            default_screenshot_path: Path, tip712_case: tuple[Path, bool],
-                            verbose_raw: bool,
+                            default_screenshot_path: Path,
+                            tip712_case: tuple[Path, bool], verbose_raw: bool,
                             golden_run: bool, test_name: str):
         global unfiltered_flow
         global snapshots_dirname
@@ -343,7 +349,8 @@ class TestTRX():
             with open(input_file, encoding="utf-8") as file:
                 data = json.load(file)
                 extra_left = test_path.endswith(
-                    '01-addresses_array_mail') and verbose_raw and filters is None
+                    '01-addresses_array_mail'
+                ) and verbose_raw and filters is None
                 vrs = tip712_new_common(device,
                                         navigator,
                                         default_screenshot_path,

@@ -160,7 +160,8 @@ static bool check_typename(const char *expected) {
         return false;
     }
     expected_len = strlen(expected);
-    if (((size_t) typename_len != expected_len) || (memcmp(typename, expected, expected_len) != 0)) {
+    if (((size_t) typename_len != expected_len) ||
+        (memcmp(typename, expected, expected_len) != 0)) {
         PRINTF("Error: expected field of type \"%s\" but got \"", expected);
         for (int i = 0; i < typename_len; ++i) PRINTF("%c", typename[i]);
         PRINTF("\" instead.\n");

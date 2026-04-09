@@ -21,6 +21,7 @@
 #include "parse.h"
 #include "helpers.h"
 #include "app_errors.h"
+#include "bip32_path_parser.h"
 
 void getAddressFromPublicKey(const uint8_t *publicKey, uint8_t address[static ADDRESS_SIZE]) {
     uint8_t hashAddress[HASH_SIZE];
@@ -113,49 +114,30 @@ int helper_send_response_pubkey(const publicKeyContext_t *pub_key_ctx) {
 }
 
 off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) {
-    if (length < 1) {
-        return -1;
-    }
-    unsigned int path_length = *buffer++;
+    off_t parsed =
+        read_bip32_path_words(buffer, length, &path->length, path->indices, MAX_BIP32_PATH);
 
-    if (path_length < 1 || path_length > MAX_BIP32_PATH) {
+    if (parsed < 0) {
         PRINTF("Invalid path\n");
-        return -1;
+        return parsed;
     }
-
-    if (length < 1 + 4 * path_length) {
-        return -1;
-    }
-    path->length = path_length;
-    for (unsigned int i = 0; i < path_length; i++) {
-        path->indices[i] = U4BE(buffer, 0);
-        buffer += 4;
-    }
-    return 1 + 4 * path_length;
+    return parsed;
 }
 
 off_t read_bip32_path_712(const uint8_t *buffer,
                           uint16_t length,
                           messageSigningContext712_t *ctx_712) {
-    if (length < 1) {
-        return -1;
-    }
-    unsigned int path_length = *buffer++;
+    off_t parsed = read_bip32_path_words(buffer,
+                                         length,
+                                         &ctx_712->pathLength,
+                                         ctx_712->bip32Path,
+                                         MAX_BIP32_PATH);
 
-    if (path_length < 1 || path_length > MAX_BIP32_PATH) {
+    if (parsed < 0) {
         PRINTF("Invalid path\n");
-        return -1;
+        return parsed;
     }
-
-    if (length < 1 + 4 * path_length) {
-        return -1;
-    }
-    ctx_712->pathLength = path_length;
-    for (unsigned int i = 0; i < path_length; i++) {
-        ctx_712->bip32Path[i] = U4BE(buffer, 0);
-        buffer += 4;
-    }
-    return 1 + 4 * path_length;
+    return parsed;
 }
 
 int initPublicKeyContext(bip32_path_t *bip32_path,

@@ -103,6 +103,7 @@ endif()
 
 set(TIP712_FUZZ_SUPPORT_SOURCES
     src/tip712_fuzz_support.c
+    src/tip712_fuzz_helpers_bridge.c
     ../../src/mem.c
     ../../src/mem_utils.c
     ../../src/hash_bytes.c
@@ -143,4 +144,54 @@ target_compile_options(fuzz_tip712 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_options(fuzz_tip712 PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_tip712 PRIVATE ${TARGET_LINK_LIBS})
+endif()
+
+add_executable(fuzz_tip712_wallet
+               src/fuzz_tip712.c
+               ${TIP712_FUZZ_SUPPORT_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_tip712_wallet PRIVATE src/fuzz_standalone_main.c)
+endif()
+
+target_include_directories(fuzz_tip712_wallet
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers/signMessageTIP712
+                           ../../tron-plugin-sdk/src)
+
+target_compile_definitions(fuzz_tip712_wallet PRIVATE SCREEN_SIZE_WALLET)
+target_compile_options(fuzz_tip712_wallet PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_tip712_wallet PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_link_options(fuzz_tip712_wallet PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_tip712_wallet PRIVATE ${TARGET_LINK_LIBS})
+endif()
+
+set(TIP712_LEGACY_FUZZ_SUPPORT_SOURCES
+    src/tip712_fuzz_support.c
+    ../../src/handlers/sign_tip712_message.c)
+
+add_executable(fuzz_tip712_legacy
+               src/fuzz_tip712_legacy.c
+               ${TIP712_LEGACY_FUZZ_SUPPORT_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_tip712_legacy PRIVATE src/fuzz_standalone_main.c)
+endif()
+
+target_include_directories(fuzz_tip712_legacy
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/ui
+                           ../../tron-plugin-sdk/src)
+
+target_compile_options(fuzz_tip712_legacy PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_tip712_legacy PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_link_options(fuzz_tip712_legacy PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_tip712_legacy PRIVATE ${TARGET_LINK_LIBS})
 endif()

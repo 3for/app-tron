@@ -130,7 +130,10 @@ static void displayCustomContractWarning(void) {
                        "Reject transaction",
                        customContractWarningChoice);
 #else
-    nbgl_useCaseAction(&ICON_APP_WARNING, "Custom Contract", "Continue", continueCustomContractWarning);
+    nbgl_useCaseAction(&ICON_APP_WARNING,
+                       "Custom Contract",
+                       "Continue",
+                       continueCustomContractWarning);
 #endif
 }
 

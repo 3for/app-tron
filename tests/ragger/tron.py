@@ -259,11 +259,12 @@ class TronClient:
             return newpos
         return size + newpos
 
-    def navigate(self,
-                 snappath: Path = None,
-                 text: str = "",
-                 warning_approve: bool = False,
-                 warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM):
+    def navigate(
+            self,
+            snappath: Path = None,
+            text: str = "",
+            warning_approve: bool = False,
+            warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM):
         if self._firmware.is_nano:
             path_name = ""
             screen_change_before_first_instruction = True
@@ -451,10 +452,11 @@ class TronClient:
                               warning_approve: bool = False):
         tx = self.packContract(
             tron.Transaction.Contract.TransferContract,
-            contract.TransferContract(
-                owner_address=bytes.fromhex(self.getAccount(0)['addressHex']),
-                to_address=bytes.fromhex(("41" + tx_params["to"].hex())),
-                amount=tx_params["value"]))
+            contract.TransferContract(owner_address=bytes.fromhex(
+                self.getAccount(0)['addressHex']),
+                                      to_address=bytes.fromhex(
+                                          ("41" + tx_params["to"].hex())),
+                                      amount=tx_params["value"]))
 
         return self.sign(bip32_path,
                          tx,

@@ -57,7 +57,7 @@ static void bytes_to_lowercase_hex_string(const uint8_t *data, size_t data_len, 
 void cleanupSignPersonalMessageFullDisplay(void) {
     if (g_sign_msg_ctx.mem_mark != NULL) {
         uint8_t *mem_end = mem_alloc(0);
-        mem_dealloc((size_t) (mem_end - (uint8_t *) g_sign_msg_ctx.mem_mark));
+        mem_dealloc((size_t)(mem_end - (uint8_t *) g_sign_msg_ctx.mem_mark));
     }
     explicit_bzero(&g_sign_msg_ctx, sizeof(g_sign_msg_ctx));
     processed_size_191 = 0;

@@ -26,7 +26,6 @@ SETTING_BITS = {
 APP_CLA = 0xE0
 GET_APP_CONFIGURATION_INS = 0x06
 
-
 # Settings Positions per device. Returns the tuple (page, x, y)
 SETTINGS_POSITIONS = {
     DeviceType.STAX: {
@@ -80,7 +79,8 @@ def get_enabled_settings(backend: BackendInterface,
     response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
     enabled_mask = response.data[0]
     return {
-        setting for setting in get_device_settings(device)
+        setting
+        for setting in get_device_settings(device)
         if enabled_mask & (1 << SETTING_BITS[setting])
     }
 
@@ -93,8 +93,8 @@ def get_settings_moves(
     settings = get_device_settings(device)
     # Assume the app is on the 1st page of Settings
     if device.is_nano:
-        moves += [NavInsID.RIGHT_CLICK,
-                  NavInsID.BOTH_CLICK]  # On Nano NBGL, Settings is the 2nd home page.
+        moves += [NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK
+                  ]  # On Nano NBGL, Settings is the 2nd home page.
         for setting in settings:
             if setting in to_toggle:
                 moves += [NavInsID.BOTH_CLICK]

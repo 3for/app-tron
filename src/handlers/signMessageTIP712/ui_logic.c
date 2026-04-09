@@ -156,7 +156,10 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
         return NULL;
     }
 
-    snprintf(dst, key_length + 1 + (size_t) suffix_length + 1, "%s-%u", key, suffix);
+    memcpy(dst, key, key_length);
+    dst[key_length] = '-';
+    memcpy(dst + key_length + 1U, suffix_buffer, (size_t) suffix_length);
+    dst[key_length + 1U + (size_t) suffix_length] = '\0';
     return dst;
 }
 
@@ -180,8 +183,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         return false;
     }
 
-    if ((ui_ctx->ui_pairs_tail != NULL) &&
-        (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
+    if ((ui_ctx->ui_pairs_tail != NULL) && (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
         (ui_ctx->ui_pairs_tail->value_length == value_length) &&
         (memcmp(ui_ctx->ui_pairs_tail->raw_key, key, key_length) == 0) &&
         (memcmp(ui_ctx->ui_pairs_tail->value, value, value_length) == 0)) {
@@ -366,12 +368,25 @@ bool ui_712_redraw_generic_step(void) {
  */
 e_tip712_nfs ui_712_next_field(void) {
     e_tip712_nfs state = TIP712_NO_MORE_FIELD;
+    const void *review_struct = NULL;
+    uint8_t depth_count = 0;
 
     if (ui_ctx == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else {
         if (ui_ctx->structs_to_review > 0) {
-            ui_712_review_struct(path_get_nth_field_to_last(ui_ctx->structs_to_review));
+            depth_count = path_get_depth_count();
+            if ((depth_count == 0U) || (ui_ctx->structs_to_review > depth_count)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                ui_ctx->structs_to_review = 0;
+                return TIP712_NO_MORE_FIELD;
+            }
+            review_struct = path_get_nth_field_to_last(ui_ctx->structs_to_review);
+            if ((review_struct == NULL) || !ui_712_review_struct(review_struct)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                ui_ctx->structs_to_review = 0;
+                return TIP712_NO_MORE_FIELD;
+            }
             ui_ctx->structs_to_review -= 1;
             state = TIP712_FIELD_LATER;
         } else if (!ui_ctx->end_reached) {
@@ -395,14 +410,18 @@ bool ui_712_review_struct(const void *struct_ptr) {
     uint8_t struct_name_length;
     const char *title = "Review struct";
 
-    if (ui_ctx == NULL) {
+    if ((ui_ctx == NULL) || (struct_ptr == NULL)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
 
-    ui_712_set_title(title, strlen(title));
-    if ((struct_name = get_struct_name(struct_ptr, &struct_name_length)) != NULL) {
-        ui_712_set_value(struct_name, struct_name_length);
+    ui_712_set_title(title, sizeof("Review struct") - 1U);
+    struct_name = get_struct_name(struct_ptr, &struct_name_length);
+    if (struct_name == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
     }
+    ui_712_set_value(struct_name, struct_name_length);
     if (!ui_712_prepare_current_pair()) {
         return false;
     }
@@ -415,7 +434,7 @@ bool ui_712_review_struct(const void *struct_ptr) {
 bool ui_712_message_hash(void) {
     const char *title = "Message hash";
 
-    ui_712_set_title(title, strlen(title));
+    ui_712_set_title(title, sizeof("Message hash") - 1U);
     array_bytes_string(strings.tmp.tmp,
                        sizeof(strings.tmp.tmp),
                        tmpCtx.messageSigningContext712.messageHash,
@@ -504,6 +523,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
     const char *true_str = "true";
     const char *false_str = "false";
     const char *str;
+    size_t str_len;
 
     // no reason for a boolean to be received over multiple chunks
     if (!first) {
@@ -514,8 +534,9 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
     str = *data ? true_str : false_str;
-    memcpy(strings.tmp.tmp, str, MIN(max_len, strlen(str)));
-    strings.tmp.tmp[MIN(max_len, strlen(str))] = '\0';
+    str_len = *data ? (sizeof("true") - 1U) : (sizeof("false") - 1U);
+    memcpy(strings.tmp.tmp, str, MIN(max_len, str_len));
+    strings.tmp.tmp[MIN(max_len, str_len)] = '\0';
     return true;
 }
 
@@ -532,6 +553,10 @@ static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first,
     size_t max_len = sizeof(strings.tmp.tmp) - 1;
     size_t cur_len;
 
+    if ((data == NULL) && (length > 0U)) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
     if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
         return false;
     }
@@ -570,25 +595,43 @@ static bool ui_712_format_int(const uint8_t *data,
     uint128_t value128;
     int32_t value32;
     int16_t value16;
+    uint16_t bit_size;
 
     // no reason for an integer to be received over multiple chunks
     if (!first) {
         return false;
     }
-    switch (get_struct_field_typesize(field_ptr) * 8) {
+    bit_size = (uint16_t) get_struct_field_typesize(field_ptr) * 8U;
+    switch (bit_size) {
         case 256:
+            if (length > INT256_LENGTH) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             convertUint256BE(data, length, &value256);
             tostring256_signed(&value256, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 128:
+            if (length > INT128_LENGTH) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             convertUint128BE(data, length, &value128);
             tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 64:
+            if (length > sizeof(uint64_t)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             convertUint64BEto128(data, length, &value128);
             tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 32:
+            if (length > sizeof(value32)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             value32 = 0;
             for (int i = 0; i < length; ++i) {
                 ((uint8_t *) &value32)[length - 1 - i] = data[i];
@@ -596,6 +639,10 @@ static bool ui_712_format_int(const uint8_t *data,
             snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value32);
             break;
         case 16:
+            if (length > sizeof(value16)) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             value16 = 0;
             for (int i = 0; i < length; ++i) {
                 ((uint8_t *) &value16)[length - 1 - i] = data[i];
@@ -606,6 +653,10 @@ static bool ui_712_format_int(const uint8_t *data,
                      value16);  // expanded to 32 bits
             break;
         case 8:
+            if (length != 1U) {
+                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                return false;
+            }
             snprintf(strings.tmp.tmp,
                      sizeof(strings.tmp.tmp),
                      "%d",
@@ -632,6 +683,10 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
 
     // no reason for an integer to be received over multiple chunks
     if (!first) {
+        return false;
+    }
+    if (length > INT256_LENGTH) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
     convertUint256BE(data, length, &value256);
@@ -836,9 +891,14 @@ bool ui_712_feed_to_display(const void *field_ptr,
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
         return false;
     }
+    if (data == NULL) {
+        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        return false;
+    }
 
-    if (first && (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
-                  (current_length > 0))) {
+    if (first &&
+        (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
+         (current_length > 0))) {
         return false;
     }
 
@@ -1063,7 +1123,7 @@ void ui_712_queue_struct_to_review(void) {
 #else
     if (HAS_SETTING(S_VERBOSE_TIP712)) {
 #endif
-        if ((ui_ctx != NULL) && (ui_ctx->structs_to_review < UINT8_MAX)) {
+        if ((ui_ctx != NULL) && (ui_ctx->structs_to_review < MAX_PATH_DEPTH)) {
             ui_ctx->structs_to_review += 1;
         }
     }
