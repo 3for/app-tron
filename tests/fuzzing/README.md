@@ -18,6 +18,11 @@ Current targets:
 - `fuzz_tip712_legacy`: fuzzes the legacy
   [`sign_tip712_message.c`](../../src/handlers/sign_tip712_message.c) handler
   that signs pre-hashed TIP712 domain and message digests.
+- `fuzz_external_plugin`: fuzzes the external plugin APDU flow in
+  [`set_external_plugin.c`](../../src/handlers/set_external_plugin.c) and
+  [`sign_external_plugin.c`](../../src/handlers/sign_external_plugin.c),
+  including APDU sequencing, plugin callback handling, and UI-cache
+  preparation.
 
 ## Coverage Goals
 
@@ -42,6 +47,31 @@ Each input is replayed through several decoder scenarios:
 `transaction_trigger_decode_fuzzer` is intentionally narrower than generic
 app-wide fuzzing: the target is to stress the stream decoder thoroughly without
 dragging in unrelated app features.
+
+`fuzz_external_plugin` replays a compact operation stream that drives the
+production `SET_EXTERNAL_PLUGIN` and `SIGN_EXTERNAL_PLUGIN` handlers through
+host-side stubs for `os_lib_call`, signature verification, UI transitions, and
+address/amount formatting helpers. The harness is intentionally stateful so it
+can cover setup/sign sequencing rather than isolated packet parsing only.
+
+External-plugin-specific coverage goals for the host harness include:
+
+- `SET_EXTERNAL_PLUGIN` payload-length, plugin-name, signature, and presence
+  handling
+- `SIGN_EXTERNAL_PLUGIN` sequencing across `P1_SIGN`, `P1_FIRST`, `P1_MORE`,
+  `P1_LAST`, and reset/error flows
+- selector/contract match and mismatch behavior
+- full and partial parameter delivery, including a final tail shorter than
+  32 bytes
+- plugin init / provide-parameter / finalize / provide-info / contract-id /
+  contract-UI callback branches
+- UI-cache preparation bounds such as zero screens, oversized screen counts,
+  and mid-cache query failures
+
+The checked-in external plugin seed corpus lives under
+[`corpus/fuzz_external_plugin`](./corpus/fuzz_external_plugin). It is generated
+by [`generate_external_plugin_corpus.py`](./generate_external_plugin_corpus.py),
+which emits a small set of semantic setup/signing scenarios.
 
 `fuzz_tip712` follows the same spirit as the Ethereum app's `fuzz_eip712`
 harness, but is adapted to Tron TIP712's APDU/state-machine flow. It replays a
@@ -125,6 +155,14 @@ cmake -B build -S . -DCMAKE_C_COMPILER=/usr/bin/clang -DSANITIZER=address
 cmake --build build --target fuzz_tip712 fuzz_tip712_wallet fuzz_tip712_legacy
 ```
 
+To build the external plugin target explicitly:
+
+```sh
+cd tests/fuzzing
+cmake -B build -S . -DCMAKE_C_COMPILER=/usr/bin/clang -DSANITIZER=address
+cmake --build build --target fuzz_external_plugin
+```
+
 To refresh the checked-in TIP712 corpus after editing the generator:
 
 ```sh
@@ -133,6 +171,13 @@ python3 generate_tip712_corpus.py
 ```
 
 This refreshes both `./corpus/fuzz_tip712` and `./corpus/fuzz_tip712_legacy`.
+
+To refresh the checked-in external plugin corpus:
+
+```sh
+cd tests/fuzzing
+python3 generate_external_plugin_corpus.py
+```
 
 `local_run.sh` will automatically use `./corpus/fuzz_tip712` for `fuzz_tip712`
 and `fuzz_tip712_wallet`. You can still override it with `CORPUS_DIR=...`.
@@ -146,6 +191,7 @@ execute inputs from files or corpus directories:
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
 ./build/fuzz_tip712_wallet ./corpus/fuzz_tip712
 ./build/fuzz_tip712_legacy ./corpus/fuzz_tip712_legacy
+./build/fuzz_external_plugin ./corpus/fuzz_external_plugin
 ./build/transaction_trigger_decode_fuzzer ./corpus
 ```
 
@@ -166,28 +212,33 @@ docker build --platform linux/amd64 --no-cache -t app-tron-fuzz \
 
 If you are not on Apple Silicon, you can omit `--platform linux/amd64`.
 
-Build the fuzzer artifact inside the ClusterFuzzLite container:
+Build the fuzzer artifact inside the ClusterFuzzLite container.
+Prefer mounting the current workspace into `/src/app-tron` so the container
+always uses your latest local source tree instead of whatever was baked into the
+image at `docker build` time:
 
 ```sh
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_LANGUAGE=c \
   -e OUT=/out \
+  -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
-  /bin/bash -lc /src/build.sh
+  /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build && cp ./build/transaction_trigger_decode_fuzzer ./build/fuzz_external_plugin /out/'
 ```
 
-This default helper currently exports only `transaction_trigger_decode_fuzzer`
-to `tests/fuzzing/out`.
+This default helper currently exports both `transaction_trigger_decode_fuzzer`
+and `fuzz_external_plugin` to `tests/fuzzing/out`.
 
 The repository's default `.clusterfuzzlite/build.sh` currently exports
-`transaction_trigger_decode_fuzzer`. To build and export `fuzz_tip712`
+`transaction_trigger_decode_fuzzer` and `fuzz_external_plugin`. To build and export `fuzz_tip712`
 explicitly, run:
 
 ```sh
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_LANGUAGE=c \
   -e OUT=/out \
+  -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
   /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_tip712 && cp ./build/fuzz_tip712 /out/'
@@ -199,6 +250,7 @@ For the wallet-screen variant:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_LANGUAGE=c \
   -e OUT=/out \
+  -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
   /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_tip712_wallet && cp ./build/fuzz_tip712_wallet /out/'
@@ -210,14 +262,13 @@ For the legacy TIP712 variant:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_LANGUAGE=c \
   -e OUT=/out \
+  -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
   /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_tip712_legacy && cp ./build/fuzz_tip712_legacy /out/'
 ```
 
-If you are actively editing the source code and want the container build to use
-your current workspace without rebuilding the Docker image each time, mount the
-repository into `/src/app-tron`:
+For the external plugin variant:
 
 ```sh
 docker run --platform linux/amd64 --rm --privileged \
@@ -226,7 +277,17 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
-  /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_tip712 && cp ./build/fuzz_tip712 /out/'
+  /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_external_plugin && cp ./build/fuzz_external_plugin /out/'
+```
+
+If you need a minimal reminder command to confirm the mounted container is using
+your current workspace, inspect the source file directly inside the container:
+
+```sh
+docker run --platform linux/amd64 --rm --privileged \
+  -v "$(pwd):/src/app-tron" \
+  app-tron-fuzz \
+  /bin/bash -lc 'sed -n "896,904p" /src/app-tron/src/handlers/sign_external_plugin.c'
 ```
 
 To export all TIP712 targets from the mounted source tree:
@@ -241,16 +302,24 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target fuzz_tip712 fuzz_tip712_wallet fuzz_tip712_legacy && cp ./build/fuzz_tip712 ./build/fuzz_tip712_wallet ./build/fuzz_tip712_legacy /out/'
 ```
 
-Run the fuzzer interactively with the OSS-Fuzz runner:
+Run the fuzzer interactively with the OSS-Fuzz runner.
+Do not bind-mount your host corpus directly onto `/tmp/<fuzzer>_corpus`: the
+runner may clear and recreate that directory before launching the target. Mount
+the host corpus somewhere else, copy it into a temporary directory inside the
+container, set `CORPUS_DIR` to that directory, then invoke `run_fuzzer`. Do
+not copy the corpus into the default `/tmp/<fuzzer>_corpus` path before
+calling `run_fuzzer`, because the runner will delete and recreate that default
+directory when `CORPUS_DIR` is unset:
 
 ```sh
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_transaction_trigger_decode_fuzzer_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer transaction_trigger_decode_fuzzer
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer'
 ```
 
 To run `fuzz_tip712` instead, first build and export it with one of the
@@ -260,10 +329,11 @@ explicit `fuzz_tip712` build commands above, then run:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer fuzz_tip712
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712'
 ```
 
 For the wallet-screen variant:
@@ -272,10 +342,24 @@ For the wallet-screen variant:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_wallet_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer fuzz_tip712_wallet
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_wallet'
+```
+
+For `fuzz_external_plugin`:
+
+```sh
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_external_plugin_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_plugin:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_plugin'
 ```
 
 If you want a bounded smoke test instead of an open-ended run in libFuzzer
@@ -285,10 +369,11 @@ mode, add extra libFuzzer flags after the target name, for example:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_transaction_trigger_decode_fuzzer_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer transaction_trigger_decode_fuzzer -- -runs=10000 -max_len=8192
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -- -runs=10000 -max_len=8192'
 ```
 
 For `fuzz_tip712`:
@@ -297,10 +382,11 @@ For `fuzz_tip712`:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer fuzz_tip712 -- -runs=10000 -max_len=8192
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712 -- -runs=10000 -max_len=8192'
 ```
 
 For `fuzz_tip712_wallet`:
@@ -309,10 +395,11 @@ For `fuzz_tip712_wallet`:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_wallet_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer fuzz_tip712_wallet -- -runs=10000 -max_len=8192
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_wallet -- -runs=10000 -max_len=8192'
 ```
 
 For `fuzz_tip712_legacy`:
@@ -321,10 +408,24 @@ For `fuzz_tip712_legacy`:
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712_legacy:/tmp/fuzz_corpus" \
+  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_legacy_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712_legacy:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  run_fuzzer fuzz_tip712_legacy -- -runs=10000 -max_len=8192
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_legacy -- -runs=10000 -max_len=8192'
+```
+
+For `fuzz_external_plugin`:
+
+```sh
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_external_plugin_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_plugin:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_plugin -- -runs=10000 -max_len=8192'
 ```
 
 To build both TIP712 targets and run them in parallel from Docker:
@@ -348,7 +449,7 @@ docker run --platform linux/amd64 --rm --privileged \
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_tip712_corpus" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
   run_fuzzer fuzz_tip712 -- -runs=10000 -max_len=8192 &
@@ -358,7 +459,7 @@ docker run --platform linux/amd64 --rm --privileged \
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_corpus" \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/tmp/fuzz_tip712_wallet_corpus" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
   run_fuzzer fuzz_tip712_wallet -- -runs=10000 -max_len=8192 &

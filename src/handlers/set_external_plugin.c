@@ -34,7 +34,7 @@ int handleSetExternalPlugin(uint8_t p1,
     PRINTF("Handling set Plugin\n");
     uint8_t hash[INT256_LENGTH];
     uint8_t pluginNameLength = *workBuffer;
-    unsigned int params[2];
+    uintptr_t params[2];
     cx_err_t error = CX_INTERNAL_ERROR;
 
     PRINTF("plugin Name Length: %d\n", pluginNameLength);
@@ -80,8 +80,8 @@ int handleSetExternalPlugin(uint8_t p1,
     PRINTF("Check external plugin %s\n", dataContext.tokenContext.pluginName);
 
     // Check if the plugin is present on the device
-    params[0] = (unsigned int) (uintptr_t) dataContext.tokenContext.pluginName;
-    params[1] = TRON_PLUGIN_CHECK_PRESENCE;
+    params[0] = (uintptr_t) dataContext.tokenContext.pluginName;
+    params[1] = (uintptr_t) TRON_PLUGIN_CHECK_PRESENCE;
     BEGIN_TRY {
         TRY {
             os_lib_call(params);

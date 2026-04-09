@@ -30,6 +30,7 @@ internal_storage_t g_fuzz_settings;
 const internal_storage_t N_storage_real = 0;
 char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
+bool g_fuzz_signature_valid = true;
 
 static extraInfo_t fuzz_assets[MAX_ASSETS];
 static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
@@ -213,7 +214,7 @@ int check_signature_with_pubkey(const char *tag,
     (void) keyUsageExp;
     (void) signature;
     (void) sigLen;
-    return CX_OK;
+    return g_fuzz_signature_valid ? CX_OK : CX_INTERNAL_ERROR;
 }
 
 const char *get_trusted_name(uint8_t type_count,

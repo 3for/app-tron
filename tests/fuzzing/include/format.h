@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 
 static inline int format_hex(const void *value, size_t len, char *out, size_t out_len) {

@@ -7,6 +7,9 @@ corpus/fuzz_tip712/*
 !corpus/fuzz_tip712_legacy/
 corpus/fuzz_tip712_legacy/*
 !corpus/fuzz_tip712_legacy/*.bin
+!corpus/fuzz_external_plugin/
+corpus/fuzz_external_plugin/*
+!corpus/fuzz_external_plugin/*.bin
 out/
 default.profdata
 default.profraw

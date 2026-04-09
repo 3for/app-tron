@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "os_pki.h"
+
 extern const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65];
 
 int check_signature_with_pubkey(const char *tag,
