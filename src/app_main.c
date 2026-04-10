@@ -32,6 +32,7 @@
 #include "parse.h"
 #include "app_errors.h"
 #include "ui_globals.h"
+#include "trusted_name.h"
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -61,6 +62,7 @@ void reset_app_context() {
     G_called_from_swap = false;
     G_swap_response_ready = false;
     pluginType = PLUGIN_TYPE_NONE;
+    clear_trusted_names();
     forget_known_assets();
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));

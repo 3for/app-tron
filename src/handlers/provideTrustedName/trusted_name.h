@@ -7,6 +7,8 @@
 #include "signature.h"
 
 #define TRUSTED_NAME_MAX_LENGTH 30
+#define TRUSTED_NAME_MAX_ENTRIES 8
+#define TRUSTED_NAME_OWNER_MAX_BIP32_PATH 10
 
 typedef enum {
     TN_TYPE_ACCOUNT = 1,
@@ -29,6 +31,7 @@ typedef enum {
     TN_SOURCE_FN,
     TN_SOURCE_DNS,
     TN_SOURCE_DYNAMIC_RESOLVER,
+    TN_SOURCE_MAB,
     TN_SOURCE_COUNT,
 } e_name_source;
 
@@ -37,7 +40,7 @@ typedef enum { TN_KEY_ID_DOMAIN_SVC = 0x07, TN_KEY_ID_CAL = 0x09 } e_tn_key_id;
 typedef struct {
     bool valid;
     uint8_t struct_version;
-    char *name;
+    char name[TRUSTED_NAME_MAX_LENGTH + 1];
     uint8_t addr[ADDRESS_LENGTH];
     uint64_t chain_id;
     e_name_type name_type;
@@ -49,6 +52,9 @@ typedef struct {
 
 typedef struct {
     s_trusted_name_info trusted_name;
+    uint8_t owner[ADDRESS_LENGTH];
+    uint8_t owner_deriv_path_length;
+    uint32_t owner_deriv_path[TRUSTED_NAME_OWNER_MAX_BIP32_PATH];
     e_tn_key_id key_id;
     uint8_t input_sig_size;
     uint8_t input_sig[ECDSA_SIGNATURE_MAX_LENGTH];
@@ -63,6 +69,7 @@ const char *get_trusted_name(uint8_t type_count,
                              const uint64_t *chain_id,
                              const uint8_t *addr);
 bool has_trusted_name(void);
+void clear_trusted_names(void);
 
 extern char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 

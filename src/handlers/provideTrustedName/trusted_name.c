@@ -5,6 +5,8 @@
 #include "challenge.h"
 #include "hash_bytes.h"
 #include "public_keys.h"
+#include "helpers.h"
+#include "bip32_path_parser.h"
 
 typedef enum { STRUCT_TYPE_TRUSTED_NAME = 0x03 } e_struct_type;
 
@@ -30,6 +32,8 @@ typedef enum {
     TRUSTED_NAME_TYPE_RCV_BIT,
     TRUSTED_NAME_SOURCE_RCV_BIT,
     NFT_ID_RCV_BIT,
+    OWNER_RCV_BIT,
+    OWNER_DERIV_PATH_RCV_BIT,
 } e_tlv_rcv_bit;
 
 typedef enum {
@@ -47,13 +51,91 @@ typedef enum {
     TRUSTED_NAME_TYPE = 0x70,
     TRUSTED_NAME_SOURCE = 0x71,
     NFT_ID = 0x72,
+    OWNER = 0x73,
+    OWNER_DERIV_PATH = 0x74,
 } e_tlv_tag;
 
-static s_trusted_name_info g_trusted_name_info = {0};
+static s_trusted_name_info g_trusted_name_entries[TRUSTED_NAME_MAX_ENTRIES] = {0};
+static uint8_t g_trusted_name_entry_count = 0;
 char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 
 bool has_trusted_name(void) {
-    return g_trusted_name_info.valid;
+    return g_trusted_name_entry_count > 0U;
+}
+
+void clear_trusted_names(void) {
+    memset(g_trusted_name_entries, 0, sizeof(g_trusted_name_entries));
+    g_trusted_name_entry_count = 0U;
+    memset(g_trusted_name, 0, sizeof(g_trusted_name));
+}
+
+static bool is_supported_v2_type(e_name_type type) {
+    switch (type) {
+        case TN_TYPE_ACCOUNT:
+        case TN_TYPE_CONTRACT:
+        case TN_TYPE_TOKEN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool is_supported_v2_source(e_name_source source) {
+    switch (source) {
+        case TN_SOURCE_CAL:
+        case TN_SOURCE_ENS:
+        case TN_SOURCE_MAB:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool requires_ens_name_validation(const s_trusted_name_info *trusted_name) {
+    if (trusted_name == NULL) {
+        return false;
+    }
+
+    if (trusted_name->struct_version == 1U) {
+        return true;
+    }
+
+    return (trusted_name->struct_version == 2U) &&
+           (trusted_name->name_type == TN_TYPE_ACCOUNT) &&
+           (trusted_name->name_source == TN_SOURCE_ENS);
+}
+
+static bool register_trusted_name(const s_trusted_name_info *trusted_name) {
+    uint8_t target_index;
+
+    if (trusted_name == NULL) {
+        return false;
+    }
+
+    for (uint8_t i = 0; i < g_trusted_name_entry_count; i++) {
+        if ((g_trusted_name_entries[i].struct_version == trusted_name->struct_version) &&
+            (g_trusted_name_entries[i].chain_id == trusted_name->chain_id) &&
+            (g_trusted_name_entries[i].name_type == trusted_name->name_type) &&
+            (g_trusted_name_entries[i].name_source == trusted_name->name_source) &&
+            (memcmp(g_trusted_name_entries[i].addr, trusted_name->addr, ADDRESS_LENGTH) == 0)) {
+            g_trusted_name_entries[i] = *trusted_name;
+            g_trusted_name_entries[i].valid = true;
+            return true;
+        }
+    }
+
+    if (g_trusted_name_entry_count < TRUSTED_NAME_MAX_ENTRIES) {
+        target_index = g_trusted_name_entry_count++;
+    } else {
+        memmove(g_trusted_name_entries,
+                g_trusted_name_entries + 1,
+                sizeof(g_trusted_name_entries[0]) * (TRUSTED_NAME_MAX_ENTRIES - 1U));
+        target_index = TRUSTED_NAME_MAX_ENTRIES - 1U;
+    }
+
+    g_trusted_name_entries[target_index] = *trusted_name;
+    g_trusted_name_entries[target_index].valid = true;
+    return true;
 }
 
 static bool matching_type(e_name_type type, uint8_t type_count, const e_name_type *types) {
@@ -115,8 +197,6 @@ static bool matching_trusted_name(const s_trusted_name_info *trusted_name,
 /**
  * Checks if a trusted name matches the given parameters
  *
- * Always wipes the content of \ref g_trusted_name_info
- *
  * @param[in] types_count number of given trusted name types
  * @param[in] types given trusted name types
  * @param[in] chain_id given chain ID
@@ -129,19 +209,23 @@ const char *get_trusted_name(uint8_t type_count,
                              const e_name_source *sources,
                              const uint64_t *chain_id,
                              const uint8_t *addr) {
-    const char *ret = NULL;
-
-    if (matching_trusted_name(&g_trusted_name_info,
-                              type_count,
-                              types,
-                              source_count,
-                              sources,
-                              chain_id,
-                              addr)) {
-        ret = g_trusted_name_info.name;
+    for (int i = (int) g_trusted_name_entry_count - 1; i >= 0; i--) {
+        if (!g_trusted_name_entries[i].valid) {
+            continue;
+        }
+        if (matching_trusted_name(&g_trusted_name_entries[i],
+                                  type_count,
+                                  types,
+                                  source_count,
+                                  sources,
+                                  chain_id,
+                                  addr)) {
+            strlcpy(g_trusted_name, g_trusted_name_entries[i].name, sizeof(g_trusted_name));
+            return g_trusted_name;
+        }
     }
-    explicit_bzero(&g_trusted_name_info, sizeof(g_trusted_name_info));
-    return ret;
+
+    return NULL;
 }
 
 /**
@@ -309,6 +393,59 @@ static bool is_valid_account_character(char c) {
     return true;
 }
 
+static bool is_valid_generic_character(char c) {
+    if (isalnum((int) c)) {
+        return true;
+    }
+
+    switch (c) {
+        case '.':
+        case '-':
+        case '_':
+        case ' ':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool validate_trusted_name_value(const s_trusted_name_info *trusted_name) {
+    size_t name_len;
+
+    if (trusted_name == NULL) {
+        return false;
+    }
+
+    name_len = strnlen(trusted_name->name, sizeof(trusted_name->name));
+    if ((name_len == 0U) || (name_len > TRUSTED_NAME_MAX_LENGTH)) {
+        return false;
+    }
+
+    if (requires_ens_name_validation(trusted_name)) {
+        if ((name_len < 5U) || (strncmp(".eth", &trusted_name->name[name_len - 4U], 4U) != 0)) {
+            PRINTF("Unexpected TLD!\n");
+            return false;
+        }
+        for (size_t idx = 0; idx < name_len; idx++) {
+            if (!is_valid_account_character(trusted_name->name[idx])) {
+                PRINTF("Domain name contains non-allowed character! (0x%x)\n",
+                       trusted_name->name[idx]);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    for (size_t idx = 0; idx < name_len; idx++) {
+        if (!is_valid_generic_character(trusted_name->name[idx])) {
+            PRINTF("Trusted name contains non-allowed character! (0x%x)\n",
+                   trusted_name->name[idx]);
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * Handler for tag \ref TRUSTED_NAME
  *
@@ -321,24 +458,7 @@ static bool handle_trusted_name(const s_tlv_data *data, s_trusted_name_ctx *cont
         PRINTF("Domain name too long! (%u)\n", data->length);
         return false;
     }
-    if ((context->trusted_name.struct_version == 1) ||
-        (context->trusted_name.name_type == TN_TYPE_ACCOUNT)) {
-        // TODO: Remove once other domain name providers are supported
-        if ((data->length < 5) ||
-            (strncmp(".eth", (char *) &data->value[data->length - 4], 4) != 0)) {
-            PRINTF("Unexpected TLD!\n");
-            return false;
-        }
-        for (int idx = 0; idx < data->length; ++idx) {
-            if (!is_valid_account_character(data->value[idx])) {
-                PRINTF("Domain name contains non-allowed character! (0x%x)\n", data->value[idx]);
-                return false;
-            }
-            context->trusted_name.name[idx] = data->value[idx];
-        }
-    } else {
-        memcpy(context->trusted_name.name, data->value, data->length);
-    }
+    memcpy(context->trusted_name.name, data->value, data->length);
     context->trusted_name.name[data->length] = '\0';
     context->rcv_flags |= SET_BIT(TRUSTED_NAME_RCV_BIT);
     return true;
@@ -400,17 +520,9 @@ static bool handle_trusted_name_type(const s_tlv_data *data, s_trusted_name_ctx 
         return false;
     }
     context->trusted_name.name_type = data->value[0];
-    switch (context->trusted_name.name_type) {
-        case TN_TYPE_ACCOUNT:
-        case TN_TYPE_CONTRACT:
-            break;
-        case TN_TYPE_NFT_COLLECTION:
-        case TN_TYPE_TOKEN:
-        case TN_TYPE_WALLET:
-        case TN_TYPE_CONTEXT_ADDRESS:
-        default:
-            PRINTF("Error: unsupported trusted name type (%u)!\n", context->trusted_name.name_type);
-            return false;
+    if (!is_supported_v2_type(context->trusted_name.name_type)) {
+        PRINTF("Error: unsupported trusted name type (%u)!\n", context->trusted_name.name_type);
+        return false;
     }
     context->rcv_flags |= SET_BIT(TRUSTED_NAME_TYPE_RCV_BIT);
     return true;
@@ -428,21 +540,37 @@ static bool handle_trusted_name_source(const s_tlv_data *data, s_trusted_name_ct
         return false;
     }
     context->trusted_name.name_source = data->value[0];
-    switch (context->trusted_name.name_source) {
-        case TN_SOURCE_CAL:
-        case TN_SOURCE_ENS:
-            break;
-        case TN_SOURCE_LAB:
-        case TN_SOURCE_UD:
-        case TN_SOURCE_FN:
-        case TN_SOURCE_DNS:
-        case TN_SOURCE_DYNAMIC_RESOLVER:
-        default:
-            PRINTF("Error: unsupported trusted name source (%u)!\n",
-                   context->trusted_name.name_source);
-            return false;
+    if (!is_supported_v2_source(context->trusted_name.name_source)) {
+        PRINTF("Error: unsupported trusted name source (%u)!\n",
+               context->trusted_name.name_source);
+        return false;
     }
     context->rcv_flags |= SET_BIT(TRUSTED_NAME_SOURCE_RCV_BIT);
+    return true;
+}
+
+static bool handle_owner(const s_tlv_data *data, s_trusted_name_ctx *context) {
+    if (data->length != ADDRESS_LENGTH) {
+        return false;
+    }
+
+    memcpy(context->owner, data->value, ADDRESS_LENGTH);
+    context->rcv_flags |= SET_BIT(OWNER_RCV_BIT);
+    return true;
+}
+
+static bool handle_owner_deriv_path(const s_tlv_data *data, s_trusted_name_ctx *context) {
+    off_t parsed = read_bip32_path_words(data->value,
+                                         data->length,
+                                         &context->owner_deriv_path_length,
+                                         context->owner_deriv_path,
+                                         TRUSTED_NAME_OWNER_MAX_BIP32_PATH);
+
+    if ((parsed < 0) || ((uint16_t) parsed != data->length)) {
+        return false;
+    }
+
+    context->rcv_flags |= SET_BIT(OWNER_DERIV_PATH_RCV_BIT);
     return true;
 }
 
@@ -511,6 +639,12 @@ bool handle_trusted_name_struct(const s_tlv_data *data, s_trusted_name_ctx *cont
         case TRUSTED_NAME_SOURCE:
             ret = handle_trusted_name_source(data, context);
             break;
+        case OWNER:
+            ret = handle_owner(data, context);
+            break;
+        case OWNER_DERIV_PATH:
+            ret = handle_owner_deriv_path(data, context);
+            break;
 #ifdef HAVE_NFT_SUPPORT
         case NFT_ID:
             ret = handle_nft_id(data, context);
@@ -571,6 +705,39 @@ static bool verify_trusted_name_signature(const s_trusted_name_ctx *context) {
     return true;
 }
 
+static bool verify_mab_owner(const s_trusted_name_ctx *context) {
+    bip32_path_t owner_path = {0};
+    publicKeyContext_t public_key_context = {0};
+    char owner_address58[BASE58CHECK_ADDRESS_SIZE + 1] = {0};
+    uint8_t owner_address[ADDRESS_SIZE];
+
+    if (context == NULL) {
+        return false;
+    }
+
+    if (!(context->rcv_flags & SET_BIT(OWNER_RCV_BIT)) ||
+        !(context->rcv_flags & SET_BIT(OWNER_DERIV_PATH_RCV_BIT))) {
+        PRINTF("Error: MAB trusted name requires owner metadata!\n");
+        return false;
+    }
+
+    owner_path.length = context->owner_deriv_path_length;
+    memcpy(owner_path.indices, context->owner_deriv_path, sizeof(uint32_t) * owner_path.length);
+
+    if (initPublicKeyContext(&owner_path, owner_address58, &public_key_context) < 0) {
+        PRINTF("Error: failed to derive MAB owner public key!\n");
+        return false;
+    }
+
+    getAddressFromPublicKey(public_key_context.publicKey, owner_address);
+    if (memcmp(owner_address + 1, context->owner, ADDRESS_LENGTH) != 0) {
+        PRINTF("Error: MAB owner does not match derivation path!\n");
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Verify the validity of the received trusted struct
  *
@@ -594,6 +761,9 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             if ((context->rcv_flags & required_flags) != required_flags) {
                 return false;
             }
+            if (!validate_trusted_name_value(&context->trusted_name)) {
+                return false;
+            }
             break;
         case 2:
             required_flags |= SET_BIT(CHAIN_ID_RCV_BIT) | SET_BIT(TRUSTED_NAME_TYPE_RCV_BIT) |
@@ -601,20 +771,30 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             if ((context->rcv_flags & required_flags) != required_flags) {
                 return false;
             }
+            if (!validate_trusted_name_value(&context->trusted_name)) {
+                return false;
+            }
             switch (context->trusted_name.name_type) {
                 case TN_TYPE_ACCOUNT:
-                    if (context->trusted_name.name_source == TN_SOURCE_CAL) {
-                        PRINTF("Error: cannot accept an account name from the CAL!\n");
+                    if ((context->trusted_name.name_source != TN_SOURCE_ENS) &&
+                        (context->trusted_name.name_source != TN_SOURCE_MAB)) {
+                        PRINTF("Error: cannot accept an account name from given source (%u)!\n",
+                               context->trusted_name.name_source);
                         return false;
                     }
                     if (!(context->rcv_flags & SET_BIT(CHALLENGE_RCV_BIT))) {
                         PRINTF("Error: trusted account name requires a challenge!\n");
                         return false;
                     }
+                    if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
+                        !verify_mab_owner(context)) {
+                        return false;
+                    }
                     break;
                 case TN_TYPE_CONTRACT:
+                case TN_TYPE_TOKEN:
                     if (context->trusted_name.name_source != TN_SOURCE_CAL) {
-                        PRINTF("Error: cannot accept a contract name from given source (%u)!\n",
+                        PRINTF("Error: cannot accept this trusted name type from given source (%u)!\n",
                                context->trusted_name.name_source);
                         return false;
                     }
@@ -633,12 +813,13 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         return false;
     }
 
-    memcpy(&g_trusted_name_info, &context->trusted_name, sizeof(g_trusted_name_info));
-    g_trusted_name_info.valid = true;
+    if (!register_trusted_name(&context->trusted_name)) {
+        return false;
+    }
 
     PRINTF("Registered : %s => %.*h\n",
-           g_trusted_name_info.name,
+           context->trusted_name.name,
            ADDRESS_LENGTH,
-           g_trusted_name_info.addr);
+           context->trusted_name.addr);
     return true;
 }
