@@ -22,6 +22,18 @@ ENABLE_TESTING()
 # specify C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED True)
+if(APPLE)
+  foreach(FLAG_VAR
+          CMAKE_C_FLAGS
+          CMAKE_C_FLAGS_DEBUG
+          CMAKE_C_FLAGS_RELEASE
+          CMAKE_C_FLAGS_RELWITHDEBINFO
+          CMAKE_C_FLAGS_MINSIZEREL)
+    if(DEFINED ${FLAG_VAR})
+      string(REPLACE "-fstack-clash-protection" "" ${FLAG_VAR} "${${FLAG_VAR}}")
+    endif()
+  endforeach()
+endif()
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -pedantic -g -O0 --coverage")
 
 set(COVERAGE_LINK_FLAGS "--coverage")
@@ -51,6 +63,15 @@ set(WITH_EXAMPLES OFF CACHE BOOL "CMocka: Build examples" FORCE)
 set(UNIT_TESTING OFF CACHE BOOL "CMocka: Build with unit testing" FORCE)
 set(PICKY_DEVELOPER OFF CACHE BOOL "CMocka: Build with picky developer flags" FORCE)
 FetchContent_MakeAvailable(cmocka)
+
+if(APPLE)
+  if(TARGET cmocka)
+    target_compile_options(cmocka PRIVATE -Wno-unused-command-line-argument)
+  endif()
+  if(TARGET cmocka-static)
+    target_compile_options(cmocka-static PRIVATE -Wno-unused-command-line-argument)
+  endif()
+endif()
 
 add_compile_definitions(TEST DEBUG=0 SKIP_FOR_CMOCKA PB_SYSTEM_HEADER=\"pb_system_header.h\")
 
@@ -102,3 +123,19 @@ if(NOT APPLE)
 endif()
 
 add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
+
+add_executable(test_trusted_name_whitebox tests/trusted_name_whitebox.c)
+target_include_directories(test_trusted_name_whitebox
+                           PRIVATE
+                           .
+                           ../fuzzing/include
+                           ../../src
+                           ../../src/handlers/provideTrustedName
+                           ../../src/handlers/getChallenge
+                           ../../tron-plugin-sdk/src)
+target_link_libraries(test_trusted_name_whitebox PUBLIC cmocka)
+if(NOT APPLE)
+    target_link_libraries(test_trusted_name_whitebox PUBLIC gcov)
+endif()
+
+add_test(test_trusted_name_whitebox test_trusted_name_whitebox)

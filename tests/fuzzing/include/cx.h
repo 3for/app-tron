@@ -8,11 +8,19 @@
 #define CX_OK 0
 #define CX_INTERNAL_ERROR 1
 #define CX_LAST 1
+#define CX_CURVE_256K1 1
+#define CX_SHA256 2
+#define CX_SHA512 3
 
 #define CX_SHA256_SIZE 32
 #define CX_KECCAK_256_SIZE 32
 
 typedef int cx_err_t;
+
+typedef struct {
+    uint8_t W[65];
+    size_t W_len;
+} cx_ecfp_public_key_t;
 
 typedef struct {
     uint32_t seed;

@@ -314,3 +314,105 @@ def test_trusted_name_v2_expired(firmware: Firmware,
                                           challenge=challenge,
                                           not_valid_after=(0, 1, 2))
     assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_mab_account_name(firmware: Firmware,
+                                          backend: BackendInterface):
+    app_client = TronClient(backend, firmware, None)
+    cmd_builder = CommandBuilder()
+    challenge = common(firmware, app_client, cmd_builder)
+    owner_path = app_client.getAccount(0)["path"]
+    owner = bytes.fromhex(app_client.getAccount(0)["addressHex"][2:])
+
+    rapdu = InputData.provide_trusted_name_v2(app_client,
+                                              cmd_builder,
+                                              ADDR,
+                                              "MyLedger",
+                                              TrustedNameType.ACCOUNT,
+                                              TrustedNameSource.MAB,
+                                              CHAIN_ID,
+                                              challenge=challenge,
+                                              owner=owner,
+                                              owner_deriv_path=owner_path)
+    assert rapdu.status == StatusWord.OK
+
+
+def test_trusted_name_v2_mab_missing_owner_metadata(firmware: Firmware,
+                                                    backend: BackendInterface):
+    app_client = TronClient(backend, firmware, None)
+    cmd_builder = CommandBuilder()
+    challenge = common(firmware, app_client, cmd_builder)
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        InputData.provide_trusted_name_v2(app_client,
+                                          cmd_builder,
+                                          ADDR,
+                                          "MyLedger",
+                                          TrustedNameType.ACCOUNT,
+                                          TrustedNameSource.MAB,
+                                          CHAIN_ID,
+                                          challenge=challenge)
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_mab_wrong_owner(firmware: Firmware,
+                                         backend: BackendInterface):
+    app_client = TronClient(backend, firmware, None)
+    cmd_builder = CommandBuilder()
+    challenge = common(firmware, app_client, cmd_builder)
+    owner_path = app_client.getAccount(0)["path"]
+    wrong_owner = bytes.fromhex(app_client.getAccount(1)["addressHex"][2:])
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        InputData.provide_trusted_name_v2(app_client,
+                                          cmd_builder,
+                                          ADDR,
+                                          "MyLedger",
+                                          TrustedNameType.ACCOUNT,
+                                          TrustedNameSource.MAB,
+                                          CHAIN_ID,
+                                          challenge=challenge,
+                                          owner=wrong_owner,
+                                          owner_deriv_path=owner_path)
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_token_cal(firmware: Firmware,
+                                   backend: BackendInterface):
+    app_client = TronClient(backend, firmware, None)
+    cmd_builder = CommandBuilder()
+
+    rapdu = InputData.provide_trusted_name_v2(app_client,
+                                              cmd_builder,
+                                              ADDR,
+                                              "USDT",
+                                              TrustedNameType.TOKEN,
+                                              TrustedNameSource.CAL,
+                                              CHAIN_ID)
+    assert rapdu.status == StatusWord.OK
+
+
+def test_trusted_name_v2_multiple_names_same_session(firmware: Firmware,
+                                                     backend: BackendInterface):
+    app_client = TronClient(backend, firmware, None)
+    cmd_builder = CommandBuilder()
+    challenge = common(firmware, app_client, cmd_builder)
+
+    rapdu = InputData.provide_trusted_name_v2(app_client,
+                                              cmd_builder,
+                                              ADDR,
+                                              NAME,
+                                              TrustedNameType.ACCOUNT,
+                                              TrustedNameSource.ENS,
+                                              CHAIN_ID,
+                                              challenge=challenge)
+    assert rapdu.status == StatusWord.OK
+
+    rapdu = InputData.provide_trusted_name_v2(app_client,
+                                              cmd_builder,
+                                              ADDR,
+                                              "USDT",
+                                              TrustedNameType.TOKEN,
+                                              TrustedNameSource.CAL,
+                                              CHAIN_ID)
+    assert rapdu.status == StatusWord.OK

@@ -11,6 +11,7 @@ from enum import IntEnum
 from client.command_builder import CommandBuilder
 from client.tip712 import TIP712FieldType
 import keychain
+from ragger.bip import pack_derivation_path
 from ragger.firmware import Firmware
 from ragger.utils import RAPDU
 from keychain import sign_data, Key
@@ -25,6 +26,7 @@ class TrustedNameType(IntEnum):
     ACCOUNT = 0x01
     CONTRACT = 0x02
     NFT = 0x03
+    TOKEN = 0x04
 
 
 class TrustedNameSource(IntEnum):
@@ -34,6 +36,8 @@ class TrustedNameSource(IntEnum):
     UD = 0x03
     FN = 0x04
     DNS = 0x05
+    DYNAMIC_RESOLVER = 0x06
+    MAB = 0x07
 
 
 class TrustedNameTag(IntEnum):
@@ -84,6 +88,8 @@ class FieldTag(IntEnum):
     TRUSTED_NAME_TYPE = 0x70
     TRUSTED_NAME_SOURCE = 0x71
     TRUSTED_NAME_NFT_ID = 0x72
+    TRUSTED_NAME_OWNER = 0x73
+    TRUSTED_NAME_OWNER_DERIV_PATH = 0x74
 
 
 class StatusWord(IntEnum):
@@ -797,7 +803,9 @@ def provide_trusted_name_v2(
         chain_id: int,
         nft_id: Optional[int] = None,
         challenge: Optional[int] = None,
-        not_valid_after: Optional[tuple[int]] = None) -> RAPDU:
+        not_valid_after: Optional[tuple[int]] = None,
+        owner: Optional[bytes] = None,
+        owner_deriv_path: Optional[str] = None) -> RAPDU:
     payload = format_tlv(FieldTag.STRUCT_VERSION, 2)
     payload += format_tlv(FieldTag.TRUSTED_NAME, name)
     payload += format_tlv(FieldTag.ADDRESS, addr)
@@ -812,5 +820,10 @@ def provide_trusted_name_v2(
         assert len(not_valid_after) == 3
         payload += format_tlv(FieldTag.NOT_VALID_AFTER,
                               struct.pack("BBB", *not_valid_after))
+    if owner is not None:
+        payload += format_tlv(FieldTag.TRUSTED_NAME_OWNER, owner)
+    if owner_deriv_path is not None:
+        payload += format_tlv(FieldTag.TRUSTED_NAME_OWNER_DERIV_PATH,
+                              pack_derivation_path(owner_deriv_path))
     return provide_trusted_name_common(app_client, cmd_builder, payload,
                                        name_source)

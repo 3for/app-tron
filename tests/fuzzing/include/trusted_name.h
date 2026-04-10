@@ -26,6 +26,7 @@ typedef enum {
     TN_SOURCE_FN,
     TN_SOURCE_DNS,
     TN_SOURCE_DYNAMIC_RESOLVER,
+    TN_SOURCE_MAB,
     TN_SOURCE_COUNT,
 } e_name_source;
 
