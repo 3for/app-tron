@@ -48,7 +48,7 @@ enum {
 
 #define NB_INFO_FIELDS 3
 static const char* const infoTypes[] = {"Version", "Developer", "Copyright"};
-static const char* const infoContents[] = {APPVERSION, "Ledger", "Ledger (c) 2025"};
+static const char* const infoContents[] = {APPVERSION, "Ledger", "Ledger (c) 2026"};
 
 #define NB_SETTINGS_SWITCHES SETTINGS_SWITCHES_NB
 #define SETTING_IDX(token)   (token - SWITCH_ALLOW_TX_DATA_TOKEN)
