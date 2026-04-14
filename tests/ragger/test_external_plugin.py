@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 import keychain
+from ledgered.devices import Device
 from client.command_builder import CommandBuilder, InsType as BuilderInsType
 from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
-from ragger.firmware import Firmware
 from tron import CLA, Errors, InsType, TronClient
 from client.tip712.InputData import send_coin_meta_certificate
 
@@ -74,9 +74,9 @@ def assert_plugin_not_found_or_speculos_crash(client: TronClient,
 
 
 @pytest.fixture(name="tron_client")
-def tron_client_fixture(firmware: Firmware,
+def tron_client_fixture(device: Device,
                         backend: BackendInterface) -> TronClient:
-    return TronClient(backend, firmware, None)
+    return TronClient(backend, device, None)
 
 
 @pytest.fixture(name="trc20_contract_address")

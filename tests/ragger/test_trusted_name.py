@@ -1,9 +1,9 @@
 from typing import Optional
 import pytest
 from web3 import Web3
+from ledgered.devices import Device
 
 from ragger.backend import BackendInterface
-from ragger.firmware import Firmware
 from ragger.error import ExceptionRAPDU
 from ragger.navigator import Navigator
 from ragger.navigator.navigation_scenario import NavigateWithScenario
@@ -28,7 +28,7 @@ GAS_LIMIT = 21000
 AMOUNT = 1_220_000
 
 
-def common(firmware: Firmware,
+def common(device: Device,
            app_client: TronClient,
            cmd_builder: CommandBuilder,
            get_challenge: bool = True) -> Optional[int]:
@@ -39,20 +39,19 @@ def common(firmware: Firmware,
 
 
 @pytest.mark.usefixtures('configuration')
-def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
+def test_trusted_name_v1(device: Device, backend: BackendInterface,
                          navigator: Navigator,
                          scenario_navigator: NavigateWithScenario,
                          test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
-    device = backend.device
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
 
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -68,11 +67,11 @@ def test_trusted_name_v1(firmware: Firmware, backend: BackendInterface,
         }, test_name, end_text)
 
 
-def test_trusted_name_v1_wrong_challenge(firmware: Firmware,
+def test_trusted_name_v1_wrong_challenge(device: Device,
                                          backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
@@ -81,14 +80,14 @@ def test_trusted_name_v1_wrong_challenge(firmware: Firmware,
 
 
 @pytest.mark.usefixtures('configuration')
-def test_trusted_name_v1_wrong_addr(firmware: Firmware,
+def test_trusted_name_v1_wrong_addr(device: Device,
                                     backend: BackendInterface,
                                     navigator: Navigator,
                                     scenario_navigator: NavigateWithScenario,
                                     test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
@@ -97,7 +96,7 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
     addr.reverse()
 
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -114,20 +113,20 @@ def test_trusted_name_v1_wrong_addr(firmware: Firmware,
 
 
 @pytest.mark.usefixtures('configuration')
-def test_trusted_name_v1_non_mainnet(firmware: Firmware,
+def test_trusted_name_v1_non_mainnet(device: Device,
                                      backend: BackendInterface,
                                      navigator: Navigator,
                                      scenario_navigator: NavigateWithScenario,
                                      test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
 
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -144,17 +143,17 @@ def test_trusted_name_v1_non_mainnet(firmware: Firmware,
 
 @pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1_unknown_chain(
-        firmware: Firmware, backend: BackendInterface, navigator: Navigator,
+        device: Device, backend: BackendInterface, navigator: Navigator,
         scenario_navigator: NavigateWithScenario, test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
                                       challenge)
 
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -169,11 +168,11 @@ def test_trusted_name_v1_unknown_chain(
         }, test_name, end_text)
 
 
-def test_trusted_name_v1_name_too_long(firmware: Firmware,
+def test_trusted_name_v1_name_too_long(device: Device,
                                        backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
@@ -182,11 +181,11 @@ def test_trusted_name_v1_name_too_long(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v1_name_invalid_character(firmware: Firmware,
+def test_trusted_name_v1_name_invalid_character(device: Device,
                                                 backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
@@ -194,11 +193,11 @@ def test_trusted_name_v1_name_invalid_character(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v1_uppercase(firmware: Firmware,
+def test_trusted_name_v1_uppercase(device: Device,
                                    backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
@@ -206,11 +205,11 @@ def test_trusted_name_v1_uppercase(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v1_name_non_ens(firmware: Firmware,
+def test_trusted_name_v1_name_non_ens(device: Device,
                                       backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
@@ -219,13 +218,13 @@ def test_trusted_name_v1_name_non_ens(firmware: Firmware,
 
 
 @pytest.mark.usefixtures('configuration')
-def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
+def test_trusted_name_v2(device: Device, backend: BackendInterface,
                          navigator: Navigator,
                          scenario_navigator: NavigateWithScenario,
                          test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     InputData.provide_trusted_name_v2(app_client,
                                       cmd_builder,
@@ -237,7 +236,7 @@ def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
                                       challenge=challenge)
 
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -255,11 +254,11 @@ def test_trusted_name_v2(firmware: Firmware, backend: BackendInterface,
 
 @pytest.mark.usefixtures('configuration')
 def test_trusted_name_v2_wrong_chainid(
-        firmware: Firmware, backend: BackendInterface, navigator: Navigator,
+        device: Device, backend: BackendInterface, navigator: Navigator,
         scenario_navigator: NavigateWithScenario, test_name: str):
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
     InputData.provide_trusted_name_v2(app_client,
                                       cmd_builder,
                                       ADDR,
@@ -269,7 +268,7 @@ def test_trusted_name_v2_wrong_chainid(
                                       CHAIN_ID,
                                       challenge=challenge)
     end_text = None
-    if firmware.is_nano:
+    if device.is_nano:
         end_text = "Sign"
     else:
         end_text = "Hold to sign"
@@ -284,11 +283,11 @@ def test_trusted_name_v2_wrong_chainid(
         }, test_name, end_text)
 
 
-def test_trusted_name_v2_missing_challenge(firmware: Firmware,
+def test_trusted_name_v2_missing_challenge(device: Device,
                                            backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    common(firmware, app_client, cmd_builder, False)
+    common(device, app_client, cmd_builder, False)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v2(app_client, cmd_builder, ADDR, NAME,
@@ -297,11 +296,11 @@ def test_trusted_name_v2_missing_challenge(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v2_expired(firmware: Firmware,
+def test_trusted_name_v2_expired(device: Device,
                                  backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v2(app_client,
@@ -316,11 +315,11 @@ def test_trusted_name_v2_expired(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v2_mab_account_name(firmware: Firmware,
+def test_trusted_name_v2_mab_account_name(device: Device,
                                           backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
     owner_path = app_client.getAccount(0)["path"]
     owner = bytes.fromhex(app_client.getAccount(0)["addressHex"][2:])
 
@@ -337,11 +336,11 @@ def test_trusted_name_v2_mab_account_name(firmware: Firmware,
     assert rapdu.status == StatusWord.OK
 
 
-def test_trusted_name_v2_mab_missing_owner_metadata(firmware: Firmware,
+def test_trusted_name_v2_mab_missing_owner_metadata(device: Device,
                                                     backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         InputData.provide_trusted_name_v2(app_client,
@@ -355,11 +354,11 @@ def test_trusted_name_v2_mab_missing_owner_metadata(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v2_mab_wrong_owner(firmware: Firmware,
+def test_trusted_name_v2_mab_wrong_owner(device: Device,
                                          backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
     owner_path = app_client.getAccount(0)["path"]
     wrong_owner = bytes.fromhex(app_client.getAccount(1)["addressHex"][2:])
 
@@ -377,9 +376,9 @@ def test_trusted_name_v2_mab_wrong_owner(firmware: Firmware,
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-def test_trusted_name_v2_token_cal(firmware: Firmware,
+def test_trusted_name_v2_token_cal(device: Device,
                                    backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
 
     rapdu = InputData.provide_trusted_name_v2(app_client,
@@ -392,11 +391,11 @@ def test_trusted_name_v2_token_cal(firmware: Firmware,
     assert rapdu.status == StatusWord.OK
 
 
-def test_trusted_name_v2_multiple_names_same_session(firmware: Firmware,
+def test_trusted_name_v2_multiple_names_same_session(device: Device,
                                                      backend: BackendInterface):
-    app_client = TronClient(backend, firmware, None)
+    app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
-    challenge = common(firmware, app_client, cmd_builder)
+    challenge = common(device, app_client, cmd_builder)
 
     rapdu = InputData.provide_trusted_name_v2(app_client,
                                               cmd_builder,

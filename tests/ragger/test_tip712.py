@@ -20,7 +20,6 @@ from ragger.bip import pack_derivation_path
 from utils import check_hash_signature
 
 from ragger.backend import BackendInterface
-from ragger.firmware import Firmware
 from ragger.navigator import Navigator, NavInsID, NavIns
 
 from settings import settings_toggle, SettingID, get_device_settings
@@ -29,7 +28,7 @@ import response_parser as ResponseParser
 from client.tip712 import InputData as InputData
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
 from utils import recover_message
-from ledgered.devices import Device
+from ledgered.devices import Device, DeviceType
 from ragger.firmware.touch.positions import POSITIONS
 
 autonext_idx: int
@@ -278,8 +277,8 @@ def filt_tn_types_fixture(request) -> list[InputData.TrustedNameType]:
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
 
-    def test_trx_sign_tip712(self, backend, firmware, navigator):
-        client = TronClient(backend, firmware, navigator)
+    def test_trx_sign_tip712(self, backend, device, navigator):
+        client = TronClient(backend, device, navigator)
         domainHash = bytes.fromhex(
             '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
         messageHash = bytes.fromhex(
@@ -290,7 +289,7 @@ class TestTRX():
 
         with backend.exchange_async(CLA, InsType.SIGN_TIP_712_MESSAGE, 0x00,
                                     0x00, data):
-            if firmware.is_nano:
+            if device.is_nano:
                 text = "Sign message"
             else:
                 text = "Hold to sign"
@@ -305,7 +304,7 @@ class TestTRX():
         assert check_hash_signature(digest, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
 
-    def test_trx_tip712_new(self, firmware: Firmware,
+    def test_trx_tip712_new(self, device: Device,
                             backend: BackendInterface, navigator: Navigator,
                             default_screenshot_path: Path,
                             tip712_case: tuple[Path, bool], verbose_raw: bool,
@@ -314,8 +313,7 @@ class TestTRX():
         global snapshots_dirname
 
         settings_to_toggle: list[SettingID] = []
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
         input_file, filtering = tip712_case
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
@@ -372,7 +370,7 @@ class TestTRX():
                 else:
                     settings_toggle(device, navigator, settings_to_toggle)
 
-    def test_trx_tip712_advanced_filtering(self, firmware: Firmware,
+    def test_trx_tip712_advanced_filtering(self, device: Device,
                                            backend: BackendInterface,
                                            navigator: Navigator,
                                            default_screenshot_path: Path,
@@ -380,8 +378,7 @@ class TestTRX():
                                            golden_run: bool):
         global snapshots_dirname
 
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
         cmd_builder = CommandBuilder()
         snapshots_dirname = test_name + data_set.suffix
 
@@ -394,7 +391,7 @@ class TestTRX():
 
         assert recovered_addr == get_wallet_addr(client)
 
-    def test_trx_tip712_filtering_empty_array(self, firmware: Firmware,
+    def test_trx_tip712_filtering_empty_array(self, device: Device,
                                               backend: BackendInterface,
                                               navigator: Navigator,
                                               default_screenshot_path: Path,
@@ -402,8 +399,7 @@ class TestTRX():
                                               golden_run: bool):
         global snapshots_dirname
 
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
 
         snapshots_dirname = test_name
         from dataset import filtering_empty_array_test_data
@@ -418,7 +414,7 @@ class TestTRX():
         assert addr == get_wallet_addr(client)
 
     def test_trx_tip712_advanced_missing_token(
-            self, firmware: Firmware, backend: BackendInterface,
+            self, device: Device, backend: BackendInterface,
             navigator: Navigator, default_screenshot_path: Path,
             test_name: str, tokens: list[dict], golden_run: bool):
         global snapshots_dirname
@@ -426,8 +422,7 @@ class TestTRX():
         test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
         snapshots_dirname = test_name
 
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
 
         from dataset import advanced_missing_token_test_data
         advanced_missing_token_test_data['filters']['tokens'] = tokens
@@ -442,7 +437,7 @@ class TestTRX():
         assert addr == get_wallet_addr(client)
 
     def test_trx_tip712_advanced_trusted_name(
-            self, firmware: Firmware, backend: BackendInterface,
+            self, device: Device, backend: BackendInterface,
             navigator: Navigator, default_screenshot_path: Path,
             test_name: str, trusted_name: tuple,
             filt_tn_types: list[InputData.TrustedNameType], golden_run: bool):
@@ -452,8 +447,7 @@ class TestTRX():
             test_name += f"_{trusted_name_type.name.lower()}"
         snapshots_dirname = test_name
 
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
 
         cmd_builder = CommandBuilder()
         if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
@@ -486,12 +480,11 @@ class TestTRX():
         addr = recover_message(advanced_trusted_name_test_data['data'], vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_bs_not_activated_error(self, firmware: Firmware,
+    def test_trx_tip712_bs_not_activated_error(self, device: Device,
                                                backend: BackendInterface,
                                                navigator: Navigator,
                                                default_screenshot_path: Path):
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
+        client = TronClient(backend, device, navigator)
 
         setting_id = SettingID.SIGN_BY_HASH
         if device.is_nano:
@@ -507,16 +500,16 @@ class TestTRX():
         InputData.disable_autonext()
         assert exc_info.value.status == InputData.StatusWord.INVALID_DATA
 
-        if firmware.is_nano:
+        if device.is_nano:
             navigator.navigate([NavInsID.BOTH_CLICK],
                                screen_change_before_first_instruction=True)
-        elif firmware == Firmware.STAX:
+        elif device.type == DeviceType.STAX:
             navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))],
                                screen_change_before_first_instruction=True)
-        elif firmware == Firmware.FLEX:
+        elif device.type == DeviceType.FLEX:
             navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))],
                                screen_change_before_first_instruction=True)
-        elif firmware == Firmware.APEX_P:
+        elif device.type == DeviceType.APEX_P:
             navigator.navigate([NavIns(NavInsID.TOUCH, (100, 350))],
                                screen_change_before_first_instruction=True)
         if device.is_nano:
@@ -525,16 +518,15 @@ class TestTRX():
         else:
             settings_toggle(device, navigator, [setting_id])
 
-    def test_trx_tip712_skip(self, firmware: Firmware,
+    def test_trx_tip712_skip(self, device: Device,
                              backend: BackendInterface, navigator: Navigator,
                              default_screenshot_path: Path, test_name: str,
                              golden_run: bool):
         global unfiltered_flow
         global skip_flow
 
-        client = TronClient(backend, firmware, navigator)
-        device = backend.device
-        if firmware.is_nano:
+        client = TronClient(backend, device, navigator)
+        if device.is_nano:
             pytest.skip("Not supported on Nano devices")
 
         unfiltered_flow = True

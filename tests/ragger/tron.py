@@ -19,10 +19,10 @@ from ragger.backend.interface import BackendInterface, RAPDU
 from ragger.navigator import NavInsID, NavIns
 from ragger.bip import pack_derivation_path
 from ragger.error import ExceptionRAPDU
-from ragger.firmware import Firmware
 from conftest import MNEMONIC
 from web3 import Web3
 from client.command_builder import CommandBuilder
+from ledgered.devices import Device
 
 from client.tip712.InputData import PKIPubKeyUsage
 '''
@@ -170,11 +170,11 @@ class TronClient:
     HOST, PORT = ('127.0.0.1', 9999)
     CLA = 0xE0
 
-    def __init__(self, client: BackendInterface, firmware, navigator):
+    def __init__(self, client: BackendInterface, device: Device, navigator):
         if not isinstance(client, BackendInterface):
             raise TypeError('client must be an instance of BackendInterface')
         self._client = client
-        self._firmware = firmware
+        self._device = device
         self._navigator = navigator
         self.accounts = [None, None]
         self.hardware = True
@@ -265,7 +265,7 @@ class TronClient:
             text: str = "",
             warning_approve: bool = False,
             warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM):
-        if self._firmware.is_nano:
+        if self._device.is_nano:
             path_name = ""
             screen_change_before_first_instruction = True
             if warning_approve:

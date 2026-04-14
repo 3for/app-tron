@@ -3,6 +3,7 @@ from ragger.backend.interface import RaisePolicy
 from ragger.bip import calculate_public_key_and_chaincode, CurveChoice
 from ragger.navigator import NavInsID, NavIns
 
+from ledgered.devices import DeviceType
 from tron import TronClient, Errors, ROOT_SCREENSHOT_PATH
 from conftest import MNEMONIC
 
@@ -21,8 +22,16 @@ def check_get_public_key_resp(backend, path, public_key, chaincode):
 
 class Test_GET_PUBLIC_KEY():
 
-    def test_get_public_key_non_confirm(self, backend, firmware, navigator):
-        client = TronClient(backend, firmware, navigator)
+    @staticmethod
+    def _qr_exit_touch(device):
+        if device.type in (DeviceType.STAX, DeviceType.FLEX):
+            return (100, 500 if device.type == DeviceType.STAX else 400)
+        if device.type == DeviceType.APEX_P:
+            return (65, 300)
+        return (100, 500)
+
+    def test_get_public_key_non_confirm(self, backend, device, navigator):
+        client = TronClient(backend, device, navigator)
 
         rapdu = client.send_get_public_key_non_confirm(TRX_PATH, True)
         public_key, address, chaincode = client.parse_get_public_key_response(
@@ -37,25 +46,18 @@ class Test_GET_PUBLIC_KEY():
         assert address_2 == address
         assert chaincode_2 is None
 
-    def test_get_public_key_confirm_accepted(self, firmware, backend,
+    def test_get_public_key_confirm_accepted(self, device, backend,
                                              navigator, test_name):
-        client = TronClient(backend, firmware, navigator)
+        client = TronClient(backend, device, navigator)
         with client.send_async_get_public_key_confirm(TRX_PATH, True):
-            if firmware.is_nano:
+            if device.is_nano:
                 navigator.navigate_until_text_and_compare(
                     NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
                     ROOT_SCREENSHOT_PATH, test_name)
             else:
                 instructions = [
                     NavInsID.SWIPE_CENTER_TO_LEFT,
-                    NavIns(
-                        NavInsID.TOUCH,
-                        (100 if firmware.device.startswith("stax") else
-                         100 if firmware.device.startswith("flex") else
-                         65 if firmware.device.startswith("apex") else 100,
-                         500 if firmware.device.startswith("stax") else
-                         400 if firmware.device.startswith("flex") else
-                         300 if firmware.device.startswith("apex") else 500)),
+                    NavIns(NavInsID.TOUCH, self._qr_exit_touch(device)),
                     NavInsID.USE_CASE_ADDRESS_CONFIRMATION_EXIT_QR,
                     NavInsID.USE_CASE_ADDRESS_CONFIRMATION_CONFIRM,
                     NavInsID.USE_CASE_STATUS_DISMISS
@@ -70,7 +72,7 @@ class Test_GET_PUBLIC_KEY():
 
         # Check that with NO_CHAINCODE, value and screens stay the same
         with client.send_async_get_public_key_confirm(TRX_PATH, False):
-            if firmware.is_nano:
+            if device.is_nano:
                 navigator.navigate_until_text_and_compare(
                     NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
                     ROOT_SCREENSHOT_PATH, test_name)
@@ -85,11 +87,11 @@ class Test_GET_PUBLIC_KEY():
         assert chaincode_2 is None
 
     # In this test we check that the GET_PUBLIC_KEY in confirmation mode replies an error if the user refuses
-    def test_get_public_key_confirm_refused(self, firmware, backend, navigator,
+    def test_get_public_key_confirm_refused(self, device, backend, navigator,
                                             test_name):
-        client = TronClient(backend, firmware, navigator)
+        client = TronClient(backend, device, navigator)
         for chaincode_param in [True, False]:
-            if firmware.is_nano:
+            if device.is_nano:
                 with client.send_async_get_public_key_confirm(
                         TRX_PATH, chaincode_param):
                     backend.raise_policy = RaisePolicy.RAISE_NOTHING
