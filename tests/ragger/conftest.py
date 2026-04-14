@@ -15,7 +15,7 @@ configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 
 
 @pytest.fixture(scope="function")
-def configuration(backend: BackendInterface, navigator, firmware):
+def configuration(backend: BackendInterface, navigator, device):
     if type(backend) is SpeculosBackend:
         desired_enabled = {
             SettingID.DATA_ALLOWED,

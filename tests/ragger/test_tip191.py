@@ -2,10 +2,10 @@ from typing import Optional
 from Crypto.Hash import keccak
 from pathlib import Path
 from eth_keys import keys
+from ledgered.devices import Device
 
 from ragger.error import ExceptionRAPDU
 from ragger.navigator.navigation_scenario import NavigateWithScenario
-from ragger.firmware import Firmware
 
 from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
 from client.tip712.InputData import StatusWord
@@ -15,11 +15,11 @@ BIP32_PATH = "m/44'/195'/0'/0/0"
 
 
 def common(scenario_navigator: NavigateWithScenario, test_name: str,
-           firmware: Firmware, msg: str | bytes):
+           device: Device, msg: str | bytes):
 
     backend = scenario_navigator.backend
     navigator = scenario_navigator.navigator
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
 
     with app_client.get_public_addr(display=False):
         pass
@@ -31,7 +31,7 @@ def common(scenario_navigator: NavigateWithScenario, test_name: str,
 
     try:
         with app_client.personal_sign_full_display(BIP32_PATH, msg):
-            if firmware.is_nano:
+            if device.is_nano:
                 text = "Sign message"
             else:
                 text = "Hold to sign"
@@ -58,37 +58,37 @@ def common(scenario_navigator: NavigateWithScenario, test_name: str,
 
 
 def test_personal_sign_metamask(scenario_navigator: NavigateWithScenario,
-                                firmware: Firmware, test_name: str):
+                                device: Device, test_name: str):
 
     msg = "Example `personal_sign` message"
-    common(scenario_navigator, test_name, firmware, msg)
+    common(scenario_navigator, test_name, device, msg)
 
 
 def test_personal_sign_non_ascii(scenario_navigator: NavigateWithScenario,
-                                 firmware: Firmware, test_name: str):
+                                 device: Device, test_name: str):
     msg = bytes.fromhex(
         "9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658")
-    common(scenario_navigator, test_name, firmware, msg)
+    common(scenario_navigator, test_name, device, msg)
 
 
 def test_personal_sign_opensea(scenario_navigator: NavigateWithScenario,
-                               firmware: Firmware, test_name: str):
+                               device: Device, test_name: str):
 
     msg = "Welcome to OpenSea!\n\n"
     msg += "Click to sign in and accept the OpenSea Terms of Service: https://opensea.io/tos\n\n"
     msg += "This request will not trigger a blockchain transaction or cost any gas fees.\n\n"
     msg += "Your authentication status will reset after 24 hours.\n\n"
     msg += "Wallet address:\n0x9858effd232b4033e47d90003d41ec34ecaeda94\n\nNonce:\n2b02c8a0-f74f-4554-9821-a28054dc9121"
-    common(scenario_navigator, test_name, firmware, msg)
+    common(scenario_navigator, test_name, device, msg)
 
 
 def test_personal_sign_reject(scenario_navigator: NavigateWithScenario,
-                              firmware: Firmware, test_name: str):
+                              device: Device, test_name: str):
 
     backend = scenario_navigator.backend
     navigator = scenario_navigator.navigator
     default_screenshot_path = Path(__file__).parent.resolve()
-    app_client = TronClient(backend, firmware, navigator)
+    app_client = TronClient(backend, device, navigator)
 
     msg = "This is an reject sign"
     try:
