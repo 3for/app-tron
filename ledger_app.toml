@@ -8,4 +8,5 @@ use_test_keys = "CAL_TEST_KEY=1 TRUSTED_NAME_TEST_KEY=1"
 dbg_use_test_keys = "DEBUG=1 CAL_TEST_KEY=1 TRUSTED_NAME_TEST_KEY=1"
 
 [tests]
+unit_directory = "./tests/unit"
 pytest_directory = "./tests/ragger"

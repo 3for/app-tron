@@ -14,6 +14,15 @@ configuration.OPTIONAL.BACKEND_SCOPE = "function"
 configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 
 
+def pytest_configure(config):
+    # web3 currently imports web3.providers.legacy_websocket during module
+    # import, which triggers this third-party deprecation with websockets>=14.
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore::DeprecationWarning:websockets.legacy",
+    )
+
+
 @pytest.fixture(scope="function")
 def configuration(backend: BackendInterface, navigator, device):
     if type(backend) is SpeculosBackend:
