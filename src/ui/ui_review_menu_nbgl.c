@@ -509,8 +509,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowSubtitle = "Custom Contract";
             break;
         case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
+#ifndef SCREEN_SIZE_WALLET
+            // Limited by the screen size of Nano-series devices
             // External plugin flows already have a descriptive title, so keep the intro card text-only.
             txInfos.flowIcon = NULL;
+#endif
             if (!prepareClearSignCustomContractPluginUi()) {
                 ui_callback_tx_cancel(false);
                 nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
