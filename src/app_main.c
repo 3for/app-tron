@@ -38,6 +38,10 @@
 #include "swap.h"
 #endif  // HAVE_SWAP
 
+#ifdef HAVE_NBGL
+#include "nbgl_use_case.h"
+#endif  // HAVE_NBGL
+
 uint16_t apdu_response_code;
 
 // The settings, stored in NVRAM.
@@ -178,4 +182,117 @@ void app_main(void) {
     }
 
     return;
+}
+
+#ifdef HAVE_SWAP
+static void tron_library_main(tron_libargs_t *args) {
+    BEGIN_TRY {
+        TRY {
+            PRINTF("Inside Tron library\n");
+            switch (args->command) {
+                case SIGN_TRANSACTION: {
+                    bool success = swap_copy_transaction_parameters(args->create_transaction);
+                    if (success) {
+                        G_called_from_swap = true;
+                        G_swap_response_ready = false;
+                        G_swap_signing_return_value_address = &args->create_transaction->result;
+
+                        common_app_init();
+#ifdef HAVE_NBGL
+                        nbgl_useCaseSpinner("Signing");
+#endif  // HAVE_NBGL
+                        app_main();
+                    }
+                    break;
+                }
+                case CHECK_ADDRESS:
+                    swap_handle_check_address(args->check_address);
+                    break;
+                case GET_PRINTABLE_AMOUNT:
+                    swap_handle_get_printable_amount(args->get_printable_amount);
+                    break;
+                default:
+                    break;
+            }
+        }
+        CATCH_OTHER(e) {
+            (void) e;
+            PRINTF("Exiting following exception: 0x%04X\n", e);
+        }
+        FINALLY {
+            os_lib_end();
+        }
+    }
+    END_TRY;
+}
+#endif  // HAVE_SWAP
+
+// Common initialization for the application, both in Standalone or Library mode (Swap)
+static void app_init(bool library_mode) {
+    reset_app_context();
+    common_app_init();
+    // storage_init();
+    if (library_mode == false) {
+        // If we are not in library mode, we need to initialize the UX
+        io_init();
+        ui_idle();
+    }
+
+    // to prevent it from having a fixed value at boot
+    roll_challenge();
+}
+
+void coin_main(tron_libargs_t *args) {
+    if (args) {
+        if ((caller_app = args->caller_app) != NULL) {
+            caller_app->type = CALLER_TYPE_PLUGIN;
+        }
+    }
+
+    app_init(false);
+
+    app_main();
+}
+
+void app_quit(void) {
+    reset_app_context();
+    app_exit();
+}
+
+int tron_main(tron_libargs_t *args) {
+    // exit critical section
+    __asm volatile("cpsie i");
+
+    // ensure exception will work as planned
+    os_boot();
+
+    if (args == NULL) {
+        // called from dashboard as standalone tron app
+        coin_main(NULL);
+        return 0;
+    }
+
+    if (args->id != 0x100) {
+        app_quit();
+        return 0;
+    }
+    switch (args->command) {
+        case RUN_APPLICATION:
+            // called as tron from altcoin or plugin
+            coin_main(args);
+            break;
+        default:
+#ifdef HAVE_SWAP
+            // called as tron or altcoin library
+            tron_library_main(args);
+#else
+            app_quit();
+#endif  // HAVE_SWAP
+            break;
+    }
+    return 0;
+}
+
+__attribute__((section(".boot"))) int main(int arg0) {
+    return tron_main((tron_libargs_t *) arg0);
 }

@@ -24,3 +24,4 @@ bool swap_check_validity(const char* amount,
                          const char* tokenName,
                          const char* action,
                          const char* toAddress);
+void __attribute__((noreturn)) swap_finalize_exchange_sign_transaction(bool is_success);
