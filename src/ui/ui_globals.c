@@ -25,6 +25,11 @@
 #include "nbgl_use_case.h"
 #include "ui_logic.h"
 
+#ifdef HAVE_SWAP
+#include "swap.h"
+#include "../swap/handle_swap_sign_transaction.h"
+#endif  // HAVE_SWAP
+
 volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
@@ -124,6 +129,9 @@ bool ui_callback_tx_cancel(bool display_menu) {
 
 bool ui_callback_tx_ok(bool display_menu) {
     bool ret = true;
+#ifdef HAVE_SWAP
+    bool quit_swap = G_called_from_swap && G_swap_response_ready;
+#endif  // HAVE_SWAP
 
     if (signTransaction(&tmpCtx.transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
@@ -133,6 +141,12 @@ bool ui_callback_tx_ok(bool display_menu) {
                                  tmpCtx.transactionContext.signatureLength,
                                  E_OK);
     }
+
+#ifdef HAVE_SWAP
+    if (quit_swap) {
+        swap_finalize_exchange_sign_transaction(ret);
+    }
+#endif  // HAVE_SWAP
 
     reset_app_context();
     if (display_menu) {

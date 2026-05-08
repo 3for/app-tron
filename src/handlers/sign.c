@@ -36,6 +36,13 @@
 
 extern void reset_app_context();
 
+#ifdef HAVE_SWAP
+static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
+    io_send_sw(sw);
+    swap_finalize_exchange_sign_transaction(false);
+}
+#endif  // HAVE_SWAP
+
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
     memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, VOTE_ADDRESS_SIZE);
@@ -165,7 +172,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
 #ifdef HAVE_SWAP
             if (G_called_from_swap) {
-                return io_send_sw(E_SWAP_CHECKING_FAIL);
+                finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
             }
 #endif
             return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
@@ -198,20 +205,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         if ((txContent.contractType != TRANSFERCONTRACT) &&      // TRX Transfer
             (txContent.contractType != TRIGGERSMARTCONTRACT)) {  // TRC20 Transfer
             PRINTF("Refused contract type when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
+            finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
         }
 
         if (txContent.contractType == TRIGGERSMARTCONTRACT) {
             if (txContent.TRC20Method != 1) {
                 // Only transfer method allowed for TRC20
                 PRINTF("Refused method type when in SWAP mode\n");
-                return io_send_sw(E_SWAP_CHECKING_FAIL);
+                finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
             }
         }
 
         if (data_warning) {
             PRINTF("Refused data warning when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
+            finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
         }
     }
 #endif  // HAVE_SWAP
@@ -304,7 +311,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     ui_callback_tx_ok(false);
                 } else {
                     PRINTF("Refused signing incorrect Swap transaction\n");
-                    return io_send_sw(E_SWAP_CHECKING_FAIL);
+                    finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
                 }
             } else {
                 ux_flow_display(APPROVAL_TRANSFER, data_warning);
