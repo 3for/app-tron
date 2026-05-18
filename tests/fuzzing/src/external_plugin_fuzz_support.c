@@ -314,7 +314,7 @@ static void fuzz_handle_plugin_call(uintptr_t message, void *parameters) {
             return;
         }
         case TRON_PLUGIN_QUERY_CONTRACT_ID: {
-            ethQueryContractID_t *query = (ethQueryContractID_t *) parameters;
+            tronQueryContractID_t *query = (tronQueryContractID_t *) parameters;
 
             if ((g_plugin_behavior.query_contract_id_mode & 0x80U) != 0U) {
                 fuzz_throw_os_lib_exception(0x1105);
@@ -338,7 +338,7 @@ static void fuzz_handle_plugin_call(uintptr_t message, void *parameters) {
             return;
         }
         case TRON_PLUGIN_QUERY_CONTRACT_UI: {
-            ethQueryContractUI_t *query = (ethQueryContractUI_t *) parameters;
+            tronQueryContractUI_t *query = (tronQueryContractUI_t *) parameters;
 
             if ((g_plugin_behavior.query_contract_ui_mode & 0x80U) != 0U) {
                 fuzz_throw_os_lib_exception(0x1106);
