@@ -371,7 +371,7 @@ static bool external_plugin_query_contract_id_raw(char *name,
                                                   size_t name_len,
                                                   char *version,
                                                   size_t version_len) {
-    ethQueryContractID_t query = {0};
+    tronQueryContractID_t query = {0};
 
     if ((name == NULL) || (version == NULL) || (name_len == 0) || (version_len == 0)) {
         return false;
@@ -466,7 +466,7 @@ static bool external_plugin_query_contract_ui_raw(uint8_t screen_index,
                                                   size_t title_len,
                                                   char *out_msg,
                                                   size_t out_msg_len) {
-    ethQueryContractUI_t query = {0};
+    tronQueryContractUI_t query = {0};
 
     if ((title == NULL) || (out_msg == NULL) || (title_len == 0) || (out_msg_len == 0)) {
         return false;
