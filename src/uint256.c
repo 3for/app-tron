@@ -23,40 +23,14 @@
 #include "read.h"
 #include "write.h"
 #include "uint_common.h"
-#include "common_utils.h"  // INT256_LENGTH
+#include "common_utils.h"  // HEXDIGITS, INT256_LENGTH
 
-#include <string.h>
-
-static const char HEXDIGITS[] = "0123456789abcdef";
-
-static uint64_t readUint64BE(uint8_t *buffer) {
-    return (((uint64_t) buffer[0]) << 56) | (((uint64_t) buffer[1]) << 48) |
-           (((uint64_t) buffer[2]) << 40) | (((uint64_t) buffer[3]) << 32) |
-           (((uint64_t) buffer[4]) << 24) | (((uint64_t) buffer[5]) << 16) |
-           (((uint64_t) buffer[6]) << 8) | (((uint64_t) buffer[7]));
-}
-
-void readu128BE(uint8_t *buffer, uint128_t *target) {
-    UPPER_P(target) = read_u64_be(buffer, 0);
-    LOWER_P(target) = read_u64_be(buffer + 8, 0);
-}
-
-void readu256BE(uint8_t *buffer, uint256_t *target) {
+void readu256BE(const uint8_t *const buffer, uint256_t *const target) {
     readu128BE(buffer, &UPPER_P(target));
     readu128BE(buffer + 16, &LOWER_P(target));
 }
 
-void convertUint256BE(const uint8_t *data, const uint32_t length, uint256_t *target) {
-    uint8_t tmp[32] = {0};
-    memcpy(tmp + 32 - length, data, length);
-    readu256BE(tmp, target);
-}
-
-bool zero128(uint128_t *number) {
-    return ((LOWER_P(number) == 0) && (UPPER_P(number) == 0));
-}
-
-bool zero256(uint256_t *number) {
+bool zero256(const uint256_t *const number) {
     return (zero128(&LOWER_P(number)) && zero128(&UPPER_P(number)));
 }
 
