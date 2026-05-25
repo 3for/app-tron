@@ -214,7 +214,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "<host-corpus>:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer <target> -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer <target> -runs=10000 -max_len=8192'
 ```
 
 Examples for all current targets:
@@ -229,7 +229,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/corpus:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -runs=10000 -max_len=8192'
 ```
 
 `fuzz_external_plugin`:
@@ -242,7 +242,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_plugin:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_plugin -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_plugin -runs=10000 -max_len=8192'
 ```
 
 `fuzz_tip712`:
@@ -255,7 +255,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712 -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712 -runs=10000 -max_len=8192'
 ```
 
 `fuzz_tip712_wallet`:
@@ -268,7 +268,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_wallet -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_wallet -runs=10000 -max_len=8192'
 ```
 
 `fuzz_tip712_legacy`:
@@ -281,14 +281,14 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712_legacy:/mnt/host_corpus:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_legacy -- -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712_legacy -runs=10000 -max_len=8192'
 ```
 
 For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
 command. For example:
 
 ```sh
-run_fuzzer fuzz_tip712 -- -max_len=8192
+run_fuzzer fuzz_tip712 -max_len=8192
 ```
 
 When using `run_fuzzer`, mount the host corpus somewhere other than `/tmp/<target>_corpus`, copy it into a temporary corpus directory inside the container, and set `CORPUS_DIR` to that temporary directory. The runner may delete and recreate its default corpus directory when `CORPUS_DIR` is unset.
