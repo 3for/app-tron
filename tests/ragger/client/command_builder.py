@@ -1,10 +1,32 @@
 # documentation about APDU format is available here:
 
+import base58
 import struct
-from typing import Optional
-from ragger.bip import pack_derivation_path
 from enum import IntEnum, auto
+from typing import Optional
+
+from ragger.bip import pack_derivation_path
+
 from .tip712 import TIP712FieldType
+
+TRON_ADDRESS_SIZE = 21
+TRON_BASE58CHECK_ADDRESS_SIZE = 34
+
+
+def encode_tron_base58_metadata_address(addr: bytes) -> bytes:
+    if len(addr) == TRON_ADDRESS_SIZE:
+        raw_addr = addr
+    elif len(addr) == TRON_ADDRESS_SIZE - 1:
+        raw_addr = b"\x41" + addr
+    else:
+        raise ValueError("expected a 20-byte or 21-byte TRON address")
+    if raw_addr[0] != 0x41:
+        raise ValueError("expected a mainnet TRON address")
+
+    encoded = base58.b58encode_check(raw_addr)
+    if len(encoded) != TRON_BASE58CHECK_ADDRESS_SIZE:
+        raise ValueError("unexpected TRON Base58Check address length")
+    return encoded
 
 
 class InsType(IntEnum):
@@ -226,7 +248,7 @@ class CommandBuilder:
         data = bytearray()
         data.append(len(plugin_name))
         data += plugin_name.encode()
-        data += contract_address
+        data += encode_tron_base58_metadata_address(contract_address)
         data += selector
         data += sig
 
@@ -361,7 +383,7 @@ class CommandBuilder:
         payload = bytearray()
         payload.append(len(ticker))
         payload += ticker.encode()
-        payload += addr
+        payload += encode_tron_base58_metadata_address(addr)
         payload += struct.pack(">I", decimals)
         payload += struct.pack(">I", chain_id)
         payload += sig

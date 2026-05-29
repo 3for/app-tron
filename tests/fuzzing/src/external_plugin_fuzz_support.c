@@ -65,6 +65,7 @@ static const uint8_t fuzz_lookup_unknown[ADDRESS_LENGTH] = {
     0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE,
     0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE,
 };
+static const char BASE58_ALPHABET[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 static tron_plugin_result_t fuzz_decode_plugin_result(uint8_t mode) {
     switch (mode & 0x03U) {
@@ -188,6 +189,39 @@ void getBase58FromAddress(const uint8_t address[static ADDRESS_SIZE], char *out,
         out[offset++] = '.';
     }
     out[offset] = '\0';
+}
+
+bool getAddressFromBase58(const char *in, size_t in_len, uint8_t out[static ADDRESS_SIZE]) {
+    uint8_t decoded[ADDRESS_SIZE + 4] = {0};
+
+    if ((in == NULL) || (out == NULL) || (in_len != BASE58CHECK_ADDRESS_SIZE)) {
+        return false;
+    }
+
+    for (size_t i = 0; i < in_len; i++) {
+        const char *digit = strchr(BASE58_ALPHABET, in[i]);
+        uint32_t carry;
+
+        if (digit == NULL) {
+            return false;
+        }
+        carry = (uint32_t) (digit - BASE58_ALPHABET);
+        for (size_t j = sizeof(decoded); j > 0U; j--) {
+            carry += (uint32_t) decoded[j - 1U] * 58U;
+            decoded[j - 1U] = (uint8_t) carry;
+            carry >>= 8U;
+        }
+        if (carry != 0U) {
+            return false;
+        }
+    }
+
+    if (decoded[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+
+    memcpy(out, decoded, ADDRESS_SIZE);
+    return true;
 }
 
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun) {

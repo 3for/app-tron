@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 from pathlib import Path
 
 
@@ -22,6 +23,7 @@ OWNER_ADDRESS = bytes.fromhex("41" + "12" * 20)
 CONTRACT_ADDRESS = bytes.fromhex("41" + "34" * 20)
 OTHER_CONTRACT_ADDRESS = bytes.fromhex("41" + "56" * 20)
 TYPE_URL = b"type.googleapis.com/protocol.TriggerSmartContract"
+BASE58_ALPHABET = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -90,8 +92,28 @@ def encode_raw_transaction(data: bytes, call_value: int = 0, permission_id=None)
     return bytes(payload)
 
 
+def base58check_encode(raw: bytes) -> bytes:
+    checksum = hashlib.sha256(hashlib.sha256(raw).digest()).digest()[:4]
+    value = int.from_bytes(raw + checksum, "big")
+    encoded = bytearray()
+
+    while value > 0:
+        value, digit = divmod(value, 58)
+        encoded.append(BASE58_ALPHABET[digit])
+
+    for byte in raw + checksum:
+        if byte == 0:
+            encoded.append(BASE58_ALPHABET[0])
+        else:
+            break
+
+    encoded.reverse()
+    return bytes(encoded)
+
+
 def build_set_payload(contract_address: bytes, selector: bytes) -> bytes:
-    return bytes([len(PLUGIN_NAME)]) + PLUGIN_NAME + contract_address + selector + b"\x42"
+    return (bytes([len(PLUGIN_NAME)]) + PLUGIN_NAME +
+            base58check_encode(contract_address) + selector + b"\x42")
 
 
 def encode_config(

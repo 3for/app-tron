@@ -7,6 +7,7 @@
 #include "ui_globals.h"
 #include "app_errors.h"
 #include "os_pki.h"
+#include "helpers.h"
 
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
@@ -31,25 +32,30 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if ((tickerLength + 1) > sizeof(token->ticker)) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    if (dataLength < tickerLength + TRON_ADDRESS_SIZE + 4 + 4) {
+    if (dataLength < tickerLength + BASE58CHECK_ADDRESS_SIZE + 4 + 4) {
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    cx_hash_sha256(workBuffer + offset, tickerLength + TRON_ADDRESS_SIZE + 4 + 4, hash, 32);
+    cx_hash_sha256(workBuffer + offset, tickerLength + BASE58CHECK_ADDRESS_SIZE + 4 + 4, hash, 32);
     memmove(token->ticker, workBuffer + offset, tickerLength);
     token->ticker[tickerLength] = '\0';
     offset += tickerLength;
     dataLength -= tickerLength;
-    if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
-        return io_send_sw(E_INCORRECT_DATA);
+
+    {
+        uint8_t decoded_address[TRON_ADDRESS_SIZE];
+        if (!getAddressFromBase58((const char *) (workBuffer + offset),
+                                  BASE58CHECK_ADDRESS_SIZE,
+                                  decoded_address)) {
+            return io_send_sw(E_INCORRECT_DATA);
+        }
+        // Internally only the last 20 bytes (the canonical EVM address) are retained.
+        // So the existing `get_asset_info_by_addr()` and UI/token comparison logic
+        // do not need to be refactored.
+        memmove(token->address, decoded_address + 1, ADDRESS_LENGTH);
     }
-    // The input must include the 0x41 prefix,
-    // but internally only the last 20 bytes (the canonical EVM address) are retained.
-    // So the existing `get_asset_info_by_addr()` and the UI/token comparison logic
-    // do not need to be refactored.
-    memmove(token->address, workBuffer + offset + 1, ADDRESS_LENGTH);
-    offset += TRON_ADDRESS_SIZE;
-    dataLength -= TRON_ADDRESS_SIZE;
+    offset += BASE58CHECK_ADDRESS_SIZE;
+    dataLength -= BASE58CHECK_ADDRESS_SIZE;
     // TODO: 4 bytes for this is overkill
     token->decimals = U4BE(workBuffer, offset);
     offset += 4;

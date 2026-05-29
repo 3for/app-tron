@@ -59,6 +59,35 @@ void getBase58FromAddress(const uint8_t address[static ADDRESS_SIZE], char *out,
     }
 }
 
+bool getAddressFromBase58(const char *in, size_t in_len, uint8_t out[static ADDRESS_SIZE]) {
+    uint8_t decoded[ADDRESS_SIZE + 4] = {0};
+    uint8_t sha256[HASH_SIZE];
+    int decoded_len;
+
+    if ((in == NULL) || (out == NULL) || (in_len != BASE58CHECK_ADDRESS_SIZE)) {
+        return false;
+    }
+    decoded_len = base58_decode(in, in_len, decoded, sizeof(decoded));
+    if (decoded_len < 0) {
+        return false;
+    }
+    if ((decoded_len > 0) && (decoded_len != (int) sizeof(decoded))) {
+        return false;
+    }
+    if (decoded[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+
+    cx_hash_sha256(decoded, ADDRESS_SIZE, sha256, sizeof(sha256));
+    cx_hash_sha256(sha256, sizeof(sha256), sha256, sizeof(sha256));
+    if (memcmp(decoded + ADDRESS_SIZE, sha256, 4) != 0) {
+        return false;
+    }
+
+    memmove(out, decoded, ADDRESS_SIZE);
+    return true;
+}
+
 void getBase58FromPublicKey(const uint8_t *publicKey, char *address58, bool truncate) {
     uint8_t address[ADDRESS_SIZE];
 

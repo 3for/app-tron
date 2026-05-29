@@ -5,7 +5,11 @@ import pytest
 
 import keychain
 from ledgered.devices import Device
-from client.command_builder import CommandBuilder, InsType as BuilderInsType
+from client.command_builder import (
+    CommandBuilder,
+    InsType as BuilderInsType,
+    encode_tron_base58_metadata_address,
+)
 from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
 from tron import CLA, Errors, InsType, TronClient
@@ -42,7 +46,7 @@ def build_external_plugin_payload(plugin_name: str, contract_address: bytes,
     payload = bytearray()
     payload.append(len(plugin_name))
     payload += plugin_name.encode()
-    payload += contract_address
+    payload += encode_tron_base58_metadata_address(contract_address)
     payload += selector
     return bytes(payload)
 
