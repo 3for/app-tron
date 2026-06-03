@@ -1,11 +1,10 @@
 #include <stdint.h>
 #include <string.h>
 #include "path.h"
-#include "mem.h"
+#include "app_mem_utils.h"
 #include "context_712.h"
 #include "commands_712.h"
 #include "type_hash.h"
-#include "mem_utils.h"
 #include "typed_data.h"
 #include "crypto_helpers.h"
 #include "parse.h"
@@ -14,6 +13,7 @@
 
 static s_path *path_struct = NULL;
 static s_path *path_backup = NULL;
+static s_hash_ctx *g_hash_ctxs = NULL;
 
 /**
  * Get the field pointer to by the first N depths of the given path
@@ -149,8 +149,40 @@ static bool path_depth_list_push(void) {
  *
  * @return pointer to the hashing context
  */
-static cx_sha3_t *get_last_hash_ctx(void) {
-    return ((cx_sha3_t *) mem_alloc(0)) - 1;
+s_hash_ctx *get_last_hash_ctx(void) {
+    s_hash_ctx *hash_ctx = g_hash_ctxs;
+
+    while ((hash_ctx != NULL) && (hash_ctx->next != NULL)) {
+        hash_ctx = hash_ctx->next;
+    }
+    return hash_ctx;
+}
+
+static s_hash_ctx *get_previous_hash_ctx(const s_hash_ctx *hash_ctx) {
+    if (hash_ctx == NULL) {
+        return NULL;
+    }
+    return hash_ctx->prev;
+}
+
+static void remove_last_hash_ctx(void) {
+    s_hash_ctx *hash_ctx = get_last_hash_ctx();
+
+    if (hash_ctx == NULL) {
+        return;
+    }
+    if (hash_ctx->prev == NULL) {
+        g_hash_ctxs = NULL;
+    } else {
+        hash_ctx->prev->next = NULL;
+    }
+    APP_MEM_FREE(hash_ctx);
+}
+
+static void clear_hash_ctxs(void) {
+    while (g_hash_ctxs != NULL) {
+        remove_last_hash_ctx();
+    }
 }
 
 /**
@@ -160,16 +192,23 @@ static cx_sha3_t *get_last_hash_ctx(void) {
  * @return whether there was anything hashed at this depth
  */
 static bool finalize_hash_depth(uint8_t *hash) {
-    const cx_sha3_t *hash_ctx;
+    const s_hash_ctx *hash_ctx;
     size_t hashed_bytes;
     cx_err_t error = CX_INTERNAL_ERROR;
 
     hash_ctx = get_last_hash_ctx();
-    hashed_bytes = hash_ctx->blen;
+    if (hash_ctx == NULL) {
+        return false;
+    }
+    hashed_bytes = hash_ctx->hash.blen;
     // finalize hash
-    CX_CHECK(
-        cx_hash_no_throw((cx_hash_t *) hash_ctx, CX_LAST, NULL, 0, hash, KECCAK256_HASH_BYTESIZE));
-    mem_dealloc(sizeof(*hash_ctx));  // remove hash context
+    CX_CHECK(cx_hash_no_throw((cx_hash_t *) &hash_ctx->hash,
+                              CX_LAST,
+                              NULL,
+                              0,
+                              hash,
+                              KECCAK256_HASH_BYTESIZE));
+    remove_last_hash_ctx();
     return hashed_bytes > 0;
 end:
     return false;
@@ -181,11 +220,14 @@ end:
  * @param[in] hash pointer to given hash
  */
 static bool feed_last_hash_depth(const uint8_t *const hash) {
-    const cx_sha3_t *hash_ctx;
+    const s_hash_ctx *hash_ctx;
 
     hash_ctx = get_last_hash_ctx();
+    if (hash_ctx == NULL) {
+        return false;
+    }
     // continue progressive hash with the array hash
-    if (cx_hash_no_throw((cx_hash_t *) hash_ctx, 0, hash, KECCAK256_HASH_BYTESIZE, NULL, 0) !=
+    if (cx_hash_no_throw((cx_hash_t *) &hash_ctx->hash, 0, hash, KECCAK256_HASH_BYTESIZE, NULL, 0) !=
         CX_OK) {
         return false;
     }
@@ -199,15 +241,23 @@ static bool feed_last_hash_depth(const uint8_t *const hash) {
  * @return whether the memory allocation of the hashing context was successful
  */
 static bool push_new_hash_depth(bool init) {
-    cx_sha3_t *hash_ctx;
+    s_hash_ctx *hash_ctx = NULL;
     cx_err_t error = CX_INTERNAL_ERROR;
 
     // allocate new hash context
-    if ((hash_ctx = MEM_ALLOC_AND_ALIGN_TYPE(*hash_ctx)) == NULL) {
+    if (APP_MEM_CALLOC((void **) &hash_ctx, sizeof(*hash_ctx)) == false) {
         return false;
     }
     if (init) {
-        CX_CHECK(cx_keccak_init_no_throw(hash_ctx, 256));
+        CX_CHECK(cx_keccak_init_no_throw(&hash_ctx->hash, 256));
+    }
+    if (g_hash_ctxs == NULL) {
+        g_hash_ctxs = hash_ctx;
+    } else {
+        s_hash_ctx *tail = get_last_hash_ctx();
+
+        tail->next = hash_ctx;
+        hash_ctx->prev = tail;
     }
     return true;
 end:
@@ -579,14 +629,18 @@ bool path_new_array_depth(const uint8_t *const data, uint8_t length) {
         return false;
     }
     if (is_custom) {
-        cx_sha3_t *hash_ctx = get_last_hash_ctx();
-        cx_sha3_t *old_ctx = hash_ctx - 1;
+        s_hash_ctx *hash_ctx = get_last_hash_ctx();
+        s_hash_ctx *old_ctx = get_previous_hash_ctx(hash_ctx);
+
+        if ((hash_ctx == NULL) || (old_ctx == NULL)) {
+            return false;
+        }
 
         if (array_size > 0) {
-            memcpy(hash_ctx, old_ctx, sizeof(*old_ctx));
-            CX_CHECK(cx_keccak_init_no_throw(old_ctx, 256));
+            memcpy(&hash_ctx->hash, &old_ctx->hash, sizeof(old_ctx->hash));
+            CX_CHECK(cx_keccak_init_no_throw(&old_ctx->hash, 256));
         } else {
-            CX_CHECK(cx_keccak_init_no_throw(hash_ctx, 256));
+            CX_CHECK(cx_keccak_init_no_throw(&hash_ctx->hash, 256));
         }
     }
     if (array_size == 0) {
@@ -826,14 +880,13 @@ bool path_exists_in_backup(const char *path, size_t length) {
  * @return whether the memory allocation were successful.
  */
 bool path_init(void) {
-    if (path_struct == NULL) {
-        if (((path_struct = MEM_ALLOC_AND_ALIGN_TYPE(*path_struct)) == NULL) ||
-            ((path_backup = MEM_ALLOC_AND_ALIGN_TYPE(*path_backup)) == NULL)) {
-            apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
-        } else {
-            explicit_bzero(path_struct, sizeof(*path_struct));
-            explicit_bzero(path_backup, sizeof(*path_backup));
-        }
+    if (path_struct != NULL) {
+        path_deinit();
+        return false;
+    }
+    if ((APP_MEM_CALLOC((void **) &path_struct, sizeof(*path_struct)) == false) ||
+        (APP_MEM_CALLOC((void **) &path_backup, sizeof(*path_backup)) == false)) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
     }
     return (path_struct != NULL) && (path_backup != NULL);
 }
@@ -842,5 +895,7 @@ bool path_init(void) {
  * De-initialize the path context
  */
 void path_deinit(void) {
-    path_struct = NULL;
+    APP_MEM_FREE_AND_NULL((void **) &path_struct);
+    APP_MEM_FREE_AND_NULL((void **) &path_backup);
+    clear_hash_ctxs();
 }

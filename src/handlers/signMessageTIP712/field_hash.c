@@ -2,8 +2,7 @@
 #include "field_hash.h"
 #include "encode_field.h"
 #include "path.h"
-#include "mem.h"
-#include "mem_utils.h"
+#include "app_mem_utils.h"
 #include "ui_logic.h"
 #include "context_712.h"   // contract_addr
 #include "common_utils.h"  // u64_from_BE
@@ -83,13 +82,15 @@ static bool field_hash_validate_remaining_size(const void *field_ptr, uint16_t r
  * @return whether the initialization was successful or not
  */
 bool field_hash_init(void) {
-    if (fh == NULL) {
-        if ((fh = MEM_ALLOC_AND_ALIGN_TYPE(*fh)) == NULL) {
-            apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
-            return false;
-        }
-        fh->state = FHS_IDLE;
+    if (fh != NULL) {
+        field_hash_deinit();
+        return false;
     }
+    if (APP_MEM_CALLOC((void **) &fh, sizeof(*fh)) == false) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return false;
+    }
+    fh->state = FHS_IDLE;
     return true;
 }
 
@@ -97,7 +98,7 @@ bool field_hash_init(void) {
  * Deinitialize the field hash context
  */
 void field_hash_deinit(void) {
-    fh = NULL;
+    APP_MEM_FREE_AND_NULL((void **) &fh);
 }
 
 /**
@@ -189,7 +190,7 @@ static uint8_t *field_hash_finalize_dynamic(void) {
     uint8_t *value;
     cx_err_t error = CX_INTERNAL_ERROR;
 
-    if ((value = mem_alloc(KECCAK256_HASH_BYTESIZE)) == NULL) {
+    if ((value = APP_MEM_ALLOC(KECCAK256_HASH_BYTESIZE)) == NULL) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return NULL;
     }
@@ -211,8 +212,9 @@ end:
  * @param[in] field_type the struct field's type
  * @param[in] hash the field hash
  */
-static void field_hash_feed_parent(e_type field_type, const uint8_t *const hash) {
+static bool field_hash_feed_parent(e_type field_type, const uint8_t *const hash) {
     uint8_t len;
+    s_hash_ctx *hash_ctx;
 
     if (IS_DYN(field_type)) {
         len = KECCAK256_HASH_BYTESIZE;
@@ -220,13 +222,14 @@ static void field_hash_feed_parent(e_type field_type, const uint8_t *const hash)
         len = TIP_712_ENCODED_FIELD_LENGTH;
     }
 
-    // last thing in mem is the hash of the previous field
-    // and just before it is the current hash context
-    cx_sha3_t *hash_ctx = (cx_sha3_t *) (hash - sizeof(cx_sha3_t));
-    // continue the progressive hash on it
-    hash_nbytes(hash, len, (cx_hash_t *) hash_ctx);
-    // deallocate it
-    mem_dealloc(len);
+    hash_ctx = get_last_hash_ctx();
+    if (hash_ctx == NULL) {
+        APP_MEM_FREE((void *) hash);
+        return false;
+    }
+    hash_nbytes(hash, len, (cx_hash_t *) &hash_ctx->hash);
+    APP_MEM_FREE((void *) hash);
+    return true;
 }
 
 /**
@@ -289,7 +292,9 @@ static bool field_hash_finalize(const void *const field_ptr,
         }
     }
 
-    field_hash_feed_parent(field_type, value);
+    if (!field_hash_feed_parent(field_type, value)) {
+        return false;
+    }
 
     if (path_get_root_type() == ROOT_DOMAIN) {
         if (field_hash_domain_special_fields(field_ptr, data, data_length) == false) {

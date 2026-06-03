@@ -1,32 +1,29 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include "mem_utils.h"
-#include "mem.h"
-#include "type_hash.h"
+
+#include "app_mem_utils.h"
+#include "app_errors.h"
 #include "format_hash_field_type.h"
 #include "hash_bytes.h"
 #include "typed_data.h"
+#include "type_hash.h"
 #include "ui_globals.h"
-#include "app_errors.h"
 
-/**
- * Encode & hash the given structure field
- *
- * @param[in] field_ptr pointer to the struct field
- * @return \ref true it finished correctly, \ref false if it didn't (memory allocation)
- */
-static bool encode_and_hash_field(const void *const field_ptr) {
+typedef struct struct_dep_s {
+    struct struct_dep_s *next;
+    const s_struct_712 *item;
+} s_struct_dep;
+
+static bool encode_and_hash_field(const s_struct_712_field *field_ptr) {
     const char *name;
     uint8_t length;
 
     if (!format_hash_field_type(field_ptr, (cx_hash_t *) &global_sha3)) {
         return false;
     }
-    // space between field type name and field name
     hash_byte(' ', (cx_hash_t *) &global_sha3);
 
-    // field name
     name = get_struct_field_keyname(field_ptr, &length);
     if (name == NULL) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
@@ -36,217 +33,171 @@ static bool encode_and_hash_field(const void *const field_ptr) {
     return true;
 }
 
-/**
- * Encode & hash the a given structure type
- *
- * @param[in] struct_ptr pointer to the structure we want the typestring of
- * @param[in] str_length length of the formatted string in memory
- * @return pointer of the string in memory, \ref NULL in case of an error
- */
-static bool encode_and_hash_type(const void *const struct_ptr) {
+static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
+    const s_struct_712_field *field_ptr;
     const char *struct_name;
     uint8_t struct_name_length;
-    const uint8_t *field_ptr;
-    uint8_t fields_count;
 
-    // struct name
     struct_name = get_struct_name(struct_ptr, &struct_name_length);
     if (struct_name == NULL) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
     hash_nbytes((uint8_t *) struct_name, struct_name_length, (cx_hash_t *) &global_sha3);
-
-    // opening struct parentheses
     hash_byte('(', (cx_hash_t *) &global_sha3);
 
-    field_ptr = get_struct_fields_array(struct_ptr, &fields_count);
-    if (field_ptr == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-        return false;
-    }
-    for (uint8_t idx = 0; idx < fields_count; ++idx) {
-        // comma separating struct fields
-        if (idx > 0) {
+    for (field_ptr = struct_ptr->fields; field_ptr != NULL; field_ptr = field_ptr->next) {
+        if (field_ptr != struct_ptr->fields) {
             hash_byte(',', (cx_hash_t *) &global_sha3);
         }
-
-        if (encode_and_hash_field(field_ptr) == false) {
-            return NULL;
-        }
-
-        field_ptr = get_next_struct_field(field_ptr);
-        if (((idx + 1) < fields_count) && (field_ptr == NULL)) {
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        if (!encode_and_hash_field(field_ptr)) {
             return false;
         }
     }
-    // closing struct parentheses
     hash_byte(')', (cx_hash_t *) &global_sha3);
-
     return true;
 }
 
-/**
- * Sort the given structs based by alphabetical order
- *
- * @param[in] deps_count count of how many struct dependencies pointers
- * @param[in,out] deps pointer to the first dependency pointer
- */
-static void sort_dependencies(uint8_t deps_count, const void **deps) {
-    bool changed;
-    const void *tmp_ptr;
-    const char *name1, *name2;
-    uint8_t namelen1, namelen2;
-    int str_cmp_result;
+static bool dep_exists(const s_struct_dep *deps, const s_struct_712 *item) {
+    while (deps != NULL) {
+        if (deps->item == item) {
+            return true;
+        }
+        deps = deps->next;
+    }
+    return false;
+}
 
-    do {
-        changed = false;
-        for (size_t idx = 0; (idx + 1) < deps_count; ++idx) {
-            name1 = get_struct_name(*(deps + idx), &namelen1);
-            name2 = get_struct_name(*(deps + idx + 1), &namelen2);
-            if ((name1 == NULL) || (name2 == NULL)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-                return;
+static bool dep_push(s_struct_dep **deps, const s_struct_712 *item) {
+    s_struct_dep *new_dep = NULL;
+    s_struct_dep *tail;
+
+    if (APP_MEM_CALLOC((void **) &new_dep, sizeof(*new_dep)) == false) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return false;
+    }
+    new_dep->item = item;
+    if (*deps == NULL) {
+        *deps = new_dep;
+    } else {
+        for (tail = *deps; tail->next != NULL; tail = tail->next)
+            ;
+        tail->next = new_dep;
+    }
+    return true;
+}
+
+static void dep_clear(s_struct_dep **deps) {
+    while (*deps != NULL) {
+        s_struct_dep *next = (*deps)->next;
+
+        APP_MEM_FREE(*deps);
+        *deps = next;
+    }
+}
+
+static bool get_struct_dependencies(s_struct_dep **deps, const s_struct_712 *struct_ptr) {
+    const s_struct_712_field *field_ptr;
+    const char *arg_structname;
+    uint8_t arg_structname_length;
+    const s_struct_712 *arg_struct_ptr;
+
+    for (field_ptr = struct_ptr->fields; field_ptr != NULL; field_ptr = field_ptr->next) {
+        if (field_ptr->type != TYPE_CUSTOM) {
+            continue;
+        }
+        arg_structname = get_struct_field_typename(field_ptr, &arg_structname_length);
+        if (arg_structname == NULL) {
+            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            return false;
+        }
+        arg_struct_ptr = get_structn(arg_structname, arg_structname_length);
+        if (arg_struct_ptr == NULL) {
+            PRINTF("Error: could not find TIP-712 dependency struct \"");
+            for (int i = 0; i < arg_structname_length; ++i) {
+                PRINTF("%c", arg_structname[i]);
             }
+            PRINTF("\" during type_hash\n");
+            return false;
+        }
+        if (!dep_exists(*deps, arg_struct_ptr)) {
+            if (!dep_push(deps, arg_struct_ptr)) {
+                return false;
+            }
+            if (!get_struct_dependencies(deps, arg_struct_ptr)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
-            str_cmp_result = memcmp(name1, name2, MIN(namelen1, namelen2));
-            if ((str_cmp_result > 0) || ((str_cmp_result == 0) && (namelen1 > namelen2))) {
-                tmp_ptr = *(deps + idx);
-                *(deps + idx) = *(deps + idx + 1);
-                *(deps + idx + 1) = tmp_ptr;
+static bool dep_less_or_equal(const s_struct_dep *a, const s_struct_dep *b) {
+    const char *name1 = a->item->name;
+    const char *name2 = b->item->name;
+    size_t namelen1 = strlen(name1);
+    size_t namelen2 = strlen(name2);
+    int str_cmp_result = strncmp(name1, name2, MIN(namelen1, namelen2));
 
+    return (str_cmp_result < 0) || ((str_cmp_result == 0) && (namelen1 <= namelen2));
+}
+
+static void dep_sort(s_struct_dep **deps) {
+    bool changed;
+
+    if ((deps == NULL) || (*deps == NULL)) {
+        return;
+    }
+    do {
+        s_struct_dep **cursor = deps;
+
+        changed = false;
+        while (((*cursor) != NULL) && ((*cursor)->next != NULL)) {
+            s_struct_dep *a = *cursor;
+            s_struct_dep *b = a->next;
+
+            if (!dep_less_or_equal(a, b)) {
+                a->next = b->next;
+                b->next = a;
+                *cursor = b;
                 changed = true;
             }
+            cursor = &((*cursor)->next);
         }
     } while (changed);
 }
 
-/**
- * Find all the dependencies from a given structure
- *
- * @param[out] deps_count count of how many struct dependency pointers
- * @param[in] first_dep pointer to the first dependency pointer
- * @param[in] struct_ptr pointer to the struct we are getting the dependencies of
- * @return pointer to the first found dependency, \ref NULL otherwise
- */
-static const void **get_struct_dependencies(uint8_t *const deps_count,
-                                            const void **first_dep,
-                                            const void *const struct_ptr) {
-    uint8_t fields_count;
-    uint8_t pending_count = 0;
-    const void *field_ptr;
-    const void *pending[UINT8_MAX];
-    const char *arg_structname;
-    uint8_t arg_structname_length;
-    const void *arg_struct_ptr;
-    size_t dep_idx;
-    const void **new_dep;
-
-    pending[pending_count++] = struct_ptr;
-    while (pending_count > 0) {
-        const void *current_struct_ptr = pending[--pending_count];
-
-        field_ptr = get_struct_fields_array(current_struct_ptr, &fields_count);
-        if (field_ptr == NULL) {
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-            return NULL;
-        }
-        for (uint8_t idx = 0; idx < fields_count; ++idx) {
-            if (struct_field_type(field_ptr) == TYPE_CUSTOM) {
-                // get struct name
-                arg_structname = get_struct_field_typename(field_ptr, &arg_structname_length);
-                if (arg_structname == NULL) {
-                    apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-                    return NULL;
-                }
-                // from its name, get the pointer to its definition
-                if ((arg_struct_ptr = get_structn(arg_structname, arg_structname_length)) == NULL) {
-                    PRINTF("Error: could not find TIP-712 dependency struct \"");
-                    for (int i = 0; i < arg_structname_length; ++i) PRINTF("%c", arg_structname[i]);
-                    PRINTF("\" during type_hash\n");
-                    return NULL;
-                }
-
-                // check if it is not already present in the dependencies array
-                for (dep_idx = 0; dep_idx < *deps_count; ++dep_idx) {
-                    // it's a match!
-                    if (*(first_dep + dep_idx) == arg_struct_ptr) {
-                        break;
-                    }
-                }
-                // if it's not present in the array, add it and inspect it later
-                if (dep_idx == *deps_count) {
-                    if (*deps_count == UINT8_MAX) {
-                        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-                        return NULL;
-                    }
-                    if (pending_count >= ARRAY_SIZE(pending)) {
-                        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-                        return NULL;
-                    }
-                    if ((new_dep = MEM_ALLOC_AND_ALIGN_TYPE(void *)) == NULL) {
-                        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
-                        return NULL;
-                    }
-                    if (*deps_count == 0) {
-                        first_dep = new_dep;
-                    }
-                    *new_dep = arg_struct_ptr;
-                    *deps_count += 1;
-                    pending[pending_count++] = arg_struct_ptr;
-                }
-            }
-            field_ptr = get_next_struct_field(field_ptr);
-            if (((idx + 1) < fields_count) && (field_ptr == NULL)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-                return NULL;
-            }
-        }
-    }
-    return first_dep;
-}
-
-/**
- * Encode the structure's type and hash it
- *
- * @param[in] struct_name name of the given struct
- * @param[in] struct_name_length length of the name of the given struct
- * @param[out] hash_buf buffer containing the resulting type_hash
- * @return whether the type_hash was successful or not
- */
 bool type_hash(const char *const struct_name, const uint8_t struct_name_length, uint8_t *hash_buf) {
-    const void *struct_ptr;
-    uint8_t deps_count = 0;
-    const void **deps;
-    void *mem_loc_bak = mem_alloc(0);
+    const s_struct_712 *struct_ptr;
+    s_struct_dep *deps = NULL;
     cx_err_t error = CX_INTERNAL_ERROR;
 
     if ((struct_ptr = get_structn(struct_name, struct_name_length)) == NULL) {
         PRINTF("Error: could not find TIP-712 struct \"");
-        for (int i = 0; i < struct_name_length; ++i) PRINTF("%c", struct_name[i]);
+        for (int i = 0; i < struct_name_length; ++i) {
+            PRINTF("%c", struct_name[i]);
+        }
         PRINTF("\" for type_hash\n");
         return false;
     }
     CX_CHECK(cx_keccak_init_no_throw(&global_sha3, 256));
-    deps = get_struct_dependencies(&deps_count, NULL, struct_ptr);
-    if ((deps_count > 0) && (deps == NULL)) {
+    if (!get_struct_dependencies(&deps, struct_ptr)) {
+        dep_clear(&deps);
         return false;
     }
-    sort_dependencies(deps_count, deps);
-    if (encode_and_hash_type(struct_ptr) == false) {
+    dep_sort(&deps);
+    if (!encode_and_hash_type(struct_ptr)) {
+        dep_clear(&deps);
         return false;
     }
-    // loop over each struct and generate string
-    for (int idx = 0; idx < deps_count; ++idx) {
-        if (encode_and_hash_type(*deps) == false) {
+    for (const s_struct_dep *dep = deps; dep != NULL; dep = dep->next) {
+        if (!encode_and_hash_type(dep->item)) {
+            dep_clear(&deps);
             return false;
         }
-        deps += 1;
     }
-    mem_dealloc(mem_alloc(0) - mem_loc_bak);
+    dep_clear(&deps);
 
-    // copy hash into memory
     CX_CHECK(cx_hash_no_throw((cx_hash_t *) &global_sha3,
                               CX_LAST,
                               NULL,
@@ -255,5 +206,6 @@ bool type_hash(const char *const struct_name, const uint8_t struct_name_length, 
                               KECCAK256_HASH_BYTESIZE));
     return true;
 end:
+    dep_clear(&deps);
     return false;
 }

@@ -4,5 +4,6 @@
 #include <stdint.h>
 
 bool sol_typenames_init(void);
+void sol_typenames_deinit(void);
 
-const char *get_struct_field_sol_typename(const uint8_t *ptr, uint8_t *const length);
+const char *get_struct_field_sol_typename(const void *ptr, uint8_t *length);

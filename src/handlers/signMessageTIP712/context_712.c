@@ -1,8 +1,7 @@
 #include <string.h>
 #include <stdint.h>
+#include "app_mem_utils.h"
 #include "context_712.h"
-#include "mem_utils.h"
-#include "mem.h"
 #include "sol_typenames.h"
 #include "path.h"
 #include "field_hash.h"
@@ -20,10 +19,11 @@ s_tip712_context *tip712_context = NULL;
  * @return a boolean indicating if the initialization was successful or not
  */
 bool tip712_context_init(void) {
-    // init global variables
-    mem_init();
-
-    if ((tip712_context = MEM_ALLOC_AND_ALIGN_TYPE(*tip712_context)) == NULL) {
+    if (tip712_context != NULL) {
+        tip712_context_deinit();
+        return false;
+    }
+    if (APP_MEM_CALLOC((void **) &tip712_context, sizeof(*tip712_context)) == false) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -69,7 +69,7 @@ void tip712_context_deinit(void) {
     path_deinit();
     field_hash_deinit();
     ui_712_deinit();
-    mem_reset();
-    tip712_context = NULL;
+    sol_typenames_deinit();
+    APP_MEM_FREE_AND_NULL((void **) &tip712_context);
     reset_app_context();
 }

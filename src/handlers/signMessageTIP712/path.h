@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "cx.h"
 
 #define MAX_PATH_DEPTH  16
 #define MAX_ARRAY_DEPTH 8
@@ -23,6 +24,12 @@ typedef struct {
     e_root_type root_type;
 } s_path;
 
+typedef struct hash_ctx_s {
+    struct hash_ctx_s *prev;
+    struct hash_ctx_s *next;
+    cx_sha3_t hash;
+} s_hash_ctx;
+
 bool path_set_root(const char *const struct_name, uint8_t length);
 const void *path_get_field(void);
 bool path_advance(bool do_typehash);
@@ -37,3 +44,4 @@ bool path_exists_in_backup(const char *path, size_t length);
 const void *path_get_nth_field_to_last(uint8_t n);
 uint8_t path_get_depth_count(void);
 uint8_t path_backup_get_depth_count(void);
+s_hash_ctx *get_last_hash_ctx(void);

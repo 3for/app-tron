@@ -18,9 +18,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "app_mem_utils.h"
 #include "cx.h"
 #include "io.h"
-#include "mem.h"
 
 #include "app_errors.h"
 #include "helpers.h"
@@ -37,7 +37,6 @@ typedef struct {
     uint32_t processed_size;
     uint8_t *received_buffer;
     char *display_buffer;
-    void *mem_mark;
 } signMessageFullDisplayContext_t;
 
 static signMessageFullDisplayContext_t g_sign_msg_ctx;
@@ -55,10 +54,8 @@ static void bytes_to_lowercase_hex_string(const uint8_t *data, size_t data_len, 
 }
 
 void cleanupSignPersonalMessageFullDisplay(void) {
-    if (g_sign_msg_ctx.mem_mark != NULL) {
-        uint8_t *mem_end = mem_alloc(0);
-        mem_dealloc((size_t)(mem_end - (uint8_t *) g_sign_msg_ctx.mem_mark));
-    }
+    APP_MEM_FREE_AND_NULL((void **) &g_sign_msg_ctx.received_buffer);
+    APP_MEM_FREE_AND_NULL((void **) &g_sign_msg_ctx.display_buffer);
     explicit_bzero(&g_sign_msg_ctx, sizeof(g_sign_msg_ctx));
     processed_size_191 = 0;
     explicit_bzero(&states191, sizeof(states191));
@@ -85,13 +82,16 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
     }
 
     cleanupSignPersonalMessageFullDisplay();
-    g_sign_msg_ctx.mem_mark = mem_alloc(0);
     g_sign_msg_ctx.msg_length = U4BE(*work_buffer, 0);
+    if (g_sign_msg_ctx.msg_length > UINT16_MAX) {
+        cleanupSignPersonalMessageFullDisplay();
+        return E_INCORRECT_LENGTH;
+    }
     txContent.dataBytes = g_sign_msg_ctx.msg_length;
 
     if (g_sign_msg_ctx.msg_length > 0) {
-        g_sign_msg_ctx.received_buffer = mem_alloc(g_sign_msg_ctx.msg_length);
-        if (g_sign_msg_ctx.received_buffer == NULL) {
+        if (APP_MEM_CALLOC((void **) &g_sign_msg_ctx.received_buffer,
+                           (uint16_t) g_sign_msg_ctx.msg_length) == false) {
             cleanupSignPersonalMessageFullDisplay();
             return APDU_RESPONSE_INSUFFICIENT_MEMORY;
         }
@@ -157,8 +157,13 @@ static int final_process(const uint8_t *data) {
         }
     }
 
-    g_sign_msg_ctx.display_buffer = mem_alloc(display_buffer_length + 1U);
-    if (g_sign_msg_ctx.display_buffer == NULL) {
+    if ((display_buffer_length > (SIZE_MAX - 1U)) ||
+        ((display_buffer_length + 1U) > UINT16_MAX)) {
+        return E_INCORRECT_LENGTH;
+    }
+
+    if (APP_MEM_CALLOC((void **) &g_sign_msg_ctx.display_buffer,
+                       (uint16_t) (display_buffer_length + 1U)) == false) {
         return APDU_RESPONSE_INSUFFICIENT_MEMORY;
     }
 

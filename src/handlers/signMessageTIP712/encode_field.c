@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
+#include "app_mem_utils.h"
 #include "encode_field.h"
-#include "mem.h"
 #include "parse.h"
 #include "app_errors.h"
 
@@ -28,7 +28,7 @@ static void *field_encode(const uint8_t *const value,
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;
     }
-    if ((padded_value = mem_alloc(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
+    if ((padded_value = APP_MEM_ALLOC(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
         switch (ptype) {
             case MSB:
                 memset(padded_value, pval, TIP_712_ENCODED_FIELD_LENGTH - length);

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // TypeDesc masks
 #define TYPE_MASK     (0xF)
@@ -27,33 +28,48 @@ typedef enum {
 } e_type;
 
 typedef struct {
-    uint8_t *structs_array;
-    uint8_t *current_struct_fields_array;
-} s_typed_data;
+    e_array_type type;
+    uint8_t size;
+} s_struct_712_field_array_level;
 
-typedef uint8_t typedesc_t;
-typedef uint8_t typesize_t;
+typedef struct struct_712_field {
+    struct struct_712_field *next;
+    bool type_is_array;
+    bool type_has_size;
+    e_type type;
+    char *type_name;
+    uint8_t type_size;
+    uint8_t array_level_count;
+    s_struct_712_field_array_level *array_levels;
+    char *key_name;
+} s_struct_712_field;
 
-const void *get_array_in_mem(const void *ptr, uint8_t *const array_size);
-const char *get_string_in_mem(const uint8_t *ptr, uint8_t *const string_length);
-bool struct_field_is_array(const uint8_t *ptr);
-bool struct_field_has_typesize(const uint8_t *ptr);
-e_type struct_field_type(const uint8_t *ptr);
-uint8_t get_struct_field_typesize(const uint8_t *ptr);
-const char *get_struct_field_custom_typename(const uint8_t *ptr, uint8_t *const length);
-const char *get_struct_field_typename(const uint8_t *ptr, uint8_t *const length);
-e_array_type struct_field_array_depth(const uint8_t *ptr, uint8_t *const array_size);
-const uint8_t *get_next_struct_field_array_lvl(const uint8_t *const ptr);
-const uint8_t *struct_field_half_skip(const uint8_t *ptr);
-const uint8_t *get_struct_field_array_lvls_array(const uint8_t *const ptr, uint8_t *const length);
-const char *get_struct_field_keyname(const uint8_t *ptr, uint8_t *const length);
-const uint8_t *get_next_struct_field(const void *ptr);
-const char *get_struct_name(const uint8_t *ptr, uint8_t *const length);
-const uint8_t *get_struct_fields_array(const uint8_t *ptr, uint8_t *const length);
-const uint8_t *get_next_struct(const uint8_t *ptr);
-const uint8_t *get_structs_array(uint8_t *const length);
-const uint8_t *get_structn(const char *const name_ptr, const uint8_t name_length);
-bool set_struct_name(uint8_t length, const uint8_t *const name);
-bool set_struct_field(uint8_t length, const uint8_t *const data);
+typedef struct struct_712 {
+    struct struct_712 *next;
+    char *name;
+    s_struct_712_field *fields;
+} s_struct_712;
+
+const void *get_array_in_mem(const void *ptr, uint8_t *array_size);
+const char *get_string_in_mem(const uint8_t *ptr, uint8_t *string_length);
+bool struct_field_is_array(const void *ptr);
+bool struct_field_has_typesize(const void *ptr);
+e_type struct_field_type(const void *ptr);
+uint8_t get_struct_field_typesize(const void *ptr);
+const char *get_struct_field_custom_typename(const void *ptr, uint8_t *length);
+const char *get_struct_field_typename(const void *ptr, uint8_t *length);
+e_array_type struct_field_array_depth(const void *ptr, uint8_t *array_size);
+const void *get_next_struct_field_array_lvl(const void *ptr);
+const void *get_struct_field_array_lvls_array(const void *ptr, uint8_t *length);
+const char *get_struct_field_keyname(const void *ptr, uint8_t *length);
+const void *get_next_struct_field(const void *ptr);
+const char *get_struct_name(const void *ptr, uint8_t *length);
+const void *get_struct_fields_array(const void *ptr, uint8_t *length);
+const void *get_next_struct(const void *ptr);
+const void *get_structs_array(uint8_t *length);
+const s_struct_712 *get_struct_list(void);
+const s_struct_712 *get_structn(const char *name_ptr, uint8_t name_length);
+bool set_struct_name(uint8_t length, const uint8_t *name);
+bool set_struct_field(uint8_t length, const uint8_t *data);
 bool typed_data_init(void);
 void typed_data_deinit(void);

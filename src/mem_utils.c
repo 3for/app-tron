@@ -1,18 +1,28 @@
-#include <stdlib.h>
-#include <string.h>
+#include <stdint.h>
 #include <stdio.h>
-#include "mem.h"
+#include "app_mem_utils.h"
 #include "mem_utils.h"
+
+#define SIZE_MEM_BUFFER (1024 * 16)
+
+static uint8_t mem_buffer[SIZE_MEM_BUFFER] __attribute__((aligned(sizeof(intmax_t))));
+
+/**
+ * Initialize the memory buffer.
+ *
+ * @return true if the initialization succeeded, false otherwise
+ */
+bool app_mem_init(void) {
+    return mem_utils_init(mem_buffer, sizeof(mem_buffer));
+}
 
 /**
  * Format an unsigned number up to 32-bit into memory into an ASCII string.
  *
  * @param[in] value Value to write in memory
- * @param[out] length number of characters written to memory
- *
  * @return pointer to memory area or \ref NULL if the allocation failed
  */
-char *mem_alloc_and_format_uint(uint32_t value, uint8_t *const length) {
+char *mem_alloc_and_format_uint(uint32_t value) {
     char *mem_ptr;
     uint32_t value_copy;
     uint8_t size;
@@ -24,69 +34,8 @@ char *mem_alloc_and_format_uint(uint32_t value, uint8_t *const length) {
         size += 1;
     }
     // +1 for the null character
-    if ((mem_ptr = mem_alloc(sizeof(char) * (size + 1)))) {
+    if ((mem_ptr = APP_MEM_ALLOC(sizeof(char) * (size + 1)))) {
         snprintf(mem_ptr, (size + 1), "%u", value);
-        mem_dealloc(sizeof(char));  // to skip the null character
-        if (length != NULL) {
-            *length = size;
-        }
     }
     return mem_ptr;
-}
-
-/**
- * Align memory by a given value
- *
- * @param[in] alignment given alignment value
- * @return size of the padding required for proper alignment
- */
-uint8_t mem_align(size_t alignment) {
-    uint8_t diff = (uintptr_t) mem_alloc(0) % alignment;
-
-    if (diff > 0) {
-        diff = alignment - diff;
-        mem_alloc(diff);
-    }
-    return diff;
-}
-
-/**
- * Allocate and align, required when dealing with pointers of multi-bytes data
- * like structures that will be dereferenced at runtime.
- *
- * @param[in] size the size of the data we want to allocate in memory
- * @param[in] alignment the byte alignment needed
- *
- * @return pointer to the memory area, \ref NULL if the allocation failed
- */
-void *mem_alloc_and_align(size_t size, size_t alignment) {
-    mem_align(alignment);
-    return mem_alloc(size);
-}
-
-/**
- * Reverse-allocate and align, required when reverse-buffer allocations are
- * later dereferenced as structures or structure arrays.
- *
- * @param[in] size the size of the data we want to allocate in memory
- * @param[in] alignment the byte alignment needed
- *
- * @return pointer to the memory area, \ref NULL if the allocation failed
- */
-void *mem_rev_alloc_and_align(size_t size, size_t alignment) {
-    uintptr_t start;
-    size_t padding = 0;
-    size_t total_size;
-
-    if (alignment > 1) {
-        start = (uintptr_t) mem_rev_alloc(0);
-        start -= size;
-        padding = start % alignment;
-    }
-
-    if (__builtin_add_overflow(size, padding, &total_size)) {
-        return NULL;
-    }
-
-    return mem_rev_alloc(total_size);
 }

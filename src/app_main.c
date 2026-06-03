@@ -25,7 +25,7 @@
 #include "io.h"
 #include "parser.h"
 #include "ux.h"
-#include "mem.h"
+#include "mem_utils.h"
 #include "ui_idle_menu.h"
 #include "settings.h"
 #include "handlers.h"
@@ -229,6 +229,10 @@ static void tron_library_main(tron_libargs_t *args) {
 
 // Common initialization for the application, both in Standalone or Library mode (Swap)
 static void app_init(bool library_mode) {
+    if (library_mode == false) {
+        // If we are not in library mode, 1st init is the dynamic memory
+        app_mem_init();
+    }
     reset_app_context();
     common_app_init();
     // storage_init();

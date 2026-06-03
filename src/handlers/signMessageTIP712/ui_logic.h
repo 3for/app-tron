@@ -14,6 +14,7 @@ typedef enum {
 
 bool ui_712_init(void);
 void ui_712_deinit(void);
+void ui_712_nbgl_cleanup(void);
 e_tip712_nfs ui_712_next_field(void);
 bool ui_712_review_struct(const void *const struct_ptr);
 bool ui_712_feed_to_display(const void *field_ptr,

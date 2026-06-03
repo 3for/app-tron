@@ -3,9 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include "app_mem_utils.h"
 #include "ui_logic.h"
-#include "mem.h"
-#include "mem_utils.h"
 #include "os_io.h"
 #include "context_712.h"  // tip712_context_deinit
 #include "path.h"         // path_get_root_type
@@ -82,6 +81,8 @@ typedef struct {
 
 static t_ui_context *ui_ctx = NULL;
 
+__attribute__((weak)) void ui_712_nbgl_cleanup(void) {}
+
 static bool ui_712_bounded_strlen(const char *str, size_t max_len, size_t *out_len) {
     size_t length;
 
@@ -119,7 +120,7 @@ static bool ui_712_copy_bounded_string(char *dst,
 }
 
 static char *ui_712_alloc_review_string(const char *src, size_t length) {
-    char *dst = mem_rev_alloc(length + 1);
+    char *dst = APP_MEM_ALLOC(length + 1);
 
     if (dst == NULL) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
@@ -150,7 +151,7 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
         return NULL;
     }
 
-    dst = mem_rev_alloc(key_length + 1 + (size_t) suffix_length + 1);
+    dst = APP_MEM_ALLOC(key_length + 1 + (size_t) suffix_length + 1);
     if (dst == NULL) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return NULL;
@@ -164,7 +165,7 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
 }
 
 static bool ui_712_push_pair(const char *key, const char *value) {
-    s_ui_712_pair *pair;
+    s_ui_712_pair *pair = NULL;
     size_t key_length;
     size_t value_length;
     uint16_t key_suffix = 0;
@@ -190,6 +191,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         // Only identical adjacent key/value pages are renamed into a numbered
         // run: "key-1", "key-2", "key-3", etc.
         if (ui_ctx->ui_pairs_consecutive_identical_count == 1) {
+            APP_MEM_FREE((void *) ui_ctx->ui_pairs_tail->key);
             ui_ctx->ui_pairs_tail->key = ui_712_alloc_review_key(key, 1);
             if (ui_ctx->ui_pairs_tail->key == NULL) {
                 return false;
@@ -201,12 +203,10 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         ui_ctx->ui_pairs_consecutive_identical_count = 1;
     }
 
-    pair = MEM_REV_ALLOC_AND_ALIGN_TYPE(*pair);
-    if (pair == NULL) {
+    if (APP_MEM_CALLOC((void **) &pair, sizeof(*pair)) == false) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return false;
     }
-    explicit_bzero(pair, sizeof(*pair));
 
     pair->raw_key = ui_712_alloc_review_string(key, key_length);
     if (pair->raw_key == NULL) {
@@ -996,21 +996,38 @@ void ui_712_end_sign(void) {
  * Initializes the UI context structure in memory
  */
 bool ui_712_init(void) {
-    if ((ui_ctx = MEM_ALLOC_AND_ALIGN_TYPE(*ui_ctx))) {
-        explicit_bzero(ui_ctx, sizeof(*ui_ctx));
-        ui_ctx->filtering_mode = TIP712_FILTERING_BASIC;
-        explicit_bzero(&strings, sizeof(strings));
-    } else {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+    if (ui_ctx != NULL) {
+        ui_712_deinit();
+        return false;
     }
-    return ui_ctx != NULL;
+    if (APP_MEM_CALLOC((void **) &ui_ctx, sizeof(*ui_ctx)) == false) {
+        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return false;
+    }
+    ui_ctx->filtering_mode = TIP712_FILTERING_BASIC;
+    explicit_bzero(&strings, sizeof(strings));
+    return true;
 }
 
 /**
  * Deinit function that simply unsets the struct pointer to NULL
  */
 void ui_712_deinit(void) {
-    ui_ctx = NULL;
+    if (ui_ctx != NULL) {
+        s_ui_712_pair *pair = ui_ctx->ui_pairs;
+
+        while (pair != NULL) {
+            s_ui_712_pair *next = pair->next;
+
+            APP_MEM_FREE((void *) pair->raw_key);
+            APP_MEM_FREE((void *) pair->key);
+            APP_MEM_FREE((void *) pair->value);
+            APP_MEM_FREE(pair);
+            pair = next;
+        }
+        ui_712_nbgl_cleanup();
+        APP_MEM_FREE_AND_NULL((void **) &ui_ctx);
+    }
 }
 
 /**

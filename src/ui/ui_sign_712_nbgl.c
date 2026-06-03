@@ -1,8 +1,7 @@
 #include <string.h>
 
+#include "app_mem_utils.h"
 #include "app_errors.h"
-#include "mem.h"
-#include "mem_utils.h"
 #include "nbgl_use_case.h"
 #include "settings.h"
 #include "utils.h"
@@ -19,6 +18,11 @@ extern void reset_app_context(void);
 static nbgl_contentTagValueList_t pairs_list;
 static nbgl_contentTagValue_t *pairs;
 
+void ui_712_nbgl_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &pairs);
+    explicit_bzero(&pairs_list, sizeof(pairs_list));
+}
+
 static bool ui_712_prepare_pairs(void) {
     uint16_t pairs_count = ui_712_pairs_count();
     const char *item;
@@ -29,13 +33,12 @@ static bool ui_712_prepare_pairs(void) {
         return false;
     }
 
-    pairs = mem_rev_alloc_and_align(sizeof(*pairs) * pairs_count, __alignof__(*pairs));
-    if (pairs == NULL) {
+    ui_712_nbgl_cleanup();
+    if (APP_MEM_CALLOC((void **) &pairs, sizeof(*pairs) * pairs_count) == false) {
         apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
         return false;
     }
 
-    explicit_bzero(pairs, sizeof(*pairs) * pairs_count);
     explicit_bzero(&pairs_list, sizeof(pairs_list));
     pairs_list.nbPairs = pairs_count;
     pairs_list.pairs = pairs;
@@ -54,8 +57,7 @@ static bool ui_712_prepare_pairs(void) {
 }
 
 static void ui_712_start_common(void) {
-    pairs = NULL;
-    explicit_bzero(&pairs_list, sizeof(pairs_list));
+    ui_712_nbgl_cleanup();
     if (appState != APP_STATE_IDLE) {
         reset_app_context();
     }
