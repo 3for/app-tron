@@ -85,6 +85,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t dataLength);
 int handleSetExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+void cleanupSignExternalPlugin(void);
 
 bool external_plugin_get_cached_ui_items_count(uint8_t *count);
 bool external_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len);

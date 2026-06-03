@@ -27,13 +27,14 @@
 #include "ui_review_menu.h"
 #include "ui_globals.h"
 #include "app_errors.h"
+#include "app_mem_utils.h"
 #include "parse.h"
 #include "settings.h"
 #include "transaction_trigger_decode.h"
 
 extern void reset_app_context();
 
-static tron_stream_decoder_t tron_stream_decoder;
+static tron_stream_decoder_t *tron_stream_decoder = NULL;
 
 typedef struct {
     extraInfo_t *item1;
@@ -67,7 +68,7 @@ typedef struct {
 
 static external_plugin_stream_t external_plugin_stream;
 static external_plugin_ui_info_t external_plugin_ui_info;
-static external_plugin_ui_cache_t external_plugin_ui_cache;
+static external_plugin_ui_cache_t *external_plugin_ui_cache = NULL;
 static uint16_t external_plugin_stream_failure_sw;
 
 static uint16_t external_plugin_status_to_sw(uint8_t plugin_status) {
@@ -305,8 +306,23 @@ static bool external_plugin_provide_info(const tronPluginFinalize_t *finalize,
     return true;
 }
 
+static bool external_plugin_ui_cache_alloc(void) {
+    if (external_plugin_ui_cache != NULL) {
+        return true;
+    }
+
+    return APP_MEM_CALLOC((void **) &external_plugin_ui_cache,
+                          sizeof(*external_plugin_ui_cache));
+}
+
 static void external_plugin_ui_cache_reset(void) {
-    memset(&external_plugin_ui_cache, 0, sizeof(external_plugin_ui_cache));
+    if (external_plugin_ui_cache != NULL) {
+        memset(external_plugin_ui_cache, 0, sizeof(*external_plugin_ui_cache));
+    }
+}
+
+static void external_plugin_ui_cache_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &external_plugin_ui_cache);
 }
 
 static void lowercase_ascii_inplace(char *s, size_t s_len) {
@@ -322,20 +338,24 @@ static void lowercase_ascii_inplace(char *s, size_t s_len) {
 }
 
 static void external_plugin_prepare_title_msg(void) {
-    if (!external_plugin_ui_cache.has_contract_id ||
-        external_plugin_ui_cache.contract_name[0] == '\0') {
+    if (external_plugin_ui_cache == NULL) {
+        return;
+    }
+
+    if (!external_plugin_ui_cache->has_contract_id ||
+        external_plugin_ui_cache->contract_name[0] == '\0') {
         char contract_addr[BASE58CHECK_ADDRESS_SIZE + 1];
 
         getBase58FromAddress(txContent.contractAddress,
                              contract_addr,
                              HAS_SETTING(S_TRUNCATE_ADDRESS));
-        snprintf(external_plugin_ui_cache.g_titleMsg,
-                 sizeof(external_plugin_ui_cache.g_titleMsg),
+        snprintf(external_plugin_ui_cache->g_titleMsg,
+                 sizeof(external_plugin_ui_cache->g_titleMsg),
                  "%s %s",
                  contract_addr,
                  "-");
-        snprintf(external_plugin_ui_cache.g_finishMsg,
-                 sizeof(external_plugin_ui_cache.g_finishMsg),
+        snprintf(external_plugin_ui_cache->g_finishMsg,
+                 sizeof(external_plugin_ui_cache->g_finishMsg),
                  "%s %s?",
                  contract_addr,
                  "-");
@@ -348,22 +368,22 @@ static void external_plugin_prepare_title_msg(void) {
         const char *finish_prefix = "Sign transaction";
 
         strlcpy(contract_version,
-                external_plugin_ui_cache.contract_version,
+                external_plugin_ui_cache->contract_version,
                 sizeof(contract_version));
         lowercase_ascii_inplace(contract_version, sizeof(contract_version));
 
-        snprintf(external_plugin_ui_cache.g_titleMsg,
-                 sizeof(external_plugin_ui_cache.g_titleMsg),
+        snprintf(external_plugin_ui_cache->g_titleMsg,
+                 sizeof(external_plugin_ui_cache->g_titleMsg),
                  "%s to %s on %s",
                  title_prefix,
                  contract_version,
-                 external_plugin_ui_cache.contract_name);
-        snprintf(external_plugin_ui_cache.g_finishMsg,
-                 sizeof(external_plugin_ui_cache.g_finishMsg),
+                 external_plugin_ui_cache->contract_name);
+        snprintf(external_plugin_ui_cache->g_finishMsg,
+                 sizeof(external_plugin_ui_cache->g_finishMsg),
                  "%s to %s on %s?",
                  finish_prefix,
                  contract_version,
-                 external_plugin_ui_cache.contract_name);
+                 external_plugin_ui_cache->contract_name);
     }
 }
 
@@ -407,11 +427,11 @@ bool external_plugin_get_cached_ui_items_count(uint8_t *count) {
 
     *count = 0;
 
-    if (!external_plugin_ui_cache.ready) {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready) {
         return false;
     }
 
-    *count = external_plugin_ui_cache.item_count;
+    *count = external_plugin_ui_cache->item_count;
     return true;
 }
 
@@ -422,11 +442,12 @@ bool external_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len)
 
     title_msg[0] = '\0';
 
-    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_titleMsg[0] == '\0') {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        external_plugin_ui_cache->g_titleMsg[0] == '\0') {
         return false;
     }
 
-    strlcpy(title_msg, external_plugin_ui_cache.g_titleMsg, title_msg_len);
+    strlcpy(title_msg, external_plugin_ui_cache->g_titleMsg, title_msg_len);
     return true;
 }
 
@@ -437,28 +458,31 @@ bool external_plugin_get_cached_finish_msg(char *finish_msg, size_t finish_msg_l
 
     finish_msg[0] = '\0';
 
-    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_finishMsg[0] == '\0') {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        external_plugin_ui_cache->g_finishMsg[0] == '\0') {
         return false;
     }
 
-    strlcpy(finish_msg, external_plugin_ui_cache.g_finishMsg, finish_msg_len);
+    strlcpy(finish_msg, external_plugin_ui_cache->g_finishMsg, finish_msg_len);
     return true;
 }
 
 const char *external_plugin_get_cached_title_msg_ref(void) {
-    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_titleMsg[0] == '\0') {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        external_plugin_ui_cache->g_titleMsg[0] == '\0') {
         return NULL;
     }
 
-    return external_plugin_ui_cache.g_titleMsg;
+    return external_plugin_ui_cache->g_titleMsg;
 }
 
 const char *external_plugin_get_cached_finish_msg_ref(void) {
-    if (!external_plugin_ui_cache.ready || external_plugin_ui_cache.g_finishMsg[0] == '\0') {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        external_plugin_ui_cache->g_finishMsg[0] == '\0') {
         return NULL;
     }
 
-    return external_plugin_ui_cache.g_finishMsg;
+    return external_plugin_ui_cache->g_finishMsg;
 }
 
 static bool external_plugin_query_contract_ui_raw(uint8_t screen_index,
@@ -511,12 +535,13 @@ bool external_plugin_get_cached_contract_ui(uint8_t screen_index,
     title[0] = '\0';
     out_msg[0] = '\0';
 
-    if (!external_plugin_ui_cache.ready || (screen_index >= external_plugin_ui_cache.item_count)) {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        (screen_index >= external_plugin_ui_cache->item_count)) {
         return false;
     }
 
-    strlcpy(title, external_plugin_ui_cache.title[screen_index], title_len);
-    strlcpy(out_msg, external_plugin_ui_cache.msg[screen_index], out_msg_len);
+    strlcpy(title, external_plugin_ui_cache->title[screen_index], title_len);
+    strlcpy(out_msg, external_plugin_ui_cache->msg[screen_index], out_msg_len);
     return true;
 }
 
@@ -530,17 +555,22 @@ bool external_plugin_get_cached_contract_ui_ref(uint8_t screen_index,
     *title = NULL;
     *out_msg = NULL;
 
-    if (!external_plugin_ui_cache.ready || (screen_index >= external_plugin_ui_cache.item_count)) {
+    if (external_plugin_ui_cache == NULL || !external_plugin_ui_cache->ready ||
+        (screen_index >= external_plugin_ui_cache->item_count)) {
         return false;
     }
 
-    *title = external_plugin_ui_cache.title[screen_index];
-    *out_msg = external_plugin_ui_cache.msg[screen_index];
+    *title = external_plugin_ui_cache->title[screen_index];
+    *out_msg = external_plugin_ui_cache->msg[screen_index];
     return true;
 }
 
 static uint16_t prepare_plugin_ui_cache(void) {
     uint8_t plugin_ui_items = dataContext.tokenContext.pluginUiMaxItems;
+
+    if (!external_plugin_ui_cache_alloc()) {
+        return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+    }
 
     external_plugin_ui_cache_reset();
 
@@ -556,31 +586,31 @@ static uint16_t prepare_plugin_ui_cache(void) {
         return E_INCORRECT_DATA;
     }
 
-    if (!external_plugin_query_contract_id_raw(external_plugin_ui_cache.contract_name,
-                                               sizeof(external_plugin_ui_cache.contract_name),
-                                               external_plugin_ui_cache.contract_version,
-                                               sizeof(external_plugin_ui_cache.contract_version))) {
+    if (!external_plugin_query_contract_id_raw(external_plugin_ui_cache->contract_name,
+                                               sizeof(external_plugin_ui_cache->contract_name),
+                                               external_plugin_ui_cache->contract_version,
+                                               sizeof(external_plugin_ui_cache->contract_version))) {
         PRINTF("Plugin contract ID query failed\n");
         external_plugin_ui_cache_reset();
         return external_plugin_failure_sw();
     }
-    external_plugin_ui_cache.has_contract_id = true;
+    external_plugin_ui_cache->has_contract_id = true;
     external_plugin_prepare_title_msg();
 
     for (uint8_t i = 0; i < plugin_ui_items; i++) {
         if (!external_plugin_query_contract_ui_raw(i,
-                                                   external_plugin_ui_cache.title[i],
-                                                   sizeof(external_plugin_ui_cache.title[i]),
-                                                   external_plugin_ui_cache.msg[i],
-                                                   sizeof(external_plugin_ui_cache.msg[i]))) {
+                                                   external_plugin_ui_cache->title[i],
+                                                   sizeof(external_plugin_ui_cache->title[i]),
+                                                   external_plugin_ui_cache->msg[i],
+                                                   sizeof(external_plugin_ui_cache->msg[i]))) {
             PRINTF("Plugin UI query failed at screen %u\n", (unsigned int) i);
             external_plugin_ui_cache_reset();
             return external_plugin_failure_sw();
         }
     }
 
-    external_plugin_ui_cache.item_count = plugin_ui_items;
-    external_plugin_ui_cache.ready = true;
+    external_plugin_ui_cache->item_count = plugin_ui_items;
+    external_plugin_ui_cache->ready = true;
     return E_OK;
 }
 
@@ -627,9 +657,12 @@ static bool external_plugin_feed_data_chunk(void *ctx,
                 if (external_plugin_stream.expect_external_plugin) {
                     bool contract_match = true;
 
-                    if (tron_stream_decoder.result.has_contract_address &&
-                        tron_stream_decoder.result.contract_address_len == ADDRESS_SIZE) {
-                        contract_match = (memcmp(tron_stream_decoder.result.contract_address,
+                    if (tron_stream_decoder == NULL) {
+                        return false;
+                    }
+                    if (tron_stream_decoder->result.has_contract_address &&
+                        tron_stream_decoder->result.contract_address_len == ADDRESS_SIZE) {
+                        contract_match = (memcmp(tron_stream_decoder->result.contract_address,
                                                  external_plugin_stream.expected_contract,
                                                  ADDRESS_SIZE) == 0);
                     }
@@ -639,7 +672,7 @@ static bool external_plugin_feed_data_chunk(void *ctx,
                                                   SELECTOR_LENGTH) != 0) {
                         external_plugin_stream.expect_external_plugin = false;
                     } else {
-                        sync_partial_txcontent(&tron_stream_decoder.result, &txContent);
+                        sync_partial_txcontent(&tron_stream_decoder->result, &txContent);
                         if (!external_plugin_init(total_len)) {
                             record_plugin_failure();
                             return false;
@@ -704,6 +737,11 @@ static void external_plugin_stream_reset(void) {
 
 static bool tron_stream_decoder_complete(const tron_stream_decoder_t *dec) {
     return tron_stream_decoder_is_done(dec);
+}
+
+void cleanupSignExternalPlugin(void) {
+    APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
+    external_plugin_ui_cache_cleanup();
 }
 
 static bool tron_stream_parse_trigger_data(const tron_decode_result_t *res, txContent_t *content) {
@@ -808,9 +846,14 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
 
         initTx(&txContext, &txContent);
         customContractField = 0;
-        tron_stream_decoder_init_raw(&tron_stream_decoder, total_len);
+        cleanupSignExternalPlugin();
+        if (APP_MEM_CALLOC((void **) &tron_stream_decoder, sizeof(*tron_stream_decoder)) == false) {
+            reset_app_context();
+            return io_send_sw(APDU_RESPONSE_INSUFFICIENT_MEMORY);
+        }
+        tron_stream_decoder_init_raw(tron_stream_decoder, total_len);
         external_plugin_stream_reset();
-        tron_stream_decoder_set_trigger_data_observer(&tron_stream_decoder,
+        tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
                                                       external_plugin_feed_data_chunk,
                                                       NULL);
 
@@ -833,7 +876,7 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
     // process buffer
-    if (!tron_stream_decoder_feed(&tron_stream_decoder, workBuffer, dataLength)) {
+    if (!tron_stream_decoder_feed(tron_stream_decoder, workBuffer, dataLength)) {
         uint16_t sw = (external_plugin_stream_failure_sw != E_OK)
                           ? external_plugin_stream_failure_sw
                           : E_INCORRECT_DATA;
@@ -845,15 +888,16 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         return io_send_sw(E_OK);
     }
 
-    if (!tron_stream_decoder_complete(&tron_stream_decoder)) {
+    if (!tron_stream_decoder_complete(tron_stream_decoder)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (!tron_stream_fill_txcontent(&tron_stream_decoder.result, &txContent)) {
+    if (!tron_stream_fill_txcontent(&tron_stream_decoder->result, &txContent)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
+    APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
 
     if (!external_plugin_finalize(&plugin_finalize)) {
         reset_app_context();
