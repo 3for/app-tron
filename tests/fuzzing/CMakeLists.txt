@@ -104,7 +104,6 @@ endif()
 set(TIP712_FUZZ_SUPPORT_SOURCES
     src/tip712_fuzz_support.c
     src/tip712_fuzz_helpers_bridge.c
-    ../../src/mem.c
     ../../src/mem_utils.c
     ../../src/hash_bytes.c
     ../../src/utils.c

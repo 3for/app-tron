@@ -6,12 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define APP_MEM_ALLOC(size) \
-    mem_utils_alloc((size), false, __FILE__, __LINE__)
+#define APP_MEM_ALLOC(size) malloc(size)
 #define APP_MEM_CALLOC(buffer, size) \
     mem_utils_calloc((buffer), (size), false, __FILE__, __LINE__)
-#define APP_MEM_FREE(ptr) \
-    mem_utils_free((ptr), __FILE__, __LINE__)
+#define APP_MEM_FREE(ptr) free(ptr)
 #define APP_MEM_FREE_AND_NULL(buffer) \
     mem_utils_free_and_null((buffer), __FILE__, __LINE__)
 #define APP_MEM_STRDUP(str) \

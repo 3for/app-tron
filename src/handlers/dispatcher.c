@@ -98,10 +98,10 @@ int apdu_dispatcher(const command_t *cmd) {
         case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
             return handleProvideTrc20TokenInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-        case INS_ENS_GET_CHALLENGE:
+        case INS_GET_CHALLENGE:
             return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-        case INS_ENS_PROVIDE_INFO:
+        case INS_PROVIDE_TRUSTED_NAME:
             return handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SET_EXTERNAL_PLUGIN:

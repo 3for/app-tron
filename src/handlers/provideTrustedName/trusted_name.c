@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include "app_mem_utils.h"
 #include "trusted_name.h"
 #include "utils.h"  // SET_BIT
 #include "read.h"
@@ -55,17 +56,19 @@ typedef enum {
     OWNER_DERIV_PATH = 0x74,
 } e_tlv_tag;
 
-static s_trusted_name_info g_trusted_name_entries[TRUSTED_NAME_MAX_ENTRIES] = {0};
-static uint8_t g_trusted_name_entry_count = 0;
+static s_trusted_name_info *g_trusted_name_list = NULL;
 char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 
 bool has_trusted_name(void) {
-    return g_trusted_name_entry_count > 0U;
+    return g_trusted_name_list != NULL;
 }
 
 void clear_trusted_names(void) {
-    memset(g_trusted_name_entries, 0, sizeof(g_trusted_name_entries));
-    g_trusted_name_entry_count = 0U;
+    while (g_trusted_name_list != NULL) {
+        s_trusted_name_info *next = g_trusted_name_list->next;
+        APP_MEM_FREE(g_trusted_name_list);
+        g_trusted_name_list = next;
+    }
     memset(g_trusted_name, 0, sizeof(g_trusted_name));
 }
 
@@ -106,35 +109,33 @@ static bool requires_ens_name_validation(const s_trusted_name_info *trusted_name
 }
 
 static bool register_trusted_name(const s_trusted_name_info *trusted_name) {
-    uint8_t target_index;
+    s_trusted_name_info *node;
 
     if (trusted_name == NULL) {
         return false;
     }
 
-    for (uint8_t i = 0; i < g_trusted_name_entry_count; i++) {
-        if ((g_trusted_name_entries[i].struct_version == trusted_name->struct_version) &&
-            (g_trusted_name_entries[i].chain_id == trusted_name->chain_id) &&
-            (g_trusted_name_entries[i].name_type == trusted_name->name_type) &&
-            (g_trusted_name_entries[i].name_source == trusted_name->name_source) &&
-            (memcmp(g_trusted_name_entries[i].addr, trusted_name->addr, ADDRESS_LENGTH) == 0)) {
-            g_trusted_name_entries[i] = *trusted_name;
-            g_trusted_name_entries[i].valid = true;
+    for (node = g_trusted_name_list; node != NULL; node = node->next) {
+        if ((node->struct_version == trusted_name->struct_version) &&
+            (node->chain_id == trusted_name->chain_id) &&
+            (node->name_type == trusted_name->name_type) &&
+            (node->name_source == trusted_name->name_source) &&
+            (memcmp(node->addr, trusted_name->addr, ADDRESS_LENGTH) == 0)) {
+            s_trusted_name_info *next = node->next;
+            *node = *trusted_name;
+            node->next = next;
             return true;
         }
     }
 
-    if (g_trusted_name_entry_count < TRUSTED_NAME_MAX_ENTRIES) {
-        target_index = g_trusted_name_entry_count++;
-    } else {
-        memmove(g_trusted_name_entries,
-                g_trusted_name_entries + 1,
-                sizeof(g_trusted_name_entries[0]) * (TRUSTED_NAME_MAX_ENTRIES - 1U));
-        target_index = TRUSTED_NAME_MAX_ENTRIES - 1U;
+    if ((node = APP_MEM_ALLOC(sizeof(*node))) == NULL) {
+        PRINTF("Error: could not allocate trusted name struct!\n");
+        return false;
     }
 
-    g_trusted_name_entries[target_index] = *trusted_name;
-    g_trusted_name_entries[target_index].valid = true;
+    *node = *trusted_name;
+    node->next = g_trusted_name_list;
+    g_trusted_name_list = node;
     return true;
 }
 
@@ -209,18 +210,15 @@ const char *get_trusted_name(uint8_t type_count,
                              const e_name_source *sources,
                              const uint64_t *chain_id,
                              const uint8_t *addr) {
-    for (int i = (int) g_trusted_name_entry_count - 1; i >= 0; i--) {
-        if (!g_trusted_name_entries[i].valid) {
-            continue;
-        }
-        if (matching_trusted_name(&g_trusted_name_entries[i],
+    for (s_trusted_name_info *node = g_trusted_name_list; node != NULL; node = node->next) {
+        if (matching_trusted_name(node,
                                   type_count,
                                   types,
                                   source_count,
                                   sources,
                                   chain_id,
                                   addr)) {
-            strlcpy(g_trusted_name, g_trusted_name_entries[i].name, sizeof(g_trusted_name));
+            strlcpy(g_trusted_name, node->name, sizeof(g_trusted_name));
             return g_trusted_name;
         }
     }

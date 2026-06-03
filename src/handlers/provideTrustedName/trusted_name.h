@@ -7,7 +7,6 @@
 #include "signature.h"
 
 #define TRUSTED_NAME_MAX_LENGTH 30
-#define TRUSTED_NAME_MAX_ENTRIES 8
 #define TRUSTED_NAME_OWNER_MAX_BIP32_PATH 10
 
 typedef enum {
@@ -37,8 +36,8 @@ typedef enum {
 
 typedef enum { TN_KEY_ID_DOMAIN_SVC = 0x07, TN_KEY_ID_CAL = 0x09 } e_tn_key_id;
 
-typedef struct {
-    bool valid;
+typedef struct s_trusted_name_info {
+    struct s_trusted_name_info *next;
     uint8_t struct_version;
     char name[TRUSTED_NAME_MAX_LENGTH + 1];
     uint8_t addr[ADDRESS_LENGTH];
