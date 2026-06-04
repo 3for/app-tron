@@ -23,7 +23,8 @@ static bool field_name_matches(const char *name,
            (memcmp(name, expected, expected_length) == 0);
 }
 
-static bool field_hash_validate_remaining_size(const void *field_ptr, uint16_t remaining_size) {
+static bool field_hash_validate_remaining_size(const s_struct_712_field *field_ptr,
+                                               uint16_t remaining_size) {
     e_type field_type;
     uint8_t type_size;
 
@@ -32,8 +33,8 @@ static bool field_hash_validate_remaining_size(const void *field_ptr, uint16_t r
         return false;
     }
 
-    field_type = struct_field_type(field_ptr);
-    type_size = get_struct_field_typesize(field_ptr);
+    field_type = field_ptr->type;
+    type_size = field_ptr->type_size;
     switch (field_type) {
         case TYPE_SOL_INT:
             if (remaining_size > type_size) {
@@ -109,13 +110,13 @@ void field_hash_deinit(void) {
  * @param[in,out] data_length the value length
  * @return the data pointer
  */
-static const uint8_t *field_hash_prepare(const void *const field_ptr,
+static const uint8_t *field_hash_prepare(const s_struct_712_field *field_ptr,
                                          const uint8_t *data,
                                          uint8_t *data_length) {
     e_type field_type;
     cx_err_t error = CX_INTERNAL_ERROR;
 
-    field_type = struct_field_type(field_ptr);
+    field_type = field_ptr->type;
     if ((data == NULL) || (data_length == NULL) || (*data_length < sizeof(uint16_t))) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return NULL;
@@ -145,16 +146,16 @@ end:
  * @param[in] data_length the value length
  * @return pointer to the encoded value
  */
-static const uint8_t *field_hash_finalize_static(const void *const field_ptr,
+static const uint8_t *field_hash_finalize_static(const s_struct_712_field *field_ptr,
                                                  const uint8_t *const data,
                                                  uint8_t data_length) {
     uint8_t *value = NULL;
     e_type field_type;
 
-    field_type = struct_field_type(field_ptr);
+    field_type = field_ptr->type;
     switch (field_type) {
         case TYPE_SOL_INT:
-            value = encode_int(data, data_length, get_struct_field_typesize(field_ptr));
+            value = encode_int(data, data_length, field_ptr->type_size);
             break;
         case TYPE_SOL_UINT:
             value = encode_uint(data, data_length);
@@ -242,17 +243,14 @@ static bool field_hash_feed_parent(e_type field_type, const uint8_t *const hash)
  * @param[in] data_length the value length
  * @return whether an error occurred or not
  */
-static bool field_hash_domain_special_fields(const void *const field_ptr,
+static bool field_hash_domain_special_fields(const s_struct_712_field *field_ptr,
                                              const uint8_t *const data,
                                              uint8_t data_length) {
     const char *key;
     uint8_t keylen;
 
-    key = get_struct_field_keyname(field_ptr, &keylen);
-    if (key == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-        return false;
-    }
+    key = field_ptr->key_name;
+    keylen = strlen(key);
     // copy contract address into context
     if (field_name_matches(key, keylen, "verifyingContract", sizeof("verifyingContract") - 1U)) {
         if (data_length != sizeof(tip712_context->contract_addr)) {
@@ -275,13 +273,13 @@ static bool field_hash_domain_special_fields(const void *const field_ptr,
  * @param[in] data_length the value length
  * @return whether an error occurred or not
  */
-static bool field_hash_finalize(const void *const field_ptr,
+static bool field_hash_finalize(const s_struct_712_field *field_ptr,
                                 const uint8_t *const data,
                                 uint8_t data_length) {
     const uint8_t *value = NULL;
     e_type field_type;
 
-    field_type = struct_field_type(field_ptr);
+    field_type = field_ptr->type;
     if (!IS_DYN(field_type)) {
         if ((value = field_hash_finalize_static(field_ptr, data, data_length)) == NULL) {
             return false;
@@ -316,7 +314,7 @@ static bool field_hash_finalize(const void *const field_ptr,
  * @return whether the data hashing was successful or not
  */
 bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
-    const void *field_ptr;
+    const s_struct_712_field *field_ptr;
     e_type field_type;
     bool first = fh->state == FHS_IDLE;
 
@@ -328,7 +326,7 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
-    field_type = struct_field_type(field_ptr);
+    field_type = field_ptr->type;
     // first packet for this frame
     if (first) {
         if (!ui_712_show_raw_key(field_ptr)) {

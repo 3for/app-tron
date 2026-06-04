@@ -17,36 +17,27 @@ typedef struct struct_dep_s {
 
 static bool encode_and_hash_field(const s_struct_712_field *field_ptr) {
     const char *name;
-    uint8_t length;
 
     if (!format_hash_field_type(field_ptr, (cx_hash_t *) &global_sha3)) {
         return false;
     }
     hash_byte(' ', (cx_hash_t *) &global_sha3);
 
-    name = get_struct_field_keyname(field_ptr, &length);
-    if (name == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-        return false;
-    }
-    hash_nbytes((uint8_t *) name, length, (cx_hash_t *) &global_sha3);
+    name = field_ptr->key_name;
+    hash_nbytes((uint8_t *) name, strlen(name), (cx_hash_t *) &global_sha3);
     return true;
 }
 
 static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
     const s_struct_712_field *field_ptr;
     const char *struct_name;
-    uint8_t struct_name_length;
 
-    struct_name = get_struct_name(struct_ptr, &struct_name_length);
-    if (struct_name == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-        return false;
-    }
-    hash_nbytes((uint8_t *) struct_name, struct_name_length, (cx_hash_t *) &global_sha3);
+    struct_name = struct_ptr->name;
+    hash_nbytes((uint8_t *) struct_name, strlen(struct_name), (cx_hash_t *) &global_sha3);
     hash_byte('(', (cx_hash_t *) &global_sha3);
 
-    for (field_ptr = struct_ptr->fields; field_ptr != NULL; field_ptr = field_ptr->next) {
+    for (field_ptr = struct_ptr->fields; field_ptr != NULL;
+         field_ptr = (s_struct_712_field *) ((flist_node_t *) field_ptr)->next) {
         if (field_ptr != struct_ptr->fields) {
             hash_byte(',', (cx_hash_t *) &global_sha3);
         }
@@ -99,22 +90,22 @@ static void dep_clear(s_struct_dep **deps) {
 static bool get_struct_dependencies(s_struct_dep **deps, const s_struct_712 *struct_ptr) {
     const s_struct_712_field *field_ptr;
     const char *arg_structname;
-    uint8_t arg_structname_length;
     const s_struct_712 *arg_struct_ptr;
 
-    for (field_ptr = struct_ptr->fields; field_ptr != NULL; field_ptr = field_ptr->next) {
+    for (field_ptr = struct_ptr->fields; field_ptr != NULL;
+         field_ptr = (s_struct_712_field *) ((flist_node_t *) field_ptr)->next) {
         if (field_ptr->type != TYPE_CUSTOM) {
             continue;
         }
-        arg_structname = get_struct_field_typename(field_ptr, &arg_structname_length);
+        arg_structname = get_struct_field_typename(field_ptr);
         if (arg_structname == NULL) {
             apdu_response_code = APDU_RESPONSE_INVALID_DATA;
             return false;
         }
-        arg_struct_ptr = get_structn(arg_structname, arg_structname_length);
+        arg_struct_ptr = get_structn(arg_structname, strlen(arg_structname));
         if (arg_struct_ptr == NULL) {
             PRINTF("Error: could not find TIP-712 dependency struct \"");
-            for (int i = 0; i < arg_structname_length; ++i) {
+            for (int i = 0; i < (int) strlen(arg_structname); ++i) {
                 PRINTF("%c", arg_structname[i]);
             }
             PRINTF("\" during type_hash\n");

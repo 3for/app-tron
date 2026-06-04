@@ -18,6 +18,43 @@
 #include "trusted_name.h"
 #include "common_utils.h"
 
+// --- Local accessors over the list-based typed-data model --------------------
+// Mirror the semantics of the typed-data accessors that used to live in
+// typed_data.c, kept local so the rest of the file keeps operating on opaque
+// `const void *` field/struct pointers.
+
+static e_type struct_field_type(const void *ptr) {
+    return ((const s_struct_712_field *) ptr)->type;
+}
+
+static uint8_t get_struct_field_typesize(const void *ptr) {
+    return ((const s_struct_712_field *) ptr)->type_size;
+}
+
+static const char *get_struct_field_keyname(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if ((field_ptr == NULL) || (field_ptr->key_name == NULL)) {
+        return NULL;
+    }
+    if (length != NULL) {
+        *length = (uint8_t) strlen(field_ptr->key_name);
+    }
+    return field_ptr->key_name;
+}
+
+static const char *get_struct_name(const void *ptr, uint8_t *length) {
+    const s_struct_712 *struct_ptr = ptr;
+
+    if ((struct_ptr == NULL) || (struct_ptr->name == NULL)) {
+        return NULL;
+    }
+    if (length != NULL) {
+        *length = (uint8_t) strlen(struct_ptr->name);
+    }
+    return struct_ptr->name;
+}
+
 #define AMOUNT_JOIN_FLAG_TOKEN (1 << 0)
 #define AMOUNT_JOIN_FLAG_VALUE (1 << 1)
 

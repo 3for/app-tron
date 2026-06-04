@@ -55,6 +55,9 @@ ENABLE_NBGL_QRCODE = 1
 ENABLE_DYNAMIC_ALLOC = 1
 ENABLE_PKI_LIBRARY = 1
 ENABLE_TLV_LIBRARY = 1
+# Linked-list library, used by the list-based TIP-712 typed-data model
+ENABLE_LISTS_LIBRARY = 1
+DEFINES += HAVE_SDK_LL_LIB
 
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
 DEBUG ?= 0

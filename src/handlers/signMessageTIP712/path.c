@@ -15,6 +15,91 @@ static s_path *path_struct = NULL;
 static s_path *path_backup = NULL;
 static s_hash_ctx *g_hash_ctxs = NULL;
 
+// --- Local accessors over the list-based typed-data model --------------------
+// These mirror the semantics of the typed-data accessors that used to live in
+// typed_data.c. They are kept local to path.c so the rest of the file keeps
+// operating on opaque `const void *` field/struct pointers, limiting the churn
+// of the migration to the SDK linked-list (flist) based representation.
+
+static const void *get_struct_fields_array(const void *ptr, uint8_t *length) {
+    const s_struct_712 *struct_ptr = ptr;
+    const s_struct_712_field *field_ptr = (struct_ptr != NULL) ? struct_ptr->fields : NULL;
+
+    if (length != NULL) {
+        uint8_t count = 0;
+        for (const s_struct_712_field *f = field_ptr; f != NULL;
+             f = (s_struct_712_field *) ((flist_node_t *) f)->next) {
+            count += 1;
+        }
+        *length = count;
+    }
+    return field_ptr;
+}
+
+static const void *get_next_struct_field(const void *ptr) {
+    if (ptr == NULL) {
+        return NULL;
+    }
+    return (s_struct_712_field *) ((flist_node_t *) ptr)->next;
+}
+
+static e_type struct_field_type(const void *ptr) {
+    return ((const s_struct_712_field *) ptr)->type;
+}
+
+static bool struct_field_is_array(const void *ptr) {
+    return ((const s_struct_712_field *) ptr)->type_is_array;
+}
+
+static const void *get_struct_field_array_lvls_array(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if (length != NULL) {
+        *length = field_ptr->array_level_count;
+    }
+    return field_ptr->array_levels;
+}
+
+static const void *get_next_struct_field_array_lvl(const void *ptr) {
+    if (ptr == NULL) {
+        return NULL;
+    }
+    return ((const s_struct_712_field_array_level *) ptr) + 1;
+}
+
+static e_array_type struct_field_array_depth(const void *ptr, uint8_t *array_size) {
+    const s_struct_712_field_array_level *lvl = ptr;
+
+    if (array_size != NULL) {
+        *array_size = lvl->size;
+    }
+    return lvl->type;
+}
+
+static const char *get_struct_field_custom_typename(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if (field_ptr->type_name == NULL) {
+        return NULL;
+    }
+    if (length != NULL) {
+        *length = (uint8_t) strlen(field_ptr->type_name);
+    }
+    return field_ptr->type_name;
+}
+
+static const char *get_struct_field_keyname(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if (field_ptr->key_name == NULL) {
+        return NULL;
+    }
+    if (length != NULL) {
+        *length = (uint8_t) strlen(field_ptr->key_name);
+    }
+    return field_ptr->key_name;
+}
+
 /**
  * Get the field pointer to by the first N depths of the given path
  *
@@ -55,7 +140,11 @@ static const void *get_nth_field_from(const s_path *path, uint8_t *fields_count_
             field_ptr = get_next_struct_field(field_ptr);
         }
         if (struct_field_type(field_ptr) == TYPE_CUSTOM) {
-            typename = get_struct_field_typename(field_ptr, &length);
+            typename = get_struct_field_typename(field_ptr);
+            if (typename == NULL) {
+                return NULL;
+            }
+            length = (uint8_t) strlen(typename);
             if ((struct_ptr = get_structn(typename, length)) == NULL) {
                 return NULL;
             }
@@ -110,8 +199,9 @@ const void *path_get_nth_field_to_last(uint8_t n) {
 
     field_ptr = get_nth_field(NULL, path_struct->depth_count - n);
     if (field_ptr != NULL) {
-        typename = get_struct_field_typename(field_ptr, &typename_len);
+        typename = get_struct_field_typename(field_ptr);
         if (typename != NULL) {
+            typename_len = (uint8_t) strlen(typename);
             struct_ptr = get_structn(typename, typename_len);
         }
     }
@@ -395,10 +485,11 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
                 break;
             }
         }
-        typename = get_struct_field_typename(field_ptr, &typename_len);
+        typename = get_struct_field_typename(field_ptr);
         if (typename == NULL) {
             return false;
         }
+        typename_len = (uint8_t) strlen(typename);
         if ((struct_ptr = get_structn(typename, typename_len)) == NULL) {
             return false;
         }

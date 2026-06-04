@@ -23,6 +23,36 @@
 
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
 
+// --- Local accessors over the list-based typed-data model --------------------
+// Mirror the semantics of the typed-data accessors that used to live in
+// typed_data.c, kept local so the rest of the file keeps operating on opaque
+// `const void *` field pointers.
+
+static const char *get_struct_field_keyname(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if ((field_ptr == NULL) || (field_ptr->key_name == NULL)) {
+        return NULL;
+    }
+    if (length != NULL) {
+        *length = (uint8_t) strlen(field_ptr->key_name);
+    }
+    return field_ptr->key_name;
+}
+
+static bool struct_field_is_array(const void *ptr) {
+    return ((const s_struct_712_field *) ptr)->type_is_array;
+}
+
+static const void *get_struct_field_array_lvls_array(const void *ptr, uint8_t *length) {
+    const s_struct_712_field *field_ptr = ptr;
+
+    if (length != NULL) {
+        *length = field_ptr->array_level_count;
+    }
+    return field_ptr->array_levels;
+}
+
 /**
  * Reconstruct the field path and hash it for the signature and the CRC
  *
@@ -154,11 +184,12 @@ static bool check_typename(const char *expected) {
     size_t expected_len;
     const char *typename;
 
-    typename = get_struct_field_typename(path_get_field(), &typename_len);
+    typename = get_struct_field_typename(path_get_field());
     if ((typename == NULL) || (expected == NULL)) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
+    typename_len = (uint8_t) strlen(typename);
     expected_len = strlen(expected);
     if (((size_t) typename_len != expected_len) ||
         (memcmp(typename, expected, expected_len) != 0)) {
