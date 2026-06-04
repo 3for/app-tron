@@ -61,8 +61,12 @@ caller_app_t *caller_app = NULL;
 extern void roll_challenge(void);
 
 void reset_app_context() {
-    cleanupSignPersonalMessageFullDisplay();
+    message_cleanup();
     cleanupSignExternalPlugin();
+    // Reset the legacy EIP-191 streamed-display state (defined in
+    // sign_message_entry.c).
+    processed_size_191 = 0;
+    explicit_bzero(&states191, sizeof(states191));
     appState = APP_STATE_IDLE;
     G_called_from_swap = false;
     G_swap_response_ready = false;

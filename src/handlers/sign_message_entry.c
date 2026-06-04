@@ -6,6 +6,11 @@
 
 #include "ui_globals.h"
 
+// Legacy EIP-191 streamed-display state. Defined here (its only consumer) rather
+// than in the full-display handler. Reset centrally in reset_app_context().
+states191_t states191;
+uint8_t processed_size_191;
+
 /**
  * Get unprocessed data from last received APDU
  *
