@@ -63,7 +63,7 @@ extern void roll_challenge(void);
 void reset_app_context() {
     message_cleanup();
     cleanupSignExternalPlugin();
-    // Reset the legacy EIP-191 streamed-display state (defined in
+    // Reset the legacy TIP-191 streamed-display state (defined in
     // sign_message_entry.c).
     processed_size_191 = 0;
     explicit_bzero(&states191, sizeof(states191));

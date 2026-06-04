@@ -50,7 +50,7 @@ static signMsgCtx_t *signMsgCtx = NULL;
 extern void reset_app_context();
 
 /**
- * Cleanup the EIP-191 signing context
+ * Cleanup the TIP-191 signing context
  *
  * Frees the message buffers, the signing context and the dedicated hash
  * context. Called from reset_app_context().
@@ -65,7 +65,7 @@ void message_cleanup(void) {
 }
 
 /**
- * Handle the data specific to the first APDU of an EIP-191 signature
+ * Handle the data specific to the first APDU of an TIP-191 signature
  *
  * @param[in,out] work_buffer the APDU payload
  * @param[in,out] data_length the payload size
@@ -251,7 +251,7 @@ static int final_process(void) {
 }
 
 /**
- * EIP-191 (full display) APDU handler
+ * TIP-191 (full display) APDU handler
  *
  * @param[in] p1 instruction parameter 1
  * @param[in] p2 instruction parameter 2

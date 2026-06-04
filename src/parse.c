@@ -743,11 +743,11 @@ static bool account_permission_update_contract(txContent_t *content, pb_istream_
 typedef struct {
     const uint8_t *buf;
     size_t size;
-} buffer_t;
+} pb_buffer_t;
 
 bool pb_decode_contract_parameter(pb_istream_t *stream, const pb_field_t *field, void **arg) {
     PB_UNUSED(field);
-    buffer_t *buffer = *arg;
+    pb_buffer_t *buffer = *arg;
 
     buffer->buf = stream->state;
     buffer->size = stream->bytes_left;
@@ -778,7 +778,7 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
      * and deserializing the nested contract inside the message requires too much
      * stack for Nano S
      */
-    buffer_t contract_buffer;
+    pb_buffer_t contract_buffer;
     transaction.contract->parameter.value.funcs.decode = pb_decode_contract_parameter;
     transaction.contract->parameter.value.arg = &contract_buffer;
 

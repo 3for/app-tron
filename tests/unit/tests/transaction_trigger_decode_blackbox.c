@@ -14,7 +14,7 @@
 typedef struct {
     uint8_t bytes[1024];
     size_t len;
-} test_buffer_t;
+} test_pb_buffer_t;
 
 typedef struct {
     uint8_t owner[32];
@@ -33,11 +33,11 @@ typedef struct {
 } decode_fixture_t;
 
 typedef struct {
-    test_buffer_t trigger;
-    test_buffer_t any;
-    test_buffer_t contract;
-    test_buffer_t raw;
-    test_buffer_t tx;
+    test_pb_buffer_t trigger;
+    test_pb_buffer_t any;
+    test_pb_buffer_t contract;
+    test_pb_buffer_t raw;
+    test_pb_buffer_t tx;
 } test_message_t;
 
 typedef struct {
@@ -54,12 +54,12 @@ static size_t test_min_size(size_t a, size_t b) {
     return (a < b) ? a : b;
 }
 
-static void test_buffer_append_byte(test_buffer_t *buffer, uint8_t byte) {
+static void test_buffer_append_byte(test_pb_buffer_t *buffer, uint8_t byte) {
     assert_true(buffer->len < sizeof(buffer->bytes));
     buffer->bytes[buffer->len++] = byte;
 }
 
-static void test_buffer_append_varint(test_buffer_t *buffer, uint64_t value) {
+static void test_buffer_append_varint(test_pb_buffer_t *buffer, uint64_t value) {
     do {
         uint8_t byte = (uint8_t) (value & 0x7FU);
         value >>= 7U;
@@ -70,16 +70,16 @@ static void test_buffer_append_varint(test_buffer_t *buffer, uint64_t value) {
     } while (value != 0U);
 }
 
-static void test_buffer_append_key(test_buffer_t *buffer, uint32_t tag, pb_wire_type_t wire_type) {
+static void test_buffer_append_key(test_pb_buffer_t *buffer, uint32_t tag, pb_wire_type_t wire_type) {
     test_buffer_append_varint(buffer, ((uint64_t) tag << 3U) | (uint64_t) wire_type);
 }
 
-static void test_buffer_append_varint_field(test_buffer_t *buffer, uint32_t tag, uint64_t value) {
+static void test_buffer_append_varint_field(test_pb_buffer_t *buffer, uint32_t tag, uint64_t value) {
     test_buffer_append_key(buffer, tag, PB_WT_VARINT);
     test_buffer_append_varint(buffer, value);
 }
 
-static void test_buffer_append_fixed32_field(test_buffer_t *buffer,
+static void test_buffer_append_fixed32_field(test_pb_buffer_t *buffer,
                                              uint32_t tag,
                                              const uint8_t value[4]) {
     test_buffer_append_key(buffer, tag, PB_WT_32BIT);
@@ -88,7 +88,7 @@ static void test_buffer_append_fixed32_field(test_buffer_t *buffer,
     buffer->len += 4U;
 }
 
-static void test_buffer_append_fixed64_field(test_buffer_t *buffer,
+static void test_buffer_append_fixed64_field(test_pb_buffer_t *buffer,
                                              uint32_t tag,
                                              const uint8_t value[8]) {
     test_buffer_append_key(buffer, tag, PB_WT_64BIT);
@@ -97,7 +97,7 @@ static void test_buffer_append_fixed64_field(test_buffer_t *buffer,
     buffer->len += 8U;
 }
 
-static void test_buffer_append_bytes_field(test_buffer_t *buffer,
+static void test_buffer_append_bytes_field(test_pb_buffer_t *buffer,
                                            uint32_t tag,
                                            const uint8_t *value,
                                            size_t value_len) {
@@ -110,9 +110,9 @@ static void test_buffer_append_bytes_field(test_buffer_t *buffer,
     }
 }
 
-static void test_buffer_append_message_field(test_buffer_t *buffer,
+static void test_buffer_append_message_field(test_pb_buffer_t *buffer,
                                              uint32_t tag,
-                                             const test_buffer_t *submessage) {
+                                             const test_pb_buffer_t *submessage) {
     test_buffer_append_bytes_field(buffer, tag, submessage->bytes, submessage->len);
 }
 
@@ -145,8 +145,8 @@ static void init_decode_fixture(decode_fixture_t *fixture,
     fill_sequence(fixture->custom_data, custom_data_len, 0x80U);
 }
 
-static test_buffer_t build_trigger_message(const decode_fixture_t *fixture) {
-    test_buffer_t trigger = {0};
+static test_pb_buffer_t build_trigger_message(const decode_fixture_t *fixture) {
+    test_pb_buffer_t trigger = {0};
 
     test_buffer_append_bytes_field(&trigger,
                                    protocol_TriggerSmartContract_owner_address_tag,
@@ -173,11 +173,11 @@ static test_buffer_t build_trigger_message(const decode_fixture_t *fixture) {
     return trigger;
 }
 
-static test_buffer_t build_any_message_with_type_url(const test_buffer_t *trigger,
+static test_pb_buffer_t build_any_message_with_type_url(const test_pb_buffer_t *trigger,
                                                      const uint8_t *type_url,
                                                      size_t type_url_len,
                                                      bool include_type_url) {
-    test_buffer_t any = {0};
+    test_pb_buffer_t any = {0};
 
     if (include_type_url) {
         test_buffer_append_bytes_field(&any,
@@ -190,18 +190,18 @@ static test_buffer_t build_any_message_with_type_url(const test_buffer_t *trigge
     return any;
 }
 
-static test_buffer_t build_any_message(const test_buffer_t *trigger) {
+static test_pb_buffer_t build_any_message(const test_pb_buffer_t *trigger) {
     return build_any_message_with_type_url(trigger,
                                            test_trigger_type_url,
                                            sizeof(test_trigger_type_url) - 1U,
                                            true);
 }
 
-static test_buffer_t build_contract_message(const test_buffer_t *any,
+static test_pb_buffer_t build_contract_message(const test_pb_buffer_t *any,
                                             protocol_Transaction_Contract_ContractType contract_type,
                                             uint32_t permission_id,
                                             bool parameter_first) {
-    test_buffer_t contract = {0};
+    test_pb_buffer_t contract = {0};
 
     if (parameter_first) {
         test_buffer_append_message_field(&contract, protocol_Transaction_Contract_parameter_tag, any);
@@ -220,8 +220,8 @@ static test_buffer_t build_contract_message(const test_buffer_t *any,
     return contract;
 }
 
-static test_buffer_t build_raw_message(const test_buffer_t *contract, const decode_fixture_t *fixture) {
-    test_buffer_t raw = {0};
+static test_pb_buffer_t build_raw_message(const test_pb_buffer_t *contract, const decode_fixture_t *fixture) {
+    test_pb_buffer_t raw = {0};
 
     test_buffer_append_bytes_field(&raw,
                                    protocol_Transaction_raw_custom_data_tag,
@@ -233,8 +233,8 @@ static test_buffer_t build_raw_message(const test_buffer_t *contract, const deco
     return raw;
 }
 
-static test_buffer_t build_transaction_message(const test_buffer_t *raw) {
-    test_buffer_t tx = {0};
+static test_pb_buffer_t build_transaction_message(const test_pb_buffer_t *raw) {
+    test_pb_buffer_t tx = {0};
 
     test_buffer_append_message_field(&tx, protocol_Transaction_raw_data_tag, raw);
 
@@ -725,7 +725,7 @@ static void test_keeps_only_first_contract(void **state) {
     decode_fixture_t fixture2;
     test_message_t message1;
     test_message_t message2;
-    test_buffer_t raw = {0};
+    test_pb_buffer_t raw = {0};
     tron_stream_decoder_t decoder;
     tron_decode_result_t result;
 
@@ -801,8 +801,8 @@ static void test_rejects_duplicate_contract_parameter(void **state) {
 
     decode_fixture_t fixture1;
     decode_fixture_t fixture2;
-    test_buffer_t contract = {0};
-    test_buffer_t raw = {0};
+    test_pb_buffer_t contract = {0};
+    test_pb_buffer_t raw = {0};
     test_message_t message1;
     test_message_t message2;
 
@@ -838,9 +838,9 @@ static void test_rejects_duplicate_any_value(void **state) {
 
     decode_fixture_t fixture1;
     decode_fixture_t fixture2;
-    test_buffer_t any = {0};
-    test_buffer_t contract;
-    test_buffer_t raw;
+    test_pb_buffer_t any = {0};
+    test_pb_buffer_t contract;
+    test_pb_buffer_t raw;
     test_message_t message1;
     test_message_t message2;
 
@@ -911,9 +911,9 @@ static void test_rejects_duplicate_any_type_url(void **state) {
     (void) state;
 
     decode_fixture_t fixture;
-    test_buffer_t any = {0};
-    test_buffer_t contract;
-    test_buffer_t raw;
+    test_pb_buffer_t any = {0};
+    test_pb_buffer_t contract;
+    test_pb_buffer_t raw;
     test_message_t message;
 
     init_decode_fixture(&fixture, 21U, 21U, 4U, 1U);
@@ -1020,8 +1020,8 @@ static void test_rejects_duplicate_contract_numeric_fields(void **state) {
 
     decode_fixture_t fixture;
     test_message_t message;
-    test_buffer_t contract = {0};
-    test_buffer_t raw = {0};
+    test_pb_buffer_t contract = {0};
+    test_pb_buffer_t raw = {0};
 
     init_decode_fixture(&fixture, 21U, 21U, 4U, 1U);
     build_standard_message(&fixture, &message);
@@ -1057,7 +1057,7 @@ static void test_rejects_duplicate_raw_fields(void **state) {
 
     decode_fixture_t fixture;
     test_message_t message;
-    test_buffer_t raw = {0};
+    test_pb_buffer_t raw = {0};
 
     init_decode_fixture(&fixture, 21U, 21U, 4U, 2U);
     build_standard_message(&fixture, &message);
@@ -1080,7 +1080,7 @@ static void test_rejects_duplicate_raw_fields(void **state) {
 static void test_rejects_length_exceeding_remaining_bytes(void **state) {
     (void) state;
 
-    test_buffer_t raw = {0};
+    test_pb_buffer_t raw = {0};
 
     test_buffer_append_key(&raw, protocol_Transaction_raw_custom_data_tag, PB_WT_STRING);
     test_buffer_append_varint(&raw, 3U);
