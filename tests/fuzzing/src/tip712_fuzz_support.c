@@ -28,12 +28,12 @@ cx_sha3_t global_sha3;
 strings_t strings;
 internal_storage_t g_fuzz_settings;
 const internal_storage_t N_storage_real = 0;
-char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
 const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
 bool g_fuzz_signature_valid = true;
 
 static extraInfo_t fuzz_assets[MAX_ASSETS];
 static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
+static s_trusted_name g_fuzz_trusted_name;
 
 static void seed_default_assets(void) {
     static const uint8_t token_addrs[][ADDRESS_LENGTH] = {
@@ -113,7 +113,7 @@ void reset_app_context(void) {
     memset(&txContext, 0, sizeof(txContext));
     memset(&dataContext, 0, sizeof(dataContext));
     memset(&strings, 0, sizeof(strings));
-    memset(g_trusted_name, 0, sizeof(g_trusted_name));
+    memset(&g_fuzz_trusted_name, 0, sizeof(g_fuzz_trusted_name));
     apdu_response_code = APDU_RESPONSE_OK;
     appState = APP_STATE_IDLE;
     pluginType = PLUGIN_TYPE_NONE;
@@ -217,37 +217,37 @@ int check_signature_with_pubkey(const char *tag,
     return g_fuzz_signature_valid ? CX_OK : CX_INTERNAL_ERROR;
 }
 
-const char *get_trusted_name(uint8_t type_count,
-                             const e_name_type *types,
-                             uint8_t source_count,
-                             const e_name_source *sources,
-                             const uint64_t *chain_id,
-                             const uint8_t *addr) {
+const s_trusted_name *get_trusted_name(uint8_t type_count,
+                                       const e_name_type *types,
+                                       uint8_t source_count,
+                                       const e_name_source *sources,
+                                       const uint64_t *chain_id,
+                                       const uint8_t *addr) {
     if ((type_count == 0U) || (types == NULL) || (source_count == 0U) || (sources == NULL) ||
         (chain_id == NULL) || (addr == NULL) || allzeroes(addr, ADDRESS_LENGTH)) {
         return NULL;
     }
 
-    if (sizeof(g_trusted_name) < sizeof("TN-0000-00")) {
+    if (sizeof(g_fuzz_trusted_name.name) < sizeof("TN-0000-00")) {
         return NULL;
     }
 
-    g_trusted_name[0] = 'T';
-    g_trusted_name[1] = 'N';
-    g_trusted_name[2] = '-';
-    g_trusted_name[3] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U] >> 4);
-    g_trusted_name[4] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U]);
-    g_trusted_name[5] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U] >> 4);
-    g_trusted_name[6] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U]);
-    g_trusted_name[7] = '-';
-    g_trusted_name[8] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U] >> 4);
-    g_trusted_name[9] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U]);
-    g_trusted_name[10] = '\0';
-    return g_trusted_name;
+    g_fuzz_trusted_name.name[0] = 'T';
+    g_fuzz_trusted_name.name[1] = 'N';
+    g_fuzz_trusted_name.name[2] = '-';
+    g_fuzz_trusted_name.name[3] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U] >> 4);
+    g_fuzz_trusted_name.name[4] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 3U]);
+    g_fuzz_trusted_name.name[5] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U] >> 4);
+    g_fuzz_trusted_name.name[6] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 2U]);
+    g_fuzz_trusted_name.name[7] = '-';
+    g_fuzz_trusted_name.name[8] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U] >> 4);
+    g_fuzz_trusted_name.name[9] = fuzz_support_hex_digit(addr[ADDRESS_LENGTH - 1U]);
+    g_fuzz_trusted_name.name[10] = '\0';
+    return &g_fuzz_trusted_name;
 }
 
 bool has_trusted_name(void) {
-    return g_trusted_name[0] != '\0';
+    return g_fuzz_trusted_name.name[0] != '\0';
 }
 
 int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {

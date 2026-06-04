@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "read.h"
 #include "bip32_path_parser.h"
+#include "../../../src/handlers/provideTrustedName/trusted_name.h"
 
 #ifndef explicit_bzero
 #define explicit_bzero(ptr, len) memset((ptr), 0, (len))
@@ -66,6 +67,10 @@ uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
     return out;
 }
 
+off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) {
+    return read_bip32_path_words(buffer, length, &path->length, path->indices, MAX_BIP32_PATH);
+}
+
 int check_signature_with_pubkey(const char *tag,
                                 uint8_t *buffer,
                                 const uint8_t bufLen,
@@ -104,8 +109,15 @@ int initPublicKeyContext(bip32_path_t *bip32_path,
 }
 
 #define static
+#define inline
 #include "../../../src/handlers/provideTrustedName/trusted_name.c"
+#undef inline
 #undef static
+
+static void mark_received_tag(s_trusted_name_ctx *ctx, TLV_tag_t tag) {
+    ctx->received_tags.tag_to_flag_function = parse_tlv_trusted_name_tag_to_flag;
+    ctx->received_tags.flags |= parse_tlv_trusted_name_tag_to_flag(tag);
+}
 
 static void init_base_ctx(s_trusted_name_ctx *ctx) {
     memset(ctx, 0, sizeof(*ctx));
@@ -114,19 +126,26 @@ static void init_base_ctx(s_trusted_name_ctx *ctx) {
     memcpy(ctx->trusted_name.addr, mock_owner_address, ADDRESS_LENGTH);
     ctx->trusted_name.chain_id = 0x44AA55U;
     ctx->key_id = TN_KEY_ID_DOMAIN_SVC;
-    ctx->input_sig_size = 1U;
-    ctx->input_sig[0] = 0x01U;
-    ctx->rcv_flags = SET_BIT(STRUCT_TYPE_RCV_BIT) | SET_BIT(STRUCT_VERSION_RCV_BIT) |
-                     SET_BIT(SIGNER_KEY_ID_RCV_BIT) | SET_BIT(SIGNER_ALGO_RCV_BIT) |
-                     SET_BIT(SIGNATURE_RCV_BIT) | SET_BIT(TRUSTED_NAME_RCV_BIT) |
-                     SET_BIT(ADDRESS_RCV_BIT) | SET_BIT(CHAIN_ID_RCV_BIT) |
-                     SET_BIT(TRUSTED_NAME_TYPE_RCV_BIT) | SET_BIT(TRUSTED_NAME_SOURCE_RCV_BIT);
+    static const uint8_t mock_signature[] = {0x01U};
+
+    ctx->sig_size = sizeof(mock_signature);
+    ctx->sig = mock_signature;
+    mark_received_tag(ctx, TAG_STRUCTURE_TYPE);
+    mark_received_tag(ctx, TAG_STRUCTURE_VERSION);
+    mark_received_tag(ctx, TAG_SIGNER_KEY_ID);
+    mark_received_tag(ctx, TAG_SIGNER_ALGO);
+    mark_received_tag(ctx, TAG_DER_SIGNATURE);
+    mark_received_tag(ctx, TAG_TRUSTED_NAME);
+    mark_received_tag(ctx, TAG_ADDRESS);
+    mark_received_tag(ctx, TAG_CHAIN_ID);
+    mark_received_tag(ctx, TAG_TRUSTED_NAME_TYPE);
+    mark_received_tag(ctx, TAG_TRUSTED_NAME_SOURCE);
 }
 
 static void test_validate_name_rules(void **state) {
     (void) state;
 
-    s_trusted_name_info info = {0};
+    s_trusted_name info = {0};
 
     info.struct_version = 1U;
     strcpy(info.name, "ledger.eth");
@@ -160,9 +179,23 @@ static void test_mab_missing_owner_metadata_is_rejected(void **state) {
     ctx.trusted_name.name_type = TN_TYPE_ACCOUNT;
     ctx.trusted_name.name_source = TN_SOURCE_MAB;
     strcpy(ctx.trusted_name.name, "MyLedger");
-    ctx.rcv_flags |= SET_BIT(CHALLENGE_RCV_BIT);
+    mark_received_tag(&ctx, TAG_CHALLENGE);
 
     assert_false(verify_trusted_name_struct(&ctx));
+}
+
+static void test_duplicate_tlv_tag_is_rejected(void **state) {
+    static const uint8_t payload[] = {
+        0x01U, 0x01U, 0x03U,
+        0x01U, 0x01U, 0x03U,
+    };
+    s_trusted_name_ctx ctx = {0};
+    const buffer_t buf = {.ptr = (uint8_t *) payload, .size = sizeof(payload), .offset = 0U};
+
+    (void) state;
+    cx_sha256_init(&ctx.hash_ctx);
+
+    assert_false(handle_trusted_name_tlv_payload(&buf, &ctx));
 }
 
 static void test_mab_owner_metadata_is_accepted(void **state) {
@@ -174,16 +207,17 @@ static void test_mab_owner_metadata_is_accepted(void **state) {
     ctx.trusted_name.name_source = TN_SOURCE_MAB;
     strcpy(ctx.trusted_name.name, "MyLedger");
     memcpy(ctx.owner, mock_owner_address, sizeof(ctx.owner));
-    ctx.owner_deriv_path_length = 5U;
-    ctx.owner_deriv_path[0] = 0x8000002CU;
-    ctx.owner_deriv_path[1] = 0x800000C3U;
-    ctx.owner_deriv_path[2] = 0x80000000U;
-    ctx.owner_deriv_path[3] = 0U;
-    ctx.owner_deriv_path[4] = 0U;
-    ctx.rcv_flags |= SET_BIT(CHALLENGE_RCV_BIT) | SET_BIT(OWNER_RCV_BIT) |
-                     SET_BIT(OWNER_DERIV_PATH_RCV_BIT);
+    ctx.owner_deriv_path.length = 5U;
+    ctx.owner_deriv_path.indices[0] = 0x8000002CU;
+    ctx.owner_deriv_path.indices[1] = 0x800000C3U;
+    ctx.owner_deriv_path.indices[2] = 0x80000000U;
+    ctx.owner_deriv_path.indices[3] = 0U;
+    ctx.owner_deriv_path.indices[4] = 0U;
+    mark_received_tag(&ctx, TAG_CHALLENGE);
+    mark_received_tag(&ctx, TAG_OWNER);
+    mark_received_tag(&ctx, TAG_OWNER_DERIV_PATH);
 
-    clear_trusted_names();
+    trusted_name_cleanup();
     assert_true(verify_trusted_name_struct(&ctx));
     assert_true(has_trusted_name());
 }
@@ -196,16 +230,17 @@ static void test_lookup_is_non_destructive(void **state) {
     const e_name_source ens_source = TN_SOURCE_ENS;
     const e_name_source cal_source = TN_SOURCE_CAL;
     const uint64_t chain_id = 0x44AA55U;
+    const s_trusted_name *trusted_name;
 
     (void) state;
 
-    clear_trusted_names();
+    trusted_name_cleanup();
 
     init_base_ctx(&ens_ctx);
     ens_ctx.trusted_name.name_type = TN_TYPE_ACCOUNT;
     ens_ctx.trusted_name.name_source = TN_SOURCE_ENS;
     strcpy(ens_ctx.trusted_name.name, "ledger.eth");
-    ens_ctx.rcv_flags |= SET_BIT(CHALLENGE_RCV_BIT);
+    mark_received_tag(&ens_ctx, TAG_CHALLENGE);
     assert_true(verify_trusted_name_struct(&ens_ctx));
 
     init_base_ctx(&token_ctx);
@@ -214,30 +249,34 @@ static void test_lookup_is_non_destructive(void **state) {
     strcpy(token_ctx.trusted_name.name, "USDT");
     assert_true(verify_trusted_name_struct(&token_ctx));
 
-    assert_non_null(get_trusted_name(1,
-                                     &account_type,
-                                     1,
-                                     &ens_source,
-                                     &chain_id,
-                                     mock_owner_address));
-    assert_string_equal(g_trusted_name, "ledger.eth");
+    trusted_name = get_trusted_name(1,
+                                    &account_type,
+                                    1,
+                                    &ens_source,
+                                    &chain_id,
+                                    mock_owner_address);
+    assert_non_null(trusted_name);
+    assert_string_equal(trusted_name->name, "ledger.eth");
 
-    assert_non_null(get_trusted_name(1,
-                                     &account_type,
-                                     1,
-                                     &ens_source,
-                                     &chain_id,
-                                     mock_owner_address));
-    assert_string_equal(g_trusted_name, "ledger.eth");
+    trusted_name = get_trusted_name(1,
+                                    &account_type,
+                                    1,
+                                    &ens_source,
+                                    &chain_id,
+                                    mock_owner_address);
+    assert_non_null(trusted_name);
+    assert_string_equal(trusted_name->name, "ledger.eth");
 
-    assert_non_null(get_trusted_name(1, &token_type, 1, &cal_source, &chain_id, mock_owner_address));
-    assert_string_equal(g_trusted_name, "USDT");
+    trusted_name = get_trusted_name(1, &token_type, 1, &cal_source, &chain_id, mock_owner_address);
+    assert_non_null(trusted_name);
+    assert_string_equal(trusted_name->name, "USDT");
 }
 
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_validate_name_rules),
         cmocka_unit_test(test_mab_missing_owner_metadata_is_rejected),
+        cmocka_unit_test(test_duplicate_tlv_tag_is_rejected),
         cmocka_unit_test(test_mab_owner_metadata_is_accepted),
         cmocka_unit_test(test_lookup_is_non_destructive),
     };

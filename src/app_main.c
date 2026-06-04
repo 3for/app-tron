@@ -71,7 +71,7 @@ void reset_app_context() {
     G_called_from_swap = false;
     G_swap_response_ready = false;
     pluginType = PLUGIN_TYPE_NONE;
-    clear_trusted_names();
+    trusted_name_cleanup();
     forget_known_assets();
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));

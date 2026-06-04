@@ -2,8 +2,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "buffer.h"
 
-typedef bool (*f_tlv_payload_handler)(const uint8_t *payload, uint16_t size);
+typedef bool (*f_tlv_payload_handler)(const buffer_t *payload);
 
 bool tlv_from_apdu(bool first_chunk,
                    uint8_t lc,

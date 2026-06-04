@@ -272,8 +272,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     e_name_type type = TN_TYPE_ACCOUNT;
     e_name_source source = TN_SOURCE_ENS;
     bool trusted_name_loaded = has_trusted_name();
-    bool trusted_name_match =
+    const s_trusted_name *trusted_name =
         get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
+    bool trusted_name_match = trusted_name != NULL;
     PRINTF("### trusted_name_match:%d\n", trusted_name_match);
     if (trusted_name_loaded) {
         txInfos.flowIcon = &APP_TRON_HOME_ICON;
@@ -291,7 +292,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = fullContract;
             if (trusted_name_match) {
                 txInfos.fields[2].item = "To (Domain)";
-                txInfos.fields[2].value = g_trusted_name;
+                txInfos.fields[2].value = trusted_name->name;
             } else {
                 txInfos.fields[2].item = TRC20ActionSendAllow;
                 txInfos.fields[2].value = toAddress;

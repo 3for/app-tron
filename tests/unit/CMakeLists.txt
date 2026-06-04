@@ -124,7 +124,9 @@ endif()
 
 add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
 
-add_executable(test_trusted_name_whitebox tests/trusted_name_whitebox.c)
+add_executable(test_trusted_name_whitebox
+               tests/trusted_name_whitebox.c
+               ../../src/tlv.c)
 target_include_directories(test_trusted_name_whitebox
                            PRIVATE
                            .

@@ -7,16 +7,14 @@
 #include "handlers.h"
 #include "io.h"
 
-static bool handle_tlv_payload(const uint8_t *payload, uint16_t size) {
+static bool handle_tlv_payload(const buffer_t *payload) {
     s_trusted_name_ctx ctx = {0};
-    bool ret;
 
     cx_sha256_init(&ctx.hash_ctx);
-    if (!tlv_parse(payload, size, (f_tlv_data_handler) &handle_trusted_name_struct, &ctx)) {
-        ret = false;
-    } else {
-        ret = verify_trusted_name_struct(&ctx);
+    if (!handle_trusted_name_tlv_payload(payload, &ctx)) {
+        return false;
     }
+    bool ret = verify_trusted_name_struct(&ctx);
     roll_challenge();  // prevent brute-force guesses and replays
     return ret;
 }

@@ -3,11 +3,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "common_utils.h"  // ADDRESS_LENGTH
-#include "tlv.h"
+#include "tlv_library.h"
+#include "buffer.h"
 #include "signature.h"
+#include "bip32_utils.h"
 
 #define TRUSTED_NAME_MAX_LENGTH 30
-#define TRUSTED_NAME_OWNER_MAX_BIP32_PATH 10
 
 typedef enum {
     TN_TYPE_ACCOUNT = 1,
@@ -36,41 +37,38 @@ typedef enum {
 
 typedef enum { TN_KEY_ID_DOMAIN_SVC = 0x07, TN_KEY_ID_CAL = 0x09 } e_tn_key_id;
 
-typedef struct s_trusted_name_info {
-    struct s_trusted_name_info *next;
+typedef struct s_trusted_name {
+    struct s_trusted_name *next;
     uint8_t struct_version;
     char name[TRUSTED_NAME_MAX_LENGTH + 1];
     uint8_t addr[ADDRESS_LENGTH];
     uint64_t chain_id;
     e_name_type name_type;
     e_name_source name_source;
-#ifdef HAVE_NFT_SUPPORT
-    uint8_t nft_id[INT256_LENGTH];
-#endif
-} s_trusted_name_info;
+    union {
+        uint8_t nft_id[INT256_LENGTH];
+    };
+} s_trusted_name;
 
 typedef struct {
-    s_trusted_name_info trusted_name;
-    uint8_t owner[ADDRESS_LENGTH];
-    uint8_t owner_deriv_path_length;
-    uint32_t owner_deriv_path[TRUSTED_NAME_OWNER_MAX_BIP32_PATH];
+    s_trusted_name trusted_name;
     e_tn_key_id key_id;
-    uint8_t input_sig_size;
-    uint8_t input_sig[ECDSA_SIGNATURE_MAX_LENGTH];
+    uint8_t sig_size;
+    const uint8_t *sig;
     cx_sha256_t hash_ctx;
-    uint32_t rcv_flags;
+    uint8_t owner[ADDRESS_LENGTH];
+    bip32_path_t owner_deriv_path;
+    TLV_reception_t received_tags;
 } s_trusted_name_ctx;
 
-const char *get_trusted_name(uint8_t type_count,
-                             const e_name_type *types,
-                             uint8_t source_count,
-                             const e_name_source *sources,
-                             const uint64_t *chain_id,
-                             const uint8_t *addr);
+const s_trusted_name *get_trusted_name(uint8_t type_count,
+                                       const e_name_type *types,
+                                       uint8_t source_count,
+                                       const e_name_source *sources,
+                                       const uint64_t *chain_id,
+                                       const uint8_t *addr);
 bool has_trusted_name(void);
-void clear_trusted_names(void);
+void trusted_name_cleanup(void);
 
-extern char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
-
-bool handle_trusted_name_struct(const s_tlv_data *data, s_trusted_name_ctx *context);
+bool handle_trusted_name_tlv_payload(const buffer_t *buf, s_trusted_name_ctx *context);
 bool verify_trusted_name_struct(const s_trusted_name_ctx *ctx);

@@ -30,12 +30,20 @@ typedef enum {
     TN_SOURCE_COUNT,
 } e_name_source;
 
-extern char g_trusted_name[TRUSTED_NAME_MAX_LENGTH + 1];
+typedef struct s_trusted_name {
+    struct s_trusted_name *next;
+    uint8_t struct_version;
+    char name[TRUSTED_NAME_MAX_LENGTH + 1];
+    uint8_t addr[ADDRESS_LENGTH];
+    uint64_t chain_id;
+    e_name_type name_type;
+    e_name_source name_source;
+} s_trusted_name;
 
-const char *get_trusted_name(uint8_t type_count,
-                             const e_name_type *types,
-                             uint8_t source_count,
-                             const e_name_source *sources,
-                             const uint64_t *chain_id,
-                             const uint8_t *addr);
+const s_trusted_name *get_trusted_name(uint8_t type_count,
+                                       const e_name_type *types,
+                                       uint8_t source_count,
+                                       const e_name_source *sources,
+                                       const uint64_t *chain_id,
+                                       const uint8_t *addr);
 bool has_trusted_name(void);
