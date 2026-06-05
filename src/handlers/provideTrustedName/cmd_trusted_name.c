@@ -7,15 +7,17 @@
 #include "apdu_constants.h"
 #include "io.h"
 
-static bool handle_tlv_payload(const buffer_t *payload) {
+static bool handle_tlv_payload(const buffer_t *buf) {
     s_trusted_name_ctx ctx = {0};
+    uint16_t ret = false;
 
+    // Initialize the hash context
     cx_sha256_init(&ctx.hash_ctx);
-    if (!handle_trusted_name_tlv_payload(payload, &ctx)) {
+    if (!handle_trusted_name_tlv_payload(buf, &ctx)) {
         return false;
     }
-    bool ret = verify_trusted_name_struct(&ctx);
-    roll_challenge();  // prevent brute-force guesses and replays
+    ret = verify_trusted_name_struct(&ctx);
+    roll_challenge();  // prevent brute-force guesses & replays
     return ret;
 }
 
