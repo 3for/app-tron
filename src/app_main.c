@@ -28,7 +28,7 @@
 #include "mem_utils.h"
 #include "ui_idle_menu.h"
 #include "settings.h"
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "parse.h"
 #include "app_errors.h"
 #include "ui_globals.h"

@@ -22,7 +22,7 @@
 #include "format.h"
 
 #include "helpers.h"
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "ui_review_menu.h"
 #include "ui_globals.h"
 #include "uint256.h"

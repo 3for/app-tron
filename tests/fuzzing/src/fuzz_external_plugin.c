@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "handlers.h"
+#include "apdu_constants.h"
 
 void init_external_plugin_fuzz_environment(const uint8_t *config, size_t config_len);
 void reset_app_context(void);

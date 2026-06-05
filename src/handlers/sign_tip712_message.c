@@ -25,7 +25,7 @@
 #include "helpers.h"
 #include "ui_review_menu.h"
 #include "app_errors.h"
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "parse.h"
 #include "ui_globals.h"
 #include "settings.h"

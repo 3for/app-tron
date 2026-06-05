@@ -18,7 +18,7 @@
 #include "io.h"
 #include "parser.h"
 
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "app_errors.h"
 #include "parse.h"
 

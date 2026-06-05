@@ -4,7 +4,7 @@
 #include "challenge.h"
 #include "tlv_apdu.h"
 #include "app_errors.h"
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "io.h"
 
 static bool handle_tlv_payload(const buffer_t *payload) {

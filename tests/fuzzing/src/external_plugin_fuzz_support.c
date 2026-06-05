@@ -9,7 +9,7 @@
 #include "bip32_path_parser.h"
 #include "common_utils.h"
 #include "cx.h"
-#include "handlers.h"
+#include "apdu_constants.h"
 #include "helpers.h"
 #include "parse.h"
 #include "public_keys.h"

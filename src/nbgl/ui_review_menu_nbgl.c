@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #include "app_errors.h"
-#include "handlers/handlers.h"
+#include "apdu_constants.h"
 #include "ux.h"
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
