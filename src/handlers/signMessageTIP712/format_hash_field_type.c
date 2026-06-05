@@ -17,7 +17,7 @@
  */
 static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_hash_t *hash_ctx) {
     uint16_t field_size;
-    char *uint_str_ptr;
+    const char *uint_str_ptr;
 
     field_size = field_ptr->type_size;
     switch (field_ptr->type) {
@@ -39,7 +39,7 @@ static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_
         return false;
     }
     hash_nbytes((uint8_t *) uint_str_ptr, strlen(uint_str_ptr), hash_ctx);
-    APP_MEM_FREE(uint_str_ptr);
+    APP_MEM_FREE((void *) uint_str_ptr);
     return true;
 }
 
@@ -52,7 +52,7 @@ static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_
  */
 static bool format_hash_field_type_array_levels(const s_struct_712_field *field_ptr,
                                                 cx_hash_t *hash_ctx) {
-    char *uint_str_ptr;
+    const char *uint_str_ptr;
 
     for (int i = 0; i < field_ptr->array_level_count; ++i) {
         hash_byte('[', hash_ctx);
@@ -67,7 +67,7 @@ static bool format_hash_field_type_array_levels(const s_struct_712_field *field_
                     return false;
                 }
                 hash_nbytes((uint8_t *) uint_str_ptr, strlen(uint_str_ptr), hash_ctx);
-                APP_MEM_FREE(uint_str_ptr);
+                APP_MEM_FREE((void *) uint_str_ptr);
                 break;
             default:
                 // should not be in here :^)
