@@ -18,7 +18,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "../parse.h"
+#include "parse.h"
+#include "shared_context.h"
 
 #define VOTE_ADDRESS          0
 #define VOTE_ADDRESS_SIZE     BASE58CHECK_ADDRESS_SIZE + 1

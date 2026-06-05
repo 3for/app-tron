@@ -45,20 +45,6 @@ typedef union {
 } tmpCtx_t;
 
 typedef struct {
-    char tmp[SHARED_CTX_FIELD_1_SIZE];
-    char tmp2[SHARED_CTX_FIELD_2_SIZE];
-} strDataTmp_t;
-
-typedef union {
-    strDataTmp_t tmp;
-} strings_t;
-
-typedef struct {
-    uint64_t chainId;
-    char coinName[10];
-} chain_config_t;
-
-typedef struct {
     char pluginName[PLUGIN_ID_LENGTH];
     uint8_t data[INT256_LENGTH];
     uint16_t fieldIndex;
