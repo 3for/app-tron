@@ -23,7 +23,8 @@
 #include "read.h"
 #include "write.h"
 #include "uint_common.h"
-#include "common_utils.h"  // HEXDIGITS, INT256_LENGTH
+#include "common_utils.h"  // INT256_LENGTH
+#include "utils.h"
 
 void readu256BE(const uint8_t *const buffer, uint256_t *const target) {
     readu128BE(buffer, &UPPER_P(target));
@@ -294,17 +295,15 @@ bool tostring256_signed(const uint256_t *const number,
 
 void convertUint256BE(const uint8_t *const data, uint32_t length, uint256_t *const target) {
     uint8_t tmp[INT256_LENGTH];
-    const uint8_t *src = data;
 
-    if ((src == NULL) || (target == NULL)) {
+    if (data == NULL || target == NULL || length == 0) {
         return;
     }
     if (length > sizeof(tmp)) {
-        src += (length - sizeof(tmp));
-        length = sizeof(tmp);
+        return;
     }
 
     memset(tmp, 0, sizeof(tmp) - length);
-    memmove(tmp + sizeof(tmp) - length, src, length);
+    memmove(tmp + sizeof(tmp) - length, data, length);
     readu256BE(tmp, target);
 }

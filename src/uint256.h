@@ -27,11 +27,6 @@ typedef struct uint256_t {
     uint128_t elements[2];
 } uint256_t;
 
-#define UPPER_P(x) x->elements[0]
-#define LOWER_P(x) x->elements[1]
-#define UPPER(x)   x.elements[0]
-#define LOWER(x)   x.elements[1]
-
 void readu256BE(const uint8_t *const buffer, uint256_t *const target);
 bool zero256(const uint256_t *const number);
 void copy256(uint256_t *const target, const uint256_t *const number);
@@ -48,9 +43,7 @@ void add256(const uint256_t *const number1,
 void sub256(const uint256_t *const number1,
             const uint256_t *const number2,
             uint256_t *const target);
-void or256(const uint256_t *const number1,
-           const uint256_t *const number2,
-           uint256_t *const target);
+void or256(const uint256_t *const number1, const uint256_t *const number2, uint256_t *const target);
 bool mul256(const uint256_t *const number1,
             const uint256_t *const number2,
             uint256_t *const target);
@@ -58,10 +51,7 @@ void divmod256(const uint256_t *const l,
                const uint256_t *const r,
                uint256_t *const div,
                uint256_t *const mod);
-bool tostring256(const uint256_t *const number,
-                 uint32_t base,
-                 char *const out,
-                 uint32_t outLength);
+bool tostring256(const uint256_t *const number, uint32_t base, char *const out, uint32_t outLength);
 bool tostring256_signed(const uint256_t *const number,
                         uint32_t base,
                         char *const out,
