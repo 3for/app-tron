@@ -25,11 +25,6 @@
 #define SUN_DIG                  6
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 
-#define UNSUPPORTED_CHAIN_ID_MSG(id)                                              \
-    do {                                                                          \
-        PRINTF("Unsupported chain ID: %u (app: %u)\n", id, chainConfig->chainId); \
-    } while (0)
-
 typedef union {
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;

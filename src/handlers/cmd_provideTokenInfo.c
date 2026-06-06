@@ -3,7 +3,7 @@
 #include "io.h"
 #include "public_keys.h"
 #include "common_utils.h"
-#include "parse.h"
+#include "network.h"
 #include "ui_globals.h"
 #include "app_errors.h"
 #include "os_pki.h"
