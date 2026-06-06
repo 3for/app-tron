@@ -21,6 +21,11 @@
 #include <stdint.h>
 
 #include "parser.h"
+#include "app_errors.h"
+// Pulled in so the ported generic_tx_parser command handlers see `appState` and
+// the APP_STATE_* enum (app-ethereum's apdu_constants.h includes it likewise).
+// The SWO_* status words used by that module come from the SDK's status_words.h.
+#include "shared_context.h"
 
 // Define command events
 #define CLA 0xE0  // Start byte for any communications
@@ -44,6 +49,10 @@
 #define INS_GET_CHALLENGE 0x20
 #define INS_PROVIDE_TRUSTED_NAME  0x22
 
+// Generic Clear Signing (GCS / generic_tx_parser). Same opcodes as app-ethereum.
+#define INS_GTP_TRANSACTION_INFO 0x26
+#define INS_GTP_FIELD            0x28
+
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
 
@@ -57,6 +66,12 @@
 
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01
+
+// INS_SIGN_EXTERNAL_PLUGIN (0xC4): store the TriggerSmartContract calldata into
+// the generic_tx_parser context (Generic Clear Signing) instead of running the
+// external-plugin UI flow. No approval is shown; the 0x26/0x28 descriptors and
+// the start-of-flow command follow.
+#define P2_GCS_STORE 0x10
 
 #define P2_TIP712_LEGACY_IMPLEM 0x00
 #define P2_TIP712_FULL_IMPLEM   0x01

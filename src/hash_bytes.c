@@ -20,3 +20,20 @@ void hash_nbytes(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx) {
 void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
     hash_nbytes(&byte, 1, hash_ctx);
 }
+
+/**
+ * Finalize a progressive hash, writing the digest to out.
+ * Mirrors app-ethereum's hash_bytes.c, used by the generic_tx_parser module.
+ *
+ * @param[in] hash_ctx pointer to the hashing context
+ * @param[out] out output buffer for the digest
+ * @param[in] out_len size of the output buffer
+ * @return whether finalization succeeded
+ */
+bool finalize_hash(cx_hash_t *hash_ctx, uint8_t *out, size_t out_len) {
+    if (cx_hash_no_throw(hash_ctx, CX_LAST, NULL, 0, out, out_len) != CX_OK) {
+        PRINTF("Could not finalize struct hash!\n");
+        return false;
+    }
+    return true;
+}

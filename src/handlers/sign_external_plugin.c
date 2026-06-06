@@ -31,6 +31,7 @@
 #include "parse.h"
 #include "settings.h"
 #include "transaction_trigger_decode.h"
+#include "gcs_calldata_bridge.h"  // Generic Clear Signing calldata store
 
 extern void reset_app_context();
 
@@ -820,9 +821,13 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     tronPluginFinalize_t plugin_finalize;
     tronPluginProvideInfo_t plugin_provide_info;
 
-    if (p2 != 0x00) {
+    if ((p2 != 0x00) && (p2 != P2_GCS_STORE)) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
+    // Generic Clear Signing "store" mode: parse the TriggerSmartContract and park
+    // its calldata into the generic_tx_parser context instead of running the
+    // external-plugin UI flow.
+    const bool gcs_store = (p2 == P2_GCS_STORE);
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
@@ -853,9 +858,16 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         }
         tron_stream_decoder_init_raw(tron_stream_decoder, total_len);
         external_plugin_stream_reset();
-        tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
-                                                      external_plugin_feed_data_chunk,
-                                                      NULL);
+        if (gcs_store) {
+            gcs_bridge_reset();
+            tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
+                                                          gcs_bridge_feed_data_chunk,
+                                                          NULL);
+        } else {
+            tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
+                                                          external_plugin_feed_data_chunk,
+                                                          NULL);
+        }
 
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
         return io_send_sw(E_INCORRECT_P1_P2);
@@ -891,6 +903,26 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     if (!tron_stream_decoder_complete(tron_stream_decoder)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
+    }
+
+    if (gcs_store) {
+        // The observer rebuilt the full EVM calldata into g_parked_calldata while
+        // streaming. Register it as the root tx context, then wait for the
+        // generic_tx_parser descriptors (0x26 / 0x28). No UI is shown here.
+        const tron_decode_result_t *res = &tron_stream_decoder->result;
+        bool ok = gcs_bridge_finalize(res->has_owner_address ? res->owner_address : NULL,
+                                      res->has_contract_address ? res->contract_address : NULL,
+                                      res->has_call_value ? (uint64_t) res->call_value : 0,
+                                      TRON_MAINNET_CHAINID);
+        APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
+        if (!ok) {
+            gcs_bridge_abort();
+            reset_app_context();
+            return io_send_sw(E_INCORRECT_DATA);
+        }
+        // Accept the incoming generic_tx_parser descriptors.
+        appState = APP_STATE_SIGNING_TX;
+        return io_send_sw(E_OK);
     }
 
     if (!tron_stream_fill_txcontent(&tron_stream_decoder->result, &txContent)) {

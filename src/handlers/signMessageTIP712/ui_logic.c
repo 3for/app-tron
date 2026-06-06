@@ -361,6 +361,11 @@ void ui_712_set_value(const char *str, size_t length) {
     ui_712_set_buf(str, length, strings.tmp.tmp, sizeof(strings.tmp.tmp), true);
 }
 
+// Used by the generic_tx_parser when grouping batched transactions under an
+// "intent" separator. Not reached by the current TIP712 flow; no-op stub.
+void ui_712_set_intent(void) {
+}
+
 /**
  * Redraw the dynamic UI step that shows TIP712 information
  *

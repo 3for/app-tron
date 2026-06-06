@@ -53,8 +53,15 @@ typedef enum {
     APP_STATE_SIGNING_MESSAGE,
     APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
     APP_STATE_SIGNING,
-    APP_STATE_SIGNING_TIP712
+    APP_STATE_SIGNING_TIP712,
+    // Used while a TriggerSmartContract is being clear-signed through the
+    // generic_tx_parser (GCS) module ported from app-ethereum.
+    APP_STATE_SIGNING_TX
 } app_state_t;
+
+// The GCS module (generic_tx_parser) ported from app-ethereum refers to the
+// EIP712 signing state by its Ethereum name. Tron's equivalent is TIP712.
+#define APP_STATE_SIGNING_EIP712 APP_STATE_SIGNING_TIP712
 
 typedef enum {
     PLUGIN_TYPE_NONE = 0,
@@ -80,6 +87,16 @@ typedef struct states191_t {
 typedef struct txContext_t {
     cx_sha256_t sha2;
     bool initialized;
+    // --- generic_tx_parser (GCS) fields, mirrored from app-ethereum ---
+    // Total number of transactions in the current GCS batch and how many have
+    // been consumed so far. The parser uses these (together) to decide whether
+    // to render per-transaction "intent" separators. A plain
+    // TriggerSmartContract is a single-transaction batch.
+    uint8_t current_batch_size;
+    uint8_t batch_nb_tx;
+    // Points at the transaction content being clear-signed (Tron's global
+    // `txContent`). Used by the GCS field formatters to reach tx-level data.
+    txContent_t *content;
 } txContext_t;
 
 typedef struct publicKeyContext_t {
@@ -164,6 +181,11 @@ typedef union {
 } strings_t;
 
 extern const chain_config_t *chainConfig;
+
+// Defined in src/nbgl/ui_globals.c. Re-declared here (matching app-ethereum's
+// shared_context.h) so the ported generic_tx_parser module can use `strings`
+// for scratch formatting without depending on the UI headers.
+extern strings_t strings;
 
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;

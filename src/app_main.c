@@ -33,6 +33,7 @@
 #include "app_errors.h"
 #include "ui_globals.h"
 #include "trusted_name.h"
+#include "tx_ctx.h"  // gcs_cleanup (Generic Clear Signing)
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -63,6 +64,9 @@ extern void roll_challenge(void);
 void reset_app_context() {
     message_cleanup();
     cleanupSignExternalPlugin();
+    // Free any Generic Clear Signing state (tx contexts, field table, parked
+    // calldata) so it never leaks across signing sessions.
+    gcs_cleanup();
     // Reset the legacy TIP-191 streamed-display state (defined in
     // sign_message_entry.c).
     processed_size_191 = 0;

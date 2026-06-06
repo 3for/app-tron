@@ -27,6 +27,10 @@ unsigned int ui_712_approve(bool);
 unsigned int ui_712_reject(bool);
 void ui_712_set_title(const char *str, size_t length);
 void ui_712_set_value(const char *str, size_t length);
+// Used by the generic_tx_parser to mark a per-transaction "intent" separator
+// when clear-signing a batch. Only reached in EIP712/TIP712 mode (not in the
+// plain TriggerSmartContract path); currently a no-op stub.
+void ui_712_set_intent(void);
 bool ui_712_message_hash(void);
 bool ui_712_prepare_current_pair(void);
 bool ui_712_redraw_generic_step(void);

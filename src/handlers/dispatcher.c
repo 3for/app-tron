@@ -28,6 +28,9 @@
 #include "challenge.h"
 #include "cmd_trusted_name.h"
 
+#include "cmd_tx_info.h"
+#include "cmd_field.h"
+
 #ifdef HAVE_SWAP
 #include "swap.h"
 #endif  // HAVE_SWAP
@@ -103,6 +106,15 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_PROVIDE_TRUSTED_NAME:
             return handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        // Generic Clear Signing (generic_tx_parser). The ported handlers return a
+        // status word (as app-ethereum's main loop expects) rather than sending it
+        // themselves, so wrap them in io_send_sw here.
+        case INS_GTP_TRANSACTION_INFO:
+            return io_send_sw(handle_tx_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+
+        case INS_GTP_FIELD:
+            return io_send_sw(handle_field(cmd->p1, cmd->p2, cmd->lc, cmd->data));
 
         case INS_SET_EXTERNAL_PLUGIN:
             // Set External Plugin
