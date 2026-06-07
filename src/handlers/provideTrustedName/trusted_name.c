@@ -1,12 +1,19 @@
 #include <ctype.h>
-#include "app_mem_utils.h"
+#include "buffer.h"
 #include "trusted_name.h"
-#include "utils.h"
-#include "read.h"
+#include "network.h"  // chain_is_ethereum_compatible
+#include "utils.h"    // SET_BIT
 #include "challenge.h"
 #include "hash_bytes.h"
 #include "public_keys.h"
-#include "helpers.h"
+#include "proxy_info.h"
+#include "ui_utils.h"
+#include "app_mem_utils.h"
+#include "crypto_helpers.h"
+#include "tlv_apdu.h"
+#include "lcx_ecdsa.h"
+#include "shared_context.h"  // CX_SECP256_PUB_KEY_SIZE
+#include "ox_ec.h"
 
 #define STRUCT_VERSION_1 0x01
 #define STRUCT_VERSION_2 0x02
@@ -21,52 +28,13 @@ static void delete_trusted_name(s_trusted_name *node) {
     APP_MEM_FREE(node);
 }
 
+void trusted_name_cleanup(void) {
+    flist_clear((flist_node_t **) &g_trusted_name_list, (f_list_node_del) &delete_trusted_name);
+}
+
+// TRON addition: used by the UI to know whether a trusted name was loaded.
 bool has_trusted_name(void) {
     return g_trusted_name_list != NULL;
-}
-
-void trusted_name_cleanup(void) {
-    while (g_trusted_name_list != NULL) {
-        s_trusted_name *next = g_trusted_name_list->next;
-        delete_trusted_name(g_trusted_name_list);
-        g_trusted_name_list = next;
-    }
-}
-
-static bool is_supported_v2_type(e_name_type type) {
-    switch (type) {
-        case TN_TYPE_ACCOUNT:
-        case TN_TYPE_CONTRACT:
-        case TN_TYPE_TOKEN:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool is_supported_v2_source(e_name_source source) {
-    switch (source) {
-        case TN_SOURCE_CAL:
-        case TN_SOURCE_ENS:
-        case TN_SOURCE_MAB:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool requires_ens_name_validation(const s_trusted_name *trusted_name) {
-    if (trusted_name == NULL) {
-        return false;
-    }
-
-    if (trusted_name->struct_version == 1U) {
-        return true;
-    }
-
-    return (trusted_name->struct_version == 2U) &&
-           (trusted_name->name_type == TN_TYPE_ACCOUNT) &&
-           (trusted_name->name_source == TN_SOURCE_ENS);
 }
 
 static bool matching_type(e_name_type type, uint8_t type_count, const e_name_type *types) {
@@ -92,17 +60,16 @@ static bool matching_trusted_name(const s_trusted_name *trusted_name,
                                   const e_name_source *sources,
                                   const uint64_t *chain_id,
                                   const uint8_t *addr) {
-    // const uint8_t *tmp;
+    const uint8_t *tmp;
 
     switch (trusted_name->struct_version) {
         case STRUCT_VERSION_1:
             if (!matching_type(TN_TYPE_ACCOUNT, type_count, types)) {
                 return false;
             }
-            // TODO. Always true for Tron now.
-            /*if (!chain_is_ethereum_compatible(chain_id)) {
+            if (!chain_is_ethereum_compatible(chain_id)) {
                 return false;
-            }*/
+            }
             break;
         case STRUCT_VERSION_2:
             if (!matching_type(trusted_name->name_type, type_count, types)) {
@@ -115,24 +82,25 @@ static bool matching_trusted_name(const s_trusted_name *trusted_name,
                 return false;
             }
 
-            /* if (trusted_name->name_type == TN_TYPE_CONTRACT) {
+            if ((trusted_name->name_type == TN_TYPE_CONTRACT) ||
+                (trusted_name->name_type == TN_TYPE_TOKEN)) {
                 if ((tmp = get_implem_contract(chain_id, addr, NULL)) != NULL) {
                     addr = tmp;
                 }
-            } */ // TODO. Not support INS_PROVIDE_PROXY_INFO yet.
+            }
             break;
     }
     return memcmp(addr, trusted_name->addr, ADDRESS_LENGTH) == 0;
 }
 
 /**
- * Checks if a trusted name matches the given parameters
+ * Get a trusted name that matches the given parameters
  *
  * @param[in] types_count number of given trusted name types
  * @param[in] types given trusted name types
  * @param[in] chain_id given chain ID
  * @param[in] addr given address
- * @return whether there is or not
+ * @return the matching trusted name if found, \ref NULL otherwise
  */
 const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const e_name_type *types,
@@ -140,62 +108,77 @@ const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const e_name_source *sources,
                                        const uint64_t *chain_id,
                                        const uint8_t *addr) {
-    for (s_trusted_name *node = g_trusted_name_list; node != NULL; node = node->next) {
-        if (matching_trusted_name(node,
-                                  type_count,
-                                  types,
-                                  source_count,
-                                  sources,
-                                  chain_id,
-                                  addr)) {
-            return node;
+    for (s_trusted_name *tmp = g_trusted_name_list; tmp != NULL;
+         tmp = (s_trusted_name *) ((flist_node_t *) tmp)->next) {
+        if (matching_trusted_name(tmp, type_count, types, source_count, sources, chain_id, addr)) {
+            return tmp;
         }
     }
-
     return NULL;
 }
 
 /**
- * Handler for tag \ref STRUCT_TYPE
+ * Handler for tag STRUCTURE_TYPE
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
-static bool tlv_check_struct_type(const tlv_data_t *data, uint8_t expected) {
-    if ((data == NULL) || (data->value.size != sizeof(uint8_t))) {
-        return false;
-    }
-    return data->value.ptr[0] == expected;
-}
-
 static bool handle_struct_type(const tlv_data_t *data, s_trusted_name_ctx *context) {
     UNUSED(context);
     return tlv_check_struct_type(data, STRUCT_TYPE_TRUSTED_NAME);
 }
 
 /**
- * Handler for tag \ref NOT_VALID_AFTER
+ * Handler for tag STRUCTURE_VERSION
+ *
+ * @param[in] data the tlv data
+ * @param[out] context the trusted name context
+ * @return whether it was successful
+ */
+static bool handle_struct_version(const tlv_data_t *data, s_trusted_name_ctx *context) {
+    uint8_t value = 0;
+    if (!get_uint8_t_from_tlv_data(data, &value)) {
+        PRINTF("STRUCTURE_VERSION: failed to extract\n");
+        return false;
+    }
+    switch (value) {
+        case STRUCT_VERSION_1:
+        case STRUCT_VERSION_2:
+            break;
+        default:
+            PRINTF("Unsupported STRUCTURE_VERSION: %u\n", value);
+            return false;
+    }
+    context->trusted_name.struct_version = value;
+    return true;
+}
+
+/**
+ * Handler for tag NOT_VALID_AFTER
  *
  * @param[in] data the tlv data
  * @param[] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_not_valid_after(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    const uint8_t app_version[] = {MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION};
-
     UNUSED(context);
-    if (data->value.size != ARRAYLEN(app_version)) {
+    const uint8_t app_version[] = {MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION};
+    buffer_t version = {0};
+    uint16_t version_size = ARRAYLEN(app_version);
+    if (!get_buffer_from_tlv_data(data, &version, version_size, version_size)) {
+        PRINTF("NOT_VALID_AFTER: failed to extract\n");
         return false;
     }
-    for (int i = 0; i < (int) ARRAYLEN(app_version); ++i) {
-        if (data->value.ptr[i] > app_version[i]) {
+    for (int i = 0; i < (int) version_size; ++i) {
+        if (version.ptr[i] > app_version[i]) {
             break;
-        } else if (data->value.ptr[i] < app_version[i]) {
+        }
+        if (version.ptr[i] < app_version[i]) {
             PRINTF("Expired trusted name : %u.%u.%u < %u.%u.%u\n",
-                   data->value.ptr[0],
-                   data->value.ptr[1],
-                   data->value.ptr[2],
+                   version.ptr[0],
+                   version.ptr[1],
+                   version.ptr[2],
                    app_version[0],
                    app_version[1],
                    app_version[2]);
@@ -206,193 +189,74 @@ static bool handle_not_valid_after(const tlv_data_t *data, s_trusted_name_ctx *c
 }
 
 /**
- * Handler for tag \ref STRUCT_VERSION
- *
- * @param[in] data the tlv data
- * @param[out] context the trusted name context
- * @return whether it was successful
- */
-static bool handle_struct_version(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size != sizeof(context->trusted_name.struct_version)) {
-        return false;
-    }
-    context->trusted_name.struct_version = data->value.ptr[0];
-    return true;
-}
-
-/**
- * Handler for tag \ref CHALLENGE
+ * Handler for tag CHALLENGE
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_challenge(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    uint8_t buf[sizeof(uint32_t)];
-
     UNUSED(context);
-    if (data->value.size > sizeof(buf)) {
-        return false;
-    }
-    buf_shrink_expand(data->value.ptr, data->value.size, buf, sizeof(buf));
-    return (read_u32_be(buf, 0) == get_challenge());
+    return tlv_check_challenge(data);
 }
 
 /**
- * Handler for tag \ref SIGNER_KEY_ID
+ * Handler for tag SIGNER_KEY_ID
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_signer_key_id(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    // for some reason this is sent as 2 bytes
-    uint16_t value;
-    uint8_t buf[sizeof(value)];
-
-    if (data->value.size > sizeof(buf)) {
+    uint16_t value = 0;
+    // For some reason, the key ID is encoded on 2 bytes
+    if (!tlv_get_uint16_range(data, &value, 0, UINT8_MAX)) {
+        PRINTF("SIGNER_KEY_ID: error\n");
         return false;
     }
-    buf_shrink_expand(data->value.ptr, data->value.size, buf, sizeof(buf));
-    value = read_u16_be(buf, 0);
-    if (value > UINT8_MAX) {
-        return false;
-    }
-    context->key_id = value;
+    context->key_id = (e_tn_key_id) value;
     return true;
 }
 
 /**
- * Handler for tag \ref SIGNER_ALGO
+ * Handler for tag SIGNER_ALGO
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_signer_algo(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    // for some reason this is sent as 2 bytes
-    uint8_t buf[sizeof(uint16_t)];
-
     UNUSED(context);
-    if (data->value.size > sizeof(buf)) {
+    uint16_t value = 0;
+    // For some reason, the key ID is encoded on 2 bytes
+    if (!get_uint16_t_from_tlv_data(data, &value)) {
+        PRINTF("SIGNER_ALGO: failed to extract\n");
         return false;
     }
-    buf_shrink_expand(data->value.ptr, data->value.size, buf, sizeof(buf));
-    return (read_u16_be(buf, 0) == SIG_ALGO_SECP256K1);
-}
-
-/**
- * Handler for tag \ref SIGNATURE
- *
- * @param[in] data the tlv data
- * @param[out] context the trusted name context
- * @return whether it was successful
- */
-static bool handle_signature(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if ((data->value.size == 0U) || (data->value.size > ECDSA_SIGNATURE_MAX_LENGTH)) {
-        return false;
-    }
-    context->sig_size = data->value.size;
-    context->sig = data->value.ptr;
+    CHECK_FIELD_VALUE("SIGNER_ALGO", value, SIG_ALGO_SECP256K1);
     return true;
 }
 
 /**
- * Tests if the given account name character is valid (in our subset of allowed characters)
- *
- * @param[in] c given character
- * @return whether the character is valid
- */
-static bool is_valid_account_character(char c) {
-    if (isalpha((int) c)) {
-        if (!islower((int) c)) {
-            return false;
-        }
-    } else if (!isdigit((int) c)) {
-        switch (c) {
-            case '.':
-            case '-':
-            case '_':
-                break;
-            default:
-                return false;
-        }
-    }
-    return true;
-}
-
-static bool is_valid_generic_character(char c) {
-    if (isalnum((int) c)) {
-        return true;
-    }
-
-    switch (c) {
-        case '.':
-        case '-':
-        case '_':
-        case ' ':
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool validate_trusted_name_value(const s_trusted_name *trusted_name) {
-    size_t name_len;
-
-    if (trusted_name == NULL) {
-        return false;
-    }
-
-    name_len = strnlen(trusted_name->name, sizeof(trusted_name->name));
-    if ((name_len == 0U) || (name_len > TRUSTED_NAME_MAX_LENGTH)) {
-        return false;
-    }
-
-    if (requires_ens_name_validation(trusted_name)) {
-        if ((name_len < 5U) || (strncmp(".eth", &trusted_name->name[name_len - 4U], 4U) != 0)) {
-            PRINTF("Unexpected TLD!\n");
-            return false;
-        }
-        for (size_t idx = 0; idx < name_len; idx++) {
-            if (!is_valid_account_character(trusted_name->name[idx])) {
-                PRINTF("Domain name contains non-allowed character! (0x%x)\n",
-                       trusted_name->name[idx]);
-                return false;
-            }
-        }
-        return true;
-    }
-
-    for (size_t idx = 0; idx < name_len; idx++) {
-        if (!is_valid_generic_character(trusted_name->name[idx])) {
-            PRINTF("Trusted name contains non-allowed character! (0x%x)\n",
-                   trusted_name->name[idx]);
-            return false;
-        }
-    }
-    return true;
-}
-
-/**
- * Handler for tag \ref TRUSTED_NAME
+ * Handler for tag TRUSTED_NAME
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_trusted_name(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size > TRUSTED_NAME_MAX_LENGTH) {
-        PRINTF("Domain name too long! (%u)\n", data->value.size);
+    if (!get_string_from_tlv_data(data,
+                                  context->trusted_name.name,
+                                  1,
+                                  sizeof(context->trusted_name.name))) {
+        PRINTF("TRUSTED_NAME: failed to extract\n");
         return false;
     }
-    memcpy(context->trusted_name.name, data->value.ptr, data->value.size);
-    context->trusted_name.name[data->value.size] = '\0';
     return true;
 }
 
 /**
- * Handler for tag \ref COIN_TYPE
+ * Handler for tag COIN_TYPE
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
@@ -400,112 +264,180 @@ static bool handle_trusted_name(const tlv_data_t *data, s_trusted_name_ctx *cont
  */
 static bool handle_coin_type(const tlv_data_t *data, s_trusted_name_ctx *context) {
     UNUSED(context);
-    if (data->value.size != sizeof(uint8_t)) {
+    if (!tlv_check_uint8(data, SLIP_44_ETHEREUM)) {
+        PRINTF("COIN_TYPE: error\n");
         return false;
     }
-    return (data->value.ptr[0] == SLIP_44_ETHEREUM);
+    return true;
 }
 
 /**
- * Handler for tag \ref ADDRESS
+ * Handler for tag ADDRESS
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_address(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size != ADDRESS_LENGTH) {
-        return false;
-    }
-    memcpy(context->trusted_name.addr, data->value.ptr, ADDRESS_LENGTH);
-    return true;
+    return tlv_get_address(data, (uint8_t *) context->trusted_name.addr);
 }
 
 /**
- * Handler for tag \ref CHAIN_ID
+ * Handler for tag CHAIN_ID
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_chain_id(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    context->trusted_name.chain_id = u64_from_BE(data->value.ptr, data->value.size);
-    return true;
+    return tlv_get_chain_id(data, &context->trusted_name.chain_id);
 }
 
 /**
- * Handler for tag \ref TRUSTED_NAME_TYPE
+ * Handler for tag NAME_TYPE
  *
  * @param[in] data the tlv data
  * @param[in,out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_trusted_name_type(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size != sizeof(e_name_type)) {
+    uint8_t value = 0;
+    if (!get_uint8_t_from_tlv_data(data, &value)) {
+        PRINTF("NAME_TYPE: failed to extract\n");
         return false;
     }
-    context->trusted_name.name_type = data->value.ptr[0];
-    if (!is_supported_v2_type(context->trusted_name.name_type)) {
-        PRINTF("Error: unsupported trusted name type (%u)!\n", context->trusted_name.name_type);
-        return false;
+    switch (value) {
+        case TN_TYPE_ACCOUNT:
+        case TN_TYPE_CONTRACT:
+        case TN_TYPE_TOKEN:
+            break;
+        case TN_TYPE_NFT_COLLECTION:
+        case TN_TYPE_WALLET:
+        case TN_TYPE_CONTEXT_ADDRESS:
+        default:
+            PRINTF("Error: unsupported trusted name type (%u)!\n", value);
+            return false;
     }
+    context->trusted_name.name_type = value;
     return true;
 }
 
 /**
- * Handler for tag \ref TRUSTED_NAME_SOURCE
+ * Handler for tag NAME_SOURCE
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_trusted_name_source(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size != sizeof(e_name_source)) {
+    uint8_t value = 0;
+    if (!get_uint8_t_from_tlv_data(data, &value)) {
+        PRINTF("NAME_SOURCE: failed to extract\n");
         return false;
     }
-    context->trusted_name.name_source = data->value.ptr[0];
-    if (!is_supported_v2_source(context->trusted_name.name_source)) {
-        PRINTF("Error: unsupported trusted name source (%u)!\n",
-               context->trusted_name.name_source);
-        return false;
+    switch (value) {
+        case TN_SOURCE_CAL:
+        case TN_SOURCE_ENS:
+        case TN_SOURCE_MAB:
+            break;
+        case TN_SOURCE_LAB:
+        case TN_SOURCE_UD:
+        case TN_SOURCE_FN:
+        case TN_SOURCE_DNS:
+        case TN_SOURCE_DYNAMIC_RESOLVER:
+        default:
+            PRINTF("Error: unsupported trusted name source (%u)!\n", value);
+            return false;
     }
-    return true;
-}
-
-static bool handle_owner(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size != ADDRESS_LENGTH) {
-        return false;
-    }
-
-    memcpy(context->owner, data->value.ptr, ADDRESS_LENGTH);
-    return true;
-}
-
-static bool handle_owner_deriv_path(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    off_t parsed = read_bip32_path(data->value.ptr, data->value.size, &context->owner_deriv_path);
-
-    if ((parsed < 0) || ((uint16_t) parsed != data->value.size)) {
-        return false;
-    }
+    context->trusted_name.name_source = value;
     return true;
 }
 
 /**
- * Handler for tag \ref NFT_ID
+ * Handler for tag NFT_ID
  *
  * @param[in] data the tlv data
  * @param[out] context the trusted name context
  * @return whether it was successful
  */
 static bool handle_nft_id(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    if (data->value.size > sizeof(context->trusted_name.nft_id)) {
+    buffer_t field = {0};
+    if (!get_buffer_from_tlv_data(data, &field, 1, sizeof(context->trusted_name.nft_id))) {
+        PRINTF("NFT_ID: failed to extract\n");
         return false;
     }
-    buf_shrink_expand(data->value.ptr,
-                      data->value.size,
+    buf_shrink_expand(field.ptr,
+                      field.size,
                       context->trusted_name.nft_id,
                       sizeof(context->trusted_name.nft_id));
-    return true;  // unhandled for now
+    return true;
+}
+
+/**
+ * Handler for tag OWNER
+ *
+ * @param[in] data the tlv data
+ * @param[out] context the trusted name context
+ * @return whether it was successful
+ */
+static bool handle_owner(const tlv_data_t *data, s_trusted_name_ctx *context) {
+    buffer_t field = {0};
+    if (!get_buffer_from_tlv_data(data, &field, 1, ADDRESS_LENGTH)) {
+        PRINTF("OWNER: failed to extract\n");
+        return false;
+    }
+    buf_shrink_expand(field.ptr, field.size, context->owner, sizeof(context->owner));
+    return true;
+}
+
+/**
+ * Handler for tag \ref OWNER_DERIV_PATH
+ *
+ * @param[in] data the tlv data
+ * @param[out] context the trusted name context
+ * @return whether it was successful
+ */
+static bool handle_owner_deriv_path(const tlv_data_t *data, s_trusted_name_ctx *context) {
+    buffer_t field = {0};
+    uint32_t bip32_max_size = MAX_BIP32_PATH * sizeof(uint32_t);
+    if (data->value.size < sizeof(context->owner_deriv_path.length)) {
+        PRINTF("OWNER_DERIV_PATH: data too short\n");
+        return false;
+    }
+    if (!get_buffer_from_tlv_data(data, &field, 1, bip32_max_size)) {
+        PRINTF("OWNER: failed to extract\n");
+        return false;
+    }
+    context->owner_deriv_path.length = field.ptr[0];
+    if (!bip32_path_read(&field.ptr[sizeof(context->owner_deriv_path.length)],
+                         field.size - sizeof(context->owner_deriv_path.length),
+                         context->owner_deriv_path.indices,
+                         context->owner_deriv_path.length)) {
+        PRINTF("OWNER_DERIV_PATH: failed to read BIP32 path\n");
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Handler for tag SIGNATURE
+ *
+ * @param[in] data the tlv data
+ * @param[out] context the trusted name context
+ * @return whether it was successful
+ */
+static bool handle_signature(const tlv_data_t *data, s_trusted_name_ctx *context) {
+    buffer_t sig = {0};
+    if (!get_buffer_from_tlv_data(data,
+                                  &sig,
+                                  CX_ECDSA_SHA256_SIG_MIN_ASN1_LENGTH,
+                                  CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH)) {
+        PRINTF("SIGNATURE: failed to extract\n");
+        return false;
+    }
+    context->sig_size = sig.size;
+    context->sig = sig.ptr;
+    return true;
 }
 
 // Define TLV tags and their handlers using X-macro pattern
@@ -523,8 +455,8 @@ static bool handle_nft_id(const tlv_data_t *data, s_trusted_name_ctx *context) {
     X(0x70, TAG_TRUSTED_NAME_TYPE, handle_trusted_name_type, ENFORCE_UNIQUE_TAG)     \
     X(0x71, TAG_TRUSTED_NAME_SOURCE, handle_trusted_name_source, ENFORCE_UNIQUE_TAG) \
     X(0x72, TAG_NFT_ID, handle_nft_id, ENFORCE_UNIQUE_TAG)                           \
-    X(0x73, TAG_OWNER, handle_owner, ENFORCE_UNIQUE_TAG)                             \
-    X(0x74, TAG_OWNER_DERIV_PATH, handle_owner_deriv_path, ENFORCE_UNIQUE_TAG)       \
+    X(0x74, TAG_OWNER, handle_owner, ENFORCE_UNIQUE_TAG)                             \
+    X(0x75, TAG_OWNER_DERIV_PATH, handle_owner_deriv_path, ENFORCE_UNIQUE_TAG)       \
     X(0x15, TAG_DER_SIGNATURE, handle_signature, ENFORCE_UNIQUE_TAG)
 
 // Forward declaration
@@ -569,32 +501,15 @@ bool handle_trusted_name_tlv_payload(const buffer_t *payload, s_trusted_name_ctx
  */
 static bool verify_signature(const s_trusted_name_ctx *context) {
     uint8_t hash[INT256_LENGTH];
-    const uint8_t *pk;
-    size_t pk_size;
 
-    switch (context->key_id) {
-        case TN_KEY_ID_DOMAIN_SVC:
-            pk = TRUSTED_NAME_PUB_KEY;
-            pk_size = sizeof(TRUSTED_NAME_PUB_KEY);
-            break;
-        case TN_KEY_ID_CAL:
-            pk = LEDGER_SIGNATURE_PUBLIC_KEY;
-            pk_size = sizeof(LEDGER_SIGNATURE_PUBLIC_KEY);
-            break;
-        default:
-            PRINTF("Error: Unknown metadata key ID %u\n", context->key_id);
-            return false;
-    }
-
-    if (cx_hash_no_throw((cx_hash_t *) &context->hash_ctx, CX_LAST, NULL, 0, hash, INT256_LENGTH) !=
-        CX_OK) {
+    if (finalize_hash((cx_hash_t *) &context->hash_ctx, hash, sizeof(hash)) != true) {
         return false;
     }
 
     if (check_signature_with_pubkey(hash,
                                     sizeof(hash),
-                                    pk,
-                                    pk_size,
+                                    NULL,
+                                    0,
                                     CERTIFICATE_PUBLIC_KEY_USAGE_TRUSTED_NAME,
                                     (uint8_t *) context->sig,
                                     context->sig_size) != true) {
@@ -603,111 +518,130 @@ static bool verify_signature(const s_trusted_name_ctx *context) {
     return true;
 }
 
-static bool verify_mab_owner(const s_trusted_name_ctx *context) {
-    bip32_path_t owner_path;
-    publicKeyContext_t public_key_context = {0};
-    char owner_address58[BASE58CHECK_ADDRESS_SIZE + 1] = {0};
-    uint8_t owner_address[ADDRESS_SIZE];
-
-    if (context == NULL) {
-        return false;
-    }
-
-    if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_OWNER, TAG_OWNER_DERIV_PATH)) {
-        PRINTF("Error: MAB trusted name requires owner metadata!\n");
-        return false;
-    }
-
-    owner_path = context->owner_deriv_path;
-
-    if (initPublicKeyContext(&owner_path, owner_address58, &public_key_context) < 0) {
-        PRINTF("Error: failed to derive MAB owner public key!\n");
-        return false;
-    }
-
-    getAddressFromPublicKey(public_key_context.publicKey, owner_address);
-    if (memcmp(owner_address + 1, context->owner, ADDRESS_LENGTH) != 0) {
-        PRINTF("Error: MAB owner does not match derivation path!\n");
-        return false;
-    }
-
-    return true;
-}
-
+/**
+ * @brief Verify the received fields
+ *
+ * Check the mandatory fields are present
+ *
+ * @param[in] context Trusted name context
+ * @return whether it was successful
+ */
 static bool verify_fields(const s_trusted_name_ctx *context) {
-    if (context == NULL) {
-        return false;
-    }
-
-    if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_STRUCTURE_VERSION)) {
-        PRINTF("Error: no struct version specified!\n");
+    // Common required tags for all versions
+    if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
+                                 TAG_STRUCTURE_TYPE,
+                                 TAG_STRUCTURE_VERSION,
+                                 TAG_SIGNER_KEY_ID,
+                                 TAG_SIGNER_ALGO,
+                                 TAG_DER_SIGNATURE,
+                                 TAG_TRUSTED_NAME,
+                                 TAG_ADDRESS)) {
         return false;
     }
 
     switch (context->trusted_name.struct_version) {
         case STRUCT_VERSION_1:
-            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
-                                         TAG_STRUCTURE_TYPE,
-                                         TAG_STRUCTURE_VERSION,
-                                         TAG_SIGNER_KEY_ID,
-                                         TAG_SIGNER_ALGO,
-                                         TAG_DER_SIGNATURE,
-                                         TAG_TRUSTED_NAME,
-                                         TAG_ADDRESS,
-                                         TAG_CHALLENGE,
-                                         TAG_COIN_TYPE)) {
-                PRINTF("Error: Missing mandatory fields in descriptor!\n");
+            // Version 1 requires: CHALLENGE and COIN_TYPE
+            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE, TAG_COIN_TYPE)) {
                 return false;
             }
             break;
 
         case STRUCT_VERSION_2:
+            // Version 2 requires: CHAIN_ID, NAME_TYPE, NAME_SOURCE
             if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
-                                         TAG_STRUCTURE_TYPE,
-                                         TAG_STRUCTURE_VERSION,
-                                         TAG_SIGNER_KEY_ID,
-                                         TAG_SIGNER_ALGO,
-                                         TAG_DER_SIGNATURE,
-                                         TAG_TRUSTED_NAME,
-                                         TAG_ADDRESS,
                                          TAG_CHAIN_ID,
                                          TAG_TRUSTED_NAME_TYPE,
                                          TAG_TRUSTED_NAME_SOURCE)) {
-                PRINTF("Error: Missing mandatory fields in descriptor!\n");
                 return false;
             }
+            // Account names require CHALLENGE
             if ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
-                !TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE)) {
+                (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE))) {
                 PRINTF("Error: trusted account name requires a challenge!\n");
                 return false;
             }
+            // MAB source requires OWNER
             if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
-                !TLV_CHECK_RECEIVED_TAGS(context->received_tags,
-                                         TAG_OWNER,
-                                         TAG_OWNER_DERIV_PATH)) {
-                PRINTF("Error: MAB trusted name requires owner metadata!\n");
+                (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
+                                          TAG_OWNER,
+                                          TAG_OWNER_DERIV_PATH))) {
+                PRINTF("Error: did not receive owner and/or deriv path for MAB source!\n");
                 return false;
             }
             break;
-
         default:
             PRINTF("Error: unsupported trusted name struct version (%u) !\n",
                    context->trusted_name.struct_version);
             return false;
     }
-
     return true;
 }
 
+/**
+ * @brief Print the Trusted name descriptor.
+ *
+ * @param[in] context Trusted name context
+ * Only for debug purpose.
+ */
 static void print_trusted_name_info(const s_trusted_name_ctx *context) {
-    if (context == NULL) {
-        return;
-    }
+    UNUSED(context);
+    PRINTF("****************************************************************************\n");
+    PRINTF("[TRUSTED NAME] - Registered Trusted Name:\n");
+    PRINTF("[TRUSTED NAME] -    Name: %s\n", context->trusted_name.name);
+    PRINTF("[TRUSTED NAME] -    Address: %.*h\n", ADDRESS_LENGTH, context->trusted_name.addr);
+}
 
-    PRINTF("Registered : %s => %.*h\n",
-           context->trusted_name.name,
-           ADDRESS_LENGTH,
-           context->trusted_name.addr);
+static bool ens_charset(char c) {
+    if (isalpha((int) c)) {
+        if (!islower((int) c)) {
+            return false;
+        }
+    } else if (!isdigit((int) c)) {
+        switch (c) {
+            case '.':
+            case '-':
+            case '_':
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool generic_trusted_name_charset(char c) {
+    if (!isalpha((int) c) && !isdigit((int) c)) {
+        switch (c) {
+            case '.':
+            case '-':
+            case '_':
+            case ' ':
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Check the characters of trusted name with a given check function
+ *
+ * @param[in] name trusted name
+ * @param[in] check_func function to check the character
+ */
+static bool check_trusted_name(const char *name, bool (*check_func)(char)) {
+    if (name == NULL) {
+        return false;
+    }
+    for (int idx = 0; name[idx] != '\0'; ++idx) {
+        if (!check_func(name[idx])) {
+            PRINTF("Error: unallowed character in trusted name '%c' !\n", name[idx]);
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -718,39 +652,72 @@ static void print_trusted_name_info(const s_trusted_name_ctx *context) {
  */
 bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
     s_trusted_name *node = NULL;
-
     if (!verify_fields(context)) {
-        return false;
-    }
-
-    if (!validate_trusted_name_value(&context->trusted_name)) {
+        PRINTF("Error: Missing mandatory fields in descriptor!\n");
         return false;
     }
 
     if (context->trusted_name.struct_version == STRUCT_VERSION_2) {
         switch (context->trusted_name.name_type) {
             case TN_TYPE_ACCOUNT:
-                if ((context->trusted_name.name_source != TN_SOURCE_ENS) &&
-                    (context->trusted_name.name_source != TN_SOURCE_MAB)) {
-                    PRINTF("Error: cannot accept an account name from given source (%u)!\n",
-                           context->trusted_name.name_source);
-                    return false;
-                }
-                if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
-                    !verify_mab_owner(context)) {
+                if (context->trusted_name.name_source == TN_SOURCE_CAL) {
+                    PRINTF("Error: cannot accept an account name from the CAL!\n");
                     return false;
                 }
                 break;
             case TN_TYPE_CONTRACT:
             case TN_TYPE_TOKEN:
                 if (context->trusted_name.name_source != TN_SOURCE_CAL) {
-                    PRINTF("Error: cannot accept this trusted name type from given source (%u)!\n",
+                    PRINTF("Error: cannot accept a contract name from given source (%u)!\n",
                            context->trusted_name.name_source);
                     return false;
                 }
                 break;
             default:
                 return false;
+        }
+        // MAB source requires OWNER
+        if (context->trusted_name.name_source == TN_SOURCE_MAB) {
+            uint8_t raw_pubkey[CX_SECP256_PUB_KEY_SIZE];
+            uint8_t wallet_addr[ADDRESS_LENGTH];
+
+            if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
+                                            context->owner_deriv_path.indices,
+                                            context->owner_deriv_path.length,
+                                            raw_pubkey,
+                                            NULL,
+                                            CX_SHA512) != CX_OK) {
+                PRINTF("Error: could not derive pubkey!\n");
+                return false;
+            }
+            getEthAddressFromRawKey(raw_pubkey, wallet_addr);
+
+            if (memcmp(context->owner, wallet_addr, sizeof(wallet_addr)) != 0) {
+                PRINTF("Error: mismatching owner received (0x%.*h vs 0x%.*h) !\n",
+                       sizeof(context->owner),
+                       context->owner,
+                       sizeof(wallet_addr),
+                       wallet_addr);
+                return false;
+            }
+        }
+    }
+
+    size_t name_length = strnlen(context->trusted_name.name, sizeof(context->trusted_name.name));
+    if ((context->trusted_name.struct_version == STRUCT_VERSION_1) ||
+        ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
+         (context->trusted_name.name_source == TN_SOURCE_ENS))) {
+        if ((name_length < 5) ||
+            (strncmp(".eth", (char *) &context->trusted_name.name[name_length - 4], 4) != 0)) {
+            PRINTF("Unexpected TLD!\n");
+            return false;
+        }
+        if (!check_trusted_name(context->trusted_name.name, &ens_charset)) {
+            return false;
+        }
+    } else {
+        if (!check_trusted_name(context->trusted_name.name, &generic_trusted_name_charset)) {
+            return false;
         }
     }
 
@@ -763,18 +730,7 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         return false;
     }
     memcpy(node, &context->trusted_name, sizeof(*node));
-    node->next = NULL;
-
-    if (g_trusted_name_list == NULL) {
-        g_trusted_name_list = node;
-    } else {
-        s_trusted_name *tail = g_trusted_name_list;
-
-        while (tail->next != NULL) {
-            tail = tail->next;
-        }
-        tail->next = node;
-    }
+    flist_push_back((flist_node_t **) &g_trusted_name_list, (flist_node_t *) node);
 
     print_trusted_name_info(context);
     return true;

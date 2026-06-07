@@ -106,7 +106,7 @@ int apdu_dispatcher(const command_t *cmd) {
             return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_PROVIDE_TRUSTED_NAME:
-            return handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            return io_send_sw(handle_trusted_name(cmd->p1, cmd->data, cmd->lc));
 
         // Generic Clear Signing (generic_tx_parser). The ported handlers return a
         // status word (as app-ethereum's main loop expects) rather than sending it

@@ -3,9 +3,8 @@
 #include "trusted_name.h"
 #include "challenge.h"
 #include "tlv_apdu.h"
-#include "app_errors.h"
 #include "apdu_constants.h"
-#include "io.h"
+#include "ui_utils.h"
 
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_trusted_name_ctx ctx = {0};
@@ -28,10 +27,9 @@ static bool handle_tlv_payload(const buffer_t *buf) {
  * @param[in] data APDU payload
  * @param[in] length payload size
  */
-uint16_t handle_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_t length) {
-    UNUSED(p2);
+uint16_t handle_trusted_name(uint8_t p1, const uint8_t *data, uint8_t length) {
     if (!tlv_from_apdu(p1 == P1_FIRST_CHUNK, length, data, &handle_tlv_payload)) {
-        return io_send_sw(E_INCORRECT_DATA);
+        return SWO_INCORRECT_DATA;
     }
-    return io_send_sw(E_OK);
+    return SWO_SUCCESS;
 }

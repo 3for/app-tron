@@ -16,7 +16,7 @@ from client.command_builder import CommandBuilder
 from client.tip712 import InputData as InputData
 
 # Values used across all tests
-CHAIN_ID = 1151668124
+CHAIN_ID = 728126428
 NAME = "ledger.eth"
 ADDR = bytes.fromhex("0011223344556677889900112233445566778899")
 KEY_ID = 1

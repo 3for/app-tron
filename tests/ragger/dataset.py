@@ -19,7 +19,7 @@ ADVANCED_DATA_SETS = [
     DataSet(
         {
             "domain": {
-                "chainId": 1151668124,
+                "chainId": 728126428,
                 "name": "Advanced test",
                 "verifyingContract":
                 "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
@@ -83,13 +83,13 @@ ADVANCED_DATA_SETS = [
                     "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     "ticker": "WETH",
                     "decimals": 18,
-                    "chain_id": 1151668124,
+                    "chain_id": 728126428,
                 },
                 {
                     "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
                     "ticker": "DAI",
                     "decimals": 18,
-                    "chain_id": 1151668124,
+                    "chain_id": 728126428,
                 },
             ],
             "fields": {
@@ -171,7 +171,7 @@ ADVANCED_DATA_SETS = [
                 "version": "1",
                 "verifyingContract":
                 "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
-                "chainId": 1151668124,
+                "chainId": 728126428,
             },
             "message": {
                 "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
@@ -188,7 +188,7 @@ ADVANCED_DATA_SETS = [
                     "addr": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
                     "ticker": "ENS",
                     "decimals": 18,
-                    "chain_id": 1151668124,
+                    "chain_id": 728126428,
                 },
             ],
             "fields": {
@@ -248,7 +248,7 @@ ADVANCED_DATA_SETS = [
                 "version": "1",
                 "verifyingContract":
                 "0x0000000000000000000000000000000000000000",
-                "chainId": 1151668124,
+                "chainId": 728126428,
             },
             "message": {
                 "token_big": "0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -264,7 +264,7 @@ ADVANCED_DATA_SETS = [
                     "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
                     "ticker": "DAI",
                     "decimals": 18,
-                    "chain_id": 1151668124,
+                    "chain_id": 728126428,
                 },
             ],
             "fields": {
@@ -355,7 +355,7 @@ filtering_empty_array_test_data = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "text": "This is a test",
@@ -395,7 +395,7 @@ TOKENS = [[
         "addr": "0x1111111111111111111111111111111111111111",
         "ticker": "SRC",
         "decimals": 18,
-        "chain_id": 1151668124,
+        "chain_id": 728126428,
     },
     {},
 ],
@@ -405,7 +405,7 @@ TOKENS = [[
                   "addr": "0x2222222222222222222222222222222222222222",
                   "ticker": "DST",
                   "decimals": 18,
-                  "chain_id": 1151668124,
+                  "chain_id": 728126428,
               },
           ]]
 
@@ -454,7 +454,7 @@ advanced_missing_token_test_data = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "token_from": "0x1111111111111111111111111111111111111111",
@@ -526,7 +526,7 @@ advanced_trusted_name_test_data = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "validator": "0x1111111111111111111111111111111111111111",
