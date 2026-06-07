@@ -102,6 +102,9 @@ int apdu_dispatcher(const command_t *cmd) {
         case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
             return handleProvideTrc20TokenInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
+        case INS_PROVIDE_NFT_INFORMATION:
+            return handleProvideNFTInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
         case INS_GET_CHALLENGE:
             return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 

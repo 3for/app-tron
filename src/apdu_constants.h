@@ -45,6 +45,7 @@
 #define INS_SIGN_EXTERNAL_PLUGIN               0xC4  // plugin(TriggerSmartContract)
 
 #define INS_PROVIDE_TRC20_TOKEN_INFORMATION 0xCA  // 0x0A in eth
+#define INS_PROVIDE_NFT_INFORMATION         0x14  // same opcode as app-ethereum
 
 #define INS_GET_CHALLENGE 0x20
 #define INS_PROVIDE_TRUSTED_NAME  0x22
@@ -99,6 +100,10 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,
                                        uint8_t dataLength);
+int handleProvideNFTInformation(uint8_t p1,
+                                uint8_t p2,
+                                const uint8_t *workBuffer,
+                                uint8_t dataLength);
 int handleSetExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 void cleanupSignExternalPlugin(void);
