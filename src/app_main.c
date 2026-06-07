@@ -33,7 +33,8 @@
 #include "app_errors.h"
 #include "ui_globals.h"
 #include "trusted_name.h"
-#include "tx_ctx.h"  // gcs_cleanup (Generic Clear Signing)
+#include "tx_ctx.h"      // gcs_cleanup (Generic Clear Signing)
+#include "proxy_info.h"  // proxy_cleanup
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -67,6 +68,8 @@ void reset_app_context() {
     // Free any Generic Clear Signing state (tx contexts, field table, parked
     // calldata) so it never leaks across signing sessions.
     gcs_cleanup();
+    // Free the cached proxy<->implementation mapping (INS_PROVIDE_PROXY_INFO).
+    proxy_cleanup();
     // Reset the legacy TIP-191 streamed-display state (defined in
     // sign_message_entry.c).
     processed_size_191 = 0;

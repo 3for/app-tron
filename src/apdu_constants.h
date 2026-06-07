@@ -52,6 +52,7 @@
 // Generic Clear Signing (GCS / generic_tx_parser). Same opcodes as app-ethereum.
 #define INS_GTP_TRANSACTION_INFO 0x26
 #define INS_GTP_FIELD            0x28
+#define INS_PROVIDE_PROXY_INFO   0x2A
 
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00

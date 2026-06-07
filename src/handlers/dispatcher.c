@@ -30,6 +30,7 @@
 
 #include "cmd_tx_info.h"
 #include "cmd_field.h"
+#include "cmd_proxy_info.h"
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -115,6 +116,9 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_GTP_FIELD:
             return io_send_sw(handle_field(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+
+        case INS_PROVIDE_PROXY_INFO:
+            return io_send_sw(handle_proxy_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
 
         case INS_SET_EXTERNAL_PLUGIN:
             // Set External Plugin
