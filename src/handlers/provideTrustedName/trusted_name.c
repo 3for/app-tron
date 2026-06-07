@@ -591,14 +591,13 @@ static bool verify_signature(const s_trusted_name_ctx *context) {
         return false;
     }
 
-    if (check_signature_with_pubkey("Trusted Name",
-                                    hash,
+    if (check_signature_with_pubkey(hash,
                                     sizeof(hash),
                                     pk,
                                     pk_size,
                                     CERTIFICATE_PUBLIC_KEY_USAGE_TRUSTED_NAME,
                                     (uint8_t *) context->sig,
-                                    context->sig_size) != CX_OK) {
+                                    context->sig_size) != true) {
         return false;
     }
     return true;

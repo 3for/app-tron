@@ -185,18 +185,13 @@ bool verify_tx_info_struct(const s_tx_info_ctx *context) {
         return false;
     }
 
-    // app-tron's check_signature_with_pubkey takes a leading debug tag and
-    // returns CX_OK (not a bool) compared to app-ethereum's. The PubKey/keyLen
-    // arguments are ignored by the Tron implementation (it uses the PKI-loaded
-    // certificate), so NULL/0 keeps app-ethereum's semantics.
-    if (check_signature_with_pubkey("GCS Tx Info",
-                                    hash,
+    if (check_signature_with_pubkey(hash,
                                     sizeof(hash),
                                     NULL,
                                     0,
                                     CERTIFICATE_PUBLIC_KEY_USAGE_CALLDATA,
                                     (uint8_t *) context->tx_info->signature,
-                                    context->tx_info->signature_len) != CX_OK) {
+                                    context->tx_info->signature_len) != true) {
         return false;
     }
     return true;

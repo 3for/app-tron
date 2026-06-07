@@ -25,6 +25,7 @@ typedef struct chain_config_s {
 } chain_config_t;
 
 #define TRON_MAINNET_CHAINID 728126428
+#define TRON_NILE_CHAINID    3448148188  // Nile testnet (0xCD8690DC)
 
 // Chain ID Validation (per EIP-2294)
 // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2294.md

@@ -8,11 +8,12 @@
 const char g_unknown_ticker[] = "???";
 
 // Mapping of chain ids to networks.
-// TRON is a single-chain application, so this table holds only the TRON
-// mainnet entry. The lookup machinery is kept identical to app-ethereum so the
-// two implementations can be diffed/audited side by side.
+// TRON holds the mainnet plus the Nile testnet entry. The lookup machinery is
+// kept identical to app-ethereum so the two implementations can be diffed/
+// audited side by side.
 static const network_info_t NETWORK_MAPPING[] = {
     {.chain_id = TRON_MAINNET_CHAINID, .name = "Tron", .ticker = "TRX"},
+    {.chain_id = TRON_NILE_CHAINID, .name = "Tron Nile", .ticker = "TRX"},
 };
 
 /**

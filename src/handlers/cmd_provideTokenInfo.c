@@ -19,7 +19,6 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     uint64_t chain_id;
     uint8_t hash[INT256_LENGTH];
     tokenDefinition_t *token = &get_current_asset_info()->token;
-    cx_err_t error = CX_INTERNAL_ERROR;
 
     PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
 
@@ -63,15 +62,13 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     offset += 4;
     dataLength -= 4;
 
-    error = check_signature_with_pubkey("TRC20 Token Info",
-                                        hash,
-                                        sizeof(hash),
-                                        LEDGER_SIGNATURE_PUBLIC_KEY,
-                                        sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
-                                        CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
-                                        (uint8_t *) (workBuffer + offset),
-                                        dataLength);
-    if (error != CX_OK) {
+    if (!check_signature_with_pubkey(hash,
+                                     sizeof(hash),
+                                     LEDGER_SIGNATURE_PUBLIC_KEY,
+                                     sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
+                                     CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
+                                     (uint8_t *) (workBuffer + offset),
+                                     dataLength)) {
         PRINTF("Invalid token signature\n");
 #ifndef HAVE_BYPASS_SIGNATURES
         return io_send_sw(E_INCORRECT_DATA);
