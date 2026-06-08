@@ -7,26 +7,48 @@ Pipeline under test:
     0x26 TX_INFO     -> CAL-signed descriptor (selector + fields_hash commitment)
     0x28 FIELD x N   -> per-field render rules; running hash must equal fields_hash
 
-`test_gcs_store_parks_calldata` is fully runnable today (it only exercises the
-0xC4/P2=STORE bridge, which returns 0x9000 once the calldata is parked).
+`test_gcs_store_parks_calldata` exercises only the 0xC4/P2=STORE bridge, which
+returns 0x9000 once the calldata is parked.
 
-`test_gcs_p1_end_to_end` is a scaffold: the exact TX_INFO/FIELD serialization,
-the fields_hash algorithm and the signature key-usage must be confirmed against
-the Ledger backend before it can pass. It is skipped until then.
+`test_gcs_p1_end_to_end` drives the full skeleton: STORE -> 0x26 -> 0x28(raw) and
+asserts the firmware validates the running fields_hash. The serialization mirrors
+the app-ethereum GCS contract (the same Ledger backend / CAL key) verbatim:
+
+  * TX_INFO struct hash  : SHA-256 over every tag except 0xFF, verified against the
+                           CALLDATA PKI public key (CERTIFICATE_PUBLIC_KEY_USAGE_CALLDATA).
+  * fields_hash          : SHA3-256 (NIST, cx_sha3_init(...,256)) over the raw bytes
+                           of each 0x28 FIELD payload -- NOT keccak256.
+  * signature            : SECP256K1 over the struct hash, signed with the CALLDATA
+                           test key (keychain/calldata.pem); the device is first sent
+                           the matching CALLDATA PKI certificate.
 """
 import sys
+import hashlib
 from pathlib import Path
 from struct import pack
 
 import pytest
-from Crypto.Hash import keccak
 
 import keychain
-from ledgered.devices import Device
+from ledgered.devices import Device, DeviceType
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from tron import CLA, Errors, InsType, TronClient, MAX_APDU_LEN
-from client.tip712.InputData import format_tlv
+from client.tip712.InputData import format_tlv as _raw_format_tlv
+
+
+def format_tlv(tag, value) -> bytes:
+    """TLV-encode one field, returning ``bytes``.
+
+    app-tron's InputData.format_tlv emits a ``bytearray`` and only accepts
+    int/str/bytes values, so feeding a nested TLV (itself a ``bytearray``) back in
+    trips its ``isinstance(value, bytes)`` assertion. Coerce both sides to bytes
+    so descriptors can be composed by nesting (data_path -> value -> param ->
+    field), matching app-ethereum's TlvSerializable behaviour.
+    """
+    if isinstance(value, bytearray):
+        value = bytes(value)
+    return bytes(_raw_format_tlv(tag, value))
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
 if PROTO_PATH not in sys.path:
@@ -36,6 +58,7 @@ from core import Tron_pb2 as tron
 
 # --- APDU constants (mirror src/apdu_constants.h) ---------------------------
 P1_FIRST = 0x00
+P1_SIGN = 0x10
 P1_MORE = 0x80
 P1_LAST = 0x90
 P2_GCS_STORE = 0x10
@@ -93,7 +116,11 @@ def gcs_store_calldata(client: TronClient, backend: BackendInterface, path: str,
     for i, msg in enumerate(messages[:-1]):
         p1 = P1_FIRST if i == 0 else P1_MORE
         backend.exchange(CLA, InsType.SIGN_EXTERNAL_PLUGIN, p1, P2_GCS_STORE, msg)
-    p1 = P1_FIRST if len(messages) == 1 else P1_LAST
+    # The last chunk must trigger the GCS finalize so the firmware registers the
+    # parked calldata as the root tx context and enters APP_STATE_SIGNING_TX.
+    # P1_LAST finalizes a multi-chunk stream; a single chunk must use P1_SIGN,
+    # which both initializes *and* finalizes in one APDU (sign_external_plugin.c).
+    p1 = P1_SIGN if len(messages) == 1 else P1_LAST
     return backend.exchange(CLA, InsType.SIGN_EXTERNAL_PLUGIN, p1, P2_GCS_STORE,
                             messages[-1]).status
 
@@ -131,6 +158,54 @@ PARAM_RAW_VERSION = 0x00
 PARAM_RAW_VALUE = 0x01
 TF_UINT = 1
 
+# gtp_data_path.c node tags (mirror app-ethereum client/gcs.py DataPath).
+DATA_PATH_VERSION = 0x00
+DATA_PATH_TUPLE = 0x01
+DATA_PATH_LEAF = 0x04
+PATH_LEAF_STATIC = 0x03
+
+
+def build_data_path_static(tuple_index: int) -> bytes:
+    """gtp_data_path TLV selecting one top-level static ABI word.
+
+    For a flat signature like `transfer(address,uint256)`, argument N is reached
+    with [TUPLE(N), LEAF(STATIC)] -- the same encoding app-ethereum's
+    fields_utils.build_path() emits for a non-dynamic parameter.
+    """
+    return (format_tlv(DATA_PATH_VERSION, 1) +
+            format_tlv(DATA_PATH_TUPLE, pack(">H", tuple_index)) +
+            format_tlv(DATA_PATH_LEAF, pack("B", PATH_LEAF_STATIC)))
+
+
+# --- CALLDATA PKI certificate ------------------------------------------------
+# TX_INFO (0x26) is verified against CERTIFICATE_PUBLIC_KEY_USAGE_CALLDATA. The
+# device gets the matching public key (private half: keychain/calldata.pem) from
+# this Ledger-test-root certificate, exactly as app-ethereum does. P1 of the
+# Ledger-PKI APDU (CLA 0xB0 / INS 0x06) is the usage id below.
+PUBKEY_USAGE_CALLDATA = 0x0b
+
+# Per-device CALLDATA certificates (copied verbatim from app-ethereum
+# client/ledger_pki.py PKI_CERTIFICATES[PUBKEY_USAGE_CALLDATA]).
+CALLDATA_CERTIFICATES = {
+    DeviceType.NANOSP: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010315463044022076DD2EAB72E69D440D6ED8290C8C37E39F54294C23FF0F8520F836E7BE07455C02201D9A8A75223C1ADA1D9D00966A12EBB919D0BBF2E66F144C83FADCAA23672566",  # noqa: E501
+    DeviceType.NANOX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010215463044022077FF9625006CB8A4AD41A4B04FF2112E92A732BD263CCE9B97D8E7D2536D04300220445B8EE3616FB907AA5E68359275E94D0A099C3E32A4FC8B3669C34083671F2F",  # noqa: E501
+    DeviceType.STAX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010415473045022100A88646AD72CA012D5FDAF8F6AE0B7EBEF079212768D57323CB5B57CADD9EB20D022005872F8EA06092C9783F01AF02C5510588FB60CBF4BA51FB382B39C1E060BB6B",  # noqa: E501
+    DeviceType.FLEX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B43401013501051546304402205305BDDDAD0284A2EAC2A9BE4CEF6604AE9415C5F46883448F5F6325026234A3022001ED743BCF33CCEB070FDD73C3D3FCC2CEE5AB30A5C3EB7D2A8D21C6F58D493F",  # noqa: E501
+    DeviceType.APEX_P: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B4340101350106154730450221009F5EDA5B6ED34FA9F1C44B1CC234BE5FE6C0DD4655F42EE50CA6201F59491E5A02206E055F490F56F42B625F2B5772AE860CAC6848B6C5AC8E44BC529A959249FC37",  # noqa: E501
+}
+
+
+def send_calldata_certificate(client: TronClient, device: Device) -> None:
+    """Load the CALLDATA PKI certificate so the device can verify TX_INFO.
+
+    No-op on devices without a published test certificate; the test is then
+    skipped rather than failing on a missing trust anchor.
+    """
+    cert = CALLDATA_CERTIFICATES.get(device.type)
+    if not cert:
+        pytest.skip(f"No CALLDATA test certificate for device {device.type.name}")
+    client._pki_client.send_certificate(PUBKEY_USAGE_CALLDATA, bytes.fromhex(cert))
+
 
 def build_field_raw(name: str, type_size: int, data_path: bytes) -> bytes:
     """Build one FIELD (0x28) struct rendering a RAW uint value from calldata.
@@ -152,27 +227,35 @@ def build_field_raw(name: str, type_size: int, data_path: bytes) -> bytes:
 
 def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[bytes],
                   operation: str) -> bytes:
-    """Build the TX_INFO (0x26) descriptor and CAL-sign it.
+    """Build the TX_INFO (0x26) descriptor and CALLDATA-sign it.
 
-    fields_hash = keccak256(concat(field_payload_i)) -- must match the firmware's
-    running cx_sha3 over each 0x28 payload (cmd_field.c + tx_ctx fields_hash_ctx).
-    The signature covers sha256(all tags except 0xFF) with the CALLDATA key usage.
+    fields_hash = SHA3-256(concat(field_payload_i)) -- matches the firmware's
+    running cx_sha3_init(...,256) fed with each raw 0x28 payload (cmd_field.c +
+    tx_ctx fields_hash_ctx). This is NIST SHA3-256, *not* keccak256.
+
+    The signature covers SHA-256(all tags except 0xFF) -- keychain.sign_data()
+    hashes with SHA-256 internally -- using the CALLDATA key, whose public key is
+    delivered to the device through the CALLDATA PKI certificate.
     """
-    fields_hash = keccak.new(digest_bits=256, data=b"".join(fields)).digest()
+    fields_hash = hashlib.sha3_256(b"".join(fields)).digest()
     body = (format_tlv(TX_INFO_VERSION, 1) +
             format_tlv(TX_INFO_CHAIN_ID, pack(">Q", TRON_MAINNET_CHAINID)) +
             format_tlv(TX_INFO_CONTRACT_ADDR, contract_addr20) +
             format_tlv(TX_INFO_SELECTOR, selector) +
             format_tlv(TX_INFO_FIELDS_HASH, fields_hash) +
             format_tlv(TX_INFO_OPERATION_TYPE, operation))
-    # TODO(backend): confirm signed digest (sha256 of `body`) and key usage.
-    signature = keychain.sign_data(keychain.Key.CAL, body)
+    signature = keychain.sign_data(keychain.Key.CALLDATA, body)
     return body + format_tlv(TX_INFO_SIGNATURE, signature)
 
 
 def send_tlv(backend: BackendInterface, ins: int, payload: bytes) -> int:
-    # The generic_tx_parser commands use chunked TLV (P1=FIRST_CHUNK then 0x00).
-    chunks = [payload[i:i + MAX_APDU_LEN] for i in range(0, len(payload), MAX_APDU_LEN)]
+    # The generic_tx_parser commands (0x26 / 0x28) use chunked TLV: the FIRST
+    # chunk is prefixed with the total TLV length as a 2-byte big-endian integer
+    # (tlv_apdu.c reads it with read_u16_be), continuation chunks are raw. The
+    # firmware strips this prefix before parsing/hashing, so it is not part of
+    # the descriptor or the fields_hash.
+    framed = pack(">H", len(payload)) + payload
+    chunks = [framed[i:i + MAX_APDU_LEN] for i in range(0, len(framed), MAX_APDU_LEN)]
     status = Errors.OK
     for i, chunk in enumerate(chunks):
         p1 = P1_FIRST_CHUNK if i == 0 else 0x00
@@ -180,21 +263,26 @@ def send_tlv(backend: BackendInterface, ins: int, payload: bytes) -> int:
     return status
 
 
-@pytest.mark.skip(reason="P1: TX_INFO/FIELD serialization, fields_hash and CAL "
-                         "key-usage must be aligned with the Ledger backend")
-def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
+def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
+                           device: Device):
     """store -> 0x26 -> 0x28(raw) -> expect 0x9000 (fields_hash validated)."""
     tx = build_trc20_transfer_tx(tron_client)
     assert gcs_store_calldata(tron_client, backend,
                               tron_client.getAccount(0)["path"], tx) == Errors.OK
 
+    # generic_tx_parser works on 20-byte EVM addresses (0x41 prefix stripped).
     contract_addr20 = bytes.fromhex(tron_client.address_hex(TRC20_CONTRACT_B58))[1:]
-    # TODO: real gtp_data_path bytes pointing at the `amount` arg (2nd ABI word).
-    amount_field = build_field_raw("Amount", 32, data_path=b"")
+
+    # `transfer(address _to, uint256 _amount)`: _amount is arg index 1, static.
+    amount_field = build_field_raw("Amount", 32,
+                                   data_path=build_data_path_static(1))
     fields = [amount_field]
 
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
+
+    # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
+    send_calldata_certificate(tron_client, device)
     assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
     for field in fields:
         assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
