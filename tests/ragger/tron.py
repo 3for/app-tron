@@ -291,7 +291,7 @@ class TronClient:
                 path_name = "/part2"
                 screen_change_before_first_instruction = False
             self._navigator.navigate_until_text_and_compare(
-                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                NavInsID.USE_CASE_REVIEW_TAP, [
                     NavInsID.USE_CASE_REVIEW_CONFIRM,
                     NavInsID.USE_CASE_STATUS_DISMISS
                 ],

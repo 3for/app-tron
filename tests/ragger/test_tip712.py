@@ -67,7 +67,7 @@ def autonext(device: Device, navigator: Navigator,
                         NavInsID.USE_CASE_CHOICE_CONFIRM,
                     ]
                 else:
-                    moves = [NavInsID.SWIPE_CENTER_TO_LEFT]
+                    moves = [NavInsID.USE_CASE_REVIEW_TAP]
         if snapshots_dirname is not None:
             navigator.navigate_and_compare(
                 default_screenshot_path,
@@ -118,7 +118,7 @@ def tip712_new_common(device: Device,
                 val_ins = NavInsID.BOTH_CLICK
                 text = "Accept risk and" if warning_approve else "Sign message"
             else:
-                nav_ins = NavInsID.SWIPE_CENTER_TO_LEFT
+                nav_ins = NavInsID.USE_CASE_REVIEW_TAP
                 val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
                 text = "Hold to sign"
             if snapshots_dirname is not None:

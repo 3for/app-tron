@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-import keychain
+from client import keychain
 from ledgered.devices import Device
 from client.command_builder import CommandBuilder, InsType as BuilderInsType
 from ragger.backend import BackendInterface

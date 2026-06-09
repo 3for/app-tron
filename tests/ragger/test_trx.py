@@ -24,7 +24,7 @@ from ragger.backend.interface import RaisePolicy
 from ragger.navigator import NavInsID, NavIns
 
 from settings import settings_toggle
-import keychain
+from client import keychain
 from web3 import Web3
 '''
 Tron Protobuf

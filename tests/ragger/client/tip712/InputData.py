@@ -10,10 +10,10 @@ from enum import IntEnum
 
 from client.command_builder import CommandBuilder
 from client.tip712 import TIP712FieldType
-import keychain
+from client import keychain
 from ragger.bip import pack_derivation_path
 from ragger.utils import RAPDU
-from keychain import sign_data, Key
+from client.keychain import sign_data, Key
 import base58
 from pathlib import Path
 from ledgered.devices import DeviceType

@@ -29,7 +29,13 @@ from struct import pack
 
 import pytest
 
-import keychain
+from client import keychain
+from client.enum_value import EnumValue
+from client.gcs import (DataPath, DatetimeType, Field, ParamAmount,
+                        ParamDatetime, ParamEnum, ParamRaw, ParamTokenAmount,
+                        ParamTrustedName, PathLeaf, PathLeafType, PathTuple,
+                        TxInfo, TypeFamily, Value)
+from client.trusted_name import TrustedNameSource, TrustedNameType
 from ledgered.devices import Device, DeviceType
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
@@ -37,21 +43,6 @@ from ragger.navigator import Navigator, NavIns, NavInsID
 from tron import (CLA, Errors, InsType, TronClient, MAX_APDU_LEN,
                   ROOT_SCREENSHOT_PATH)
 from utils import check_tx_signature
-from client.tip712.InputData import format_tlv as _raw_format_tlv
-
-
-def format_tlv(tag, value) -> bytes:
-    """TLV-encode one field, returning ``bytes``.
-
-    app-tron's InputData.format_tlv emits a ``bytearray`` and only accepts
-    int/str/bytes values, so feeding a nested TLV (itself a ``bytearray``) back in
-    trips its ``isinstance(value, bytes)`` assertion. Coerce both sides to bytes
-    so descriptors can be composed by nesting (data_path -> value -> param ->
-    field), matching app-ethereum's TlvSerializable behaviour.
-    """
-    if isinstance(value, bytearray):
-        value = bytes(value)
-    return bytes(_raw_format_tlv(tag, value))
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
 if PROTO_PATH not in sys.path:
@@ -141,53 +132,13 @@ def test_gcs_store_parks_calldata(tron_client: TronClient,
     assert status == Errors.OK
 
 
-# --- Descriptor builders (scaffold) -----------------------------------------
-# Tag values mirror gtp_tx_info.c (TX_INFO_TAGS) and gtp_field.c (FIELD_TAGS).
-TX_INFO_VERSION = 0x00
-TX_INFO_CHAIN_ID = 0x01
-TX_INFO_CONTRACT_ADDR = 0x02
-TX_INFO_SELECTOR = 0x03
-TX_INFO_FIELDS_HASH = 0x04
-TX_INFO_OPERATION_TYPE = 0x05
-TX_INFO_SIGNATURE = 0xFF
-
-FIELD_VERSION = 0x00
-FIELD_NAME = 0x01
-FIELD_PARAM_TYPE = 0x02
-FIELD_PARAM = 0x03
-
-PARAM_TYPE_RAW = 0
-PARAM_TYPE_AMOUNT = 1
-PARAM_TYPE_TOKEN_AMOUNT = 2
-PARAM_TYPE_DATETIME = 4
-PARAM_TYPE_ENUM = 7
-PARAM_TYPE_TRUSTED_NAME = 8
-VALUE_VERSION = 0x00
-VALUE_TYPE_FAMILY = 0x01
-VALUE_TYPE_SIZE = 0x02
-VALUE_DATA_PATH = 0x03
-PARAM_RAW_VERSION = 0x00
-PARAM_RAW_VALUE = 0x01
-TF_UINT = 1
-TF_ADDRESS = 5
-
-# gtp_data_path.c node tags (mirror app-ethereum client/gcs.py DataPath).
-DATA_PATH_VERSION = 0x00
-DATA_PATH_TUPLE = 0x01
-DATA_PATH_LEAF = 0x04
-PATH_LEAF_STATIC = 0x03
+# --- Descriptor builders -----------------------------------------------------
+# Keep the host-side GCS serialization in client.gcs, matching app-ethereum.
 
 
-def build_data_path_static(tuple_index: int) -> bytes:
-    """gtp_data_path TLV selecting one top-level static ABI word.
-
-    For a flat signature like `transfer(address,uint256)`, argument N is reached
-    with [TUPLE(N), LEAF(STATIC)] -- the same encoding app-ethereum's
-    fields_utils.build_path() emits for a non-dynamic parameter.
-    """
-    return (format_tlv(DATA_PATH_VERSION, 1) +
-            format_tlv(DATA_PATH_TUPLE, pack(">H", tuple_index)) +
-            format_tlv(DATA_PATH_LEAF, pack("B", PATH_LEAF_STATIC)))
+def build_data_path_static(tuple_index: int) -> DataPath:
+    """Select one top-level static ABI word from calldata."""
+    return DataPath(1, [PathTuple(tuple_index), PathLeaf(PathLeafType.STATIC)])
 
 
 # --- CALLDATA PKI certificate ------------------------------------------------
@@ -220,200 +171,79 @@ def send_calldata_certificate(client: TronClient, device: Device) -> None:
     client._pki_client.send_certificate(PUBKEY_USAGE_CALLDATA, bytes.fromhex(cert))
 
 
-def build_field_raw(name: str, type_size: int, data_path: bytes) -> bytes:
-    """Build one FIELD (0x28) struct rendering a RAW uint value from calldata.
-
-    NOTE: `data_path` (gtp_data_path TLV) is left to the caller because its
-    element encoding (tuple/array/ref/leaf/slice) must match gtp_data_path.c.
-    """
-    value = (format_tlv(VALUE_VERSION, 1) +
-             format_tlv(VALUE_TYPE_FAMILY, TF_UINT) +
-             format_tlv(VALUE_TYPE_SIZE, type_size) +
-             format_tlv(VALUE_DATA_PATH, data_path))
-    param = format_tlv(PARAM_RAW_VERSION, 1) + format_tlv(PARAM_RAW_VALUE, value)
-    field = (format_tlv(FIELD_VERSION, 1) +
-             format_tlv(FIELD_NAME, name) +
-             format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_RAW) +
-             format_tlv(FIELD_PARAM, param))
-    return field
+def _uint_value(type_size: int, data_path: DataPath) -> Value:
+    return Value(1, TypeFamily.UINT, type_size=type_size, data_path=data_path)
 
 
-# --- Rich field-type descriptor builders ------------------------------------
-# PARAM_DATETIME type tag values (mirror gtp_param_datetime.h).
-PARAM_DT_VERSION = 0x00
-PARAM_DT_VALUE = 0x01
-PARAM_DT_TYPE = 0x02
-DT_UNIX = 0
+def _address_value(data_path: DataPath) -> Value:
+    return Value(1, TypeFamily.ADDRESS, type_size=32, data_path=data_path)
 
 
-def _build_value(type_size: int, data_path: bytes) -> bytes:
-    """The shared VALUE struct (gtp_value.c) selecting one calldata word."""
-    return (format_tlv(VALUE_VERSION, 1) +
-            format_tlv(VALUE_TYPE_FAMILY, TF_UINT) +
-            format_tlv(VALUE_TYPE_SIZE, type_size) +
-            format_tlv(VALUE_DATA_PATH, data_path))
+def build_field_raw(name: str, type_size: int, data_path: DataPath) -> Field:
+    return Field(1, name, ParamRaw(1, _uint_value(type_size, data_path)))
 
 
-def build_field_amount(name: str, type_size: int, data_path: bytes) -> bytes:
-    """FIELD (0x28) rendering a native-currency AMOUNT (gtp_param_amount.c).
-
-    The firmware formats it with SUN_TO_TRX (6) decimals + the "TRX" ticker, so a
-    calldata word of 1_000_000 renders as "1 TRX" -- the regression guard for the
-    TRON native-decimals divergence from app-ethereum's WEI_TO_ETHER (18).
-    """
-    # PARAM_AMOUNT tags mirror RAW: 0x00 version, 0x01 value.
-    param = format_tlv(PARAM_DT_VERSION, 1) + format_tlv(PARAM_DT_VALUE,
-                                                         _build_value(type_size, data_path))
-    return (format_tlv(FIELD_VERSION, 1) +
-            format_tlv(FIELD_NAME, name) +
-            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_AMOUNT) +
-            format_tlv(FIELD_PARAM, param))
+def build_field_amount(name: str, type_size: int, data_path: DataPath) -> Field:
+    return Field(1, name, ParamAmount(1, _uint_value(type_size, data_path)))
 
 
-def build_field_datetime(name: str, type_size: int, data_path: bytes) -> bytes:
-    """FIELD (0x28) rendering a Unix DATETIME (gtp_param_datetime.c)."""
-    param = (format_tlv(PARAM_DT_VERSION, 1) +
-             format_tlv(PARAM_DT_VALUE, _build_value(type_size, data_path)) +
-             format_tlv(PARAM_DT_TYPE, DT_UNIX))
-    return (format_tlv(FIELD_VERSION, 1) +
-            format_tlv(FIELD_NAME, name) +
-            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_DATETIME) +
-            format_tlv(FIELD_PARAM, param))
+def build_field_datetime(name: str, type_size: int, data_path: DataPath) -> Field:
+    return Field(1,
+                 name,
+                 ParamDatetime(1,
+                               _uint_value(type_size, data_path),
+                               DatetimeType.DT_UNIX))
 
 
-# PARAM_TOKEN_AMOUNT tags (mirror gtp_param_token_amount.c).
-PARAM_TA_VERSION = 0x00
-PARAM_TA_VALUE = 0x01
-PARAM_TA_TOKEN = 0x02
+def build_field_token_amount(name: str, value_path: DataPath,
+                             token_path: DataPath) -> Field:
+    return Field(1,
+                 name,
+                 ParamTokenAmount(1,
+                                  value=_uint_value(32, value_path),
+                                  token=_address_value(token_path)))
 
 
-def build_field_token_amount(name: str, value_path: bytes,
-                             token_path: bytes) -> bytes:
-    """FIELD (0x28) rendering a TOKEN_AMOUNT (gtp_param_token_amount.c).
-
-    `value_path` selects the amount word; `token_path` selects the token address
-    word, which the firmware resolves to a ticker/decimals via the TRC20 registry
-    (get_asset_info_by_addr -> "token via trc_tokens").
-    """
-    value = _build_value(32, value_path)  # TF_UINT amount
-    token = (format_tlv(VALUE_VERSION, 1) +
-             format_tlv(VALUE_TYPE_FAMILY, TF_ADDRESS) +
-             format_tlv(VALUE_TYPE_SIZE, 32) +
-             format_tlv(VALUE_DATA_PATH, token_path))
-    param = (format_tlv(PARAM_TA_VERSION, 1) +
-             format_tlv(PARAM_TA_VALUE, value) +
-             format_tlv(PARAM_TA_TOKEN, token))
-    return (format_tlv(FIELD_VERSION, 1) +
-            format_tlv(FIELD_NAME, name) +
-            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_TOKEN_AMOUNT) +
-            format_tlv(FIELD_PARAM, param))
+def build_field_trusted_name(name: str, addr_path: DataPath,
+                             types: list[TrustedNameType],
+                             sources: list[TrustedNameSource]) -> Field:
+    return Field(1,
+                 name,
+                 ParamTrustedName(1,
+                                  _address_value(addr_path),
+                                  types,
+                                  sources))
 
 
-# PARAM_TRUSTED_NAME tags (mirror gtp_param_trusted_name.c).
-PARAM_TN_VERSION = 0x00
-PARAM_TN_VALUE = 0x01
-PARAM_TN_TYPES = 0x02
-PARAM_TN_SOURCES = 0x03
-TN_TYPE_ACCOUNT = 1
-TN_SOURCE_ENS = 2
-
-
-def build_field_trusted_name(name: str, addr_path: bytes,
-                             types: list[int], sources: list[int]) -> bytes:
-    """FIELD (0x28) rendering a TRUSTED_NAME (gtp_param_trusted_name.c).
-
-    `addr_path` selects the address word; the firmware resolves it against the
-    trusted names provided via INS_PROVIDE_TRUSTED_NAME, filtered by the allowed
-    `types`/`sources`.
-    """
-    value = (format_tlv(VALUE_VERSION, 1) +
-             format_tlv(VALUE_TYPE_FAMILY, TF_ADDRESS) +
-             format_tlv(VALUE_TYPE_SIZE, 32) +
-             format_tlv(VALUE_DATA_PATH, addr_path))
-    param = (format_tlv(PARAM_TN_VERSION, 1) +
-             format_tlv(PARAM_TN_VALUE, value) +
-             format_tlv(PARAM_TN_TYPES, bytes(types)) +
-             format_tlv(PARAM_TN_SOURCES, bytes(sources)))
-    return (format_tlv(FIELD_VERSION, 1) +
-            format_tlv(FIELD_NAME, name) +
-            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_TRUSTED_NAME) +
-            format_tlv(FIELD_PARAM, param))
-
-
-# PARAM_ENUM tags (mirror gtp_param_enum.c).
-PARAM_ENUM_VERSION = 0x00
-PARAM_ENUM_ID = 0x01
-PARAM_ENUM_VALUE = 0x02
-
-
-def build_field_enum(name: str, enum_id: int, value_path: bytes) -> bytes:
-    """FIELD (0x28) rendering an ENUM (gtp_param_enum.c).
-
-    The firmware takes the last byte of the selected word and resolves
-    (chain_id, contract, selector, enum_id, value) to a name registered via
-    INS_PROVIDE_ENUM_VALUE.
-    """
-    value = _build_value(32, value_path)
-    param = (format_tlv(PARAM_ENUM_VERSION, 1) +
-             format_tlv(PARAM_ENUM_ID, enum_id) +
-             format_tlv(PARAM_ENUM_VALUE, value))
-    return (format_tlv(FIELD_VERSION, 1) +
-            format_tlv(FIELD_NAME, name) +
-            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_ENUM) +
-            format_tlv(FIELD_PARAM, param))
-
-
-# ENUM_VALUE descriptor tags (mirror enum_value.c ENUM_VALUE_TAGS).
-ENUM_VALUE_VERSION = 0x00
-ENUM_VALUE_CHAIN_ID = 0x01
-ENUM_VALUE_CONTRACT_ADDR = 0x02
-ENUM_VALUE_SELECTOR = 0x03
-ENUM_VALUE_ID = 0x04
-ENUM_VALUE_VALUE = 0x05
-ENUM_VALUE_NAME = 0x06
-ENUM_VALUE_SIGNATURE = 0xff
+def build_field_enum(name: str, enum_id: int, value_path: DataPath) -> Field:
+    return Field(1,
+                 name,
+                 ParamEnum(1, enum_id, _uint_value(32, value_path)))
 
 
 def build_enum_value(contract_addr20: bytes, selector: bytes, enum_id: int,
                      value: int, name: str) -> bytes:
-    """Build a CALLDATA-signed INS_PROVIDE_ENUM_VALUE descriptor.
-
-    The signature covers SHA-256(concat of the raw TLV of every tag except 0xff),
-    matching enum_value.c's running hash (hash_nbytes over each data->raw), and is
-    verified against the CALLDATA PKI key -- the same trust anchor as TX_INFO.
-    """
-    body = (format_tlv(ENUM_VALUE_VERSION, 1) +
-            format_tlv(ENUM_VALUE_CHAIN_ID, pack(">Q", TRON_MAINNET_CHAINID)) +
-            format_tlv(ENUM_VALUE_CONTRACT_ADDR, contract_addr20) +
-            format_tlv(ENUM_VALUE_SELECTOR, selector) +
-            format_tlv(ENUM_VALUE_ID, bytes([enum_id])) +
-            format_tlv(ENUM_VALUE_VALUE, bytes([value])) +
-            format_tlv(ENUM_VALUE_NAME, name))
-    sig = keychain.sign_data(keychain.Key.CALLDATA, body)
-    return body + format_tlv(ENUM_VALUE_SIGNATURE, sig)
+    return EnumValue(1,
+                     TRON_MAINNET_CHAINID,
+                     contract_addr20,
+                     selector,
+                     enum_id,
+                     value,
+                     name).serialize()
 
 
-def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[bytes],
+def compute_inst_hash(fields: list[Field]) -> bytes:
+    return hashlib.sha3_256(b"".join(field.serialize() for field in fields)).digest()
+
+
+def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
                   operation: str) -> bytes:
-    """Build the TX_INFO (0x26) descriptor and CALLDATA-sign it.
-
-    fields_hash = SHA3-256(concat(field_payload_i)) -- matches the firmware's
-    running cx_sha3_init(...,256) fed with each raw 0x28 payload (cmd_field.c +
-    tx_ctx fields_hash_ctx). This is NIST SHA3-256, *not* keccak256.
-
-    The signature covers SHA-256(all tags except 0xFF) -- keychain.sign_data()
-    hashes with SHA-256 internally -- using the CALLDATA key, whose public key is
-    delivered to the device through the CALLDATA PKI certificate.
-    """
-    fields_hash = hashlib.sha3_256(b"".join(fields)).digest()
-    body = (format_tlv(TX_INFO_VERSION, 1) +
-            format_tlv(TX_INFO_CHAIN_ID, pack(">Q", TRON_MAINNET_CHAINID)) +
-            format_tlv(TX_INFO_CONTRACT_ADDR, contract_addr20) +
-            format_tlv(TX_INFO_SELECTOR, selector) +
-            format_tlv(TX_INFO_FIELDS_HASH, fields_hash) +
-            format_tlv(TX_INFO_OPERATION_TYPE, operation))
-    signature = keychain.sign_data(keychain.Key.CALLDATA, body)
-    return body + format_tlv(TX_INFO_SIGNATURE, signature)
+    return TxInfo(1,
+                  TRON_MAINNET_CHAINID,
+                  contract_addr20,
+                  selector,
+                  compute_inst_hash(fields),
+                  operation).serialize()
 
 
 def send_tlv(backend: BackendInterface, ins: int, payload: bytes) -> int:
@@ -453,7 +283,7 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
     send_calldata_certificate(tron_client, device)
     assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
 
 
 def _approve_review(navigator: Navigator, device: Device, test_name: str) -> None:
@@ -470,7 +300,7 @@ def _approve_review(navigator: Navigator, device: Device, test_name: str) -> Non
                                                   test_name)
     else:
         navigator.navigate_until_text_and_compare(
-            NavInsID.SWIPE_CENTER_TO_LEFT,
+            NavInsID.USE_CASE_REVIEW_TAP,
             [
                 NavInsID.USE_CASE_REVIEW_CONFIRM,
                 NavInsID.USE_CASE_STATUS_DISMISS,
@@ -503,7 +333,7 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
     send_calldata_certificate(client, device)
     assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
 
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
@@ -518,7 +348,7 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
 
 
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
-                         device: Device, fields: list[bytes],
+                         device: Device, fields: list[Field],
                          provision=None) -> bytes:
     """STORE -> [provision] -> cert -> 0x26 -> 0x28(xN); returns the parked tx.
 
@@ -537,7 +367,7 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     send_calldata_certificate(client, device)
     assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
     return tx
 
 
@@ -679,8 +509,8 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
     client = TronClient(backend, device, navigator)
     field = build_field_trusted_name("To",
                                      addr_path=build_data_path_static(0),
-                                     types=[TN_TYPE_ACCOUNT],
-                                     sources=[TN_SOURCE_ENS])
+                                     types=[TrustedNameType.ACCOUNT],
+                                     sources=[TrustedNameSource.ENS])
 
     def provision() -> None:
         provide_trusted_name(client, TKN_ADDR20, "alice.eth")
