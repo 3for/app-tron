@@ -46,9 +46,11 @@ bool format_param_amount(const s_param_amount *param, const char *name) {
         chain_id = get_current_tx_info()->chain_id;
         ticker = get_displayable_ticker(&chain_id, chainConfig, true);
         for (int i = 0; i < collec.size; ++i) {
+            // TRON divergence from app-ethereum: the native currency is TRX with
+            // SUN_TO_TRX (6) decimals, not ETH's WEI_TO_ETHER (18).
             if (!(ret = amountToString(collec.value[i].ptr,
                                        collec.value[i].length,
-                                       WEI_TO_ETHER,
+                                       SUN_TO_TRX,
                                        ticker,
                                        buf,
                                        buf_size))) {

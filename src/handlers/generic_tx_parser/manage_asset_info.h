@@ -18,6 +18,7 @@
 // this header.
 #include "shared_context.h"
 
-// Returns metadata for the given contract address, or NULL when unknown
-// (always NULL in the P1 stub).
+// Returns metadata (ticker/decimals/collection) for the given contract address
+// from the TRC20/NFT registry, or NULL when no matching token/NFT was provided
+// via INS_PROVIDE_TRC20_TOKEN_INFORMATION / INS_PROVIDE_NFT_INFORMATION.
 extraInfo_t *get_asset_info_by_addr(const uint8_t *contractAddress);

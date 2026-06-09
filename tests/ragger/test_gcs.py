@@ -73,6 +73,8 @@ P1_FIRST_CHUNK = 0x01
 
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
 TRON_MAINNET_CHAINID = 728126428
+# TRON mainnet address prefix byte (parse.h ADD_PRE_FIX_BYTE_MAINNET).
+ADD_PRE_FIX_BYTE_MAINNET = 0x41
 
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
@@ -154,6 +156,10 @@ FIELD_PARAM_TYPE = 0x02
 FIELD_PARAM = 0x03
 
 PARAM_TYPE_RAW = 0
+PARAM_TYPE_AMOUNT = 1
+PARAM_TYPE_TOKEN_AMOUNT = 2
+PARAM_TYPE_DATETIME = 4
+PARAM_TYPE_TRUSTED_NAME = 8
 VALUE_VERSION = 0x00
 VALUE_TYPE_FAMILY = 0x01
 VALUE_TYPE_SIZE = 0x02
@@ -161,6 +167,7 @@ VALUE_DATA_PATH = 0x03
 PARAM_RAW_VERSION = 0x00
 PARAM_RAW_VALUE = 0x01
 TF_UINT = 1
+TF_ADDRESS = 5
 
 # gtp_data_path.c node tags (mirror app-ethereum client/gcs.py DataPath).
 DATA_PATH_VERSION = 0x00
@@ -227,6 +234,108 @@ def build_field_raw(name: str, type_size: int, data_path: bytes) -> bytes:
              format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_RAW) +
              format_tlv(FIELD_PARAM, param))
     return field
+
+
+# --- Rich field-type descriptor builders ------------------------------------
+# PARAM_DATETIME type tag values (mirror gtp_param_datetime.h).
+PARAM_DT_VERSION = 0x00
+PARAM_DT_VALUE = 0x01
+PARAM_DT_TYPE = 0x02
+DT_UNIX = 0
+
+
+def _build_value(type_size: int, data_path: bytes) -> bytes:
+    """The shared VALUE struct (gtp_value.c) selecting one calldata word."""
+    return (format_tlv(VALUE_VERSION, 1) +
+            format_tlv(VALUE_TYPE_FAMILY, TF_UINT) +
+            format_tlv(VALUE_TYPE_SIZE, type_size) +
+            format_tlv(VALUE_DATA_PATH, data_path))
+
+
+def build_field_amount(name: str, type_size: int, data_path: bytes) -> bytes:
+    """FIELD (0x28) rendering a native-currency AMOUNT (gtp_param_amount.c).
+
+    The firmware formats it with SUN_TO_TRX (6) decimals + the "TRX" ticker, so a
+    calldata word of 1_000_000 renders as "1 TRX" -- the regression guard for the
+    TRON native-decimals divergence from app-ethereum's WEI_TO_ETHER (18).
+    """
+    # PARAM_AMOUNT tags mirror RAW: 0x00 version, 0x01 value.
+    param = format_tlv(PARAM_DT_VERSION, 1) + format_tlv(PARAM_DT_VALUE,
+                                                         _build_value(type_size, data_path))
+    return (format_tlv(FIELD_VERSION, 1) +
+            format_tlv(FIELD_NAME, name) +
+            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_AMOUNT) +
+            format_tlv(FIELD_PARAM, param))
+
+
+def build_field_datetime(name: str, type_size: int, data_path: bytes) -> bytes:
+    """FIELD (0x28) rendering a Unix DATETIME (gtp_param_datetime.c)."""
+    param = (format_tlv(PARAM_DT_VERSION, 1) +
+             format_tlv(PARAM_DT_VALUE, _build_value(type_size, data_path)) +
+             format_tlv(PARAM_DT_TYPE, DT_UNIX))
+    return (format_tlv(FIELD_VERSION, 1) +
+            format_tlv(FIELD_NAME, name) +
+            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_DATETIME) +
+            format_tlv(FIELD_PARAM, param))
+
+
+# PARAM_TOKEN_AMOUNT tags (mirror gtp_param_token_amount.c).
+PARAM_TA_VERSION = 0x00
+PARAM_TA_VALUE = 0x01
+PARAM_TA_TOKEN = 0x02
+
+
+def build_field_token_amount(name: str, value_path: bytes,
+                             token_path: bytes) -> bytes:
+    """FIELD (0x28) rendering a TOKEN_AMOUNT (gtp_param_token_amount.c).
+
+    `value_path` selects the amount word; `token_path` selects the token address
+    word, which the firmware resolves to a ticker/decimals via the TRC20 registry
+    (get_asset_info_by_addr -> "token via trc_tokens").
+    """
+    value = _build_value(32, value_path)  # TF_UINT amount
+    token = (format_tlv(VALUE_VERSION, 1) +
+             format_tlv(VALUE_TYPE_FAMILY, TF_ADDRESS) +
+             format_tlv(VALUE_TYPE_SIZE, 32) +
+             format_tlv(VALUE_DATA_PATH, token_path))
+    param = (format_tlv(PARAM_TA_VERSION, 1) +
+             format_tlv(PARAM_TA_VALUE, value) +
+             format_tlv(PARAM_TA_TOKEN, token))
+    return (format_tlv(FIELD_VERSION, 1) +
+            format_tlv(FIELD_NAME, name) +
+            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_TOKEN_AMOUNT) +
+            format_tlv(FIELD_PARAM, param))
+
+
+# PARAM_TRUSTED_NAME tags (mirror gtp_param_trusted_name.c).
+PARAM_TN_VERSION = 0x00
+PARAM_TN_VALUE = 0x01
+PARAM_TN_TYPES = 0x02
+PARAM_TN_SOURCES = 0x03
+TN_TYPE_ACCOUNT = 1
+TN_SOURCE_ENS = 2
+
+
+def build_field_trusted_name(name: str, addr_path: bytes,
+                             types: list[int], sources: list[int]) -> bytes:
+    """FIELD (0x28) rendering a TRUSTED_NAME (gtp_param_trusted_name.c).
+
+    `addr_path` selects the address word; the firmware resolves it against the
+    trusted names provided via INS_PROVIDE_TRUSTED_NAME, filtered by the allowed
+    `types`/`sources`.
+    """
+    value = (format_tlv(VALUE_VERSION, 1) +
+             format_tlv(VALUE_TYPE_FAMILY, TF_ADDRESS) +
+             format_tlv(VALUE_TYPE_SIZE, 32) +
+             format_tlv(VALUE_DATA_PATH, addr_path))
+    param = (format_tlv(PARAM_TN_VERSION, 1) +
+             format_tlv(PARAM_TN_VALUE, value) +
+             format_tlv(PARAM_TN_TYPES, bytes(types)) +
+             format_tlv(PARAM_TN_SOURCES, bytes(sources)))
+    return (format_tlv(FIELD_VERSION, 1) +
+            format_tlv(FIELD_NAME, name) +
+            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_TRUSTED_NAME) +
+            format_tlv(FIELD_PARAM, param))
 
 
 def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[bytes],
@@ -349,5 +458,186 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
     assert resp.status == Errors.OK
 
     # The returned signature must verify over sha256(tx) against the device key.
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
+                         device: Device, fields: list[bytes],
+                         provision=None) -> bytes:
+    """STORE -> [provision] -> cert -> 0x26 -> 0x28(xN); returns the parked tx.
+
+    `provision` (optional) runs after the calldata is parked but before the
+    fields are streamed, so token/trusted-name metadata is in place by the time
+    each FIELD's formatter (format_field) looks it up at 0x28 time.
+    """
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == Errors.OK
+    if provision is not None:
+        provision()
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
+                            "transfer")
+    send_calldata_certificate(client, device)
+    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
+    for field in fields:
+        assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+    return tx
+
+
+def provide_trc20_token(backend: BackendInterface, client: TronClient,
+                        addr20: bytes, ticker: str, decimals: int) -> None:
+    """Register a TRC20 token (ticker/decimals) for `addr20` via INS 0xCA.
+
+    Mirrors InputData.provide_token_metadata: the COIN_META PKI certificate
+    delivers the CAL public key, then the token info is CAL-signed over the
+    payload (minus the ticker-length byte and the trailing signature).
+    """
+    from client.command_builder import CommandBuilder
+    from client.tip712.InputData import send_coin_meta_certificate
+
+    # cmd_provideTokenInfo.c requires the TRON 0x41-prefixed 21-byte address; it
+    # stores only the canonical 20-byte form for get_asset_info_by_addr lookups.
+    addr21 = bytes([ADD_PRE_FIX_BYTE_MAINNET]) + addr20
+    send_coin_meta_certificate(client)
+    cmd = CommandBuilder()
+    unsigned = cmd.provide_trc20_token_information(ticker, addr21, decimals,
+                                                   TRON_MAINNET_CHAINID, b"")
+    # The firmware hashes ticker+addr+decimals+chain (payload minus the
+    # ticker-length byte and trailing sig); keychain.sign_data sha256s internally.
+    sig = keychain.sign_data(keychain.Key.CAL, unsigned[6:])
+    apdu = cmd.provide_trc20_token_information(ticker, addr21, decimals,
+                                               TRON_MAINNET_CHAINID, sig)
+    assert backend.exchange_raw(apdu).status == Errors.OK
+
+
+def provide_trusted_name(client: TronClient, addr20: bytes, name: str) -> None:
+    """Register an account trusted name for `addr20` via INS 0x22 (v2/ENS).
+
+    Delegates to InputData.provide_trusted_name_v2, which sends the TRUSTED_NAME
+    PKI certificate and the challenge-bound, signed trusted-name descriptor.
+    TRON's firmware only accepts CAL/ENS/MAB sources; ACCOUNT + ENS is the
+    simplest (a ".eth" name + the device challenge, no MAB owner).
+    """
+    from client.command_builder import CommandBuilder
+    from client.tip712 import InputData
+    import response_parser as ResponseParser
+
+    cmd = CommandBuilder()
+    challenge = ResponseParser.challenge(
+        client.exchange_raw(cmd.get_challenge()).data)
+    InputData.provide_trusted_name_v2(client, cmd, addr20, name,
+                                      InputData.TrustedNameType.ACCOUNT,
+                                      InputData.TrustedNameSource.ENS,
+                                      TRON_MAINNET_CHAINID, challenge=challenge)
+
+
+def test_gcs_amount_decimals(backend: BackendInterface, navigator: Navigator,
+                             device: Device, test_name: str):
+    """AMOUNT field renders native TRX with 6 decimals (SUN_TO_TRX), not 18.
+
+    Calldata _amount = 0xf4240 = 1_000_000; with TRON's 6 decimals this is
+    "1 TRX". The old app-ethereum WEI_TO_ETHER (18) bug would render
+    "0.000000000001 TRX", so the snapshot is the regression guard for the fix.
+    """
+    client = TronClient(backend, device, navigator)
+    amount_field = build_field_amount("Amount", 32,
+                                      data_path=build_data_path_static(1))
+    tx = _gcs_send_descriptor(client, backend, device, [amount_field])
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def test_gcs_datetime(backend: BackendInterface, navigator: Navigator,
+                      device: Device, test_name: str):
+    """DATETIME (DT_UNIX) field renders the calldata word as a UTC timestamp.
+
+    Calldata word = 0xf4240 = 1_000_000 seconds since the epoch, which
+    time_format_to_utc() renders as "1970-01-12 ... UTC" in the snapshot.
+    """
+    client = TronClient(backend, device, navigator)
+    dt_field = build_field_datetime("Deadline", 32,
+                                    data_path=build_data_path_static(1))
+    tx = _gcs_send_descriptor(client, backend, device, [dt_field])
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+# `transfer(address _to, uint256 _amount)` arg0 (_to) doubles as a stand-in token
+# address: we register it via INS_PROVIDE_TRC20_TOKEN_INFORMATION so the
+# TOKEN_AMOUNT formatter resolves it to a ticker/decimals from the TRC20 registry.
+TKN_ADDR20 = bytes.fromhex("364b03e0815687edaf90b81ff58e496dea7383d7")
+
+
+def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
+                          device: Device, test_name: str):
+    """TOKEN_AMOUNT resolves the token via the TRC20 registry (trc_tokens).
+
+    arg0 is registered as "TKN" with 6 decimals; the amount word arg1 =
+    1_000_000 then renders as "1 TKN" in the snapshot using the registry's
+    decimals/ticker.
+    """
+    client = TronClient(backend, device, navigator)
+    field = build_field_token_amount("Amount",
+                                     value_path=build_data_path_static(1),
+                                     token_path=build_data_path_static(0))
+
+    def provision() -> None:
+        provide_trc20_token(backend, client, TKN_ADDR20, "TKN", 6)
+
+    tx = _gcs_send_descriptor(client, backend, device, [field],
+                              provision=provision)
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
+                          device: Device, test_name: str):
+    """TRUSTED_NAME resolves a calldata address via provideTrustedName (0x22).
+
+    arg0 is registered as the account name "alice.eth"; the GCS TRUSTED_NAME
+    field over arg0 then renders that name in the snapshot instead of the raw
+    address -- the provideTrustedName path unblocked by get_public_key().
+    """
+    client = TronClient(backend, device, navigator)
+    field = build_field_trusted_name("To",
+                                     addr_path=build_data_path_static(0),
+                                     types=[TN_TYPE_ACCOUNT],
+                                     sources=[TN_SOURCE_ENS])
+
+    def provision() -> None:
+        provide_trusted_name(client, TKN_ADDR20, "alice.eth")
+
+    tx = _gcs_send_descriptor(client, backend, device, [field],
+                              provision=provision)
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])

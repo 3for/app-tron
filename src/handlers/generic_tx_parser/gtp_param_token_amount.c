@@ -106,7 +106,9 @@ static bool process_token_amount(const s_param_token_amount *param,
         buf_shrink_expand(token->ptr, token->length, addr_buf, sizeof(addr_buf));
         if (match_native(addr_buf, param)) {
             ticker = get_displayable_ticker(&chain_id, chainConfig, true);
-            decimals = WEI_TO_ETHER;
+            // TRON divergence from app-ethereum: native TRX uses SUN_TO_TRX (6)
+            // decimals, not ETH's WEI_TO_ETHER (18).
+            decimals = SUN_TO_TRX;
         } else {
             if ((token_def = (const tokenDefinition_t *) get_asset_info_by_addr(addr_buf)) !=
                 NULL) {
