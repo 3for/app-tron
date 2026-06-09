@@ -32,6 +32,7 @@
 #include "settings.h"
 #include "transaction_trigger_decode.h"
 #include "gcs_calldata_bridge.h"  // Generic Clear Signing calldata store
+#include "cmd_sign_flow.h"        // handle_gcs_start_flow (GCS review + sign)
 
 extern void reset_app_context();
 
@@ -821,6 +822,18 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     tronPluginFinalize_t plugin_finalize;
     tronPluginProvideInfo_t plugin_provide_info;
 
+    // Generic Clear Signing "start flow": runs the GCS review UI and signs once
+    // all 0x26/0x28 descriptors have been provided. It carries no streamed data,
+    // so handle it before the external-plugin streaming logic below.
+    if (p2 == P2_GCS_START_FLOW) {
+        (void) p1;
+        (void) workBuffer;
+        if (dataLength != 0) {
+            return io_send_sw(E_INCORRECT_LENGTH);
+        }
+        return handle_gcs_start_flow();
+    }
+
     if ((p2 != 0x00) && (p2 != P2_GCS_STORE)) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
@@ -920,6 +933,15 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
             reset_app_context();
             return io_send_sw(E_INCORRECT_DATA);
         }
+        // Finalize the transaction hash now (all tx bytes were fed into
+        // txContext.sha2 above). The GCS START_FLOW signs tmpCtx.transactionContext.hash,
+        // so it must be populated here -- the non-GCS path does the same finalize.
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2,
+                                   CX_LAST,
+                                   workBuffer,
+                                   0,
+                                   tmpCtx.transactionContext.hash,
+                                   32));
         // Accept the incoming generic_tx_parser descriptors.
         appState = APP_STATE_SIGNING_TX;
         return io_send_sw(E_OK);

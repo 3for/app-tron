@@ -2,7 +2,7 @@
 #include "shared_context.h"
 #include "ux.h"
 #include "nbgl_use_case.h"  // nbgl_warning_t (needed by ui_nbgl.h)
-#include "ui_nbgl.h"        // APP_TRON_ICON
+#include "ui_nbgl.h"        // warning
 #include "ui_globals.h"
 #include "ui_idle_menu.h"  // ui_idle
 #include "ui_callbacks.h"  // io_seproxyhal_touch_tx_ok / io_seproxyhal_touch_tx_cancel
@@ -517,7 +517,7 @@ bool ui_gcs(void) {
 #ifndef FUZZ
     nbgl_useCaseAdvancedReview(TYPE_TRANSACTION,
                                g_pairsList,
-                               &APP_TRON_ICON,
+                               &APP_TRON_HOME_ICON,
                                g_titleMsg,
                                NULL,
                                g_finishMsg,

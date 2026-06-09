@@ -33,7 +33,10 @@ import keychain
 from ledgered.devices import Device, DeviceType
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
-from tron import CLA, Errors, InsType, TronClient, MAX_APDU_LEN
+from ragger.navigator import Navigator, NavIns, NavInsID
+from tron import (CLA, Errors, InsType, TronClient, MAX_APDU_LEN,
+                  ROOT_SCREENSHOT_PATH)
+from utils import check_tx_signature
 from client.tip712.InputData import format_tlv as _raw_format_tlv
 
 
@@ -62,6 +65,7 @@ P1_SIGN = 0x10
 P1_MORE = 0x80
 P1_LAST = 0x90
 P2_GCS_STORE = 0x10
+P2_GCS_START_FLOW = 0x11
 
 INS_GTP_TRANSACTION_INFO = 0x26
 INS_GTP_FIELD = 0x28
@@ -286,3 +290,64 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
     assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
     for field in fields:
         assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+
+
+def _approve_review(navigator: Navigator, device: Device, test_name: str) -> None:
+    """Walk the GCS review screen to its sign confirmation and approve it.
+
+    Uses snapshot comparison so the functional signing test also records the
+    rendered GCS review flow.
+    """
+    if device.is_nano:
+        navigator.navigate_until_text_and_compare(NavIns(NavInsID.RIGHT_CLICK),
+                                                  [NavIns(NavInsID.BOTH_CLICK)],
+                                                  "Sign",
+                                                  ROOT_SCREENSHOT_PATH,
+                                                  test_name)
+    else:
+        navigator.navigate_until_text_and_compare(
+            NavInsID.SWIPE_CENTER_TO_LEFT,
+            [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS,
+            ],
+            "Hold to sign",
+            ROOT_SCREENSHOT_PATH,
+            test_name)
+
+
+def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
+                  device: Device, test_name: str):
+    """Full keystone flow: STORE -> cert -> 0x26 -> 0x28 -> START_FLOW -> approve.
+
+    Asserts the firmware renders the GCS review and returns a signature over
+    sha256(tx) recoverable to the device key -- the first real end-to-end GCS
+    signature (this is also the first execution of ui_gcs()).
+    """
+    client = TronClient(backend, device, navigator)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == Errors.OK
+
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    amount_field = build_field_raw("Amount", 32,
+                                   data_path=build_data_path_static(1))
+    fields = [amount_field]
+    tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
+                            "transfer")
+
+    send_calldata_certificate(client, device)
+    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
+    for field in fields:
+        assert send_tlv(backend, INS_GTP_FIELD, field) == Errors.OK
+
+    # START_FLOW triggers the async GCS review; approve it, then collect the reply.
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
+
+    # The returned signature must verify over sha256(tx) against the device key.
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])

@@ -74,6 +74,9 @@
 // external-plugin UI flow. No approval is shown; the 0x26/0x28 descriptors and
 // the start-of-flow command follow.
 #define P2_GCS_STORE 0x10
+// Generic Clear Signing "start flow": sent after the 0x26/0x28 descriptors to run
+// the GCS review UI and sign. Sibling of P2_GCS_STORE on INS_SIGN_EXTERNAL_PLUGIN.
+#define P2_GCS_START_FLOW 0x11
 
 #define P2_TIP712_LEGACY_IMPLEM 0x00
 #define P2_TIP712_FULL_IMPLEM   0x01
