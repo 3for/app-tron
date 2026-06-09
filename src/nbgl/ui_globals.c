@@ -24,6 +24,7 @@
 #include "app_errors.h"
 #include "nbgl_use_case.h"
 #include "ui_logic.h"
+#include "ui_callbacks.h"
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -155,6 +156,20 @@ bool ui_callback_tx_ok(bool display_menu) {
     }
 
     return ret;
+}
+
+// app-ethereum parity wrappers: the GCS review screen (src/nbgl/ui_gcs.c) drives
+// signing through these io_seproxyhal_touch_tx_ok/cancel entry points, exactly
+// like app-ethereum. They sign/reject without redisplaying the idle UX, because
+// review_choice() chains nbgl_useCaseReviewStatus(..., ui_idle) for that.
+unsigned int io_seproxyhal_touch_tx_ok(void) {
+    ui_callback_tx_ok(false);
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_tx_cancel(void) {
+    ui_callback_tx_cancel(false);
+    return 0;
 }
 
 bool ui_callback_ecdh_ok(bool display_menu) {

@@ -1,11 +1,12 @@
 #pragma once
 
-// ---------------------------------------------------------------------------
-// GCS P1 STUB.
-//
-// tx_ctx.c calls ui_gcs_cleanup() from gcs_cleanup() to tear down any GCS review
-// UI state. The actual GCS review screen is added in a later phase (P2); until
-// then this is a no-op. Signature matches app-ethereum's common_ui.h entry.
-// ---------------------------------------------------------------------------
+#include <stdbool.h>
 
+// Generic Clear Signing review UI (implemented in src/nbgl/ui_gcs.c).
+//
+// ui_gcs() builds the review screen from the parsed field table and runs the
+// NBGL transaction review (sign/reject). ui_gcs_cleanup() is called from
+// gcs_cleanup() (tx_ctx.c) to free the UI state. Signatures match
+// app-ethereum's entry points.
+bool ui_gcs(void);
 void ui_gcs_cleanup(void);
