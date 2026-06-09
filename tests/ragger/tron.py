@@ -21,7 +21,9 @@ from ragger.bip import pack_derivation_path
 from ragger.error import ExceptionRAPDU
 from conftest import MNEMONIC
 from web3 import Web3
-from client.command_builder import CommandBuilder
+from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
+                                    P1Type as P1, P2Type as P2)
+from client.status_word import StatusWord
 from ledgered.devices import Device
 
 from client.tip712.InputData import PKIPubKeyUsage
@@ -39,94 +41,12 @@ from google.protobuf.internal.decoder import _DecodeVarint32
 
 ROOT_SCREENSHOT_PATH = Path(__file__).parent.resolve()
 
-MAX_APDU_LEN: int = 255
-
-CLA: int = 0xE0
-
 PUBLIC_KEY_LENGTH = 65
 BASE58_ADDRESS_SIZE = 34
 GET_ADDRESS_RESP_LEN = 101
 GET_VERSION_RESP_LEN = 4
 
-
-class P1(IntEnum):
-    # GET_PUBLIC_KEY P1 values
-    CONFIRM = 0x01
-    NON_CONFIRM = 0x00
-    # SIGN P1 values
-    SIGN = 0x10
-    FIRST = 0x00
-    MORE = 0x80
-    LAST = 0x90
-    TRC10_NAME = 0xA0
-
-
-class P2(IntEnum):
-    # GET_PUBLIC_KEY P2 values
-    NO_CHAINCODE = 0x00
-    CHAINCODE = 0x01
-
-
-class InsType(IntEnum):
-    GET_PUBLIC_KEY = 0x02
-    SIGN = 0x04
-    SIGN_TXN_HASH = 0x05  #  Unsafe
-    GET_APP_CONFIGURATION = 0x06  # Version and settings
-    SIGN_PERSONAL_MESSAGE = 0x08
-    SIGN_PERSONAL_MESSAGE_FULL_DISPLAY = 0xC8
-    GET_ECDH_SECRET = 0x0A
-    SIGN_TIP_712_MESSAGE = 0x0C
-    SIGN_EXTERNAL_PLUGIN = 0xC4
-
-
-class Errors(IntEnum):
-    OK = 0x9000
-    # NOTE: The follow codes have alt status messages defined.
-    # "Incorrect length"
-    INCORRECT_LENGTH = 0x6700
-    # "Missing critical parameter"
-    MISSING_CRITICAL_PARAMETER = 0x6800
-    # "Security not satisfied (dongle locked or have invalid access rights)"
-    SECURITY_STATUS_NOT_SATISFIED = 0x6982
-    # "Condition of use not satisfied (denied by the user?)";
-    CONDITIONS_OF_USE_NOT_SATISFIED = 0x6985
-    # "Plugin requested is not installed on the device"
-    PLUGIN_NOT_FOUND = 0x6984
-    # "Invalid data received"
-    INCORRECT_DATA = 0x6a80
-    # "Invalid parameter received"
-    INCORRECT_P2 = 0x6b00
-    # TRON defined:
-    INCORRECT_BIP32_PATH = 0x6a8a
-    MISSING_SETTING_DATA_ALLOWED = 0x6a8b
-    MISSING_SETTING_SIGN_BY_HASH = 0x6a8c
-    MISSING_SETTING_CUSTOM_CONTRACT = 0x6a8d
-    # Official:
-    PIN_REMAINING_ATTEMPTS = 0x63c0
-    COMMAND_INCOMPATIBLE_FILE_STRUCTURE = 0x6981
-    NOT_ENOUGH_MEMORY_SPACE = 0x6a84
-    REFERENCED_DATA_NOT_FOUND = 0x6a88
-    FILE_ALREADY_EXISTS = 0x6a89
-    INS_NOT_SUPPORTED = 0x6d00
-    CLA_NOT_SUPPORTED = 0x6e00
-    TECHNICAL_PROBLEM = 0x6f00
-    MEMORY_PROBLEM = 0x9240
-    NO_EF_SELECTED = 0x9400
-    INVALID_OFFSET = 0x9402
-    FILE_NOT_FOUND = 0x9404
-    INCONSISTENT_FILE = 0x9408
-    ALGORITHM_NOT_SUPPORTED = 0x9484
-    INVALID_KCV = 0x9485
-    CODE_NOT_INITIALIZED = 0x9802
-    ACCESS_CONDITION_NOT_FULFILLED = 0x9804
-    CONTRADICTION_SECRET_CODE_STATUS = 0x9808
-    CONTRADICTION_INVALIDATION = 0x9810
-    CODE_BLOCKED = 0x9840
-    MAX_VALUE_REACHED = 0x9850
-    GP_AUTH_FAILED = 0x6300
-    LICENSING = 0x6f42
-    HALTED = 0x6faa
-    NOT_IMPLEMENTED = 0x911c
+Errors = StatusWord
 
 
 class APDUOffsets(IntEnum):
@@ -148,9 +68,9 @@ class PKIClient:
     def send_certificate(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
         try:
             response = self.send_raw(p1, payload)
-            assert response.status == Errors.OK
+            assert response.status == StatusWord.OK
         except ExceptionRAPDU as err:
-            if err.status == Errors.NOT_IMPLEMENTED:
+            if err.status == StatusWord.NOT_IMPLEMENTED:
                 print(
                     "Ledger-PKI APDU not yet implemented. Legacy path will be used"
                 )

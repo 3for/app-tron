@@ -7,8 +7,8 @@ from ledgered.devices import Device
 from ragger.error import ExceptionRAPDU
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
-from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
-from client.tip712.InputData import StatusWord
+from client.status_word import StatusWord
+from tron import TronClient
 import response_parser as ResponseParser
 
 BIP32_PATH = "m/44'/195'/0'/0/0"

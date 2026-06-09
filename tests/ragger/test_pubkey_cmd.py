@@ -4,7 +4,8 @@ from ragger.bip import calculate_public_key_and_chaincode, CurveChoice
 from ragger.navigator import NavInsID, NavIns
 
 from ledgered.devices import DeviceType
-from tron import TronClient, Errors, ROOT_SCREENSHOT_PATH
+from client.status_word import StatusWord
+from tron import TronClient, ROOT_SCREENSHOT_PATH
 from conftest import MNEMONIC
 
 # Proposed TRX derivation paths for tests ###
@@ -99,7 +100,7 @@ class Test_GET_PUBLIC_KEY():
                         NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Cancel",
                         ROOT_SCREENSHOT_PATH, test_name)
                 rapdu = client.get_async_response()
-                assert rapdu.status == Errors.CONDITIONS_OF_USE_NOT_SATISFIED
+                assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
                 assert len(rapdu.data) == 0
             else:
                 instructions_set = [
@@ -122,5 +123,5 @@ class Test_GET_PUBLIC_KEY():
                                 ROOT_SCREENSHOT_PATH, test_name + f"/part{i}",
                                 instructions)
                         rapdu = client.get_async_response()
-                        assert rapdu.status == Errors.CONDITIONS_OF_USE_NOT_SATISFIED
+                        assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
                         assert len(rapdu.data) == 0

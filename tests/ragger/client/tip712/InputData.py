@@ -9,6 +9,7 @@ import struct
 from enum import IntEnum
 
 from client.command_builder import CommandBuilder
+from client.status_word import StatusWord
 from client.tip712 import TIP712FieldType
 from client import keychain
 from ragger.bip import pack_derivation_path
@@ -90,19 +91,6 @@ class FieldTag(IntEnum):
     TRUSTED_NAME_NFT_ID = 0x72
     TRUSTED_NAME_OWNER = 0x74
     TRUSTED_NAME_OWNER_DERIV_PATH = 0x75
-
-
-class StatusWord(IntEnum):
-    OK = 0x9000
-    ERROR_NO_INFO = 0x6a00
-    INVALID_DATA = 0x6a80
-    INSUFFICIENT_MEMORY = 0x6a84
-    INVALID_INS = 0x6d00
-    INVALID_P1_P2 = 0x6b00
-    CONDITION_NOT_SATISFIED = 0x6985
-    REF_DATA_NOT_FOUND = 0x6a88
-    EXCEPTION_OVERFLOW = 0x6807
-    NOT_IMPLEMENTED = 0x911c
 
 
 # global variables

@@ -30,6 +30,7 @@ from struct import pack
 import pytest
 
 from client import keychain
+from client.command_builder import CLA, MAX_APDU_LEN, InsType, P1Type, P2Type
 from client.enum_value import EnumValue
 from client.gcs import (DataPath, DatetimeType, Field, ParamAmount,
                         ParamDatetime, ParamEnum, ParamRaw, ParamTokenAmount,
@@ -40,8 +41,8 @@ from ledgered.devices import Device, DeviceType
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavIns, NavInsID
-from tron import (CLA, Errors, InsType, TronClient, MAX_APDU_LEN,
-                  ROOT_SCREENSHOT_PATH)
+from client.status_word import StatusWord
+from tron import TronClient, ROOT_SCREENSHOT_PATH
 from utils import check_tx_signature
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
@@ -51,17 +52,17 @@ from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
 
 # --- APDU constants (mirror src/apdu_constants.h) ---------------------------
-P1_FIRST = 0x00
-P1_SIGN = 0x10
-P1_MORE = 0x80
-P1_LAST = 0x90
-P2_GCS_STORE = 0x10
-P2_GCS_START_FLOW = 0x11
+P1_FIRST = P1Type.FIRST
+P1_SIGN = P1Type.SIGN
+P1_MORE = P1Type.MORE
+P1_LAST = P1Type.LAST
+P2_GCS_STORE = P2Type.GCS_STORE
+P2_GCS_START_FLOW = P2Type.GCS_START_FLOW
 
-INS_GTP_TRANSACTION_INFO = 0x26
-INS_GTP_FIELD = 0x28
-INS_PROVIDE_ENUM_VALUE = 0x24
-P1_FIRST_CHUNK = 0x01
+INS_GTP_TRANSACTION_INFO = InsType.PROVIDE_TRANSACTION_INFO
+INS_GTP_FIELD = InsType.PROVIDE_TRANSACTION_FIELD_DESC
+INS_PROVIDE_ENUM_VALUE = InsType.PROVIDE_ENUM_VALUE
+P1_FIRST_CHUNK = P1Type.FIRST_CHUNK
 
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
 TRON_MAINNET_CHAINID = 728126428
@@ -129,7 +130,7 @@ def test_gcs_store_parks_calldata(tron_client: TronClient,
     tx = build_trc20_transfer_tx(tron_client)
     status = gcs_store_calldata(tron_client, backend,
                                 tron_client.getAccount(0)["path"], tx)
-    assert status == Errors.OK
+    assert status == StatusWord.OK
 
 
 # --- Descriptor builders -----------------------------------------------------
@@ -254,7 +255,7 @@ def send_tlv(backend: BackendInterface, ins: int, payload: bytes) -> int:
     # the descriptor or the fields_hash.
     framed = pack(">H", len(payload)) + payload
     chunks = [framed[i:i + MAX_APDU_LEN] for i in range(0, len(framed), MAX_APDU_LEN)]
-    status = Errors.OK
+    status = StatusWord.OK
     for i, chunk in enumerate(chunks):
         p1 = P1_FIRST_CHUNK if i == 0 else 0x00
         status = backend.exchange(CLA, ins, p1, 0x00, chunk).status
@@ -266,7 +267,7 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
     """store -> 0x26 -> 0x28(raw) -> expect 0x9000 (fields_hash validated)."""
     tx = build_trc20_transfer_tx(tron_client)
     assert gcs_store_calldata(tron_client, backend,
-                              tron_client.getAccount(0)["path"], tx) == Errors.OK
+                              tron_client.getAccount(0)["path"], tx) == StatusWord.OK
 
     # generic_tx_parser works on 20-byte EVM addresses (0x41 prefix stripped).
     contract_addr20 = bytes.fromhex(tron_client.address_hex(TRC20_CONTRACT_B58))[1:]
@@ -281,9 +282,9 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
 
     # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
     send_calldata_certificate(tron_client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
+    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
 
 
 def _approve_review(navigator: Navigator, device: Device, test_name: str) -> None:
@@ -321,7 +322,7 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
     client = TronClient(backend, device, navigator)
     tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == Errors.OK
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     amount_field = build_field_raw("Amount", 32,
@@ -331,16 +332,16 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
                             "transfer")
 
     send_calldata_certificate(client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
+    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
 
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
         _approve_review(navigator, device, test_name)
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
 
     # The returned signature must verify over sha256(tx) against the device key.
     assert check_tx_signature(tx, resp.data[0:65],
@@ -358,16 +359,16 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     """
     tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == Errors.OK
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
     if provision is not None:
         provision()
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
     send_calldata_certificate(client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == Errors.OK
+    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == Errors.OK
+        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
     return tx
 
 
@@ -394,7 +395,7 @@ def provide_trc20_token(backend: BackendInterface, client: TronClient,
     sig = keychain.sign_data(keychain.Key.CAL, unsigned[6:])
     apdu = cmd.provide_trc20_token_information(ticker, addr21, decimals,
                                                TRON_MAINNET_CHAINID, sig)
-    assert backend.exchange_raw(apdu).status == Errors.OK
+    assert backend.exchange_raw(apdu).status == StatusWord.OK
 
 
 def provide_trusted_name(client: TronClient, addr20: bytes, name: str) -> None:
@@ -436,7 +437,7 @@ def test_gcs_amount_decimals(backend: BackendInterface, navigator: Navigator,
         _approve_review(navigator, device, test_name)
 
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
 
@@ -458,7 +459,7 @@ def test_gcs_datetime(backend: BackendInterface, navigator: Navigator,
         _approve_review(navigator, device, test_name)
 
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
 
@@ -493,7 +494,7 @@ def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
         _approve_review(navigator, device, test_name)
 
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
 
@@ -523,7 +524,7 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
         _approve_review(navigator, device, test_name)
 
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
 
@@ -547,7 +548,7 @@ def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
         send_calldata_certificate(client, device)
         enum_desc = build_enum_value(contract_addr20, TRC20_TRANSFER_SELECTOR,
                                      enum_id=0, value=0x40, name="Deposit")
-        assert send_tlv(backend, INS_PROVIDE_ENUM_VALUE, enum_desc) == Errors.OK
+        assert send_tlv(backend, INS_PROVIDE_ENUM_VALUE, enum_desc) == StatusWord.OK
 
     tx = _gcs_send_descriptor(client, backend, device, [field],
                               provision=provision)
@@ -557,6 +558,6 @@ def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
         _approve_review(navigator, device, test_name)
 
     resp = backend.last_async_response
-    assert resp.status == Errors.OK
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])

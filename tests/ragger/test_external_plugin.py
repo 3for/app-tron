@@ -4,11 +4,12 @@ from pathlib import Path
 import pytest
 
 from client import keychain
+from client.status_word import StatusWord
 from ledgered.devices import Device
-from client.command_builder import CommandBuilder, InsType as BuilderInsType
+from client.command_builder import CLA, CommandBuilder, InsType
 from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
-from tron import CLA, Errors, InsType, TronClient
+from tron import TronClient
 from client.tip712.InputData import send_coin_meta_certificate
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
@@ -62,7 +63,7 @@ def assert_plugin_not_found_or_speculos_crash(client: TronClient,
     try:
         client.exchange_raw(setup_apdu)
     except ExceptionRAPDU as error:
-        assert error.status == Errors.PLUGIN_NOT_FOUND
+        assert error.status == StatusWord.PLUGIN_NOT_FOUND
         return
     except Exception as error:
         if (isinstance(error, TimeoutError)
@@ -91,9 +92,9 @@ def trc20_transfer_tx_fixture(tron_client: TronClient) -> bytes:
 
 def test_set_external_plugin_rejects_short_payload(backend: BackendInterface):
     with pytest.raises(ExceptionRAPDU) as e:
-        backend.exchange(CLA, BuilderInsType.EXTERNAL_PLUGIN_SETUP, 0x00, 0x00,
+        backend.exchange(CLA, InsType.EXTERNAL_PLUGIN_SETUP, 0x00, 0x00,
                          b"\x00")
-    assert e.value.status == Errors.INCORRECT_DATA
+    assert e.value.status == StatusWord.INVALID_DATA
 
 
 def test_set_external_plugin_returns_plugin_not_found(
@@ -115,4 +116,4 @@ def test_sign_external_plugin_without_external_plugin_returns_invalid_data(
                          navigate=False,
                          ins=InsType.SIGN_EXTERNAL_PLUGIN,
                          include_tx_len=True)
-    assert e.value.status == Errors.INCORRECT_DATA
+    assert e.value.status == StatusWord.INVALID_DATA

@@ -15,7 +15,9 @@ from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
-from tron import TronClient, Errors, CLA, InsType, MAX_APDU_LEN
+from client.command_builder import CLA, MAX_APDU_LEN, InsType
+from client.status_word import StatusWord
+from tron import TronClient
 from ragger.bip import pack_derivation_path
 from utils import check_tx_signature, check_hash_signature, build_trc20_calldata
 from eth_keys import KeyAPI
@@ -178,7 +180,7 @@ class TestTRX():
                         tx,
                         tokenSignature,
                         navigate=False)
-        assert e.value.status == Errors.INCORRECT_DATA
+        assert e.value.status == StatusWord.INVALID_DATA
 
     def test_trx_exchange_create(self, backend, device, navigator):
         client = TronClient(backend, device, navigator)
@@ -336,7 +338,7 @@ class TestTRX():
                 ]))
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
-        assert e.value.status == Errors.INCORRECT_DATA
+        assert e.value.status == StatusWord.INVALID_DATA
 
     def test_trx_freeze_balance_bw(self, backend, device, navigator):
         client = TronClient(backend, device, navigator)

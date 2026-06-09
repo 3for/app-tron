@@ -15,7 +15,8 @@ from ragger.error import ExceptionRAPDU
 from pathlib import Path
 from Crypto.Hash import keccak
 from inspect import currentframe
-from tron import TronClient, CLA, InsType
+from client.command_builder import CLA, InsType
+from tron import TronClient
 from ragger.bip import pack_derivation_path
 from utils import check_hash_signature
 

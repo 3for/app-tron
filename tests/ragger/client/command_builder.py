@@ -3,16 +3,25 @@
 import struct
 from typing import Optional
 from ragger.bip import pack_derivation_path
-from enum import IntEnum, auto
+from enum import IntEnum
 from .tip712 import TIP712FieldType
+
+CLA: int = 0xE0
+MAX_APDU_LEN: int = 255
 
 
 class InsType(IntEnum):
-    GET_PUBLIC_ADDR = 0x02
+    GET_PUBLIC_KEY = 0x02
+    GET_PUBLIC_ADDR = GET_PUBLIC_KEY
     GET_TRC2_PUBLIC_ADDR = 0x0e
     SIGN = 0x04
-    PERSONAL_SIGN = 0x08
-    PERSONAL_SIGN_FULL_DISPLAY = 0xc8
+    SIGN_TXN_HASH = 0x05
+    GET_APP_CONFIGURATION = 0x06
+    SIGN_PERSONAL_MESSAGE = 0x08
+    PERSONAL_SIGN = SIGN_PERSONAL_MESSAGE
+    SIGN_PERSONAL_MESSAGE_FULL_DISPLAY = 0xc8
+    PERSONAL_SIGN_FULL_DISPLAY = SIGN_PERSONAL_MESSAGE_FULL_DISPLAY
+    GET_ECDH_SECRET = 0x0a
     PROVIDE_TRC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
     PROVIDE_NFT_INFORMATION = 0x14
     SET_PLUGIN = 0x16
@@ -20,20 +29,38 @@ class InsType(IntEnum):
     TIP712_SEND_STRUCT_DEF = 0x1a
     TIP712_SEND_STRUCT_IMPL = 0x1c
     TIP712_SEND_FILTERING = 0x1e
-    TIP712_SIGN = 0x0c
+    SIGN_TIP_712_MESSAGE = 0x0c
+    TIP712_SIGN = SIGN_TIP_712_MESSAGE
     GET_CHALLENGE = 0x20
     PROVIDE_TRUSTED_NAME = 0x22
+    PROVIDE_ENUM_VALUE = 0x24
+    PROVIDE_TRANSACTION_INFO = 0x26
+    PROVIDE_TRANSACTION_FIELD_DESC = 0x28
+    PROVIDE_PROXY_INFO = 0x2a
     EXTERNAL_PLUGIN_SETUP = 0x12
+    SET_EXTERNAL_PLUGIN = EXTERNAL_PLUGIN_SETUP
+    SIGN_EXTERNAL_PLUGIN = 0xc4
 
 
 class P1Type(IntEnum):
+    NON_CONFIRM = 0x00
+    CONFIRM = 0x01
     COMPLETE_SEND = 0x00
     PARTIAL_SEND = 0x01
     SIGN_FIRST_CHUNK = 0x00
     SIGN_SUBSQT_CHUNK = 0x80
+    FIRST_CHUNK = 0x01
+    FOLLOWING_CHUNK = 0x00
+    SIGN = 0x10
+    FIRST = 0x00
+    MORE = 0x80
+    LAST = 0x90
+    TRC10_NAME = 0xa0
 
 
 class P2Type(IntEnum):
+    NO_CHAINCODE = 0x00
+    CHAINCODE = 0x01
     STRUCT_NAME = 0x00
     STRUCT_FIELD = 0xff
     ARRAY = 0x0f
@@ -47,10 +74,12 @@ class P2Type(IntEnum):
     FILTERING_RAW = 0xff
     FILTERING_DISCARDED_PATH = 0x01
     FILTERING_TRUSTED_NAME = 0xfb
+    GCS_STORE = 0x10
+    GCS_START_FLOW = 0x11
 
 
 class CommandBuilder:
-    _CLA: int = 0xE0
+    _CLA: int = CLA
 
     def _serialize(self,
                    ins: InsType,

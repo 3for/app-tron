@@ -10,7 +10,8 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 import response_parser as ResponseParser
 from tron import TronClient
-from client.tip712.InputData import StatusWord, TrustedNameType, TrustedNameSource
+from client.status_word import StatusWord
+from client.tip712.InputData import TrustedNameType, TrustedNameSource
 from settings import SettingID, settings_toggle
 from client.command_builder import CommandBuilder
 from client.tip712 import InputData as InputData
