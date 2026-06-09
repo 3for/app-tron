@@ -2,6 +2,7 @@
 #include "network.h"
 #include "enum_value.h"
 #include "gtp_field_table.h"
+#include "gtp_tx_info.h"  // get_contract_addr
 #include "calldata.h"
 #include "shared_context.h"
 #include "tx_ctx.h"
@@ -57,8 +58,12 @@ bool format_param_enum(const s_param_enum *param, const char *name) {
                 ret = false;
                 break;
             }
+            // TRON divergence from app-ethereum: the GCS contract address lives in
+            // the TX_INFO descriptor (get_contract_addr), not in
+            // txContext.content->destination, which is never populated by the GCS
+            // STORE flow (dereferencing it would fault).
             if ((enum_entry = get_matching_enum(&chain_id,
-                                                txContext.content->destination,
+                                                get_contract_addr(get_current_tx_info()),
                                                 selector,
                                                 param->id,
                                                 value)) == NULL) {

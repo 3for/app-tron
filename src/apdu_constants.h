@@ -49,6 +49,7 @@
 
 #define INS_GET_CHALLENGE 0x20
 #define INS_PROVIDE_TRUSTED_NAME  0x22
+#define INS_PROVIDE_ENUM_VALUE    0x24  // same opcode as app-ethereum
 
 // Generic Clear Signing (GCS / generic_tx_parser). Same opcodes as app-ethereum.
 #define INS_GTP_TRANSACTION_INFO 0x26

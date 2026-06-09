@@ -33,8 +33,9 @@
 #include "app_errors.h"
 #include "ui_globals.h"
 #include "trusted_name.h"
-#include "tx_ctx.h"      // gcs_cleanup (Generic Clear Signing)
-#include "proxy_info.h"  // proxy_cleanup
+#include "tx_ctx.h"        // gcs_cleanup (Generic Clear Signing)
+#include "proxy_info.h"    // proxy_cleanup
+#include "enum_value.h"    // enum_value_cleanup
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -79,6 +80,8 @@ void reset_app_context() {
     G_swap_response_ready = false;
     pluginType = PLUGIN_TYPE_NONE;
     trusted_name_cleanup();
+    // Free cached enum-value descriptors (INS_PROVIDE_ENUM_VALUE).
+    enum_value_cleanup();
     forget_known_assets();
     memset((uint8_t *) &txContext, 0, sizeof(txContext));
     memset((uint8_t *) &txContent, 0, sizeof(txContent));

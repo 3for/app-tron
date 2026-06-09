@@ -31,6 +31,7 @@
 #include "cmd_tx_info.h"
 #include "cmd_field.h"
 #include "cmd_proxy_info.h"
+#include "cmd_enum_value.h"
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -110,6 +111,9 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_PROVIDE_TRUSTED_NAME:
             return io_send_sw(handle_trusted_name(cmd->p1, cmd->data, cmd->lc));
+
+        case INS_PROVIDE_ENUM_VALUE:
+            return io_send_sw(handle_enum_value(cmd->p1, cmd->p2, cmd->lc, cmd->data));
 
         // Generic Clear Signing (generic_tx_parser). The ported handlers return a
         // status word (as app-ethereum's main loop expects) rather than sending it

@@ -69,6 +69,7 @@ P2_GCS_START_FLOW = 0x11
 
 INS_GTP_TRANSACTION_INFO = 0x26
 INS_GTP_FIELD = 0x28
+INS_PROVIDE_ENUM_VALUE = 0x24
 P1_FIRST_CHUNK = 0x01
 
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
@@ -159,6 +160,7 @@ PARAM_TYPE_RAW = 0
 PARAM_TYPE_AMOUNT = 1
 PARAM_TYPE_TOKEN_AMOUNT = 2
 PARAM_TYPE_DATETIME = 4
+PARAM_TYPE_ENUM = 7
 PARAM_TYPE_TRUSTED_NAME = 8
 VALUE_VERSION = 0x00
 VALUE_TYPE_FAMILY = 0x01
@@ -336,6 +338,59 @@ def build_field_trusted_name(name: str, addr_path: bytes,
             format_tlv(FIELD_NAME, name) +
             format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_TRUSTED_NAME) +
             format_tlv(FIELD_PARAM, param))
+
+
+# PARAM_ENUM tags (mirror gtp_param_enum.c).
+PARAM_ENUM_VERSION = 0x00
+PARAM_ENUM_ID = 0x01
+PARAM_ENUM_VALUE = 0x02
+
+
+def build_field_enum(name: str, enum_id: int, value_path: bytes) -> bytes:
+    """FIELD (0x28) rendering an ENUM (gtp_param_enum.c).
+
+    The firmware takes the last byte of the selected word and resolves
+    (chain_id, contract, selector, enum_id, value) to a name registered via
+    INS_PROVIDE_ENUM_VALUE.
+    """
+    value = _build_value(32, value_path)
+    param = (format_tlv(PARAM_ENUM_VERSION, 1) +
+             format_tlv(PARAM_ENUM_ID, enum_id) +
+             format_tlv(PARAM_ENUM_VALUE, value))
+    return (format_tlv(FIELD_VERSION, 1) +
+            format_tlv(FIELD_NAME, name) +
+            format_tlv(FIELD_PARAM_TYPE, PARAM_TYPE_ENUM) +
+            format_tlv(FIELD_PARAM, param))
+
+
+# ENUM_VALUE descriptor tags (mirror enum_value.c ENUM_VALUE_TAGS).
+ENUM_VALUE_VERSION = 0x00
+ENUM_VALUE_CHAIN_ID = 0x01
+ENUM_VALUE_CONTRACT_ADDR = 0x02
+ENUM_VALUE_SELECTOR = 0x03
+ENUM_VALUE_ID = 0x04
+ENUM_VALUE_VALUE = 0x05
+ENUM_VALUE_NAME = 0x06
+ENUM_VALUE_SIGNATURE = 0xff
+
+
+def build_enum_value(contract_addr20: bytes, selector: bytes, enum_id: int,
+                     value: int, name: str) -> bytes:
+    """Build a CALLDATA-signed INS_PROVIDE_ENUM_VALUE descriptor.
+
+    The signature covers SHA-256(concat of the raw TLV of every tag except 0xff),
+    matching enum_value.c's running hash (hash_nbytes over each data->raw), and is
+    verified against the CALLDATA PKI key -- the same trust anchor as TX_INFO.
+    """
+    body = (format_tlv(ENUM_VALUE_VERSION, 1) +
+            format_tlv(ENUM_VALUE_CHAIN_ID, pack(">Q", TRON_MAINNET_CHAINID)) +
+            format_tlv(ENUM_VALUE_CONTRACT_ADDR, contract_addr20) +
+            format_tlv(ENUM_VALUE_SELECTOR, selector) +
+            format_tlv(ENUM_VALUE_ID, bytes([enum_id])) +
+            format_tlv(ENUM_VALUE_VALUE, bytes([value])) +
+            format_tlv(ENUM_VALUE_NAME, name))
+    sig = keychain.sign_data(keychain.Key.CALLDATA, body)
+    return body + format_tlv(ENUM_VALUE_SIGNATURE, sig)
 
 
 def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[bytes],
@@ -629,6 +684,40 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
 
     def provision() -> None:
         provide_trusted_name(client, TKN_ADDR20, "alice.eth")
+
+    tx = _gcs_send_descriptor(client, backend, device, [field],
+                              provision=provision)
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == Errors.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
+                  device: Device, test_name: str):
+    """ENUM field resolves a calldata byte via INS_PROVIDE_ENUM_VALUE (0x24).
+
+    arg1's low byte is 0x40 (0xf4240 & 0xff); an enum descriptor maps
+    (contract, selector, id=0, value=0x40) -> "Deposit", which the ENUM field
+    then renders in the snapshot instead of the raw value.
+    """
+    client = TronClient(backend, device, navigator)
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    field = build_field_enum("Action", enum_id=0,
+                             value_path=build_data_path_static(1))
+
+    def provision() -> None:
+        # The enum descriptor is CALLDATA-signed, so the CALLDATA cert (also used
+        # by TX_INFO) must be loaded before INS_PROVIDE_ENUM_VALUE.
+        send_calldata_certificate(client, device)
+        enum_desc = build_enum_value(contract_addr20, TRC20_TRANSFER_SELECTOR,
+                                     enum_id=0, value=0x40, name="Deposit")
+        assert send_tlv(backend, INS_PROVIDE_ENUM_VALUE, enum_desc) == Errors.OK
 
     tx = _gcs_send_descriptor(client, backend, device, [field],
                               provision=provision)
