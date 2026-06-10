@@ -19,8 +19,8 @@ the app-ethereum GCS contract (the same Ledger backend / CAL key) verbatim:
   * fields_hash          : SHA3-256 (NIST, cx_sha3_init(...,256)) over the raw bytes
                            of each 0x28 FIELD payload -- NOT keccak256.
   * signature            : SECP256K1 over the struct hash, signed with the CALLDATA
-                           test key (keychain/calldata.pem); the device is first sent
-                           the matching CALLDATA PKI certificate.
+                           test key (keychain/calldata.pem); TronClient loads the
+                           matching CALLDATA PKI certificate.
 """
 import sys
 import hashlib
@@ -40,7 +40,7 @@ from client.gcs import (DataPath, DatetimeType, Field, ParamAmount,
                         PathLeafType, PathTuple, TxInfo, TypeFamily, Value)
 from client.trusted_name import TrustedNameSource, TrustedNameType
 from fields_utils import get_all_tuple_array_paths
-from ledgered.devices import Device, DeviceType
+from ledgered.devices import Device
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavIns, NavInsID
@@ -153,36 +153,6 @@ def build_data_path_static(tuple_index: int) -> DataPath:
     return DataPath(1, [PathTuple(tuple_index), PathLeaf(PathLeafType.STATIC)])
 
 
-# --- CALLDATA PKI certificate ------------------------------------------------
-# TX_INFO (0x26) is verified against CERTIFICATE_PUBLIC_KEY_USAGE_CALLDATA. The
-# device gets the matching public key (private half: keychain/calldata.pem) from
-# this Ledger-test-root certificate, exactly as app-ethereum does. P1 of the
-# Ledger-PKI APDU (CLA 0xB0 / INS 0x06) is the usage id below.
-PUBKEY_USAGE_CALLDATA = 0x0b
-
-# Per-device CALLDATA certificates (copied verbatim from app-ethereum
-# client/ledger_pki.py PKI_CERTIFICATES[PUBKEY_USAGE_CALLDATA]).
-CALLDATA_CERTIFICATES = {
-    DeviceType.NANOSP: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010315463044022076DD2EAB72E69D440D6ED8290C8C37E39F54294C23FF0F8520F836E7BE07455C02201D9A8A75223C1ADA1D9D00966A12EBB919D0BBF2E66F144C83FADCAA23672566",  # noqa: E501
-    DeviceType.NANOX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010215463044022077FF9625006CB8A4AD41A4B04FF2112E92A732BD263CCE9B97D8E7D2536D04300220445B8EE3616FB907AA5E68359275E94D0A099C3E32A4FC8B3669C34083671F2F",  # noqa: E501
-    DeviceType.STAX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B434010135010415473045022100A88646AD72CA012D5FDAF8F6AE0B7EBEF079212768D57323CB5B57CADD9EB20D022005872F8EA06092C9783F01AF02C5510588FB60CBF4BA51FB382B39C1E060BB6B",  # noqa: E501
-    DeviceType.FLEX: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B43401013501051546304402205305BDDDAD0284A2EAC2A9BE4CEF6604AE9415C5F46883448F5F6325026234A3022001ED743BCF33CCEB070FDD73C3D3FCC2CEE5AB30A5C3EB7D2A8D21C6F58D493F",  # noqa: E501
-    DeviceType.APEX_P: "01010102010211040000000212010013020002140101160400000000200863616C6C646174613002000831010B32012133210381C0821E2A14AC2546FB0B9852F37CA2789D7D76483D79217FB36F51DCE1E7B4340101350106154730450221009F5EDA5B6ED34FA9F1C44B1CC234BE5FE6C0DD4655F42EE50CA6201F59491E5A02206E055F490F56F42B625F2B5772AE860CAC6848B6C5AC8E44BC529A959249FC37",  # noqa: E501
-}
-
-
-def send_calldata_certificate(client: TronClient, device: Device) -> None:
-    """Load the CALLDATA PKI certificate so the device can verify TX_INFO.
-
-    No-op on devices without a published test certificate; the test is then
-    skipped rather than failing on a missing trust anchor.
-    """
-    cert = CALLDATA_CERTIFICATES.get(device.type)
-    if not cert:
-        pytest.skip(f"No CALLDATA test certificate for device {device.type.name}")
-    client._pki_client.send_certificate(PUBKEY_USAGE_CALLDATA, bytes.fromhex(cert))
-
-
 def _uint_value(type_size: int, data_path: DataPath) -> Value:
     return Value(1, TypeFamily.UINT, type_size=type_size, data_path=data_path)
 
@@ -261,8 +231,7 @@ def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
                   operation).serialize()
 
 
-def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
-                           device: Device):
+def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
     """store -> 0x26 -> 0x28(raw) -> expect 0x9000 (fields_hash validated)."""
     tx = build_trc20_transfer_tx(tron_client)
     assert gcs_store_calldata(tron_client, backend,
@@ -279,8 +248,6 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
 
-    # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
-    send_calldata_certificate(tron_client, device)
     tron_client.provide_transaction_info(tx_info)
     for field in fields:
         tron_client.provide_transaction_field_desc(field.serialize())
@@ -312,7 +279,7 @@ def _approve_review(navigator: Navigator, device: Device, test_name: str) -> Non
 
 def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
                   device: Device, test_name: str):
-    """Full keystone flow: STORE -> cert -> 0x26 -> 0x28 -> START_FLOW -> approve.
+    """Full keystone flow: STORE -> 0x26 -> 0x28 -> START_FLOW -> approve.
 
     Asserts the firmware renders the GCS review and returns a signature over
     sha256(tx) recoverable to the device key -- the first real end-to-end GCS
@@ -330,7 +297,6 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
 
-    send_calldata_certificate(client, device)
     client.provide_transaction_info(tx_info)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -411,8 +377,6 @@ def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
         creator_legal_name="Ledger",
     )
 
-    # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
-    send_calldata_certificate(client, device)
     client.provide_transaction_info(tx_info.serialize())
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -428,9 +392,9 @@ def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
 
 
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
-                         device: Device, fields: list[Field],
+                         fields: list[Field],
                          provision=None) -> bytes:
-    """STORE -> [provision] -> cert -> 0x26 -> 0x28(xN); returns the parked tx.
+    """STORE -> [provision] -> 0x26 -> 0x28(xN); returns the parked tx.
 
     `provision` (optional) runs after the calldata is parked but before the
     fields are streamed, so token/trusted-name metadata is in place by the time
@@ -444,7 +408,6 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
-    send_calldata_certificate(client, device)
     client.provide_transaction_info(tx_info)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -509,7 +472,7 @@ def test_gcs_amount_decimals(backend: BackendInterface, navigator: Navigator,
     client = TronClient(backend, device, navigator)
     amount_field = build_field_amount("Amount", 32,
                                       data_path=build_data_path_static(1))
-    tx = _gcs_send_descriptor(client, backend, device, [amount_field])
+    tx = _gcs_send_descriptor(client, backend, [amount_field])
 
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
@@ -531,7 +494,7 @@ def test_gcs_datetime(backend: BackendInterface, navigator: Navigator,
     client = TronClient(backend, device, navigator)
     dt_field = build_field_datetime("Deadline", 32,
                                     data_path=build_data_path_static(1))
-    tx = _gcs_send_descriptor(client, backend, device, [dt_field])
+    tx = _gcs_send_descriptor(client, backend, [dt_field])
 
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
@@ -565,8 +528,7 @@ def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
     def provision() -> None:
         provide_trc20_token(backend, client, TKN_ADDR20, "TKN", 6)
 
-    tx = _gcs_send_descriptor(client, backend, device, [field],
-                              provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
@@ -595,8 +557,7 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
     def provision() -> None:
         provide_trusted_name(client, TKN_ADDR20, "alice.eth")
 
-    tx = _gcs_send_descriptor(client, backend, device, [field],
-                              provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
@@ -622,15 +583,11 @@ def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
                              value_path=build_data_path_static(1))
 
     def provision() -> None:
-        # The enum descriptor is CALLDATA-signed, so the CALLDATA cert (also used
-        # by TX_INFO) must be loaded before provide_enum_value.
-        send_calldata_certificate(client, device)
         enum_desc = build_enum_value(contract_addr20, TRC20_TRANSFER_SELECTOR,
                                      enum_id=0, value=0x40, name="Deposit")
         client.provide_enum_value(enum_desc)
 
-    tx = _gcs_send_descriptor(client, backend, device, [field],
-                              provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):

@@ -18,15 +18,13 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from ragger.backend.interface import BackendInterface, RAPDU
 from ragger.navigator import NavInsID, NavIns
 from ragger.bip import pack_derivation_path
-from ragger.error import ExceptionRAPDU
 from conftest import MNEMONIC
 from web3 import Web3
 from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
                                     P1Type as P1, P2Type as P2)
+from client.ledger_pki import PKIClient, PKIPubKeyUsage
 from client.status_word import StatusWord
 from ledgered.devices import Device
-
-from client.tip712.InputData import PKIPubKeyUsage
 '''
 Tron Protobuf
 '''
@@ -56,33 +54,6 @@ class APDUOffsets(IntEnum):
     P2 = 3
     LC = 4
     CDATA = 5
-
-
-class PKIClient:
-    _CLA: int = 0xB0
-    _INS: int = 0x06
-
-    def __init__(self, client: BackendInterface) -> None:
-        self._client = client
-
-    def send_certificate(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
-        try:
-            response = self.send_raw(p1, payload)
-            assert response.status == StatusWord.OK
-        except ExceptionRAPDU as err:
-            if err.status == StatusWord.NOT_IMPLEMENTED:
-                print(
-                    "Ledger-PKI APDU not yet implemented. Legacy path will be used"
-                )
-
-    def send_raw(self, p1: PKIPubKeyUsage, payload: bytes) -> RAPDU:
-        header = bytearray()
-        header.append(self._CLA)
-        header.append(self._INS)
-        header.append(p1)
-        header.append(0x00)
-        header.append(len(payload))
-        return self._client.exchange_raw(header + payload)
 
 
 class TronClient:
@@ -415,9 +386,11 @@ class TronClient:
         return response
 
     def provide_enum_value(self, payload: bytes) -> RAPDU:
+        self._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_CALLDATA)
         return self._provide_tlv(CommandBuilder().provide_enum_value(payload))
 
     def provide_transaction_info(self, payload: bytes) -> RAPDU:
+        self._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_CALLDATA)
         return self._provide_tlv(
             CommandBuilder().provide_transaction_info(payload))
 
