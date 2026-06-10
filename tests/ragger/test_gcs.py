@@ -47,10 +47,10 @@ from ledgered.devices import Device
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
-from ragger.navigator import Navigator, NavIns, NavInsID
+from ragger.navigator.navigation_scenario import NavigateWithScenario
 import response_parser as ResponseParser
 from client.status_word import StatusWord
-from tron import TronClient, ROOT_SCREENSHOT_PATH
+from tron import TronClient
 from utils import check_tx_signature, get_selector_from_data
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
@@ -72,6 +72,7 @@ TRON_MAINNET_CHAINID = 728126428
 # TRON mainnet address prefix byte (parse.h ADD_PRE_FIX_BYTE_MAINNET).
 ADD_PRE_FIX_BYTE_MAINNET = 0x41
 ABIS_FOLDER = Path(__file__).parent / "abis"
+ROOT_SCREENSHOT_PATH = Path(__file__).parent.resolve()
 
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
@@ -258,36 +259,22 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
         tron_client.provide_transaction_field_desc(field.serialize())
 
 
-def _approve_review(navigator: Navigator, device: Device, test_name: str) -> None:
-    """Walk the GCS review screen to its sign confirmation and approve it.
-
-    Uses snapshot comparison so the functional signing test also records the
-    rendered GCS review flow.
-    """
-    if device.is_nano:
-        navigator.navigate_until_text_and_compare(NavIns(NavInsID.RIGHT_CLICK),
-                                                  [NavIns(NavInsID.BOTH_CLICK)],
-                                                  "Sign transaction",
-                                                  ROOT_SCREENSHOT_PATH,
-                                                  test_name)
-    else:
-        navigator.navigate_until_text_and_compare(
-            NavInsID.USE_CASE_REVIEW_TAP,
-            [
-                NavInsID.USE_CASE_REVIEW_CONFIRM,
-                NavInsID.USE_CASE_STATUS_DISMISS,
-            ],
-            "Hold to sign",
-            ROOT_SCREENSHOT_PATH,
-            test_name)
+def _client_from_scenario(scenario_navigator: NavigateWithScenario) -> TronClient:
+    return TronClient(scenario_navigator.backend, scenario_navigator.device,
+                      scenario_navigator.navigator)
 
 
-def _start_gcs_flow_and_assert(backend: BackendInterface, navigator: Navigator,
-                               device: Device, test_name: str,
-                               client: TronClient, tx: bytes) -> None:
+def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
+                               client: TronClient, tx: bytes,
+                               test_name: str | None = None) -> None:
+    backend = scenario_navigator.backend
+    custom_screen_text = ("Sign transaction"
+                          if scenario_navigator.device.is_nano else None)
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
+        scenario_navigator.review_approve(path=ROOT_SCREENSHOT_PATH,
+                                          test_name=test_name,
+                                          custom_screen_text=custom_screen_text)
 
     resp = backend.last_async_response
     assert resp.status == StatusWord.OK
@@ -300,15 +287,15 @@ def _get_challenge(client: TronClient) -> int:
         client.exchange_raw(CommandBuilder().get_challenge()).data)
 
 
-def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
-                  device: Device, test_name: str):
+def test_gcs_sign(scenario_navigator: NavigateWithScenario):
     """Full keystone flow: STORE -> 0x26 -> 0x28 -> START_FLOW -> approve.
 
     Asserts the firmware renders the GCS review and returns a signature over
     sha256(tx) recoverable to the device key -- the first real end-to-end GCS
     signature (this is also the first execution of ui_gcs()).
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
@@ -325,13 +312,13 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
         client.provide_transaction_field_desc(field.serialize())
 
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
-    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
-                            device: Device, test_name: str):
+def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
     """batchExecute(calls[].data=b"") exercises ParamCalldata empty nested tx."""
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
 
     with Path(f"{ABIS_FOLDER}/batch.json").open(encoding="utf-8") as f:
         contract = Web3().eth.contract(
@@ -396,19 +383,12 @@ def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_nft(backend: BackendInterface, navigator: Navigator,
-                 device: Device, test_name: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_nft(scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
 
     with Path(f"{ABIS_FOLDER}/erc1155.json").open(encoding="utf-8") as f:
         contract = Web3().eth.contract(
@@ -552,14 +532,7 @@ def test_gcs_nft(backend: BackendInterface, navigator: Navigator,
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 def _poap_data() -> str:
@@ -609,9 +582,9 @@ def _provide_gcs_descriptor(client: TronClient, contract_addr20: bytes,
         client.provide_transaction_field_desc(field.serialize())
 
 
-def test_gcs_poap(backend: BackendInterface, navigator: Navigator,
-                  device: Device, test_name: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_poap(scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     data, tx = _store_poap_tx(client, backend)
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
@@ -682,13 +655,14 @@ def test_gcs_poap(backend: BackendInterface, navigator: Navigator,
                             creator_url="poap.xyz",
                             contract_name="PoapBridge",
                             deploy_date=1646305200)
-    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 @pytest.mark.parametrize("test_config", ["chain_id", "network"])
-def test_gcs_formatter(backend: BackendInterface, navigator: Navigator,
-                       device: Device, test_name: str, test_config: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_formatter(scenario_navigator: NavigateWithScenario,
+                       test_config: str):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     data, tx = _store_poap_tx(client, backend)
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
@@ -762,8 +736,9 @@ def test_gcs_formatter(backend: BackendInterface, navigator: Navigator,
                             creator_url="poap.xyz",
                             contract_name="PoapBridge",
                             deploy_date=1646305200)
-    _start_gcs_flow_and_assert(backend, navigator, device,
-                               f"{test_name}_{test_config}", client, tx)
+    _start_gcs_flow_and_assert(
+        scenario_navigator, client, tx,
+        f"{scenario_navigator.test_name}_{test_config}")
 
 
 @pytest.mark.parametrize(
@@ -781,10 +756,11 @@ def test_gcs_formatter(backend: BackendInterface, navigator: Navigator,
           bytes.fromhex("02")]),
     ],
 )
-def test_gcs_constraints(backend: BackendInterface, navigator: Navigator,
-                         device: Device, test_name: str, test_config: str,
+def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
+                         test_config: str,
                          visible: VisibleType, constraints: list[bytes]):
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     data, tx = _store_poap_tx(client, backend)
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
@@ -886,13 +862,14 @@ def test_gcs_constraints(backend: BackendInterface, navigator: Navigator,
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(backend, navigator, device,
-                               f"{test_name}_{test_config}", client, tx)
+    _start_gcs_flow_and_assert(
+        scenario_navigator, client, tx,
+        f"{scenario_navigator.test_name}_{test_config}")
 
 
-def test_gcs_1inch(backend: BackendInterface, navigator: Navigator,
-                   device: Device, test_name: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
 
     with Path(f"{ABIS_FOLDER}/1inch.abi.json").open(encoding="utf-8") as f:
         contract = Web3().eth.contract(
@@ -985,12 +962,12 @@ def test_gcs_1inch(backend: BackendInterface, navigator: Navigator,
         TRON_MAINNET_CHAINID)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_proxy(backend: BackendInterface, navigator: Navigator,
-                   device: Device, test_name: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_proxy(scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     new_owner = bytes.fromhex("2222222222222222222222222222222222222222")
 
     with Path(f"{ABIS_FOLDER}/proxy_implem.abi.json").open(
@@ -1059,12 +1036,12 @@ def test_gcs_proxy(backend: BackendInterface, navigator: Navigator,
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_4226(backend: BackendInterface, navigator: Navigator,
-                  device: Device, test_name: str):
-    client = TronClient(backend, device, navigator)
+def test_gcs_4226(scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
 
     with Path(f"{ABIS_FOLDER}/rSWELL.abi.json").open(encoding="utf-8") as f:
         contract = Web3().eth.contract(
@@ -1134,7 +1111,7 @@ def test_gcs_4226(backend: BackendInterface, navigator: Navigator,
                                   TRON_MAINNET_CHAINID)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
@@ -1159,49 +1136,35 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
         client.provide_transaction_field_desc(field.serialize())
     return tx
 
-def test_gcs_amount_decimals(backend: BackendInterface, navigator: Navigator,
-                             device: Device, test_name: str):
+def test_gcs_amount_decimals(scenario_navigator: NavigateWithScenario):
     """AMOUNT field renders native TRX with 6 decimals (SUN_TO_TRX), not 18.
 
     Calldata _amount = 0xf4240 = 1_000_000; with TRON's 6 decimals this is
     "1 TRX". The old app-ethereum WEI_TO_ETHER (18) bug would render
     "0.000000000001 TRX", so the snapshot is the regression guard for the fix.
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     amount_field = build_field_amount("Amount", 32,
                                       data_path=build_data_path_static(1))
     tx = _gcs_send_descriptor(client, backend, [amount_field])
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_datetime(backend: BackendInterface, navigator: Navigator,
-                      device: Device, test_name: str):
+def test_gcs_datetime(scenario_navigator: NavigateWithScenario):
     """DATETIME (DT_UNIX) field renders the calldata word as a UTC timestamp.
 
     Calldata word = 0xf4240 = 1_000_000 seconds since the epoch, which
     time_format_to_utc() renders as "1970-01-12 ... UTC" in the snapshot.
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     dt_field = build_field_datetime("Deadline", 32,
                                     data_path=build_data_path_static(1))
     tx = _gcs_send_descriptor(client, backend, [dt_field])
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 # `transfer(address _to, uint256 _amount)` arg0 (_to) doubles as a stand-in token
@@ -1210,15 +1173,15 @@ def test_gcs_datetime(backend: BackendInterface, navigator: Navigator,
 TKN_ADDR20 = bytes.fromhex("364b03e0815687edaf90b81ff58e496dea7383d7")
 
 
-def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
-                          device: Device, test_name: str):
+def test_gcs_token_amount(scenario_navigator: NavigateWithScenario):
     """TOKEN_AMOUNT resolves the token via the TRC20 registry (trc_tokens).
 
     arg0 is registered as "TKN" with 6 decimals; the amount word arg1 =
     1_000_000 then renders as "1 TKN" in the snapshot using the registry's
     decimals/ticker.
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     field = build_field_token_amount("Amount",
                                      value_path=build_data_path_static(1),
                                      token_path=build_data_path_static(0))
@@ -1229,25 +1192,18 @@ def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
-                          device: Device, test_name: str):
+def test_gcs_trusted_name(scenario_navigator: NavigateWithScenario):
     """TRUSTED_NAME resolves a calldata address via provideTrustedName (0x22).
 
     arg0 is registered as the account name "alice.eth"; the GCS TRUSTED_NAME
     field over arg0 then renders that name in the snapshot instead of the raw
     address -- the provideTrustedName path unblocked by get_public_key().
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     field = build_field_trusted_name("To",
                                      addr_path=build_data_path_static(0),
                                      types=[TrustedNameType.ACCOUNT],
@@ -1265,25 +1221,18 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
-                  device: Device, test_name: str):
+def test_gcs_enum(scenario_navigator: NavigateWithScenario):
     """ENUM field resolves a calldata byte via provide_enum_value (INS 0x24).
 
     arg1's low byte is 0x40 (0xf4240 & 0xff); an enum descriptor maps
     (contract, selector, id=0, value=0x40) -> "Deposit", which the ENUM field
     then renders in the snapshot instead of the raw value.
     """
-    client = TronClient(backend, device, navigator)
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     field = build_field_enum("Action", enum_id=0,
                              value_path=build_data_path_static(1))
@@ -1295,11 +1244,4 @@ def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
