@@ -396,3 +396,46 @@ class CommandBuilder:
         payload += sig
         return self._serialize(InsType.PROVIDE_TRC20_TOKEN_INFORMATION, 0x00,
                                0x00, payload)
+
+    def common_tlv_serialize(self,
+                             ins: InsType,
+                             tlv_payload: bytes,
+                             p1l: list[int] = [P1Type.FIRST_CHUNK,
+                                               P1Type.FOLLOWING_CHUNK],
+                             p2l: list[int] = [0x00],
+                             payload: bytes = bytes()) -> list[bytes]:
+        # Chunked TLV framing shared by the generic clear-signing commands: the
+        # FIRST chunk is prefixed with the total TLV length as a 2-byte
+        # big-endian integer (firmware reads it with read_u16_be), continuation
+        # chunks are raw. The firmware strips this prefix before parsing/hashing,
+        # so it is not part of the descriptor or the fields_hash.
+        assert len(p1l) in [1, 2]
+        assert len(p2l) in [1, 2]
+        chunks = list()
+        payload += struct.pack(">H", len(tlv_payload))
+        payload += tlv_payload
+        p1 = p1l[0]
+        p2 = p2l[0]
+        while len(payload) > 0:
+            chunks.append(self._serialize(ins, p1, p2, payload[:0xff]))
+            payload = payload[0xff:]
+            # -1 so it works with a list of 1 or 2 items
+            p1 = p1l[-1]
+            p2 = p2l[-1]
+        return chunks
+
+    def provide_enum_value(self, tlv_payload: bytes) -> list[bytes]:
+        return self.common_tlv_serialize(InsType.PROVIDE_ENUM_VALUE,
+                                         tlv_payload)
+
+    def provide_transaction_info(self, tlv_payload: bytes) -> list[bytes]:
+        return self.common_tlv_serialize(InsType.PROVIDE_TRANSACTION_INFO,
+                                         tlv_payload)
+
+    def provide_transaction_field_desc(self, tlv_payload: bytes) -> list[bytes]:
+        return self.common_tlv_serialize(
+            InsType.PROVIDE_TRANSACTION_FIELD_DESC, tlv_payload)
+
+    def provide_proxy_info(self, tlv_payload: bytes) -> list[bytes]:
+        return self.common_tlv_serialize(InsType.PROVIDE_PROXY_INFO,
+                                         tlv_payload)

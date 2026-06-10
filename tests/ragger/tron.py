@@ -403,3 +403,24 @@ class TronClient:
         for chunk in chunks[:-1]:
             self._client.exchange_raw(chunk)
         return self._client.exchange_async_raw(chunks[-1])
+
+    def _provide_tlv(self, chunks: list) -> RAPDU:
+        # Generic clear-signing descriptors (0x24/0x26/0x28) are streamed as a
+        # chunked TLV payload; every chunk must return 0x9000.
+        for chunk in chunks[:-1]:
+            response = self._client.exchange_raw(chunk)
+            assert response.status == StatusWord.OK
+        response = self._client.exchange_raw(chunks[-1])
+        assert response.status == StatusWord.OK
+        return response
+
+    def provide_enum_value(self, payload: bytes) -> RAPDU:
+        return self._provide_tlv(CommandBuilder().provide_enum_value(payload))
+
+    def provide_transaction_info(self, payload: bytes) -> RAPDU:
+        return self._provide_tlv(
+            CommandBuilder().provide_transaction_info(payload))
+
+    def provide_transaction_field_desc(self, payload: bytes) -> RAPDU:
+        return self._provide_tlv(
+            CommandBuilder().provide_transaction_field_desc(payload))

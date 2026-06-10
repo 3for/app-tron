@@ -24,26 +24,29 @@ the app-ethereum GCS contract (the same Ledger backend / CAL key) verbatim:
 """
 import sys
 import hashlib
+import json
 from pathlib import Path
 from struct import pack
 
 import pytest
+from web3 import Web3
 
 from client import keychain
 from client.command_builder import CLA, MAX_APDU_LEN, InsType, P1Type, P2Type
 from client.enum_value import EnumValue
 from client.gcs import (DataPath, DatetimeType, Field, ParamAmount,
-                        ParamDatetime, ParamEnum, ParamRaw, ParamTokenAmount,
-                        ParamTrustedName, PathLeaf, PathLeafType, PathTuple,
-                        TxInfo, TypeFamily, Value)
+                        ParamCalldata, ParamDatetime, ParamEnum, ParamRaw,
+                        ParamTokenAmount, ParamTrustedName, PathLeaf,
+                        PathLeafType, PathTuple, TxInfo, TypeFamily, Value)
 from client.trusted_name import TrustedNameSource, TrustedNameType
+from fields_utils import get_all_tuple_array_paths
 from ledgered.devices import Device, DeviceType
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavIns, NavInsID
 from client.status_word import StatusWord
 from tron import TronClient, ROOT_SCREENSHOT_PATH
-from utils import check_tx_signature
+from utils import check_tx_signature, get_selector_from_data
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
 if PROTO_PATH not in sys.path:
@@ -59,15 +62,11 @@ P1_LAST = P1Type.LAST
 P2_GCS_STORE = P2Type.GCS_STORE
 P2_GCS_START_FLOW = P2Type.GCS_START_FLOW
 
-INS_GTP_TRANSACTION_INFO = InsType.PROVIDE_TRANSACTION_INFO
-INS_GTP_FIELD = InsType.PROVIDE_TRANSACTION_FIELD_DESC
-INS_PROVIDE_ENUM_VALUE = InsType.PROVIDE_ENUM_VALUE
-P1_FIRST_CHUNK = P1Type.FIRST_CHUNK
-
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
 TRON_MAINNET_CHAINID = 728126428
 # TRON mainnet address prefix byte (parse.h ADD_PRE_FIX_BYTE_MAINNET).
 ADD_PRE_FIX_BYTE_MAINNET = 0x41
+ABIS_FOLDER = Path(__file__).parent / "abis"
 
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
@@ -76,6 +75,7 @@ TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "a9059cbb"
     "000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d7"
     "00000000000000000000000000000000000000000000000000000000000f4240")
+BATCH_CONTRACT20 = bytes.fromhex("2cc8475177918e8c4d840150b68815a4b6f0f5f3")
 
 
 @pytest.fixture(name="tron_client")
@@ -90,6 +90,17 @@ def build_trc20_transfer_tx(client: TronClient) -> bytes:
             owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
             contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
             data=TRC20_TRANSFER_CALLDATA))
+
+
+def build_trigger_smart_contract_tx(client: TronClient,
+                                    contract_addr20: bytes,
+                                    calldata: bytes) -> bytes:
+    return client.packContract(
+        tron.Transaction.Contract.TriggerSmartContract,
+        contract.TriggerSmartContract(
+            owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+            contract_address=bytes([ADD_PRE_FIX_BYTE_MAINNET]) + contract_addr20,
+            data=calldata))
 
 
 def gcs_store_calldata(client: TronClient, backend: BackendInterface, path: str,
@@ -234,7 +245,10 @@ def build_enum_value(contract_addr20: bytes, selector: bytes, enum_id: int,
 
 
 def compute_inst_hash(fields: list[Field]) -> bytes:
-    return hashlib.sha3_256(b"".join(field.serialize() for field in fields)).digest()
+    inst_hash = hashlib.sha3_256()
+    for field in fields:
+        inst_hash.update(field.serialize())
+    return inst_hash.digest()
 
 
 def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
@@ -245,21 +259,6 @@ def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
                   selector,
                   compute_inst_hash(fields),
                   operation).serialize()
-
-
-def send_tlv(backend: BackendInterface, ins: int, payload: bytes) -> int:
-    # The generic_tx_parser commands (0x26 / 0x28) use chunked TLV: the FIRST
-    # chunk is prefixed with the total TLV length as a 2-byte big-endian integer
-    # (tlv_apdu.c reads it with read_u16_be), continuation chunks are raw. The
-    # firmware strips this prefix before parsing/hashing, so it is not part of
-    # the descriptor or the fields_hash.
-    framed = pack(">H", len(payload)) + payload
-    chunks = [framed[i:i + MAX_APDU_LEN] for i in range(0, len(framed), MAX_APDU_LEN)]
-    status = StatusWord.OK
-    for i, chunk in enumerate(chunks):
-        p1 = P1_FIRST_CHUNK if i == 0 else 0x00
-        status = backend.exchange(CLA, ins, p1, 0x00, chunk).status
-    return status
 
 
 def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
@@ -282,9 +281,9 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface,
 
     # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
     send_calldata_certificate(tron_client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
+    tron_client.provide_transaction_info(tx_info)
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
+        tron_client.provide_transaction_field_desc(field.serialize())
 
 
 def _approve_review(navigator: Navigator, device: Device, test_name: str) -> None:
@@ -332,9 +331,9 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
                             "transfer")
 
     send_calldata_certificate(client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
+    client.provide_transaction_info(tx_info)
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
+        client.provide_transaction_field_desc(field.serialize())
 
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
@@ -344,6 +343,86 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
     assert resp.status == StatusWord.OK
 
     # The returned signature must verify over sha256(tx) against the device key.
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
+                            device: Device, test_name: str):
+    """batchExecute(calls[].data=b"") exercises ParamCalldata empty nested tx."""
+    client = TronClient(backend, device, navigator)
+
+    with Path(f"{ABIS_FOLDER}/batch.json").open(encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=BATCH_CONTRACT20,
+        )
+
+    data = contract.encode_abi("batchExecute", [[
+        (
+            bytes.fromhex("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
+            Web3.to_wei(0.0, "ether"),
+            b"",
+        ),
+    ]])
+
+    # Same batchExecute calldata as app-ethereum, but carried by a TRON protobuf
+    # TriggerSmartContract transaction (not an ETH RLP one); park it via the 0xC4
+    # STORE bridge instead of app_client.sign(mode=STORE).
+    tx = build_trigger_smart_contract_tx(client, BATCH_CONTRACT20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json",
+                                            "batchExecute",
+                                            "calls")
+    fields = [
+        Field(
+            1,
+            "Destination",
+            ParamCalldata(
+                1,
+                Value(
+                    1,
+                    TypeFamily.BYTES,
+                    data_path=DataPath(1, param_paths["data"]),
+                ),
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    data_path=DataPath(1, param_paths["to"]),
+                ),
+            ),
+        ),
+    ]
+
+    # compute instructions hash
+    inst_hash = compute_inst_hash(fields)
+
+    tx_info = TxInfo(
+        1,
+        TRON_MAINNET_CHAINID,
+        BATCH_CONTRACT20,
+        get_selector_from_data(data),
+        inst_hash,
+        "Batch transaction",
+        creator_name="Ledger Multisig",
+        creator_legal_name="Ledger",
+    )
+
+    # TX_INFO is signed by the CALLDATA key: load its PKI certificate first.
+    send_calldata_certificate(client, device)
+    client.provide_transaction_info(tx_info.serialize())
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
 
@@ -366,9 +445,9 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
     send_calldata_certificate(client, device)
-    assert send_tlv(backend, INS_GTP_TRANSACTION_INFO, tx_info) == StatusWord.OK
+    client.provide_transaction_info(tx_info)
     for field in fields:
-        assert send_tlv(backend, INS_GTP_FIELD, field.serialize()) == StatusWord.OK
+        client.provide_transaction_field_desc(field.serialize())
     return tx
 
 
@@ -531,7 +610,7 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
 
 def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
                   device: Device, test_name: str):
-    """ENUM field resolves a calldata byte via INS_PROVIDE_ENUM_VALUE (0x24).
+    """ENUM field resolves a calldata byte via provide_enum_value (INS 0x24).
 
     arg1's low byte is 0x40 (0xf4240 & 0xff); an enum descriptor maps
     (contract, selector, id=0, value=0x40) -> "Deposit", which the ENUM field
@@ -544,11 +623,11 @@ def test_gcs_enum(backend: BackendInterface, navigator: Navigator,
 
     def provision() -> None:
         # The enum descriptor is CALLDATA-signed, so the CALLDATA cert (also used
-        # by TX_INFO) must be loaded before INS_PROVIDE_ENUM_VALUE.
+        # by TX_INFO) must be loaded before provide_enum_value.
         send_calldata_certificate(client, device)
         enum_desc = build_enum_value(contract_addr20, TRC20_TRANSFER_SELECTOR,
                                      enum_id=0, value=0x40, name="Deposit")
-        assert send_tlv(backend, INS_PROVIDE_ENUM_VALUE, enum_desc) == StatusWord.OK
+        client.provide_enum_value(enum_desc)
 
     tx = _gcs_send_descriptor(client, backend, device, [field],
                               provision=provision)

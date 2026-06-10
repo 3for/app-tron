@@ -40,6 +40,13 @@ def check_tx_signature(transaction, signature, public_key):
     return check_hash_signature(txID, signature, public_key)
 
 
+def get_selector_from_data(data: str) -> bytes:
+    # `data` is the "0x"-prefixed ABI-encoded calldata returned by web3's
+    # encode_abi; the 4-byte function selector is its first word.
+    raw_data = bytes.fromhex(data[2:])
+    return raw_data[:4]
+
+
 def build_trc20_calldata(to_address_hex: str, amount: Decimal):
     # Function selector for transfer(address,uint256)
     selector = bytes.fromhex("a9059cbb")
