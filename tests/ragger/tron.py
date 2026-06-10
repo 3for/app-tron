@@ -22,8 +22,10 @@ from conftest import MNEMONIC
 from web3 import Web3
 from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
                                     P1Type as P1, P2Type as P2)
+from client.keychain import Key, sign_data
 from client.ledger_pki import PKIClient, PKIPubKeyUsage
 from client.status_word import StatusWord
+from client.trusted_name import TrustedName, TrustedNameSource
 from ledgered.devices import Device
 '''
 Tron Protobuf
@@ -43,6 +45,7 @@ PUBLIC_KEY_LENGTH = 65
 BASE58_ADDRESS_SIZE = 34
 GET_ADDRESS_RESP_LEN = 101
 GET_VERSION_RESP_LEN = 4
+TRON_MAINNET_ADDRESS_PREFIX = 0x41
 
 Errors = StatusWord
 
@@ -397,3 +400,96 @@ class TronClient:
     def provide_transaction_field_desc(self, payload: bytes) -> RAPDU:
         return self._provide_tlv(
             CommandBuilder().provide_transaction_field_desc(payload))
+
+    def provide_proxy_info(self, payload: bytes) -> RAPDU:
+        # Send ledgerPKI certificate
+        self._pki_client.send_certificate(
+            PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME)
+        return self._provide_tlv(CommandBuilder().provide_proxy_info(payload))
+
+    def provide_trusted_name(self, trusted_name: TrustedName) -> RAPDU:
+        self._pki_client.send_certificate(
+            PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME,
+            trusted_name.tn_source == TrustedNameSource.CAL)
+        return self._provide_tlv(
+            CommandBuilder().provide_trusted_name(trusted_name.serialize()))
+
+    def provide_token_metadata(self,
+                               ticker: str,
+                               addr: bytes,
+                               decimals: int,
+                               chain_id: int,
+                               sig: Optional[bytes] = None) -> RAPDU:
+        cmd_builder = CommandBuilder()
+        if len(addr) == 20:
+            addr = bytes([TRON_MAINNET_ADDRESS_PREFIX]) + addr
+        elif len(addr) != 21:
+            raise ValueError("Token metadata address must be 20 or 21 bytes")
+
+        if sig is None:
+            # Send ledgerPKI certificate
+            self._pki_client.send_certificate(
+                PKIPubKeyUsage.PUBKEY_USAGE_COIN_META)
+            # Temporarily get a command with an empty signature to extract the payload and
+            # compute the signature on it
+            tmp = cmd_builder.provide_trc20_token_information(ticker,
+                                                              addr,
+                                                              decimals,
+                                                              chain_id,
+                                                              bytes())
+            # skip APDU header & empty sig
+            sig = sign_data(Key.CAL, tmp[6:])
+
+        response = self._client.exchange_raw(
+            cmd_builder.provide_trc20_token_information(ticker,
+                                                        addr,
+                                                        decimals,
+                                                        chain_id,
+                                                        sig))
+        assert response.status == StatusWord.OK
+        return response
+
+    def provide_nft_metadata(self,
+                             collection: str,
+                             addr: bytes,
+                             chain_id: int,
+                             type_: int = 1,
+                             version: int = 1,
+                             key_id: int = 1,
+                             algo_id: int = 1,
+                             sig: Optional[bytes] = None) -> RAPDU:
+        cmd_builder = CommandBuilder()
+        if len(addr) == 20:
+            addr = bytes([TRON_MAINNET_ADDRESS_PREFIX]) + addr
+        elif len(addr) != 21:
+            raise ValueError("NFT metadata address must be 20 or 21 bytes")
+
+        if sig is None:
+            # Send ledgerPKI certificate
+            self._pki_client.send_certificate(
+                PKIPubKeyUsage.PUBKEY_USAGE_NFT_METADATA)
+
+            # Temporarily get a command with an empty signature to extract the payload and
+            # compute the signature on it
+            tmp = cmd_builder.provide_nft_information(type_,
+                                                      version,
+                                                      collection,
+                                                      addr,
+                                                      chain_id,
+                                                      key_id,
+                                                      algo_id,
+                                                      bytes())
+            # skip APDU header & empty sig
+            sig = sign_data(Key.NFT, tmp[5:-1])
+
+        response = self._client.exchange_raw(
+            cmd_builder.provide_nft_information(type_,
+                                                version,
+                                                collection,
+                                                addr,
+                                                chain_id,
+                                                key_id,
+                                                algo_id,
+                                                sig))
+        assert response.status == StatusWord.OK
+        return response

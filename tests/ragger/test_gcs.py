@@ -31,19 +31,24 @@ from struct import pack
 import pytest
 from web3 import Web3
 
-from client import keychain
-from client.command_builder import CLA, MAX_APDU_LEN, InsType, P1Type, P2Type
+from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
+                                    P1Type, P2Type)
 from client.enum_value import EnumValue
-from client.gcs import (DataPath, DatetimeType, Field, ParamAmount,
+from client.proxy_info import ProxyInfo
+from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmount,
                         ParamCalldata, ParamDatetime, ParamEnum, ParamRaw,
-                        ParamTokenAmount, ParamTrustedName, PathLeaf,
-                        PathLeafType, PathTuple, TxInfo, TypeFamily, Value)
-from client.trusted_name import TrustedNameSource, TrustedNameType
-from fields_utils import get_all_tuple_array_paths
+                        ParamNetwork, ParamNFT, ParamToken, ParamTokenAmount,
+                        ParamTrustedName, PathLeaf, PathLeafType, PathTuple,
+                        TxInfo, TypeFamily, Value, VisibleType)
+from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
+from fields_utils import (get_all_paths, get_all_tuple_array_paths,
+                          get_all_tuple_paths)
 from ledgered.devices import Device
+from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavIns, NavInsID
+import response_parser as ResponseParser
 from client.status_word import StatusWord
 from tron import TronClient, ROOT_SCREENSHOT_PATH
 from utils import check_tx_signature, get_selector_from_data
@@ -262,7 +267,7 @@ def _approve_review(navigator: Navigator, device: Device, test_name: str) -> Non
     if device.is_nano:
         navigator.navigate_until_text_and_compare(NavIns(NavInsID.RIGHT_CLICK),
                                                   [NavIns(NavInsID.BOTH_CLICK)],
-                                                  "Sign",
+                                                  "Sign transaction",
                                                   ROOT_SCREENSHOT_PATH,
                                                   test_name)
     else:
@@ -275,6 +280,24 @@ def _approve_review(navigator: Navigator, device: Device, test_name: str) -> Non
             "Hold to sign",
             ROOT_SCREENSHOT_PATH,
             test_name)
+
+
+def _start_gcs_flow_and_assert(backend: BackendInterface, navigator: Navigator,
+                               device: Device, test_name: str,
+                               client: TronClient, tx: bytes) -> None:
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == StatusWord.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def _get_challenge(client: TronClient) -> int:
+    return ResponseParser.challenge(
+        client.exchange_raw(CommandBuilder().get_challenge()).data)
 
 
 def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
@@ -302,15 +325,7 @@ def test_gcs_sign(backend: BackendInterface, navigator: Navigator,
         client.provide_transaction_field_desc(field.serialize())
 
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
-                                P2_GCS_START_FLOW, b""):
-        _approve_review(navigator, device, test_name)
-    resp = backend.last_async_response
-    assert resp.status == StatusWord.OK
-
-    # The returned signature must verify over sha256(tx) against the device key.
-    assert check_tx_signature(tx, resp.data[0:65],
-                              client.getAccount(0)["publicKey"][2:])
+    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
 
 
 def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
@@ -391,6 +406,737 @@ def test_gcs_batch_empty_tx(backend: BackendInterface, navigator: Navigator,
                               client.getAccount(0)["publicKey"][2:])
 
 
+def test_gcs_nft(backend: BackendInterface, navigator: Navigator,
+                 device: Device, test_name: str):
+    client = TronClient(backend, device, navigator)
+
+    with Path(f"{ABIS_FOLDER}/erc1155.json").open(encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=None,
+        )
+
+    data = contract.encode_abi("safeBatchTransferFrom", [
+        bytes.fromhex("1111111111111111111111111111111111111111"),
+        bytes.fromhex("d8da6bf26964af9d7eed9e03e53415d37aa96045"),
+        [
+            2,
+            4,
+            8,
+            16,
+        ],
+        [
+            1,
+            2,
+            3,
+            4,
+        ],
+        bytes.fromhex("deadbeef1337cafe"),
+    ])
+
+    collection_addr20 = bytes.fromhex(
+        "495f947276749ce646f68ac8c248420045cb7b5e")
+    tx = build_trigger_smart_contract_tx(client, collection_addr20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/erc1155.json",
+                                "safeBatchTransferFrom")
+    fields = [
+        Field(
+            1,
+            "From",
+            ParamTrustedName(
+                1,
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    data_path=DataPath(1, param_paths["_from"]),
+                ),
+                [
+                    TrustedNameType.ACCOUNT,
+                ],
+                [
+                    TrustedNameSource.UD,
+                    TrustedNameSource.ENS,
+                    TrustedNameSource.FN,
+                ],
+                [
+                    bytes.fromhex("0000000000000000000000000000000000000000"),
+                    bytes.fromhex("1111111111111111111111111111111111111111"),
+                    bytes.fromhex("2222222222222222222222222222222222222222"),
+                ],
+            ),
+        ),
+        Field(
+            1,
+            "To",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    data_path=DataPath(1, param_paths["_to"]),
+                ),
+            ),
+        ),
+        Field(
+            1,
+            "NFTs",
+            ParamNFT(
+                1,
+                Value(
+                    1,
+                    TypeFamily.UINT,
+                    type_size=32,
+                    data_path=DataPath(1, param_paths["_ids"]),
+                ),
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    container_path=ContainerPath.TO,
+                ),
+            ),
+        ),
+        Field(
+            1,
+            "Values",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.UINT,
+                    type_size=32,
+                    data_path=DataPath(1, param_paths["_values"]),
+                ),
+            ),
+        ),
+        Field(
+            1,
+            "Data",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.BYTES,
+                    data_path=DataPath(1, param_paths["_data"]),
+                ),
+            ),
+        ),
+    ]
+
+    inst_hash = compute_inst_hash(fields)
+    tx_info = TxInfo(
+        1,
+        TRON_MAINNET_CHAINID,
+        collection_addr20,
+        get_selector_from_data(data),
+        inst_hash,
+        "batch transfer NFTs",
+    )
+
+    client.provide_transaction_info(tx_info.serialize())
+    device_addr20 = bytes.fromhex(client.getAccount(0)["addressHex"])[1:]
+    client.provide_trusted_name(
+        TrustedName(2,
+                    device_addr20,
+                    "gerard.eth",
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=TRON_MAINNET_CHAINID,
+                    challenge=_get_challenge(client)))
+    client.provide_nft_metadata("OpenSea Shared Storefront", collection_addr20,
+                                TRON_MAINNET_CHAINID)
+
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        _approve_review(navigator, device, test_name)
+
+    resp = backend.last_async_response
+    assert resp.status == StatusWord.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
+def _poap_data() -> str:
+    with Path(f"{ABIS_FOLDER}/poap.abi.json").open(encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=None,
+        )
+    return contract.encode_abi("mintToken", [
+        175676,
+        7163978,
+        bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
+        1730621615,
+        bytes.fromhex(
+            "8991da687cff5300959810a08c4ec183bb2a56dc82f5aac2b24f1106c2d"
+            "983ac6f7a6b28700a236724d814000d0fd8c395fcf9f87c4424432ebf30"
+            "c9479201d71c"),
+    ])
+
+
+POAP_CONTRACT20 = bytes.fromhex("0bb4D3e88243F4A057Db77341e6916B0e449b158")
+
+
+def _store_poap_tx(client: TronClient,
+                   backend: BackendInterface) -> tuple[str, bytes]:
+    data = _poap_data()
+    tx = build_trigger_smart_contract_tx(client, POAP_CONTRACT20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    return data, tx
+
+
+def _provide_gcs_descriptor(client: TronClient, contract_addr20: bytes,
+                            data: str, fields: list[Field],
+                            operation: str, **tx_info_kwargs) -> None:
+    tx_info = TxInfo(1,
+                     TRON_MAINNET_CHAINID,
+                     contract_addr20,
+                     get_selector_from_data(data),
+                     compute_inst_hash(fields),
+                     operation,
+                     **tx_info_kwargs)
+
+    client.provide_transaction_info(tx_info.serialize())
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+
+def test_gcs_poap(backend: BackendInterface, navigator: Navigator,
+                  device: Device, test_name: str):
+    client = TronClient(backend, device, navigator)
+    data, tx = _store_poap_tx(client, backend)
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
+    fields = [
+        Field(
+            1,
+            "Event ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["eventId"])),
+            ),
+        ),
+        Field(
+            1,
+            "Token ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["tokenId"])),
+            ),
+        ),
+        Field(
+            1,
+            "Receiver",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["receiver"])),
+            ),
+        ),
+        Field(
+            1,
+            "Expiration time",
+            ParamDatetime(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["expirationTime"])),
+                DatetimeType.DT_UNIX,
+            ),
+        ),
+        Field(
+            1,
+            "Signature",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signature"])),
+            ),
+        ),
+    ]
+
+    _provide_gcs_descriptor(client,
+                            POAP_CONTRACT20,
+                            data,
+                            fields,
+                            "mint POAP",
+                            creator_name="POAP",
+                            creator_legal_name="Proof of Attendance Protocol",
+                            creator_url="poap.xyz",
+                            contract_name="PoapBridge",
+                            deploy_date=1646305200)
+    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+
+
+@pytest.mark.parametrize("test_config", ["chain_id", "network"])
+def test_gcs_formatter(backend: BackendInterface, navigator: Navigator,
+                       device: Device, test_name: str, test_config: str):
+    client = TronClient(backend, device, navigator)
+    data, tx = _store_poap_tx(client, backend)
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
+    fields = [
+        Field(
+            1,
+            "Token ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["tokenId"])),
+            ),
+        ),
+        Field(
+            1,
+            "Receiver",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["receiver"])),
+            ),
+        ),
+        Field(
+            1,
+            "Expiration time",
+            ParamDatetime(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["expirationTime"])),
+                DatetimeType.DT_UNIX,
+            ),
+        ),
+    ]
+    if test_config == "chain_id":
+        fields.append(
+            Field(
+                1,
+                "Chain ID",
+                ParamRaw(
+                    1,
+                    Value(1,
+                          TypeFamily.UINT,
+                          container_path=ContainerPath.CHAIN_ID),
+                ),
+            ))
+    else:
+        fields.append(
+            Field(
+                1,
+                "Custom Network",
+                ParamNetwork(
+                    1,
+                    Value(1,
+                          TypeFamily.UINT,
+                          container_path=ContainerPath.CHAIN_ID),
+                ),
+            ))
+
+    _provide_gcs_descriptor(client,
+                            POAP_CONTRACT20,
+                            data,
+                            fields,
+                            "mint POAP",
+                            creator_name="POAP",
+                            creator_legal_name="Proof of Attendance Protocol",
+                            creator_url="poap.xyz",
+                            contract_name="PoapBridge",
+                            deploy_date=1646305200)
+    _start_gcs_flow_and_assert(backend, navigator, device,
+                               f"{test_name}_{test_config}", client, tx)
+
+
+@pytest.mark.parametrize(
+    "test_config, visible, constraints",
+    [
+        ("if_not_0", VisibleType.IF_NOT_IN,
+         [bytes.fromhex("0000000000000000000000000000000000000000")]),
+        ("if_not_addr", VisibleType.IF_NOT_IN,
+         [bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D")]),
+        ("must_be_addr", VisibleType.MUST_BE,
+         [bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D")]),
+        ("must_be_0", VisibleType.MUST_BE,
+         [bytes.fromhex("00"),
+          bytes.fromhex("01"),
+          bytes.fromhex("02")]),
+    ],
+)
+def test_gcs_constraints(backend: BackendInterface, navigator: Navigator,
+                         device: Device, test_name: str, test_config: str,
+                         visible: VisibleType, constraints: list[bytes]):
+    client = TronClient(backend, device, navigator)
+    data, tx = _store_poap_tx(client, backend)
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
+    fields = [
+        Field(
+            1,
+            "Token ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["tokenId"])),
+            ),
+        ),
+        Field(
+            1,
+            "Receiver",
+            ParamTrustedName(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["receiver"])),
+                [
+                    TrustedNameType.ACCOUNT,
+                    TrustedNameType.WALLET,
+                ],
+                [
+                    TrustedNameSource.UD,
+                    TrustedNameSource.ENS,
+                    TrustedNameSource.FN,
+                ],
+            ),
+            visible,
+            constraints,
+        ),
+        Field(
+            1,
+            "Receiver uint",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["receiver"])),
+            ),
+            visible,
+            constraints,
+        ),
+        Field(
+            1,
+            "Receiver addr",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["receiver"])),
+            ),
+            visible,
+            constraints,
+        ),
+        Field(
+            1,
+            "Expiration time",
+            ParamDatetime(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["expirationTime"])),
+                DatetimeType.DT_UNIX,
+            ),
+        ),
+    ]
+
+    tx_info = TxInfo(
+        1,
+        TRON_MAINNET_CHAINID,
+        POAP_CONTRACT20,
+        get_selector_from_data(data),
+        compute_inst_hash(fields),
+        "mint POAP",
+        creator_name="POAP",
+        creator_legal_name="Proof of Attendance Protocol",
+        creator_url="poap.xyz",
+        contract_name="PoapBridge",
+        deploy_date=1646305200,
+    )
+    client.provide_transaction_info(tx_info.serialize())
+
+    if test_config == "must_be_0":
+        with pytest.raises((ExceptionRAPDU, AssertionError)) as err:
+            for field in fields:
+                client.provide_transaction_field_desc(field.serialize())
+        if isinstance(err.value, ExceptionRAPDU):
+            assert err.value.status == StatusWord.INVALID_DATA
+        return
+
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+    _start_gcs_flow_and_assert(backend, navigator, device,
+                               f"{test_name}_{test_config}", client, tx)
+
+
+def test_gcs_1inch(backend: BackendInterface, navigator: Navigator,
+                   device: Device, test_name: str):
+    client = TronClient(backend, device, navigator)
+
+    with Path(f"{ABIS_FOLDER}/1inch.abi.json").open(encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=None,
+        )
+    data = contract.encode_abi("swap", [
+        bytes.fromhex("F313B370D28760b98A2E935E56Be92Feb2c4EC04"),
+        [
+            bytes.fromhex("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
+            bytes.fromhex("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+            bytes.fromhex("F313B370D28760b98A2E935E56Be92Feb2c4EC04"),
+            bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
+            Web3.to_wei(0.22, "ether"),
+            682119805,
+            0,
+        ],
+        bytes(),
+    ])
+    contract_addr20 = bytes.fromhex("111111125421cA6dc452d289314280a0f8842A65")
+    tx = build_trigger_smart_contract_tx(client, contract_addr20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/1inch.abi.json", "swap")
+    tuple_paths = get_all_tuple_paths(f"{ABIS_FOLDER}/1inch.abi.json", "swap",
+                                      "desc")
+    fields = [
+        Field(
+            1,
+            "Executor",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["executor"])),
+            ),
+        ),
+        Field(
+            1,
+            "Send",
+            ParamTokenAmount(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, tuple_paths["amount"])),
+                token=Value(1,
+                            TypeFamily.ADDRESS,
+                            data_path=DataPath(1, tuple_paths["srcToken"])),
+                native_currency=[
+                    bytes.fromhex("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
+                ],
+            ),
+        ),
+        Field(
+            1,
+            "Receive",
+            ParamTokenAmount(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, tuple_paths["minReturnAmount"])),
+                token=Value(1,
+                            TypeFamily.ADDRESS,
+                            data_path=DataPath(1, tuple_paths["dstToken"])),
+                native_currency=[
+                    bytes.fromhex("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
+                ],
+            ),
+        ),
+    ]
+
+    client.provide_transaction_info(
+        TxInfo(1,
+               TRON_MAINNET_CHAINID,
+               contract_addr20,
+               get_selector_from_data(data),
+               compute_inst_hash(fields),
+               "swap",
+               creator_name="1inch",
+               creator_legal_name="1inch Network",
+               creator_url="1inch.io",
+               contract_name="Aggregation Router V6",
+               deploy_date=1707724800).serialize())
+    client.provide_token_metadata(
+        "USDC", bytes.fromhex("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), 6,
+        TRON_MAINNET_CHAINID)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+
+
+def test_gcs_proxy(backend: BackendInterface, navigator: Navigator,
+                   device: Device, test_name: str):
+    client = TronClient(backend, device, navigator)
+    new_owner = bytes.fromhex("2222222222222222222222222222222222222222")
+
+    with Path(f"{ABIS_FOLDER}/proxy_implem.abi.json").open(
+            encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=None,
+        )
+    data = contract.encode_abi("transferOwnership", [new_owner])
+    proxy_addr20 = bytes.fromhex("39053d51b77dc0d36036fc1fcc8cb819df8ef37a")
+    impl_addr20 = bytes.fromhex("1784be6401339fc0fedf7e9379409f5c1bfe9dda")
+    tx = build_trigger_smart_contract_tx(client, proxy_addr20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/proxy_implem.abi.json",
+                                "transferOwnership")
+    fields = [
+        Field(
+            1,
+            "New owner",
+            ParamTrustedName(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["newOwner"])),
+                [TrustedNameType.CONTRACT],
+                [TrustedNameSource.CAL],
+            ),
+        ),
+    ]
+
+    tx_info = TxInfo(1,
+                     TRON_MAINNET_CHAINID,
+                     impl_addr20,
+                     get_selector_from_data(data),
+                     compute_inst_hash(fields),
+                     "transfer ownership",
+                     creator_name="EigenLayer",
+                     creator_legal_name="Eigen Labs",
+                     creator_url="https://eigenlayer.xyz",
+                     contract_name="Delegation Manager",
+                     deploy_date=1711098731)
+
+    client.provide_proxy_info(
+        ProxyInfo(_get_challenge(client),
+                  proxy_addr20,
+                  tx_info.chain_id,
+                  tx_info.contract_addr,
+                  selector=tx_info.selector).serialize())
+    client.provide_transaction_info(tx_info.serialize())
+
+    impl_contract = bytes.fromhex("1111111111111111111111111111111111111111")
+    client.provide_proxy_info(
+        ProxyInfo(_get_challenge(client), new_owner, tx_info.chain_id,
+                  impl_contract).serialize())
+    client.provide_trusted_name(
+        TrustedName(2,
+                    impl_contract,
+                    "some contract",
+                    tn_type=TrustedNameType.CONTRACT,
+                    tn_source=TrustedNameSource.CAL,
+                    chain_id=TRON_MAINNET_CHAINID,
+                    challenge=_get_challenge(client)))
+
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+
+
+def test_gcs_4226(backend: BackendInterface, navigator: Navigator,
+                  device: Device, test_name: str):
+    client = TronClient(backend, device, navigator)
+
+    with Path(f"{ABIS_FOLDER}/rSWELL.abi.json").open(encoding="utf-8") as f:
+        contract = Web3().eth.contract(
+            abi=json.load(f),
+            address=None,
+        )
+    data = contract.encode_abi("deposit", [
+        Web3.to_wei(4.20, "ether"),
+        bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
+    ])
+    contract_addr20 = bytes.fromhex("358d94b5b2F147D741088803d932Acb566acB7B6")
+    tx = build_trigger_smart_contract_tx(client, contract_addr20,
+                                         bytes.fromhex(data[2:]))
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    swell_token_addr = bytes.fromhex("0a6e7ba5042b38349e437ec6db6214aec7b35676")
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/rSWELL.abi.json", "deposit")
+    fields = [
+        Field(
+            1,
+            "Deposit asset",
+            ParamTokenAmount(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["assets"])),
+                token=Value(1, TypeFamily.ADDRESS, constant=swell_token_addr),
+            ),
+        ),
+        Field(
+            1,
+            "Receive shares",
+            ParamToken(
+                1,
+                Value(1, TypeFamily.ADDRESS, container_path=ContainerPath.TO),
+            ),
+        ),
+        Field(
+            1,
+            "Send shares to",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, param_paths["receiver"])),
+            ),
+        ),
+    ]
+
+    client.provide_transaction_info(
+        TxInfo(1,
+               TRON_MAINNET_CHAINID,
+               contract_addr20,
+               get_selector_from_data(data),
+               compute_inst_hash(fields),
+               "deposit",
+               creator_name="Swell",
+               creator_legal_name="Swell Network",
+               creator_url="www.swellnetwork.io",
+               contract_name="rSWELL Token",
+               deploy_date=1726817291).serialize())
+    client.provide_token_metadata("rSWELL", contract_addr20, 18,
+                                  TRON_MAINNET_CHAINID)
+    client.provide_token_metadata("SWELL", swell_token_addr, 18,
+                                  TRON_MAINNET_CHAINID)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+    _start_gcs_flow_and_assert(backend, navigator, device, test_name, client, tx)
+
+
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
                          fields: list[Field],
                          provision=None) -> bytes:
@@ -412,54 +1158,6 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
     return tx
-
-
-def provide_trc20_token(backend: BackendInterface, client: TronClient,
-                        addr20: bytes, ticker: str, decimals: int) -> None:
-    """Register a TRC20 token (ticker/decimals) for `addr20` via INS 0xCA.
-
-    Mirrors InputData.provide_token_metadata: the COIN_META PKI certificate
-    delivers the CAL public key, then the token info is CAL-signed over the
-    payload (minus the ticker-length byte and the trailing signature).
-    """
-    from client.command_builder import CommandBuilder
-    from client.tip712.InputData import send_coin_meta_certificate
-
-    # cmd_provideTokenInfo.c requires the TRON 0x41-prefixed 21-byte address; it
-    # stores only the canonical 20-byte form for get_asset_info_by_addr lookups.
-    addr21 = bytes([ADD_PRE_FIX_BYTE_MAINNET]) + addr20
-    send_coin_meta_certificate(client)
-    cmd = CommandBuilder()
-    unsigned = cmd.provide_trc20_token_information(ticker, addr21, decimals,
-                                                   TRON_MAINNET_CHAINID, b"")
-    # The firmware hashes ticker+addr+decimals+chain (payload minus the
-    # ticker-length byte and trailing sig); keychain.sign_data sha256s internally.
-    sig = keychain.sign_data(keychain.Key.CAL, unsigned[6:])
-    apdu = cmd.provide_trc20_token_information(ticker, addr21, decimals,
-                                               TRON_MAINNET_CHAINID, sig)
-    assert backend.exchange_raw(apdu).status == StatusWord.OK
-
-
-def provide_trusted_name(client: TronClient, addr20: bytes, name: str) -> None:
-    """Register an account trusted name for `addr20` via INS 0x22 (v2/ENS).
-
-    Delegates to InputData.provide_trusted_name_v2, which sends the TRUSTED_NAME
-    PKI certificate and the challenge-bound, signed trusted-name descriptor.
-    TRON's firmware only accepts CAL/ENS/MAB sources; ACCOUNT + ENS is the
-    simplest (a ".eth" name + the device challenge, no MAB owner).
-    """
-    from client.command_builder import CommandBuilder
-    from client.tip712 import InputData
-    import response_parser as ResponseParser
-
-    cmd = CommandBuilder()
-    challenge = ResponseParser.challenge(
-        client.exchange_raw(cmd.get_challenge()).data)
-    InputData.provide_trusted_name_v2(client, cmd, addr20, name,
-                                      InputData.TrustedNameType.ACCOUNT,
-                                      InputData.TrustedNameSource.ENS,
-                                      TRON_MAINNET_CHAINID, challenge=challenge)
-
 
 def test_gcs_amount_decimals(backend: BackendInterface, navigator: Navigator,
                              device: Device, test_name: str):
@@ -526,7 +1224,8 @@ def test_gcs_token_amount(backend: BackendInterface, navigator: Navigator,
                                      token_path=build_data_path_static(0))
 
     def provision() -> None:
-        provide_trc20_token(backend, client, TKN_ADDR20, "TKN", 6)
+        client.provide_token_metadata("TKN", TKN_ADDR20, 6,
+                                      TRON_MAINNET_CHAINID)
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
@@ -555,7 +1254,14 @@ def test_gcs_trusted_name(backend: BackendInterface, navigator: Navigator,
                                      sources=[TrustedNameSource.ENS])
 
     def provision() -> None:
-        provide_trusted_name(client, TKN_ADDR20, "alice.eth")
+        client.provide_trusted_name(
+            TrustedName(2,
+                        TKN_ADDR20,
+                        "alice.eth",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=TRON_MAINNET_CHAINID,
+                        challenge=_get_challenge(client)))
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
