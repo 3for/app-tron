@@ -27,6 +27,7 @@
 #include "ui_review_menu.h"
 #include "ui_idle_menu.h"
 #include "ui_nbgl.h"
+#include "common_712.h"
 #include "trusted_name.h"
 
 // Macros
@@ -217,7 +218,7 @@ static void reviewChoice(bool confirm) {
         } else if (txInfos.state == APPROVAL_SHARED_ECDH_SECRET) {
             ret = ui_callback_ecdh_ok(false);
         } else if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
-            ret = ui_callback_signMessage712_v0_ok(false);
+            ret = ui_712_approve_cb(false);
             success_status = STATUS_TYPE_MESSAGE_SIGNED;
         } else {
             ret = ui_callback_tx_ok(false);
@@ -237,7 +238,7 @@ static void rejectChoice(void) {
     nbgl_reviewStatusType_t reject_status = STATUS_TYPE_TRANSACTION_REJECTED;
 
     if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
-        ui_callback_signMessage712_v0_cancel(false);
+        ui_712_reject_cb(false);
         reject_status = STATUS_TYPE_MESSAGE_REJECTED;
     } else {
         ui_callback_tx_cancel(false);
@@ -246,11 +247,6 @@ static void rejectChoice(void) {
         }
     }
     nbgl_useCaseReviewStatus(reject_status, ui_idle);
-}
-
-static char *format_hash(const uint8_t *hash, char *buffer, size_t buffer_size, size_t offset) {
-    bytes_to_string(buffer + offset, buffer_size - offset, hash, 32);
-    return buffer + offset;
 }
 
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
@@ -476,16 +472,8 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            txInfos.fields[0].item = "Domain hash";
-            txInfos.fields[0].value = format_hash(tmpCtx.messageSigningContext712.domainHash,
-                                                  strings.tmp.tmp,
-                                                  sizeof(strings.tmp.tmp),
-                                                  0);
-            txInfos.fields[1].item = "Message hash";
-            txInfos.fields[1].value = format_hash(tmpCtx.messageSigningContext712.messageHash,
-                                                  strings.tmp.tmp,
-                                                  sizeof(strings.tmp.tmp),
-                                                  70);
+            tip712_format_hash(0, &txInfos.fields[0].item, &txInfos.fields[0].value);
+            tip712_format_hash(1, &txInfos.fields[1].item, &txInfos.fields[1].value);
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";

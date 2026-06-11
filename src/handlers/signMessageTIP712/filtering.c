@@ -13,12 +13,21 @@
 #include "settings.h"
 #include "os_pki.h"
 #include "trusted_name.h"
+#include "app_mem_utils.h"
+#include "get_public_key.h"
 
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_AMOUNT_JOIN_TOKEN 11
 #define FILT_MAGIC_AMOUNT_JOIN_VALUE 22
 #define FILT_MAGIC_DATETIME          33
 #define FILT_MAGIC_TRUSTED_NAME      44
+#define FILT_MAGIC_CALLDATA_INFO     55
+#define FILT_MAGIC_CALLDATA_VALUE    66
+#define FILT_MAGIC_CALLDATA_CALLEE   77
+#define FILT_MAGIC_CALLDATA_CHAIN_ID 88
+#define FILT_MAGIC_CALLDATA_SELECTOR 99
+#define FILT_MAGIC_CALLDATA_AMOUNT   110
+#define FILT_MAGIC_CALLDATA_SPENDER  121
 #define FILT_MAGIC_RAW_FIELD         72
 
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
@@ -361,6 +370,425 @@ bool filtering_discarded_path(const uint8_t *payload, uint8_t length) {
     return true;
 }
 
+bool filtering_calldata_spender(const uint8_t *payload,
+                                uint8_t length,
+                                bool discarded,
+                                uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_SPENDER)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_SPENDER);
+    return true;
+}
+
+bool filtering_calldata_amount(const uint8_t *payload,
+                               uint8_t length,
+                               bool discarded,
+                               uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_AMOUNT)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_AMOUNT);
+    return true;
+}
+
+bool filtering_calldata_selector(const uint8_t *payload,
+                                 uint8_t length,
+                                 bool discarded,
+                                 uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_SELECTOR)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_SELECTOR);
+    return true;
+}
+
+bool filtering_calldata_chain_id(const uint8_t *payload,
+                                 uint8_t length,
+                                 bool discarded,
+                                 uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_CHAIN_ID)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_CHAIN_ID);
+    return true;
+}
+
+bool filtering_calldata_callee(const uint8_t *payload,
+                               uint8_t length,
+                               bool discarded,
+                               uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_CALLEE)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_CALLEE);
+    return true;
+}
+
+bool filtering_calldata_value(const uint8_t *payload,
+                              uint8_t length,
+                              bool discarded,
+                              uint32_t *path_crc) {
+    uint8_t offset = 0;
+    uint8_t index;
+    uint8_t sig_len;
+    const uint8_t *sig;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_VALUE)) {
+        return false;
+    }
+    hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc);
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+
+    if (get_calldata_info(index) == NULL) {
+        PRINTF("Error: no matching calldata info (index=%u)\n", index);
+        return false;
+    }
+    ui_712_flag_field(false, false, false, false, false, true);
+    calldata_info_set_state(index, EIP712_CALLDATA_VALUE);
+    return true;
+}
+
+bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
+    uint8_t offset = 0;
+    uint8_t index;
+    bool value_flag;
+    e_calldata_addr_flag callee_flag;
+    bool chain_id_flag;
+    bool selector_flag;
+    bool amount_flag;
+    e_calldata_addr_flag spender_flag;
+    uint8_t sig_len;
+    const uint8_t *sig;
+    s_eip712_calldata_info *calldata_info;
+
+    if (path_get_root_type() != ROOT_MESSAGE) {
+        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return false;
+    }
+
+    if ((offset + sizeof(index)) > length) {
+        return false;
+    }
+    index = payload[offset++];
+
+    if ((offset + sizeof(value_flag)) > length) {
+        return false;
+    }
+    value_flag = payload[offset++];
+    if (!value_flag) return false;
+
+    if ((offset + sizeof(callee_flag)) > length) {
+        return false;
+    }
+    callee_flag = payload[offset++];
+    switch (callee_flag) {
+        case CALLDATA_FLAG_ADDR_FILTER:
+        case CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT:
+            break;
+        default:
+            return false;
+    }
+
+    if ((offset + sizeof(chain_id_flag)) > length) {
+        return false;
+    }
+    chain_id_flag = payload[offset++];
+
+    if ((offset + sizeof(selector_flag)) > length) {
+        return false;
+    }
+    selector_flag = payload[offset++];
+
+    if ((offset + sizeof(amount_flag)) > length) {
+        return false;
+    }
+    amount_flag = payload[offset++];
+
+    if ((offset + sizeof(spender_flag)) > length) {
+        return false;
+    }
+    spender_flag = payload[offset++];
+    switch (spender_flag) {
+        case CALLDATA_FLAG_ADDR_NONE:
+        case CALLDATA_FLAG_ADDR_FILTER:
+        case CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT:
+            break;
+        default:
+            return false;
+    }
+
+    if ((offset + sizeof(sig_len)) > length) {
+        return false;
+    }
+    sig_len = payload[offset++];
+    if ((offset + sig_len) != length) {
+        return false;
+    }
+    sig = &payload[offset];
+
+    cx_sha256_t hash_ctx;
+    if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_INFO)) {
+        return false;
+    }
+    hash_byte(index, (cx_hash_t *) &hash_ctx);
+    hash_byte(value_flag, (cx_hash_t *) &hash_ctx);
+    hash_byte(callee_flag, (cx_hash_t *) &hash_ctx);
+    hash_byte(chain_id_flag, (cx_hash_t *) &hash_ctx);
+    hash_byte(selector_flag, (cx_hash_t *) &hash_ctx);
+    hash_byte(amount_flag, (cx_hash_t *) &hash_ctx);
+    hash_byte(spender_flag, (cx_hash_t *) &hash_ctx);
+    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+        return false;
+    }
+    if (APP_MEM_CALLOC((void **) &calldata_info, sizeof(*calldata_info)) == false) {
+        return false;
+    }
+
+    calldata_info->index = index;
+
+    calldata_info->value_state = CALLDATA_INFO_PARAM_UNSET;
+    switch (callee_flag) {
+        case CALLDATA_FLAG_ADDR_FILTER:
+            calldata_info->callee_state = CALLDATA_INFO_PARAM_UNSET;
+            break;
+        case CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT:
+            memcpy(calldata_info->callee, tip712_context->contract_addr, sizeof(calldata_info->callee));
+            calldata_info->callee_state = CALLDATA_INFO_PARAM_SET;
+            break;
+        default:
+            break;
+    }
+    if (chain_id_flag) {
+        calldata_info->chain_id_state = CALLDATA_INFO_PARAM_UNSET;
+    } else {
+        calldata_info->chain_id = tip712_context->chain_id;
+        calldata_info->chain_id_state = CALLDATA_INFO_PARAM_SET;
+    }
+    if (selector_flag) calldata_info->selector_state = CALLDATA_INFO_PARAM_UNSET;
+    if (amount_flag) calldata_info->amount_state = CALLDATA_INFO_PARAM_UNSET;
+    switch (spender_flag) {
+        case CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT:
+            memcpy(calldata_info->spender,
+                   tip712_context->contract_addr,
+                   sizeof(calldata_info->spender));
+            calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
+            break;
+        case CALLDATA_FLAG_ADDR_NONE:
+            get_public_key(calldata_info->spender, sizeof(calldata_info->spender));
+            calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
+            break;
+        default:
+            break;
+    }
+    add_calldata_info(calldata_info);
+    PRINTF("New calldata info (index=%u)\n", index);
+    return true;
+}
+
 /**
  * Command to display a field as a trusted name
  *
@@ -469,7 +897,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     if (name_len > 0) {  // don't substitute for an empty name
         ui_712_set_title(name, name_len);
     }
-    ui_712_flag_field(true, name_len > 0, false, false, true);
+    ui_712_flag_field(true, name_len > 0, false, false, true, false);
     ui_712_set_trusted_name_requirements(type_count, types, source_count, sources);
     return true;
 }
@@ -535,7 +963,7 @@ bool filtering_date_time(const uint8_t *payload,
     if (name_len > 0) {  // don't substitute for an empty name
         ui_712_set_title(name, name_len);
     }
-    ui_712_flag_field(true, name_len > 0, false, true, false);
+    ui_712_flag_field(true, name_len > 0, false, true, false, false);
     return true;
 }
 
@@ -591,7 +1019,7 @@ bool filtering_amount_join_token(const uint8_t *payload,
     if (!check_typename("address") || !check_token_index(token_idx)) {
         return false;
     }
-    ui_712_flag_field(false, false, true, false, false);
+    ui_712_flag_field(false, false, true, false, false, false);
     ui_712_token_join_prepare_addr_check(token_idx);
     return true;
 }
@@ -676,7 +1104,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     if (!check_typename("uint") || !check_token_index(token_idx)) {
         return false;
     }
-    ui_712_flag_field(false, false, true, false, false);
+    ui_712_flag_field(false, false, true, false, false, false);
     ui_712_token_join_prepare_amount(token_idx, name, name_len);
     return true;
 }
@@ -739,7 +1167,7 @@ bool filtering_raw_field(const uint8_t *payload,
         if (name_len > 0) {  // don't substitute for an empty name
             ui_712_set_title(name, name_len);
         }
-        ui_712_flag_field(true, name_len > 0, false, false, false);
+        ui_712_flag_field(true, name_len > 0, false, false, false, false);
     }
     return true;
 }

@@ -6,14 +6,13 @@
 #include "settings.h"
 #include "utils.h"
 #include "commands_712.h"
+#include "common_712.h"
 #include "ui_globals.h"
 #include "ui_idle_menu.h"
 #include "ui_logic.h"
 #include "ui_nbgl.h"
 
 nbgl_warning_t warning;
-
-extern void reset_app_context(void);
 
 static nbgl_contentTagValueList_t pairs_list;
 static nbgl_contentTagValue_t *pairs;
@@ -54,24 +53,6 @@ static bool ui_712_prepare_pairs(void) {
     }
 
     return true;
-}
-
-static void ui_712_start_common(void) {
-    ui_712_nbgl_cleanup();
-    if (appState != APP_STATE_IDLE) {
-        reset_app_context();
-    }
-    appState = APP_STATE_SIGNING_TIP712;
-    explicit_bzero(&warning, sizeof(nbgl_warning_t));
-}
-
-void ui_712_start_unfiltered(void) {
-    ui_712_start_common();
-    warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
-}
-
-void ui_712_start(void) {
-    ui_712_start_common();
 }
 
 void ui_712_switch_to_message(void) {

@@ -10,6 +10,7 @@
 #include "path.h"         // path_get_root_type
 #include "typed_data.h"
 #include "commands_712.h"
+#include "common_712.h"
 #include "filtering.h"
 #include "ui_globals.h"
 #include "app_errors.h"
@@ -18,6 +19,9 @@
 #include "trusted_name.h"
 #include "common_utils.h"
 #include "network.h"
+#include "tx_ctx.h"
+#include "utils.h"
+#include "read.h"
 
 // --- Local accessors over the list-based typed-data model --------------------
 // Mirror the semantics of the typed-data accessors that used to live in
@@ -79,6 +83,7 @@ typedef enum {
 #define UI_712_AMOUNT_JOIN         (1 << 2)
 #define UI_712_DATETIME            (1 << 3)
 #define UI_712_TRUSTED_NAME        (1 << 4)
+#define UI_712_CALLDATA            (1 << 5)
 
 typedef struct {
     s_amount_join joins[MAX_ASSETS];
@@ -113,6 +118,8 @@ typedef struct {
     e_name_source tn_sources[TN_SOURCE_COUNT];
     s_ui_712_pair *ui_pairs;
     s_ui_712_pair *ui_pairs_tail;
+    s_eip712_calldata_info *calldata_info;
+    uint8_t calldata_index;
     uint16_t ui_pairs_count;
     uint16_t ui_pairs_consecutive_identical_count;
 } t_ui_context;
@@ -385,11 +392,7 @@ bool ui_712_redraw_generic_step(void) {
             }
             return false;
         }
-        if (ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) {
-            ui_712_start_unfiltered();
-        } else {
-            ui_712_start();
-        }
+        apdu_response_code = ui_712_start(ui_ctx->filtering_mode);
         ui_ctx->shown = true;
     } else {
         ui_712_switch_to_message();
@@ -938,21 +941,241 @@ static bool ui_712_format_datetime(const uint8_t *data, uint8_t length) {
     return true;
 }
 
+static void ui_712_set_intent_field(const char *value) {
+    const char key[] = "Transaction type";
+
+    ui_712_set_title(key, strlen(key));
+    ui_712_set_value(value, strlen(value));
+}
+
+static bool ui_712_set_displayable_address(const uint8_t addr[ADDRESS_LENGTH]) {
+    char eth_addr[43];
+
+    if (!getEthDisplayableAddress((uint8_t *) addr, eth_addr, sizeof(eth_addr), chainConfig->chainId)) {
+        return false;
+    }
+    return ethToTronBase58(eth_addr, strings.tmp.tmp, sizeof(strings.tmp.tmp));
+}
+
+static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldata_info) {
+    char *buf = strings.tmp.tmp;
+    size_t buf_size = sizeof(strings.tmp.tmp);
+    uint64_t chain_id;
+    const char *ticker;
+    e_name_type types[] = {TN_TYPE_ACCOUNT};
+    e_name_source sources[] = {TN_SOURCE_ENS, TN_SOURCE_LAB, TN_SOURCE_MAB};
+    const s_trusted_name *trusted_name;
+
+    if (calldata_info->amount_state == CALLDATA_INFO_PARAM_SET) {
+        ui_712_set_intent_field("Send");
+        if (!ui_712_prepare_current_pair()) return false;
+
+        if (calldata_info->chain_id != 0) {
+            chain_id = calldata_info->chain_id;
+        } else {
+            chain_id = tip712_context->chain_id;
+        }
+
+        ticker = get_displayable_ticker(&chain_id, chainConfig, true);
+        if (!amountToString(calldata_info->amount,
+                            sizeof(calldata_info->amount),
+                            SUN_TO_TRX,
+                            ticker,
+                            buf,
+                            buf_size)) {
+            return false;
+        }
+        ui_712_set_title("Amount", 6);
+        ui_712_set_value(buf, strlen(buf));
+        if (!ui_712_prepare_current_pair()) return false;
+    } else {
+        ui_712_set_intent_field("Empty transaction");
+        if (!ui_712_prepare_current_pair()) return false;
+    }
+
+    ui_712_set_title("To", 2);
+    if ((trusted_name = get_trusted_name(ARRAYLEN(types),
+                                         types,
+                                         ARRAYLEN(sources),
+                                         sources,
+                                         &calldata_info->chain_id,
+                                         calldata_info->callee)) != NULL) {
+        ui_712_set_value(trusted_name->name, strlen(trusted_name->name));
+    } else {
+        if (!ui_712_set_displayable_address(calldata_info->callee)) {
+            return false;
+        }
+    }
+    if (!ui_712_prepare_current_pair()) return false;
+    return ui_712_redraw_generic_step();
+}
+
+static bool update_calldata_value(const uint8_t *data,
+                                  uint8_t length,
+                                  const uint16_t *complete_length,
+                                  bool last,
+                                  s_eip712_calldata_info *calldata_info) {
+    const uint8_t *selector = NULL;
+    size_t calldata_size;
+
+    if (calldata_info->value_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (complete_length != NULL) {
+        calldata_size = *complete_length;
+        if (calldata_size > 0) {
+            if (calldata_info->selector_state == CALLDATA_INFO_PARAM_NONE) {
+                if ((length < CALLDATA_SELECTOR_SIZE) || (calldata_size < CALLDATA_SELECTOR_SIZE)) {
+                    return false;
+                }
+                selector = data;
+                data += CALLDATA_SELECTOR_SIZE;
+                length -= CALLDATA_SELECTOR_SIZE;
+                calldata_size -= CALLDATA_SELECTOR_SIZE;
+            } else if (calldata_info->selector_state == CALLDATA_INFO_PARAM_SET) {
+                selector = calldata_info->selector;
+            }
+            if ((g_parked_calldata = calldata_init(calldata_size, selector)) == NULL) {
+                return false;
+            }
+        }
+    }
+    if (g_parked_calldata != NULL) {
+        if (!calldata_append(g_parked_calldata, data, length)) {
+            return false;
+        }
+    } else {
+        // won't receive a TX info & descriptors about a non-existent calldata
+        calldata_info->processed = true;
+    }
+    if (last) calldata_info->value_state = CALLDATA_INFO_PARAM_SET;
+    return true;
+}
+
+static bool update_calldata_callee(const uint8_t *data,
+                                   uint8_t length,
+                                   bool last,
+                                   s_eip712_calldata_info *calldata_info) {
+    if (calldata_info->callee_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (!last) return false;
+    buf_shrink_expand(data, length, calldata_info->callee, sizeof(calldata_info->callee));
+    calldata_info->callee_state = CALLDATA_INFO_PARAM_SET;
+    return true;
+}
+
+static bool update_calldata_chain_id(const uint8_t *data,
+                                     uint8_t length,
+                                     bool last,
+                                     s_eip712_calldata_info *calldata_info) {
+    uint8_t chain_id_buf[sizeof(uint64_t)];
+
+    if (calldata_info->chain_id_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (!last) return false;
+    buf_shrink_expand(data, length, chain_id_buf, sizeof(chain_id_buf));
+    calldata_info->chain_id = read_u64_be(chain_id_buf, 0);
+    calldata_info->chain_id_state = CALLDATA_INFO_PARAM_SET;
+    return true;
+}
+
+static bool update_calldata_selector(const uint8_t *data,
+                                     uint8_t length,
+                                     bool last,
+                                     s_eip712_calldata_info *calldata_info) {
+    if (calldata_info->selector_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (!last) return false;
+    buf_shrink_expand(data, length, calldata_info->selector, sizeof(calldata_info->selector));
+    calldata_info->selector_state = CALLDATA_INFO_PARAM_SET;
+    if ((calldata_info->value_state == CALLDATA_INFO_PARAM_SET) && (g_parked_calldata != NULL)) {
+        calldata_set_selector(g_parked_calldata, calldata_info->selector);
+    }
+    return true;
+}
+
+static bool update_calldata_amount(const uint8_t *data,
+                                   uint8_t length,
+                                   bool last,
+                                   s_eip712_calldata_info *calldata_info) {
+    if (calldata_info->amount_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (!last) return false;
+    buf_shrink_expand(data, length, calldata_info->amount, sizeof(calldata_info->amount));
+    calldata_info->amount_state = CALLDATA_INFO_PARAM_SET;
+    return true;
+}
+
+static bool update_calldata_spender(const uint8_t *data,
+                                    uint8_t length,
+                                    bool last,
+                                    s_eip712_calldata_info *calldata_info) {
+    if (calldata_info->spender_state != CALLDATA_INFO_PARAM_UNSET) return false;
+    if (!last) return false;
+    buf_shrink_expand(data, length, calldata_info->spender, sizeof(calldata_info->spender));
+    calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
+    return true;
+}
+
+static bool update_calldata(const uint8_t *data,
+                            uint8_t length,
+                            const uint16_t *complete_length,
+                            bool last) {
+    s_eip712_calldata_info *calldata_info = get_calldata_info(ui_ctx->calldata_index);
+
+    if (calldata_info == NULL) return false;
+    switch (calldata_info->state) {
+        case EIP712_CALLDATA_VALUE:
+            if (!update_calldata_value(data, length, complete_length, last, calldata_info))
+                return false;
+            break;
+        case EIP712_CALLDATA_CALLEE:
+            if (!update_calldata_callee(data, length, last, calldata_info)) return false;
+            break;
+        case EIP712_CALLDATA_CHAIN_ID:
+            if (!update_calldata_chain_id(data, length, last, calldata_info)) return false;
+            break;
+        case EIP712_CALLDATA_SELECTOR:
+            if (!update_calldata_selector(data, length, last, calldata_info)) return false;
+            break;
+        case EIP712_CALLDATA_AMOUNT:
+            if (!update_calldata_amount(data, length, last, calldata_info)) return false;
+            break;
+        case EIP712_CALLDATA_SPENDER:
+            if (!update_calldata_spender(data, length, last, calldata_info)) return false;
+            break;
+        default:
+            return false;
+    }
+    if (calldata_info_all_received(calldata_info)) {
+        if (g_parked_calldata == NULL) {
+            if (!handle_fallback_empty_calldata(calldata_info)) return false;
+        } else {
+            if (!tx_ctx_init(g_parked_calldata,
+                             calldata_info->spender,
+                             calldata_info->callee,
+                             calldata_info->amount,
+                             &calldata_info->chain_id)) {
+                calldata_delete(g_parked_calldata);
+                g_parked_calldata = NULL;
+                return false;
+            }
+            g_parked_calldata = NULL;
+        }
+    }
+    return true;
+}
+
 /**
  * Formats and feeds the given input data to the display buffers
  *
  * @param[in] field_ptr pointer to the new struct field
  * @param[in] data pointer to the field's raw value
  * @param[in] length field's raw value byte-length
- * @param[in] first if this is the first chunk
+ * @param[in] complete_length pointer to complete length if first chunk, \ref NULL otherwise
  * @param[in] last if this is the last chunk
  */
 bool ui_712_feed_to_display(const void *field_ptr,
                             const uint8_t *data,
                             uint8_t length,
-                            bool first,
+                            const uint16_t *complete_length,
                             bool last) {
     size_t current_length;
+    bool first = complete_length != NULL;
 
     if (ui_ctx == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
@@ -1036,6 +1259,12 @@ bool ui_712_feed_to_display(const void *field_ptr,
         }
     }
 
+    if (ui_ctx->field_flags & UI_712_CALLDATA) {
+        if (!update_calldata(data, length, complete_length, last)) {
+            return false;
+        }
+    }
+
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
         if (!ui_712_prepare_current_pair()) {
@@ -1076,6 +1305,10 @@ bool ui_712_init(void) {
     return true;
 }
 
+static void delete_calldata_info(s_eip712_calldata_info *node) {
+    APP_MEM_FREE(node);
+}
+
 /**
  * Deinit function that simply unsets the struct pointer to NULL
  */
@@ -1092,6 +1325,9 @@ void ui_712_deinit(void) {
             APP_MEM_FREE(pair);
             pair = next;
         }
+        flist_clear((flist_node_t **) &ui_ctx->calldata_info,
+                    (f_list_node_del) &delete_calldata_info);
+        gcs_cleanup();
         ui_712_nbgl_cleanup();
         APP_MEM_FREE_AND_NULL((void **) &ui_ctx);
     }
@@ -1104,7 +1340,7 @@ void ui_712_deinit(void) {
  * @return unused here, just needed to match the UI function signature
  */
 unsigned int ui_712_approve(bool display_menu) {
-    ui_callback_signMessage712_v0_ok(display_menu);
+    ui_712_approve_cb(display_menu);
     tip712_context_deinit();
     return 0;
 }
@@ -1117,7 +1353,7 @@ unsigned int ui_712_approve(bool display_menu) {
  * @return unused here, just needed to match the UI function signature
  */
 unsigned int ui_712_reject(bool display_menu) {
-    ui_callback_signMessage712_v0_cancel(display_menu);
+    ui_712_reject_cb(display_menu);
     tip712_context_deinit();
     return 0;
 }
@@ -1135,7 +1371,8 @@ void ui_712_flag_field(bool show,
                        bool name_provided,
                        bool token_join,
                        bool datetime,
-                       bool trusted_name) {
+                       bool trusted_name,
+                       bool calldata) {
     if (show) {
         ui_ctx->field_flags |= UI_712_FIELD_SHOWN;
     }
@@ -1150,6 +1387,9 @@ void ui_712_flag_field(bool show,
     }
     if (trusted_name) {
         ui_ctx->field_flags |= UI_712_TRUSTED_NAME;
+    }
+    if (calldata) {
+        ui_ctx->field_flags |= UI_712_CALLDATA;
     }
 }
 
@@ -1362,5 +1602,90 @@ bool ui_712_get_pair(uint16_t index, const char **item, const char **value) {
 
     *item = pair->key;
     *value = pair->value;
+    return true;
+}
+
+void add_calldata_info(s_eip712_calldata_info *node) {
+    if ((ui_ctx == NULL) || (node == NULL)) {
+        return;
+    }
+    flist_push_back((flist_node_t **) &ui_ctx->calldata_info, (flist_node_t *) node);
+}
+
+s_eip712_calldata_info *get_calldata_info(uint8_t index) {
+    if (ui_ctx == NULL) {
+        return NULL;
+    }
+    for (s_eip712_calldata_info *tmp = ui_ctx->calldata_info; tmp != NULL;
+         tmp = (s_eip712_calldata_info *) ((flist_node_t *) tmp)->next) {
+        if (index == tmp->index) {
+            return tmp;
+        }
+    }
+    return NULL;
+}
+
+s_eip712_calldata_info *get_current_calldata_info(void) {
+    if (ui_ctx == NULL) {
+        return NULL;
+    }
+    return get_calldata_info(ui_ctx->calldata_index);
+}
+
+bool all_calldata_info_processed(void) {
+    if (ui_ctx == NULL) {
+        return false;
+    }
+    for (const s_eip712_calldata_info *tmp = ui_ctx->calldata_info; tmp != NULL;
+         tmp = (const s_eip712_calldata_info *) ((const flist_node_t *) tmp)->next) {
+        if (!tmp->processed) return false;
+    }
+    return true;
+}
+
+void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state) {
+    s_eip712_calldata_info *calldata_info = get_calldata_info(index);
+
+    if (ui_ctx == NULL) {
+        return;
+    }
+    ui_ctx->calldata_index = index;
+    if (calldata_info != NULL) {
+        calldata_info->state = state;
+    }
+}
+
+bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info) {
+    if (calldata_info == NULL) return false;
+    if (calldata_info->value_state != CALLDATA_INFO_PARAM_SET) return false;
+    if (calldata_info->callee_state != CALLDATA_INFO_PARAM_SET) return false;
+    switch (calldata_info->chain_id_state) {
+        case CALLDATA_INFO_PARAM_NONE:
+        case CALLDATA_INFO_PARAM_SET:
+            break;
+        default:
+            return false;
+    }
+    switch (calldata_info->selector_state) {
+        case CALLDATA_INFO_PARAM_NONE:
+        case CALLDATA_INFO_PARAM_SET:
+            break;
+        default:
+            return false;
+    }
+    switch (calldata_info->amount_state) {
+        case CALLDATA_INFO_PARAM_NONE:
+        case CALLDATA_INFO_PARAM_SET:
+            break;
+        default:
+            return false;
+    }
+    switch (calldata_info->spender_state) {
+        case CALLDATA_INFO_PARAM_NONE:
+        case CALLDATA_INFO_PARAM_SET:
+            break;
+        default:
+            return false;
+    }
     return true;
 }

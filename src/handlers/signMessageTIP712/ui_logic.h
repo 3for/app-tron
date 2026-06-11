@@ -4,6 +4,8 @@
 #include "ux.h"
 #include "uint256.h"
 #include "trusted_name.h"
+#include "lists.h"
+#include "calldata.h"
 
 typedef enum { TIP712_FILTERING_BASIC, TIP712_FILTERING_FULL } e_tip712_filtering_mode;
 typedef enum {
@@ -11,6 +13,49 @@ typedef enum {
     TIP712_FIELD_INCOMING,
     TIP712_NO_MORE_FIELD
 } e_tip712_nfs;  // next field state
+
+typedef enum {
+    CALLDATA_FLAG_ADDR_NONE = 0,
+    CALLDATA_FLAG_ADDR_FILTER = 1,
+    CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT = 2,
+} e_calldata_addr_flag;
+
+typedef enum {
+    EIP712_CALLDATA_VALUE,
+    EIP712_CALLDATA_CALLEE,
+    EIP712_CALLDATA_CHAIN_ID,
+    EIP712_CALLDATA_SELECTOR,
+    EIP712_CALLDATA_AMOUNT,
+    EIP712_CALLDATA_SPENDER,
+} e_eip712_calldata_state;
+
+typedef enum {
+    CALLDATA_INFO_PARAM_NONE = 0,
+    CALLDATA_INFO_PARAM_UNSET,
+    CALLDATA_INFO_PARAM_SET,
+} e_calldata_info_param_state;
+
+typedef struct {
+    flist_node_t _list;
+    uint8_t index;
+    e_eip712_calldata_state state;
+
+    e_calldata_info_param_state value_state : 2;
+    e_calldata_info_param_state callee_state : 2;
+    e_calldata_info_param_state chain_id_state : 2;
+    e_calldata_info_param_state selector_state : 2;
+    e_calldata_info_param_state amount_state : 2;
+    e_calldata_info_param_state spender_state : 2;
+
+    bool processed : 1;
+
+    // value is stored in the TX context
+    uint8_t callee[ADDRESS_LENGTH];
+    uint64_t chain_id;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE];
+    uint8_t amount[INT256_LENGTH];
+    uint8_t spender[ADDRESS_LENGTH];
+} s_eip712_calldata_info;
 
 bool ui_712_init(void);
 void ui_712_deinit(void);
@@ -21,7 +66,7 @@ bool ui_712_review_network(const uint64_t *chain_id);
 bool ui_712_feed_to_display(const void *field_ptr,
                             const uint8_t *data,
                             uint8_t length,
-                            bool first,
+                            const uint16_t *complete_length,
                             bool last);
 void ui_712_end_sign(void);
 unsigned int ui_712_approve(bool);
@@ -39,7 +84,8 @@ void ui_712_flag_field(bool show,
                        bool name_provided,
                        bool token_join,
                        bool datetime,
-                       bool contract_name);
+                       bool contract_name,
+                       bool calldata);
 void ui_712_field_flags_reset(void);
 void ui_712_finalize_field(void);
 void ui_712_set_filtering_mode(e_tip712_filtering_mode mode);
@@ -60,3 +106,9 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_source *sources);
 uint16_t ui_712_pairs_count(void);
 bool ui_712_get_pair(uint16_t index, const char **item, const char **value);
+void add_calldata_info(s_eip712_calldata_info *node);
+s_eip712_calldata_info *get_calldata_info(uint8_t index);
+s_eip712_calldata_info *get_current_calldata_info(void);
+bool all_calldata_info_processed(void);
+void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state);
+bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info);

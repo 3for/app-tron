@@ -15,6 +15,7 @@
 #include "helpers.h"
 #include "app_errors.h"
 #include "settings.h"
+#include "tx_ctx.h"
 
 // APDUs P1
 #define P1_COMPLETE  0x00
@@ -30,6 +31,13 @@
 #define P2_FILT_ACTIVATE          0x00
 #define P2_FILT_DISCARDED_PATH    0x01
 #define P2_FILT_MESSAGE_INFO      0x0F
+#define P2_FILT_CALLDATA_SPENDER  0xF4
+#define P2_FILT_CALLDATA_AMOUNT   0xF5
+#define P2_FILT_CALLDATA_SELECTOR 0xF6
+#define P2_FILT_CALLDATA_CHAIN_ID 0xF7
+#define P2_FILT_CALLDATA_CALLEE   0xF8
+#define P2_FILT_CALLDATA_VALUE    0xF9
+#define P2_FILT_CALLDATA_INFO     0xFA
 #define P2_FILT_CONTRACT_NAME     0xFB
 #define P2_FILT_DATE_TIME         0xFC
 #define P2_FILT_AMOUNT_JOIN_TOKEN 0xFD
@@ -210,6 +218,27 @@ uint16_t handleTIP712Filtering(uint8_t p1,
                 reply_apdu = false;
             }
             break;
+        case P2_FILT_CALLDATA_SPENDER:
+            ret = filtering_calldata_spender(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_AMOUNT:
+            ret = filtering_calldata_amount(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_SELECTOR:
+            ret = filtering_calldata_selector(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_CHAIN_ID:
+            ret = filtering_calldata_chain_id(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_CALLEE:
+            ret = filtering_calldata_callee(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_VALUE:
+            ret = filtering_calldata_value(cdata, length, p1 == P1_DISCARDED, &path_crc);
+            break;
+        case P2_FILT_CALLDATA_INFO:
+            ret = filtering_calldata_info(cdata, length);
+            break;
         case P2_FILT_CONTRACT_NAME:
             ret = filtering_trusted_name(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
@@ -230,7 +259,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
             apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
             ret = false;
     }
-    if ((p2 > P2_FILT_MESSAGE_INFO) && ret) {
+    if ((p2 > P2_FILT_MESSAGE_INFO) && (p2 != P2_FILT_CALLDATA_INFO) && ret) {
         if (!ui_712_push_new_filter_path(path_crc)) {
             ret = false;
         }
@@ -264,6 +293,9 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length) {
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
+        apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
+    } else if (!all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
+        PRINTF("Unprocessed calldata\n");
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
     } else if (read_bip32_path_712(cdata, length, &tmpCtx.messageSigningContext712) < 0) {
         apdu_response_code = SWO_INCORRECT_DATA;

@@ -63,8 +63,6 @@ bool ui_callback_tx_cancel(bool display_menu);
 bool ui_callback_address_ok(bool display_menu);
 bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
-bool ui_callback_signMessage712_v0_cancel(bool display_menu);
-bool ui_callback_signMessage712_v0_ok(bool display_menu);
 
 #define UI_191_BUFFER strings.tmp.tmp
 
@@ -78,9 +76,7 @@ void ui_191_switch_to_message(void);
 void ui_191_switch_to_sign(void);
 void ui_191_switch_to_question(void);
 
-void ui_712_start(void);
 void ui_712_switch_to_message(void);
-void ui_712_start_unfiltered(void);
 
 void feed_display(void);
 void skip_rest_of_message(void);
