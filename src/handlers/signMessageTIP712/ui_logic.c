@@ -17,6 +17,7 @@
 #include "settings.h"
 #include "trusted_name.h"
 #include "common_utils.h"
+#include "network.h"
 
 // --- Local accessors over the list-based typed-data model --------------------
 // Mirror the semantics of the typed-data accessors that used to live in
@@ -464,6 +465,27 @@ bool ui_712_review_struct(const void *struct_ptr) {
         return false;
     }
     ui_712_set_value(struct_name, struct_name_length);
+    if (!ui_712_prepare_current_pair()) {
+        return false;
+    }
+    return ui_712_redraw_generic_step();
+}
+
+bool ui_712_review_network(const uint64_t *chain_id) {
+    const char *title = "Network";
+    const char *buf;
+
+    if (*chain_id == chainConfig->chainId) {
+        return true;
+    }
+    ui_712_set_title(title, sizeof("Network") - 1U);
+    if ((buf = get_network_name_from_chain_id(chain_id)) == NULL) {
+        if (!u64_to_string(*chain_id, strings.tmp.tmp, NETWORK_STRING_MAX_SIZE)) {
+            return false;
+        }
+        buf = strings.tmp.tmp;
+    }
+    ui_712_set_value(buf, strlen(buf));
     if (!ui_712_prepare_current_pair()) {
         return false;
     }
@@ -1192,18 +1214,8 @@ void ui_712_queue_struct_to_review(void) {
 }
 
 /**
- * Increment the filters counter
- *
- * @return if the counter could be incremented
+ * Prepare a token join address check
  */
-bool ui_712_filters_counter_incr(void) {
-    if ((ui_ctx == NULL) || (ui_ctx->filters_received >= ui_ctx->filters_to_process)) {
-        return false;
-    }
-    ui_ctx->filters_received += 1;
-    return true;
-}
-
 void ui_712_token_join_prepare_addr_check(uint8_t index) {
     if ((ui_ctx == NULL) || (index >= MAX_ASSETS)) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
@@ -1252,9 +1264,11 @@ bool ui_712_show_raw_key(const void *field_ptr) {
  * Push a new filter path
  *
  * @param[in] path_crc CRC of the filter path
- * @return if the path was pushed or not (in case it was already present)
+ * @return whether it was successful or not
  */
 bool ui_712_push_new_filter_path(uint32_t path_crc) {
+    uint8_t filter_count = 0;
+
     if (ui_ctx == NULL) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
@@ -1262,16 +1276,18 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
     // check if already present
     for (int i = 0; i < ui_ctx->filters_received; ++i) {
         if (ui_ctx->filters_crc[i] == path_crc) {
-            PRINTF("TIP-712 path CRC (%x) already found at index %u!\n", path_crc, i);
-            return false;
+            PRINTF("TIP-712 path CRC (%x) already found!\n", path_crc);
+            return true;
         }
+        filter_count += 1;
     }
-    if (ui_ctx->filters_received >= MAX_FILTERS) {
+    if ((filter_count >= ui_ctx->filters_to_process) || (filter_count >= MAX_FILTERS)) {
         apdu_response_code = APDU_RESPONSE_INVALID_DATA;
         return false;
     }
-    PRINTF("Pushing new TIP-712 path CRC (%x) at index %u\n", path_crc, ui_ctx->filters_received);
-    ui_ctx->filters_crc[ui_ctx->filters_received] = path_crc;
+    PRINTF("Pushing new TIP-712 path CRC (%x) at index %u\n", path_crc, filter_count);
+    ui_ctx->filters_crc[filter_count] = path_crc;
+    ui_ctx->filters_received = filter_count + 1;
     return true;
 }
 

@@ -12,7 +12,7 @@
     },
     "primaryType": "Test",
     "domain": {
-        "chainId": 1151668124,
+        "chainId": 728126428,
         "name": "Depth Test",
         "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
         "version": "1"

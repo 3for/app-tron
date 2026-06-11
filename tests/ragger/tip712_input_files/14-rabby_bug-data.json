@@ -35,7 +35,7 @@
     "domain": {
         "name": "ElementEx",
         "version": "1.0.0",
-        "chainId": "1151668124",
+        "chainId": "728126428",
         "verifyingContract": "0x2fa13cf695ec51ded5b8e45ad0bef838ab17e2af"
     },
     "primaryType": "BatchSignedTRC721Orders",

@@ -6,7 +6,9 @@
 #include "settings.h"
 
 extern void init_tip712_fuzz_environment(void);
-extern int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+extern uint16_t handleSignTIP712Message(uint8_t p1,
+                                        const uint8_t *workBuffer,
+                                        uint8_t dataLength);
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     uint8_t *work_buffer;
@@ -35,7 +37,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         memcpy(work_buffer, data + 4U, payload_size);
     }
 
-    (void) handleSignTIP712Message(data[2], data[3], work_buffer, (uint16_t) payload_size);
+    (void) handleSignTIP712Message(data[2], work_buffer, (uint8_t) payload_size);
 
     free(work_buffer);
     return 0;

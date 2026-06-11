@@ -438,7 +438,7 @@ FILTERING_EMPTY_ARRAY = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "text": "This is a test",
@@ -518,7 +518,7 @@ AMOUNT_JOIN = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "token_from": "0x1111111111111111111111111111111111111111",
@@ -589,7 +589,7 @@ TRUSTED_NAME = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "validator": "0x1111111111111111111111111111111111111111",
@@ -666,7 +666,7 @@ DATETIME_FILTER = {
             "name": "Advanced test",
             "version": "1",
             "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
@@ -759,7 +759,7 @@ PERMIT_AMOUNT_JOIN = {
             "name": "ENS",
             "version": "1",
             "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
@@ -821,7 +821,7 @@ TRUSTED_NAME_FALLBACK = {
             "name": "test",
             "version": "1",
             "verifyingContract": "0x0000000000000000000000000000000000000000",
-            "chainId": 1151668124,
+            "chainId": 728126428,
         },
         "message": {
             "validator": "0x0000000000000000000000000000000000000000",

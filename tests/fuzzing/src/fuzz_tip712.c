@@ -53,16 +53,16 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
 
         switch (op % 4U) {
             case OP_STRUCT_DEF:
-                handleTIP712StructDef(p1, p2, (uint8_t *) data, len, 0x1AU);
+                handleTIP712StructDef(p2, (uint8_t *) data, len);
                 break;
             case OP_FILTERING:
-                handleTIP712Filtering(p1, p2, (uint8_t *) data, len, 0x1EU);
+                handleTIP712Filtering(p1, p2, (uint8_t *) data, len);
                 break;
             case OP_STRUCT_IMPL:
-                handleTIP712StructImpl(p1, p2, (uint8_t *) data, len, 0x1CU);
+                handleTIP712StructImpl(p1, p2, (uint8_t *) data, len);
                 break;
             case OP_SIGN:
-                handleTIP712Sign(p1, p2, (uint8_t *) data, len);
+                handleTIP712Sign((uint8_t *) data, len);
                 break;
         }
 

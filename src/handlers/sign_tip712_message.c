@@ -32,43 +32,44 @@
 
 extern void reset_app_context();
 
-int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t dataLength) {
     uint8_t i;
+
     if (!HAS_SETTING(S_SIGN_BY_HASH)) {
-        return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+        return E_MISSING_SETTING_SIGN_BY_HASH;
     }
 
-    if ((p1 != 00) || (p2 != 00)) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+    if (p1 != 0x00) {
+        return E_INCORRECT_P1_P2;
     }
     if (appState != APP_STATE_IDLE) {
         reset_app_context();
     }
     if (dataLength < 1) {
-        return io_send_sw(E_INCORRECT_DATA);
+        return E_INCORRECT_DATA;
     }
     tmpCtx.messageSigningContext712.pathLength = workBuffer[0];
     if ((tmpCtx.messageSigningContext712.pathLength < 0x01) ||
         (tmpCtx.messageSigningContext712.pathLength > MAX_BIP32_PATH)) {
-        return io_send_sw(E_INCORRECT_DATA);
+        return E_INCORRECT_DATA;
     }
     workBuffer++;
     dataLength--;
     for (i = 0; i < tmpCtx.messageSigningContext712.pathLength; i++) {
         if (dataLength < 4) {
-            return io_send_sw(E_INCORRECT_DATA);
+            return E_INCORRECT_DATA;
         }
         tmpCtx.messageSigningContext712.bip32Path[i] = U4BE(workBuffer, 0);
         workBuffer += 4;
         dataLength -= 4;
     }
     if (dataLength < HASH_SIZE * 2) {
-        return io_send_sw(E_INCORRECT_DATA);
+        return E_INCORRECT_DATA;
     }
     memmove(tmpCtx.messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
     memmove(tmpCtx.messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
 
     ux_flow_display(APPROVAL_SIGN_TIP72_TRANSACTION, false);
 
-    return 0;
+    return APDU_NO_RESPONSE;
 }

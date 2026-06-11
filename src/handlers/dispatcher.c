@@ -81,24 +81,47 @@ int apdu_dispatcher(const command_t *cmd) {
         case INS_SIGN_PERSONAL_MESSAGE:
             return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
-        case INS_SIGN_TIP_712_MESSAGE:
+        case INS_SIGN_TIP_712_MESSAGE: {
+            uint16_t sw;
+
             switch (cmd->p2) {
                 case P2_TIP712_LEGACY_IMPLEM:
                     forget_known_assets();
-                    return handleSignTIP712Message(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+                    sw = handleSignTIP712Message(cmd->p1, cmd->data, cmd->lc);
+                    break;
 
                 case P2_TIP712_FULL_IMPLEM:
-                    return handleTIP712Sign(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+                    sw = handleTIP712Sign(cmd->data, cmd->lc);
+                    break;
+
+                default:
+                    sw = E_INCORRECT_P1_P2;
+                    break;
             }
+            if (sw == APDU_NO_RESPONSE) {
+                return 0;
+            }
+            return io_send_sw(sw);
+        }
 
         case INS_TIP712_STRUCT_DEF:
-            return handleTIP712StructDef(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+            return io_send_sw(handleTIP712StructDef(cmd->p2, cmd->data, cmd->lc));
 
-        case INS_TIP712_STRUCT_IMPL:
-            return handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+        case INS_TIP712_STRUCT_IMPL: {
+            uint16_t sw = handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            if (sw == APDU_NO_RESPONSE) {
+                return 0;
+            }
+            return io_send_sw(sw);
+        }
 
-        case INS_TIP712_FILTERING:
-            return handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, cmd->ins);
+        case INS_TIP712_FILTERING: {
+            uint16_t sw = handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            if (sw == APDU_NO_RESPONSE) {
+                return 0;
+            }
+            return io_send_sw(sw);
+        }
 
         case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
             return handleProvideTrc20TokenInformation(cmd->p1, cmd->p2, cmd->data, cmd->lc);

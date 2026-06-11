@@ -30,8 +30,8 @@ GET_APP_CONFIGURATION_INS = 0x06
 SETTINGS_POSITIONS = {
     DeviceType.STAX: {
         SettingID.DATA_ALLOWED: (0, 350, 130),
-        SettingID.CUSTOM_CONTRACT: (0, 350, 270),
-        SettingID.SIGN_BY_HASH: (0, 350, 430),
+        SettingID.CUSTOM_CONTRACT: (0, 350, 335),
+        SettingID.SIGN_BY_HASH: (0, 350, 445),
         SettingID.VERBOSE_TIP712: (1, 350, 130),
     },
     DeviceType.FLEX: {

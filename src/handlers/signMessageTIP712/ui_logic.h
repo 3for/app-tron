@@ -17,6 +17,7 @@ void ui_712_deinit(void);
 void ui_712_nbgl_cleanup(void);
 e_tip712_nfs ui_712_next_field(void);
 bool ui_712_review_struct(const void *const struct_ptr);
+bool ui_712_review_network(const uint64_t *chain_id);
 bool ui_712_feed_to_display(const void *field_ptr,
                             const uint8_t *data,
                             uint8_t length,
@@ -46,7 +47,6 @@ e_tip712_filtering_mode ui_712_get_filtering_mode(void);
 void ui_712_set_filters_count(uint8_t count);
 uint8_t ui_712_remaining_filters(void);
 void ui_712_queue_struct_to_review(void);
-bool ui_712_filters_counter_incr(void);
 void ui_712_token_join_prepare_addr_check(uint8_t index);
 void ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length);
 void amount_join_set_token_received(void);

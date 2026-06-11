@@ -87,13 +87,7 @@ void handle_tip712_return_code(bool success) {
  * @param[in] length length of the command data
  * @return whether the command was successful or not
  */
-int handleTIP712StructDef(uint8_t p1,
-                          uint8_t p2,
-                          uint8_t *workBuffer,
-                          uint16_t dataLength,
-                          uint8_t ins) {
-    UNUSED(p1);
-    UNUSED(ins);
+uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length) {
     bool ret = true;
 
     if (tip712_context == NULL) {
@@ -106,19 +100,19 @@ int handleTIP712StructDef(uint8_t p1,
     if (ret) {
         switch (p2) {
             case P2_DEF_NAME:
-                ret = set_struct_name(dataLength, workBuffer);
+                ret = set_struct_name(length, cdata);
                 break;
             case P2_DEF_FIELD:
-                ret = set_struct_field(dataLength, workBuffer);
+                ret = set_struct_field(length, cdata);
                 break;
             default:
-                PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
+                PRINTF("Unknown P2 0x%x\n", p2);
                 apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
                 ret = false;
         }
     }
-    handle_tip712_return_code(ret);
-    return 0;
+    apdu_reply(ret);
+    return apdu_response_code;
 }
 
 /**
@@ -127,21 +121,20 @@ int handleTIP712StructDef(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-int handleTIP712StructImpl(uint8_t p1,
-                           uint8_t p2,
-                           uint8_t *workBuffer,
-                           uint16_t dataLength,
-                           uint8_t ins) {
-    UNUSED(ins);
+uint16_t handleTIP712StructImpl(uint8_t p1,
+                                uint8_t p2,
+                                const uint8_t *cdata,
+                                uint8_t length) {
     bool ret = false;
     bool reply_apdu = true;
+
     if (tip712_context == NULL) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
                 // set root type
-                ret = path_set_root((char *) workBuffer, dataLength);
+                ret = path_set_root((char *) cdata, length);
                 if (ret) {
 #ifdef SCREEN_SIZE_WALLET
                     if (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC) {
@@ -152,24 +145,29 @@ int handleTIP712StructImpl(uint8_t p1,
                             reply_apdu = false;
                         }
                     }
+                    if ((path_get_root_type() == ROOT_MESSAGE) &&
+                        (ui_712_get_filtering_mode() == TIP712_FILTERING_FULL)) {
+                        ret = ui_712_review_network(&tip712_context->chain_id);
+                    }
                     ui_712_field_flags_reset();
                 }
                 break;
             case P2_IMPL_FIELD:
-                if ((ret = field_hash(workBuffer, dataLength, p1 != P1_COMPLETE))) {
+                if ((ret = field_hash(cdata, length, p1 != P1_COMPLETE))) {
                     reply_apdu = false;
                 }
                 break;
             case P2_IMPL_ARRAY:
-                ret = path_new_array_depth(workBuffer, dataLength);
+                ret = path_new_array_depth(cdata, length);
                 break;
             default:
-                PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
+                PRINTF("Unknown P2 0x%x\n", p2);
                 apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
         }
     }
     if (reply_apdu) {
-        handle_tip712_return_code(ret);
+        apdu_reply(ret);
+        return apdu_response_code;
     }
     return APDU_NO_RESPONSE;
 }
@@ -180,25 +178,20 @@ int handleTIP712StructImpl(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-int handleTIP712Filtering(uint8_t p1,
-                          uint8_t p2,
-                          uint8_t *workBuffer,
-                          uint16_t dataLength,
-                          uint8_t ins) {
-    UNUSED(p1);
-    UNUSED(ins);
+uint16_t handleTIP712Filtering(uint8_t p1,
+                               uint8_t p2,
+                               const uint8_t *cdata,
+                               uint8_t length) {
     bool ret = true;
     bool reply_apdu = true;
     uint32_t path_crc = 0;
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
-        handle_tip712_return_code(false);
-        return 0;
+        apdu_reply(false);
+        return APDU_RESPONSE_CONDITION_NOT_SATISFIED;
     }
     if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
-        handle_tip712_return_code(true);
-        return 0;
+        return APDU_RESPONSE_OK;
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
@@ -209,48 +202,44 @@ int handleTIP712Filtering(uint8_t p1,
             forget_known_assets();
             break;
         case P2_FILT_DISCARDED_PATH:
-            ret = filtering_discarded_path(workBuffer, dataLength);
+            ret = filtering_discarded_path(cdata, length);
             break;
         case P2_FILT_MESSAGE_INFO:
-            ret = filtering_message_info(workBuffer, dataLength);
+            ret = filtering_message_info(cdata, length);
             if (ret) {
                 reply_apdu = false;
             }
             break;
         case P2_FILT_CONTRACT_NAME:
-            ret = filtering_trusted_name(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret = filtering_trusted_name(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_DATE_TIME:
-            ret = filtering_date_time(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret = filtering_date_time(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_TOKEN:
-            ret =
-                filtering_amount_join_token(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret = filtering_amount_join_token(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_AMOUNT_JOIN_VALUE:
-            ret =
-                filtering_amount_join_value(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret = filtering_amount_join_value(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
         case P2_FILT_RAW_FIELD:
-            ret = filtering_raw_field(workBuffer, dataLength, p1 == P1_DISCARDED, &path_crc);
+            ret = filtering_raw_field(cdata, length, p1 == P1_DISCARDED, &path_crc);
             break;
         default:
-            PRINTF("Unknown P2 0x%x for APDU 0x%x\n", p2, ins);
+            PRINTF("Unknown P2 0x%x\n", p2);
             apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
             ret = false;
     }
     if ((p2 > P2_FILT_MESSAGE_INFO) && ret) {
-        if (ui_712_push_new_filter_path(path_crc)) {
-            if (!ui_712_filters_counter_incr()) {
-                ret = false;
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
-            }
+        if (!ui_712_push_new_filter_path(path_crc)) {
+            ret = false;
         }
     }
     if (reply_apdu) {
-        handle_tip712_return_code(ret);
+        apdu_reply(ret);
+        return apdu_response_code;
     }
-    return 0;
+    return APDU_NO_RESPONSE;
 }
 
 /**
@@ -259,13 +248,11 @@ int handleTIP712Filtering(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length) {
     bool ret = false;
-    UNUSED(p1);
-    UNUSED(p2);
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
     }
     // if the final hashes are still zero or if there are some unimplemented fields
     else if (allzeroes(tmpCtx.messageSigningContext712.domainHash,
@@ -273,13 +260,13 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
              allzeroes(tmpCtx.messageSigningContext712.messageHash,
                        sizeof(tmpCtx.messageSigningContext712.messageHash)) ||
              (path_get_field() != NULL)) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_INCORRECT_DATA;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
                (ui_712_remaining_filters() != 0)) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
-        apdu_response_code = APDU_RESPONSE_REF_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(workBuffer, dataLength, &tmpCtx.messageSigningContext712) < 0) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
+    } else if (read_bip32_path_712(cdata, length, &tmpCtx.messageSigningContext712) < 0) {
+        apdu_response_code = SWO_INCORRECT_DATA;
     } else {
         ret = true;
 #ifndef SCREEN_SIZE_WALLET
@@ -288,14 +275,12 @@ int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
             ret = ui_712_message_hash();
         }
 #endif
-        if (ret) {
-            ui_712_end_sign();
-        }
+        ui_712_end_sign();
     }
 
     if (!ret) {
-        handle_tip712_return_code(false);
-        return 0;
+        apdu_reply(false);
+        return apdu_response_code;
     }
 
     return APDU_NO_RESPONSE;

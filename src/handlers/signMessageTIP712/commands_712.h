@@ -5,20 +5,14 @@
 
 #define DOMAIN_STRUCT_NAME "EIP712Domain"
 
-int handleTIP712StructDef(uint8_t p1,
-                          uint8_t p2,
-                          uint8_t *workBuffer,
-                          uint16_t dataLength,
-                          uint8_t ins);
-int handleTIP712StructImpl(uint8_t p1,
-                           uint8_t p2,
-                           uint8_t *workBuffer,
-                           uint16_t dataLength,
-                           uint8_t ins);
-int handleTIP712Sign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
-int handleTIP712Filtering(uint8_t p1,
-                          uint8_t p2,
-                          uint8_t *workBuffer,
-                          uint16_t dataLength,
-                          uint8_t ins);
+uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length);
+uint16_t handleTIP712StructImpl(uint8_t p1,
+                                uint8_t p2,
+                                const uint8_t *cdata,
+                                uint8_t length);
+uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length);
+uint16_t handleTIP712Filtering(uint8_t p1,
+                               uint8_t p2,
+                               const uint8_t *cdata,
+                               uint8_t length);
 void handle_tip712_return_code(bool success);
