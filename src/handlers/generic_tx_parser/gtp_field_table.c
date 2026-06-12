@@ -48,7 +48,7 @@ bool add_to_field_table(e_param_type type,
     PRINTF(">>> \"%s\": \"%s\"\n", key, value);
     if (appState == APP_STATE_SIGNING_EIP712) {
         if ((type == PARAM_TYPE_INTENT) && (txContext.current_batch_size > 1)) {
-            // Special handling for intent in EIP712 mode
+            // Special handling for intent in TIP712 mode
             ui_712_set_intent();
             PRINTF("[Intent] Start\n");
         }

@@ -55,7 +55,7 @@ typedef struct {
     uint8_t selector[CALLDATA_SELECTOR_SIZE];
     uint8_t amount[INT256_LENGTH];
     uint8_t spender[ADDRESS_LENGTH];
-} s_eip712_calldata_info;
+} s_tip712_calldata_info;
 
 bool ui_712_init(void);
 void ui_712_deinit(void);
@@ -106,9 +106,9 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_source *sources);
 uint16_t ui_712_pairs_count(void);
 bool ui_712_get_pair(uint16_t index, const char **item, const char **value);
-void add_calldata_info(s_eip712_calldata_info *node);
-s_eip712_calldata_info *get_calldata_info(uint8_t index);
-s_eip712_calldata_info *get_current_calldata_info(void);
+void add_calldata_info(s_tip712_calldata_info *node);
+s_tip712_calldata_info *get_calldata_info(uint8_t index);
+s_tip712_calldata_info *get_current_calldata_info(void);
 bool all_calldata_info_processed(void);
 void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state);
-bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info);
+bool calldata_info_all_received(const s_tip712_calldata_info *calldata_info);

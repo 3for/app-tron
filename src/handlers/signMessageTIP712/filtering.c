@@ -663,7 +663,7 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     e_calldata_addr_flag spender_flag;
     uint8_t sig_len;
     const uint8_t *sig;
-    s_eip712_calldata_info *calldata_info;
+    s_tip712_calldata_info *calldata_info;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
