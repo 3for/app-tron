@@ -55,8 +55,8 @@ uint16_t handle_get_challenge(uint8_t p1, uint8_t p2, const uint8_t *data, uint8
     U4BE_ENCODE(G_io_apdu_buffer, 0, get_challenge());
     uint32_t tx = 4;
 
-    G_io_apdu_buffer[tx] = (APDU_RESPONSE_OK >> 8) & 0xff;
-    G_io_apdu_buffer[tx + 1] = APDU_RESPONSE_OK & 0xff;
+    G_io_apdu_buffer[tx] = (SWO_SUCCESS >> 8) & 0xff;
+    G_io_apdu_buffer[tx + 1] = SWO_SUCCESS & 0xff;
 
     tx += 2;
     // Send back the response, do not restart the event loop

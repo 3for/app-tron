@@ -28,13 +28,13 @@ static bool ui_712_prepare_pairs(void) {
     const char *value;
 
     if (pairs_count == 0) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     ui_712_nbgl_cleanup();
     if (APP_MEM_CALLOC((void **) &pairs, sizeof(*pairs) * pairs_count) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
@@ -45,7 +45,7 @@ static bool ui_712_prepare_pairs(void) {
 
     for (uint16_t i = 0; i < pairs_count; i++) {
         if (!ui_712_get_pair(i, &item, &value)) {
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
         pairs[i].item = item;

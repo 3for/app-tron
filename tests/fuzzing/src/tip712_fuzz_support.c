@@ -114,7 +114,7 @@ void reset_app_context(void) {
     memset(&dataContext, 0, sizeof(dataContext));
     memset(&strings, 0, sizeof(strings));
     memset(&g_fuzz_trusted_name, 0, sizeof(g_fuzz_trusted_name));
-    apdu_response_code = APDU_RESPONSE_OK;
+    apdu_response_code = SWO_SUCCESS;
     appState = APP_STATE_IDLE;
     pluginType = PLUGIN_TYPE_NONE;
     seed_default_assets();

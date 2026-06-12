@@ -98,7 +98,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 
     if (APP_MEM_CALLOC((void **) &signMsgCtx, sizeof(signMsgCtx_t)) == false) {
         PRINTF("Memory allocation failed for Sign Context\n");
-        return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     // Get the message length. The wire format uses 4 bytes but the rest of the
@@ -114,7 +114,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
         if (APP_MEM_CALLOC((void **) &signMsgCtx->received_buffer, signMsgCtx->msg_length) ==
             false) {
             PRINTF("Error: Not enough memory!\n");
-            return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+            return SWO_INSUFFICIENT_MEMORY;
         }
     }
 
@@ -124,7 +124,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 
     if (APP_MEM_CALLOC((void **) &g_msg_hash_ctx, sizeof(cx_sha3_t)) == false) {
         PRINTF("Memory allocation failed for Sign Hash\n");
-        return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     // Initialize message header + length hash
@@ -214,7 +214,7 @@ static int final_process(void) {
     buffer_length++;  // for the NULL byte
     if (APP_MEM_CALLOC((void **) &signMsgCtx->display_buffer, buffer_length) == false) {
         PRINTF("Error: Not enough memory!\n");
-        return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     if (is_hex) {
@@ -227,7 +227,7 @@ static int final_process(void) {
                                    signMsgCtx->msg_length) < 0) {
             // Should never happen, buffer is large enough
             PRINTF("Error: Not enough memory!\n");
-            return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+            return SWO_INSUFFICIENT_MEMORY;
         }
     } else {
 #ifdef SCREEN_SIZE_NANO

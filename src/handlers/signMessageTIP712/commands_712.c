@@ -53,10 +53,10 @@ static void apdu_reply(bool success) {
     bool home = true;
 
     if (success) {
-        apdu_response_code = APDU_RESPONSE_OK;
+        apdu_response_code = SWO_SUCCESS;
     } else {
-        if (apdu_response_code == APDU_RESPONSE_OK) {  // somehow not set
-            apdu_response_code = APDU_RESPONSE_ERROR_NO_INFO;
+        if (apdu_response_code == SWO_SUCCESS) {  // somehow not set
+            apdu_response_code = SWO_PARAMETER_ERROR_NO_INFO;
         }
         if (tip712_context != NULL) {
             home = tip712_context->go_home_on_failure;
@@ -110,7 +110,7 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
                 break;
             default:
                 PRINTF("Unknown P2 0x%x\n", p2);
-                apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
+                apdu_response_code = SWO_WRONG_P1_P2;
                 ret = false;
         }
     }
@@ -136,7 +136,7 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
     bool reply_apdu = true;
 
     if (tip712_context == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
@@ -169,7 +169,7 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
                 break;
             default:
                 PRINTF("Unknown P2 0x%x\n", p2);
-                apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
+                apdu_response_code = SWO_WRONG_P1_P2;
         }
     }
     if (reply_apdu) {
@@ -200,10 +200,10 @@ uint16_t handleTIP712Filtering(uint8_t p1,
 
     if (tip712_context == NULL) {
         apdu_reply(false);
-        return APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        return SWO_CONDITIONS_NOT_SATISFIED;
     }
     if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
-        return APDU_RESPONSE_OK;
+        return SWO_SUCCESS;
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
@@ -260,7 +260,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
             break;
         default:
             PRINTF("Unknown P2 0x%x\n", p2);
-            apdu_response_code = APDU_RESPONSE_INVALID_P1_P2;
+            apdu_response_code = SWO_WRONG_P1_P2;
             ret = false;
     }
     if ((p2 > P2_FILT_MESSAGE_INFO) && (p2 != P2_FILT_CALLDATA_INFO) && ret) {

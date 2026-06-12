@@ -71,7 +71,7 @@ const s_struct_712 *get_structn(const char *name, uint8_t length) {
     const s_struct_712 *struct_ptr;
 
     if (name == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return NULL;
     }
     for (struct_ptr = get_struct_list(); struct_ptr != NULL;
@@ -83,7 +83,7 @@ const s_struct_712 *get_structn(const char *name, uint8_t length) {
             }
         }
     }
-    apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+    apdu_response_code = SWO_INCORRECT_DATA;
     return NULL;
 }
 
@@ -98,17 +98,17 @@ bool set_struct_name(uint8_t length, const uint8_t *name) {
     s_struct_712 *new_struct;
 
     if (name == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     if (APP_MEM_CALLOC((void **) &new_struct, sizeof(*new_struct)) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
     if ((new_struct->name = APP_MEM_ALLOC(length + 1)) == NULL) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     new_struct->name[length] = '\0';
@@ -135,7 +135,7 @@ static bool set_struct_field_typedesc(s_struct_712_field *field,
     // copy TypeDesc
     if ((*data_idx + sizeof(typedesc)) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     typedesc = data[(*data_idx)++];
@@ -161,7 +161,7 @@ static bool set_struct_field_custom_typename(s_struct_712_field *field,
     // copy custom struct name length
     if ((*data_idx + sizeof(typename_len)) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     typename_len = data[(*data_idx)++];
@@ -169,11 +169,11 @@ static bool set_struct_field_custom_typename(s_struct_712_field *field,
     // copy name
     if ((*data_idx + typename_len) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if ((field->type_name = APP_MEM_ALLOC(typename_len + 1)) == NULL) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
@@ -196,7 +196,7 @@ static bool set_struct_field_array(s_struct_712_field *field,
                                    uint8_t length) {
     if ((*data_idx + sizeof(field->array_level_count)) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     field->array_level_count = data[(*data_idx)++];
@@ -207,7 +207,7 @@ static bool set_struct_field_array(s_struct_712_field *field,
     for (int idx = 0; idx < field->array_level_count; ++idx) {
         if ((*data_idx + sizeof(field->array_levels[idx].type)) > length)  // check buffer bound
         {
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
         field->array_levels[idx].type = data[(*data_idx)++];
@@ -218,14 +218,14 @@ static bool set_struct_field_array(s_struct_712_field *field,
                 if ((*data_idx + sizeof(field->array_levels[idx].size)) >
                     length)  // check buffer bound
                 {
-                    apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                    apdu_response_code = SWO_INCORRECT_DATA;
                     return false;
                 }
                 field->array_levels[idx].size = data[(*data_idx)++];
                 break;
             default:
                 // should not be in here :^)
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
         }
     }
@@ -246,7 +246,7 @@ static bool set_struct_field_typesize(s_struct_712_field *field,
     // copy TypeSize
     if ((*data_idx + sizeof(field->type_size)) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     field->type_size = data[(*data_idx)++];
@@ -269,7 +269,7 @@ static bool set_struct_field_keyname(s_struct_712_field *field,
     // copy length
     if ((*data_idx + sizeof(keyname_len)) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     keyname_len = data[(*data_idx)++];
@@ -277,12 +277,12 @@ static bool set_struct_field_keyname(s_struct_712_field *field,
     // copy name
     if ((*data_idx + keyname_len) > length)  // check buffer bound
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     if ((field->key_name = APP_MEM_ALLOC(keyname_len + 1)) == NULL) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     field->key_name[keyname_len] = '\0';
@@ -302,21 +302,21 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
     uint8_t data_idx = 0;
 
     if ((data == NULL) || (length == 0)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     } else if (g_structs == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     if (struct_state == NOT_INITIALIZED) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     s_struct_712_field *new_field = NULL;
     if (APP_MEM_CALLOC((void **) &new_field, sizeof(*new_field)) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
@@ -328,7 +328,7 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
     if (new_field->type_has_size) {
         // TYPESIZE and TYPE_CUSTOM are mutually exclusive
         if (new_field->type == TYPE_CUSTOM) {
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            apdu_response_code = SWO_INCORRECT_DATA;
             goto cleanup;
         }
 
@@ -353,7 +353,7 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
 
     if (data_idx != length)  // check that there is no more
     {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         goto cleanup;
     }
 

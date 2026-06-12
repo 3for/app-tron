@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "status_words.h"  // SWO_* status words
+
 #define E_OK 0x9000
 
 // NOTE: The follow codes have alt status messages defined.
@@ -32,16 +34,4 @@
 #define E_INS_NOT_SUPPORTED 0x6d00
 #define E_CLA_NOT_SUPPORTED 0x6e00
 
-#define APDU_RESPONSE_OK                      0x9000
-#define APDU_RESPONSE_CMD_CODE_NOT_SUPPORTED  0x911c
-#define APDU_RESPONSE_ERROR_NO_INFO           0x6a00
-#define APDU_RESPONSE_INVALID_DATA            0x6a80
-#define APDU_RESPONSE_INSUFFICIENT_MEMORY     0x6a84
-#define APDU_RESPONSE_INVALID_INS             0x6d00
-#define APDU_RESPONSE_INVALID_P1_P2           0x6b00
-#define APDU_RESPONSE_CONDITION_NOT_SATISFIED 0x6985
-#define APDU_RESPONSE_REF_DATA_NOT_FOUND      0x6a88
-#define APDU_RESPONSE_UNKNOWN                 0x6f00
-
-#define APDU_NO_RESPONSE                0x0000
-#define APDU_RESPONSE_MODE_CHECK_FAILED 0x6001
+#define APDU_NO_RESPONSE 0x0000

@@ -571,7 +571,7 @@ static uint16_t prepare_plugin_ui_cache(void) {
     uint8_t plugin_ui_items = dataContext.tokenContext.pluginUiMaxItems;
 
     if (!external_plugin_ui_cache_alloc()) {
-        return APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     external_plugin_ui_cache_reset();
@@ -867,7 +867,7 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         cleanupSignExternalPlugin();
         if (APP_MEM_CALLOC((void **) &tron_stream_decoder, sizeof(*tron_stream_decoder)) == false) {
             reset_app_context();
-            return io_send_sw(APDU_RESPONSE_INSUFFICIENT_MEMORY);
+            return io_send_sw(SWO_INSUFFICIENT_MEMORY);
         }
         tron_stream_decoder_init_raw(tron_stream_decoder, total_len);
         external_plugin_stream_reset();

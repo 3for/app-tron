@@ -26,7 +26,7 @@ bool tip712_context_init(void) {
 
     // init global variables
     if (APP_MEM_CALLOC((void **) &tip712_context, sizeof(*tip712_context)) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 

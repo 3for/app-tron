@@ -109,13 +109,13 @@ static bool ui_712_bounded_strlen(const char *str, size_t max_len, size_t *out_l
     size_t length;
 
     if ((str == NULL) || (out_len == NULL)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     length = strnlen(str, max_len);
     if (length >= max_len) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -130,7 +130,7 @@ static bool ui_712_copy_bounded_string(char *dst,
     size_t src_len;
 
     if ((dst == NULL) || (src == NULL) || (dst_size == 0U)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if (!ui_712_bounded_strlen(src, src_max_len, &src_len)) {
@@ -145,7 +145,7 @@ static char *ui_712_alloc_review_string(const char *src, size_t length) {
     char *dst = APP_MEM_ALLOC(length + 1);
 
     if (dst == NULL) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return NULL;
     }
 
@@ -169,13 +169,13 @@ static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
 
     suffix_length = snprintf(suffix_buffer, sizeof(suffix_buffer), "%u", suffix);
     if ((suffix_length <= 0) || ((size_t) suffix_length >= sizeof(suffix_buffer))) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return NULL;
     }
 
     dst = APP_MEM_ALLOC(key_length + 1 + (size_t) suffix_length + 1);
     if (dst == NULL) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return NULL;
     }
 
@@ -193,7 +193,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     uint16_t key_suffix = 0;
 
     if ((ui_ctx == NULL) || (key == NULL) || (value == NULL)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -202,7 +202,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
         return false;
     }
     if (key_length == 0) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -226,7 +226,7 @@ static bool ui_712_push_pair(const char *key, const char *value) {
     }
 
     if (APP_MEM_CALLOC((void **) &pair, sizeof(*pair)) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
@@ -362,7 +362,7 @@ bool ui_712_redraw_generic_step(void) {
             !HAS_SETTING(S_VERBOSE_TIP712)) {
             // Both settings not enabled => Error.
             ui_error_blind_signing();
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            apdu_response_code = SWO_INCORRECT_DATA;
             tip712_context->go_home_on_failure = false;
             if (tip712_context != NULL) {
                 tip712_context->go_home_on_failure = false;
@@ -395,18 +395,18 @@ e_tip712_nfs ui_712_next_field(void) {
     uint8_t depth_count = 0;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
     } else {
         if (ui_ctx->structs_to_review > 0) {
             depth_count = path_get_depth_count();
             if ((depth_count == 0U) || (ui_ctx->structs_to_review > depth_count)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 ui_ctx->structs_to_review = 0;
                 return TIP712_NO_MORE_FIELD;
             }
             review_struct = path_get_nth_field_to_last(ui_ctx->structs_to_review);
             if ((review_struct == NULL) || !ui_712_review_struct(review_struct)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 ui_ctx->structs_to_review = 0;
                 return TIP712_NO_MORE_FIELD;
             }
@@ -433,13 +433,13 @@ bool ui_712_review_struct(const s_struct_712 *struct_ptr) {
     const char *title = "Review struct";
 
     if ((ui_ctx == NULL) || (struct_ptr == NULL)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     ui_712_set_title(title, strlen(title));
     if ((struct_name = struct_ptr->name) == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     ui_712_set_value(struct_name, strlen(struct_name));
@@ -527,7 +527,7 @@ static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) 
     }
     if (length != ADDRESS_LENGTH) {
         PRINTF("TIP712 addr: invalid length %u\n", length);
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -539,13 +539,13 @@ static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) 
                                   sizeof(ethAddr),
                                   chainConfig->chainId)) {
         PRINTF("TIP712 addr: getEthDisplayableAddress failed\n");
-        apdu_response_code = APDU_RESPONSE_ERROR_NO_INFO;
+        apdu_response_code = SWO_PARAMETER_ERROR_NO_INFO;
         return false;
     }
 
     if (!ethToTronBase58(ethAddr, strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
         PRINTF("TIP712 addr: ethToTronBase58 failed\n");
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -572,7 +572,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
     if (length != 1) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     str = *data ? true_str : false_str;
@@ -596,7 +596,7 @@ static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first,
     size_t cur_len;
 
     if ((data == NULL) && (length > 0U)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
@@ -647,7 +647,7 @@ static bool ui_712_format_int(const uint8_t *data,
     switch (bit_size) {
         case 256:
             if (length > INT256_LENGTH) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             convertUint256BE(data, length, &value256);
@@ -655,7 +655,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         case 128:
             if (length > INT128_LENGTH) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             convertUint128BE(data, length, &value128);
@@ -663,7 +663,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         case 64:
             if (length > sizeof(uint64_t)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             convertUint64BEto128(data, length, &value128);
@@ -671,7 +671,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         case 32:
             if (length > sizeof(value32)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             value32 = 0;
@@ -682,7 +682,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         case 16:
             if (length > sizeof(value16)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             value16 = 0;
@@ -696,7 +696,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         case 8:
             if (length != 1U) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             snprintf(strings.tmp.tmp,
@@ -706,7 +706,7 @@ static bool ui_712_format_int(const uint8_t *data,
             break;
         default:
             PRINTF("Unhandled field typesize\n");
-            apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+            apdu_response_code = SWO_INCORRECT_DATA;
             return false;
     }
     return true;
@@ -728,7 +728,7 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
     if (length > INT256_LENGTH) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     convertUint256BE(data, length, &value256);
@@ -829,7 +829,7 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
     switch (ui_ctx->amount.state) {
         case AMOUNT_JOIN_STATE_TOKEN:
             if (length != ADDRESS_LENGTH) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             if (token != NULL) {
@@ -844,7 +844,7 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
 
         case AMOUNT_JOIN_STATE_VALUE:
             if (length > sizeof(ui_ctx->amount.joins[ui_ctx->amount.idx].value)) {
-                apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+                apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
             memcpy(ui_ctx->amount.joins[ui_ctx->amount.idx].value, data, length);
@@ -1163,11 +1163,11 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
     bool first = complete_length != NULL;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         return false;
     }
     if (data == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
@@ -1266,7 +1266,7 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
  */
 void ui_712_end_sign(void) {
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_CONDITION_NOT_SATISFIED;
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         return;
     }
     ui_ctx->end_reached = true;
@@ -1282,7 +1282,7 @@ bool ui_712_init(void) {
         return false;
     }
     if (APP_MEM_CALLOC((void **) &ui_ctx, sizeof(*ui_ctx)) == false) {
-        apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     ui_ctx->filtering_mode = TIP712_FILTERING_BASIC;
@@ -1448,7 +1448,7 @@ void ui_712_queue_struct_to_review(void) {
  */
 void ui_712_token_join_prepare_addr_check(uint8_t index) {
     if ((ui_ctx == NULL) || (index >= MAX_ASSETS)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return;
     }
     ui_ctx->amount.idx = index;
@@ -1459,7 +1459,7 @@ bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t n
     uint8_t cpy_len;
 
     if ((ui_ctx == NULL) || (name == NULL) || (index >= MAX_ASSETS)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     cpy_len = MIN(sizeof(ui_ctx->amount.joins[index].name), name_length);
@@ -1500,7 +1500,7 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
     uint8_t filter_count = 0;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     // check if already present
@@ -1512,7 +1512,7 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
         filter_count += 1;
     }
     if ((filter_count >= ui_ctx->filters_to_process) || (filter_count >= MAX_FILTERS)) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     PRINTF("Pushing new TIP-712 path CRC (%x) at index %u\n", path_crc, filter_count);
@@ -1529,7 +1529,7 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
  */
 bool ui_712_set_discarded_path(const char *path, uint8_t length) {
     if ((ui_ctx == NULL) || (path == NULL) || (length >= sizeof(ui_ctx->discarded_path))) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     memcpy(ui_ctx->discarded_path, path, length);
@@ -1564,7 +1564,7 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_source *sources) {
     if ((ui_ctx == NULL) || (type_count > TN_TYPE_COUNT) || (source_count > TN_SOURCE_COUNT) ||
         ((type_count > 0) && (types == NULL)) || ((source_count > 0) && (sources == NULL))) {
-        apdu_response_code = APDU_RESPONSE_INVALID_DATA;
+        apdu_response_code = SWO_INCORRECT_DATA;
         return;
     }
     ui_ctx->tn_type_count = type_count;

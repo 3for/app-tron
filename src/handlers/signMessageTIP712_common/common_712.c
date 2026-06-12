@@ -25,7 +25,7 @@
 #include "ux.h"
 #include "crypto_helpers.h"
 #include "ui_idle_menu.h"   // ui_idle
-#include "app_errors.h"     // E_OK, E_SECURITY_STATUS_NOT_SATISFIED, APDU_RESPONSE_OK
+#include "app_errors.h"     // E_OK, E_SECURITY_STATUS_NOT_SATISFIED, SWO_SUCCESS
 #include "nbgl_use_case.h"  // BLIND_SIGNING_WARN
 #include "ui_logic.h"       // ui_712_nbgl_cleanup, e_tip712_filtering_mode
 #include "ui_nbgl.h"        // warning
@@ -225,5 +225,5 @@ uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
         // Not fully filtered: surface the blind-signing warning.
         warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
     }
-    return APDU_RESPONSE_OK;
+    return SWO_SUCCESS;
 }

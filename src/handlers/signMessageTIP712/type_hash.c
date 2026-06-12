@@ -114,7 +114,7 @@ static bool get_struct_dependencies(s_struct_dep **first_dep, const s_struct_712
             // if it's not present in the array, add it and recurse into it
             if (tmp == NULL) {
                 if (APP_MEM_CALLOC((void **) &new_dep, sizeof(*new_dep)) == false) {
-                    apdu_response_code = APDU_RESPONSE_INSUFFICIENT_MEMORY;
+                    apdu_response_code = SWO_INSUFFICIENT_MEMORY;
                     return false;
                 }
                 new_dep->s = arg_struct_ptr;
