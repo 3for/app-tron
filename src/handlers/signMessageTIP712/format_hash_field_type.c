@@ -1,4 +1,3 @@
-#include <string.h>
 #include "format_hash_field_type.h"
 #include "app_mem_utils.h"
 #include "mem_utils.h"

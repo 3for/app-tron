@@ -1,6 +1,3 @@
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include "commands_712.h"
 #include "context_712.h"
 #include "field_hash.h"
@@ -9,13 +6,11 @@
 #include "typed_data.h"
 #include "schema_hash.h"
 #include "filtering.h"
-#include "parse.h"
-#include "ui_globals.h"
 #include "ui_idle_menu.h"  // ui_idle
 #include "helpers.h"
 #include "app_errors.h"
 #include "settings.h"
-#include "tx_ctx.h"
+#include "tx_ctx.h"  // get_tx_ctx_count
 
 // APDUs P1
 #define P1_COMPLETE  0x00
@@ -126,13 +121,17 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
 /**
  * Process the TIP712 struct implementation command
  *
- * @param[in] apdu_buf the APDU payload
+ * @param[in] p1 instruction parameter 1
+ * @param[in] p2 instruction parameter 2
+ * @param[in] cdata command data
+ * @param[in] length length of the command data
  * @return whether the command was successful or not
  */
 uint16_t handleTIP712StructImpl(uint8_t p1,
                                 uint8_t p2,
                                 const uint8_t *cdata,
-                                uint8_t length) {
+                                uint8_t length,
+                                uint32_t *flags) {
     bool ret = false;
     bool reply_apdu = true;
 
@@ -177,19 +176,24 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
         apdu_reply(ret);
         return apdu_response_code;
     }
+    *flags |= IO_ASYNCH_REPLY;
     return APDU_NO_RESPONSE;
 }
 
 /**
  * Process the TIP712 filtering command
  *
- * @param[in] apdu_buf the APDU payload
+ * @param[in] p1 instruction parameter 1
+ * @param[in] p2 instruction parameter 2
+ * @param[in] cdata command data
+ * @param[in] length length of the command data
  * @return whether the command was successful or not
  */
 uint16_t handleTIP712Filtering(uint8_t p1,
                                uint8_t p2,
                                const uint8_t *cdata,
-                               uint8_t length) {
+                               uint8_t length,
+                               uint32_t *flags) {
     bool ret = true;
     bool reply_apdu = true;
     uint32_t path_crc = 0;
@@ -268,6 +272,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
         apdu_reply(ret);
         return apdu_response_code;
     }
+    *flags |= IO_ASYNCH_REPLY;
     return APDU_NO_RESPONSE;
 }
 
@@ -277,7 +282,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
  * @param[in] apdu_buf the APDU payload
  * @return whether the command was successful or not
  */
-uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length) {
+uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags) {
     bool ret = false;
 
     if (tip712_context == NULL) {
@@ -291,7 +296,7 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length) {
              (path_get_field() != NULL)) {
         apdu_response_code = SWO_INCORRECT_DATA;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
-               (ui_712_remaining_filters() != 0)) {
+               (!ui_712_message_info_received() || (ui_712_remaining_filters() != 0))) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
     } else if (!all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
@@ -314,6 +319,6 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length) {
         apdu_reply(false);
         return apdu_response_code;
     }
-
+    *flags |= IO_ASYNCH_REPLY;
     return APDU_NO_RESPONSE;
 }

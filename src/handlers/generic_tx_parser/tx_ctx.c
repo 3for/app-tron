@@ -6,7 +6,7 @@
 #include "shared_context.h"  // appState
 #include "utils.h"           // buf_shrink_expand
 #include "get_public_key.h"
-#include "ui_logic.h"  // s_tip712_calldata_info, get_current_calldata_info (TIP712 nested-calldata)
+#include "ui_logic.h"  // s_eip712_calldata_info, get_current_calldata_info (TIP712 nested-calldata)
 #include "network.h"
 #include "hash_bytes.h"
 
@@ -255,7 +255,7 @@ bool tx_ctx_init(s_calldata *calldata,
                  const uint8_t *amount,
                  const uint64_t *chain_id) {
     s_tx_ctx *node;
-    s_tip712_calldata_info *calldata_info;
+    s_eip712_calldata_info *calldata_info;
 
     if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
         return false;

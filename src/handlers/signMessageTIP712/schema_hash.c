@@ -4,7 +4,6 @@
 #include "typed_data.h"
 #include "format_hash_field_type.h"
 #include "context_712.h"
-#include "app_errors.h"
 
 // the SDK does not define a SHA-224 type, define it here so it's easier
 // to understand in the code
@@ -23,7 +22,6 @@ bool compute_schema_hash(void) {
     const s_struct_712 *struct_ptr;
     const s_struct_712_field *field_ptr;
     cx_sha224_t hash_ctx;
-    cx_err_t error = CX_INTERNAL_ERROR;
 
     cx_sha224_init(&hash_ctx);
 
@@ -60,13 +58,10 @@ bool compute_schema_hash(void) {
     hash_byte('}', (cx_hash_t *) &hash_ctx);
 
     // copy hash into context struct
-    CX_CHECK(cx_hash_no_throw((cx_hash_t *) &hash_ctx,
-                              CX_LAST,
-                              NULL,
-                              0,
-                              tip712_context->schema_hash,
-                              sizeof(tip712_context->schema_hash)));
+    if (finalize_hash((cx_hash_t *) &hash_ctx,
+                      tip712_context->schema_hash,
+                      sizeof(tip712_context->schema_hash)) != true) {
+        return false;
+    }
     return true;
-end:
-    return false;
 }

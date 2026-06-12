@@ -83,6 +83,7 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_SIGN_TIP_712_MESSAGE: {
             uint16_t sw;
+            uint32_t flags = 0;
 
             switch (cmd->p2) {
                 case P2_TIP712_LEGACY_IMPLEM:
@@ -91,7 +92,7 @@ int apdu_dispatcher(const command_t *cmd) {
                     break;
 
                 case P2_TIP712_FULL_IMPLEM:
-                    sw = handleTIP712Sign(cmd->data, cmd->lc);
+                    sw = handleTIP712Sign(cmd->data, cmd->lc, &flags);
                     break;
 
                 default:
@@ -108,7 +109,8 @@ int apdu_dispatcher(const command_t *cmd) {
             return io_send_sw(handleTIP712StructDef(cmd->p2, cmd->data, cmd->lc));
 
         case INS_TIP712_STRUCT_IMPL: {
-            uint16_t sw = handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            uint32_t flags = 0;
+            uint16_t sw = handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc, &flags);
             if (sw == APDU_NO_RESPONSE) {
                 return 0;
             }
@@ -116,7 +118,8 @@ int apdu_dispatcher(const command_t *cmd) {
         }
 
         case INS_TIP712_FILTERING: {
-            uint16_t sw = handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+            uint32_t flags = 0;
+            uint16_t sw = handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, &flags);
             if (sw == APDU_NO_RESPONSE) {
                 return 0;
             }

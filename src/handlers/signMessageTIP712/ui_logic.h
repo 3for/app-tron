@@ -1,8 +1,10 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "ux.h"
 #include "uint256.h"
+#include "typed_data.h"
 #include "trusted_name.h"
 #include "lists.h"
 #include "calldata.h"
@@ -55,15 +57,15 @@ typedef struct {
     uint8_t selector[CALLDATA_SELECTOR_SIZE];
     uint8_t amount[INT256_LENGTH];
     uint8_t spender[ADDRESS_LENGTH];
-} s_tip712_calldata_info;
+} s_eip712_calldata_info;
 
 bool ui_712_init(void);
 void ui_712_deinit(void);
 void ui_712_nbgl_cleanup(void);
 e_tip712_nfs ui_712_next_field(void);
-bool ui_712_review_struct(const void *const struct_ptr);
+bool ui_712_review_struct(const s_struct_712 *struct_ptr);
 bool ui_712_review_network(const uint64_t *chain_id);
-bool ui_712_feed_to_display(const void *field_ptr,
+bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
                             const uint8_t *data,
                             uint8_t length,
                             const uint16_t *complete_length,
@@ -84,7 +86,7 @@ void ui_712_flag_field(bool show,
                        bool name_provided,
                        bool token_join,
                        bool datetime,
-                       bool contract_name,
+                       bool trusted_name,
                        bool calldata);
 void ui_712_field_flags_reset(void);
 void ui_712_finalize_field(void);
@@ -92,23 +94,25 @@ void ui_712_set_filtering_mode(e_tip712_filtering_mode mode);
 e_tip712_filtering_mode ui_712_get_filtering_mode(void);
 void ui_712_set_filters_count(uint8_t count);
 uint8_t ui_712_remaining_filters(void);
+bool ui_712_message_info_received(void);
 void ui_712_queue_struct_to_review(void);
 void ui_712_token_join_prepare_addr_check(uint8_t index);
-void ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length);
-void amount_join_set_token_received(void);
-bool ui_712_show_raw_key(const void *field_ptr);
+bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length);
+bool amount_join_set_token_received(void);
+bool ui_712_show_raw_key(const s_struct_712_field *field_ptr);
 bool ui_712_push_new_filter_path(uint32_t path_crc);
-void ui_712_set_discarded_path(const char *path, uint8_t length);
-const char *ui_712_get_discarded_path(uint8_t *length);
+bool ui_712_set_discarded_path(const char *path, uint8_t length);
+const char *ui_712_get_discarded_path(void);
+void ui_712_clear_discarded_path(void);
 void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources);
 uint16_t ui_712_pairs_count(void);
 bool ui_712_get_pair(uint16_t index, const char **item, const char **value);
-void add_calldata_info(s_tip712_calldata_info *node);
-s_tip712_calldata_info *get_calldata_info(uint8_t index);
-s_tip712_calldata_info *get_current_calldata_info(void);
+void add_calldata_info(s_eip712_calldata_info *node);
+s_eip712_calldata_info *get_calldata_info(uint8_t index);
+s_eip712_calldata_info *get_current_calldata_info(void);
 bool all_calldata_info_processed(void);
 void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state);
-bool calldata_info_all_received(const s_tip712_calldata_info *calldata_info);
+bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info);

@@ -5,6 +5,7 @@
 #include "app_errors.h"  // APDU response codes
 #include "parse.h"       // apdu_response_code
 #include "typed_data.h"
+#include "common_utils.h"  // ARRAY_SIZE
 
 typedef struct {
     char *name;
