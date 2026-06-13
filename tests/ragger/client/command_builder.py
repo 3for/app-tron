@@ -4,7 +4,7 @@ import struct
 from typing import Optional
 from ragger.bip import pack_derivation_path
 from enum import IntEnum
-from .tip712 import TIP712FieldType
+from .tip712 import TIP712FieldType, TIP712TypeDescOffset
 
 CLA: int = 0xE0
 MAX_APDU_LEN: int = 255
@@ -106,9 +106,9 @@ class CommandBuilder:
                                             key_name: str) -> bytes:
         data = bytearray()
         typedesc = 0
-        typedesc |= (len(array_levels) > 0) << 7
-        typedesc |= (type_size is not None) << 6
-        typedesc |= field_type
+        typedesc |= (len(array_levels) > 0) << TIP712TypeDescOffset.ARRAY
+        typedesc |= (type_size is not None) << TIP712TypeDescOffset.SIZE
+        typedesc |= field_type << TIP712TypeDescOffset.TYPE
         data.append(typedesc)
         if field_type == TIP712FieldType.CUSTOM:
             data.append(len(type_name))
@@ -139,11 +139,10 @@ class CommandBuilder:
 
     def tip712_send_struct_impl_struct_field(self,
                                              data: bytearray) -> list[bytes]:
-        chunks = list()
+        chunks = []
         # Add a 16-bit integer with the data's byte length (network byte order)
         data_w_length = bytearray()
-        data_w_length.append((len(data) & 0xff00) >> 8)
-        data_w_length.append(len(data) & 0x00ff)
+        data_w_length += struct.pack(">H", len(data))
         data_w_length += data
         while len(data_w_length) > 0:
             p1 = P1Type.PARTIAL_SEND if len(

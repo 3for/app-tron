@@ -108,7 +108,7 @@ def tip712_new_common(device: Device,
     default_screenshot_path = Path(__file__).parent.resolve()
     try:
         assert InputData.process_data(
-            client, builder, json_data, filters,
+            client, json_data, filters,
             partial(autonext, device, navigator, default_screenshot_path),
             golden_run)
 

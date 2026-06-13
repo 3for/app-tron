@@ -7,12 +7,10 @@ import copy
 from typing import Any, Callable, Optional, Union
 import struct
 
-from client.command_builder import CommandBuilder
 from client.ledger_pki import PKIPubKeyUsage
 from client.status_word import StatusWord
 from client.tip712 import TIP712FieldType
 from client import keychain
-from ragger.utils import RAPDU
 import base58
 from pathlib import Path
 from ledgered.devices import DeviceType
@@ -23,7 +21,6 @@ from address import to_raw_address, to_tvm_address
 
 # global variables
 app_client = None
-cmd_builder: CommandBuilder = None
 filtering_paths: dict = {}
 filtering_tokens: list[dict] = []
 current_path: list[str] = []
@@ -127,9 +124,8 @@ def send_struct_def_field(typename, keyname):
     else:
         type_enum = TIP712FieldType.CUSTOM
         typesize = None
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_send_struct_def_struct_field(
-                type_enum, typename, typesize, array_lvls, keyname)):
+    with app_client.tip712_send_struct_def_struct_field(
+            type_enum, typename, typesize, array_lvls, keyname):
         pass
     return (typename, type_enum, typesize, array_lvls)
 
@@ -223,9 +219,10 @@ def send_filtering_token(token_idx: int):
     if len(filtering_tokens[token_idx]) > 0:
         token = filtering_tokens[token_idx]
         if not token["sent"]:
-            provide_token_metadata(token["ticker"],
-                                   to_raw_address(token["addr"]),
-                                   token["decimals"], token["chain_id"])
+            app_client.provide_token_metadata(token["ticker"],
+                                              to_raw_address(token["addr"]),
+                                              token["decimals"],
+                                              token["chain_id"])
             token["sent"] = True
 
 
@@ -270,8 +267,7 @@ def send_struct_impl_field(value, field):
         path = ".".join(current_path)
         if path in filtering_paths.keys():
             send_filter(path, False)
-    with app_client.exchange_async_raw_chunks(
-            cmd_builder.tip712_send_struct_impl_struct_field(bytearray(data))):
+    with app_client.tip712_send_struct_impl_struct_field(data):
         enable_autonext()
     disable_autonext()
 
@@ -282,15 +278,13 @@ def evaluate_field(structs, data, field, lvls_left, new_level=True):
     if new_level:
         current_path.append(field["name"])
     if len(array_lvls) > 0 and lvls_left > 0:
-        with app_client.exchange_async_raw(
-                cmd_builder.tip712_send_struct_impl_array(len(data))):
+        with app_client.tip712_send_struct_impl_array(len(data)):
             pass
         if len(data) == 0:
             for path in filtering_paths.keys():
                 dpath = ".".join(current_path) + ".[]"
                 if path.startswith(dpath):
-                    app_client.exchange_raw(
-                        cmd_builder.tip712_filtering_discarded_path(path))
+                    app_client.tip712_filtering_discarded_path(path)
                     send_filter(path, True)
         idx = 0
         for subdata in data:
@@ -350,9 +344,8 @@ def send_filtering_message_info(display_name: str, filters_count: int):
     to_sign += display_name.encode()
 
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_message_info(display_name,
-                                                      filters_count, sig)):
+    with app_client.tip712_filtering_message_info(display_name, filters_count,
+                                                  sig):
         enable_autonext()
     disable_autonext()
 
@@ -365,9 +358,8 @@ def send_filtering_amount_join_token(path: str, token_idx: int,
     to_sign += path.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_amount_join_token(
-                token_idx, sig, discarded)):
+    with app_client.tip712_filtering_amount_join_token(token_idx, sig,
+                                                       discarded):
         pass
 
 
@@ -380,9 +372,8 @@ def send_filtering_amount_join_value(path: str, token_idx: int,
     to_sign += display_name.encode()
     to_sign.append(token_idx)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_amount_join_value(
-                token_idx, display_name, sig, discarded)):
+    with app_client.tip712_filtering_amount_join_value(token_idx, display_name,
+                                                       sig, discarded):
         pass
 
 
@@ -393,9 +384,7 @@ def send_filtering_datetime(path: str, display_name: str, discarded: bool):
     to_sign += path.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_datetime(display_name, sig,
-                                                  discarded)):
+    with app_client.tip712_filtering_datetime(display_name, sig, discarded):
         pass
 
 
@@ -412,10 +401,8 @@ def send_filtering_trusted_name(path: str, display_name: str,
     for s in name_source:
         to_sign.append(s)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_trusted_name(display_name, name_type,
-                                                      name_source, sig,
-                                                      discarded)):
+    with app_client.tip712_filtering_trusted_name(display_name, name_type,
+                                                  name_source, sig, discarded):
         pass
 
 
@@ -427,8 +414,7 @@ def send_filtering_raw(path: str, display_name: str, discarded: bool):
     to_sign += path.encode()
     to_sign += display_name.encode()
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_filtering_raw(display_name, sig, discarded)):
+    with app_client.tip712_filtering_raw(display_name, sig, discarded):
         pass
 
 
@@ -438,25 +424,6 @@ def send_coin_meta_certificate(app_client) -> None:
         return
 
     app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META)
-
-
-def provide_token_metadata(ticker: str,
-                           addr: bytes,
-                           decimals: int,
-                           chain_id: int,
-                           sig: Optional[bytes] = None) -> RAPDU:
-    send_coin_meta_certificate(app_client)
-
-    if sig is None:
-        # Temporarily get a command with an empty signature to extract the payload and
-        # compute the signature on it
-        tmp = cmd_builder.provide_trc20_token_information(
-            ticker, addr, decimals, chain_id, bytes())
-        # skip APDU header & empty sig
-        sig = keychain.sign_data(keychain.Key.CAL, tmp[6:])
-    return app_client.exchange_raw(
-        cmd_builder.provide_trc20_token_information(ticker, addr, decimals,
-                                                    chain_id, sig))
 
 
 def prepare_filtering(filter_data, message):
@@ -526,14 +493,12 @@ def disable_autonext():
 
 
 def process_data(aclient,
-                 cbuilder: CommandBuilder,
                  data_json: dict,
                  filters: Optional[dict] = None,
                  autonext: Optional[Callable] = None,
                  golden_run: bool = False) -> bool:
     global sig_ctx
     global app_client
-    global cmd_builder
     global autonext_handler
     global is_golden_run
     global current_path
@@ -542,7 +507,6 @@ def process_data(aclient,
     # deepcopy because this function modifies the dict
     data_json = copy.deepcopy(data_json)
     app_client = aclient
-    cmd_builder = cbuilder
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]
     types = data_json["types"]
@@ -559,24 +523,21 @@ def process_data(aclient,
 
     # send types definition
     for key in types.keys():
-        with app_client.exchange_async_raw(
-                cmd_builder.tip712_send_struct_def_struct_name(key)):
+        with app_client.tip712_send_struct_def_struct_name(key):
             pass
         for f in types[key]:
             (f["type"], f["enum"], f["typesize"], f["array_lvls"]) = \
              send_struct_def_field(f["type"], f["name"])
 
     if filters:
-        with app_client.exchange_async_raw(
-                cmd_builder.tip712_filtering_activate()):
+        with app_client.tip712_filtering_activate():
             pass
         prepare_filtering(filters, message)
 
     send_coin_meta_certificate(app_client)
 
     # send domain implementation
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_send_struct_impl_root_struct(domain_typename)):
+    with app_client.tip712_send_struct_impl_root_struct(domain_typename):
         enable_autonext()
     disable_autonext()
     if not send_struct_impl(types, domain, domain_typename):
@@ -589,8 +550,7 @@ def process_data(aclient,
             send_filtering_message_info(domain["name"], len(filtering_paths))
 
     # send message implementation
-    with app_client.exchange_async_raw(
-            cmd_builder.tip712_send_struct_impl_root_struct(message_typename)):
+    with app_client.tip712_send_struct_impl_root_struct(message_typename):
         enable_autonext()
     disable_autonext()
     if not send_struct_impl(types, message, message_typename):
