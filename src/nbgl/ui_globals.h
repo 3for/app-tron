@@ -69,6 +69,6 @@ bool ui_callback_ecdh_ok(bool display_menu);
 // mirroring app-ethereum's ui_191_start(const char *message).
 void ui_191_start(const char *message);
 
-void ui_typed_message_review_choice(bool confirm);
+// ui_typed_message_review_choice() is declared in ui_message_signing.h.
 
 void ui_error_blind_signing(void);
