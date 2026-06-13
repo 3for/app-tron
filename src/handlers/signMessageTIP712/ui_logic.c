@@ -1,52 +1,43 @@
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include "app_mem_utils.h"
 #include "ui_logic.h"
+#include "app_mem_utils.h"
 #include "os_io.h"
+#include "shared_context.h"  // appState, txContext, strings, tmpCtx, chainConfig
+#include "common_utils.h"
+#include "common_712.h"
 #include "context_712.h"  // tip712_context_deinit
 #include "path.h"         // path_get_root_type
+#include "app_errors.h"   // SWO_* status words
 #include "typed_data.h"
 #include "commands_712.h"
-#include "common_712.h"
+#include "settings.h"  // HAS_SETTING
 #include "filtering.h"
-#include "ui_globals.h"
-#include "app_errors.h"
-#include "parse.h"
-#include "settings.h"
 #include "trusted_name.h"
-#include "common_utils.h"
 #include "network.h"
-#include "tx_ctx.h"
-#include "utils.h"
-#include "read.h"
+#include "time_format.h"
+#include "lists.h"
+#include "ui_globals.h"  // ui_error_blind_signing
+#include "ui_utils.h"    // g_pairs, g_pairsList, ui_pairs_init
+#include "utils.h"       // ethToTronBase58
+#include "tx_ctx.h"      // g_parked_calldata, validate_instruction_hash
+#include "read.h"        // read_u64_be
+#include <string.h>
+#include <time.h>
 
-// --- Local accessors over the list-based typed-data model --------------------
-// Mirror the semantics of the typed-data accessors that used to live in
-// typed_data.c, kept local so the rest of the file keeps operating on opaque
-// `const void *` field/struct pointers.
+#define N_OF_M_LENGTH 10  // enough to hold "nn of mm"
 
-static e_type struct_field_type(const void *ptr) {
-    return ((const s_struct_712_field *) ptr)->type;
-}
+#define AMOUNT_JOIN_FLAG_TOKEN  (1 << 0)
+#define AMOUNT_JOIN_FLAG_VALUE  (1 << 1)
+#define AMOUNT_JOIN_NAME_LENGTH 25
 
-static uint8_t get_struct_field_typesize(const void *ptr) {
-    return ((const s_struct_712_field *) ptr)->type_size;
-}
-
-#define AMOUNT_JOIN_FLAG_TOKEN (1 << 0)
-#define AMOUNT_JOIN_FLAG_VALUE (1 << 1)
-
-typedef struct {
-    // display name, not NULL-terminated
-    char name[25];
-    uint8_t name_length;
-    uint8_t value[INT256_LENGTH];
-    uint8_t value_length;
+typedef struct amount_join {
+    flist_node_t _list;
+    // display name, NULL-terminated
+    char name[AMOUNT_JOIN_NAME_LENGTH + 1];
     // indicates the steps the token join has gone through
     uint8_t flags;
+    uint8_t token_idx;
+    uint8_t value_length;
+    uint8_t value[INT256_LENGTH];
 } s_amount_join;
 
 typedef enum {
@@ -62,22 +53,17 @@ typedef enum {
 #define UI_712_CALLDATA            (1 << 5)
 
 typedef struct {
-    s_amount_join joins[MAX_ASSETS];
+    s_amount_join *joins;
     uint8_t idx;
     e_amount_join_state state;
 } s_amount_context;
 
-typedef struct ui_712_pair_s {
-    struct ui_712_pair_s *next;
-    const char *raw_key;
-    size_t raw_key_length;
-    const char *key;
-    const char *value;
-    size_t value_length;
-} s_ui_712_pair;
+typedef struct filter_crc {
+    flist_node_t _list;
+    uint32_t value;
+} s_filter_crc;
 
 typedef struct {
-    bool shown;
     bool end_reached;
     e_tip712_filtering_mode filtering_mode;
     uint8_t filters_to_process;
@@ -85,180 +71,123 @@ typedef struct {
     uint8_t field_flags;
     uint8_t structs_to_review;
     s_amount_context amount;
-    uint8_t filters_received;
-    uint32_t filters_crc[MAX_FILTERS];
-    uint8_t discarded_path_length;
-    char discarded_path[255];
+    s_filter_crc *filters_crc;
+    char *discarded_path;
     uint8_t tn_type_count;
     uint8_t tn_source_count;
     e_name_type tn_types[TN_TYPE_COUNT];
     e_name_source tn_sources[TN_SOURCE_COUNT];
     s_ui_712_pair *ui_pairs;
-    s_ui_712_pair *ui_pairs_tail;
+    uint16_t ui_pairs_dup_count;  // TRON: length of the current identical-page run
     s_eip712_calldata_info *calldata_info;
     uint8_t calldata_index;
-    uint16_t ui_pairs_count;
-    uint16_t ui_pairs_consecutive_identical_count;
 } t_ui_context;
 
 static t_ui_context *ui_ctx = NULL;
 
-__attribute__((weak)) void ui_712_nbgl_cleanup(void) {}
-
-static bool ui_712_bounded_strlen(const char *str, size_t max_len, size_t *out_len) {
-    size_t length;
-
-    if ((str == NULL) || (out_len == NULL)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-
-    length = strnlen(str, max_len);
-    if (length >= max_len) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-
-    *out_len = length;
-    return true;
+// to be used as a \ref f_list_node_del
+static void delete_filter_crc(s_filter_crc *fcrc) {
+    APP_MEM_FREE(fcrc);
 }
 
-static bool ui_712_copy_bounded_string(char *dst,
-                                       size_t dst_size,
-                                       const char *src,
-                                       size_t src_max_len) {
-    size_t src_len;
-
-    if ((dst == NULL) || (src == NULL) || (dst_size == 0U)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-    if (!ui_712_bounded_strlen(src, src_max_len, &src_len)) {
-        return false;
-    }
-    memcpy(dst, src, MIN(dst_size - 1U, src_len));
-    dst[MIN(dst_size - 1U, src_len)] = '\0';
-    return true;
+// to be used as a \ref f_list_node_del
+static void delete_ui_pair(s_ui_712_pair *pair) {
+    APP_MEM_FREE(pair->key);
+    APP_MEM_FREE(pair->raw_key);
+    APP_MEM_FREE(pair->value);
+    APP_MEM_FREE(pair);
 }
 
-static char *ui_712_alloc_review_string(const char *src, size_t length) {
-    char *dst = APP_MEM_ALLOC(length + 1);
-
-    if (dst == NULL) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return NULL;
-    }
-
-    memcpy(dst, src, length);
-    dst[length] = '\0';
-    return dst;
-}
-
-static char *ui_712_alloc_review_key(const char *key, uint16_t suffix) {
-    size_t key_length;
-    char suffix_buffer[6];
-    int suffix_length;
+/**
+ * TRON: allocate a copy of @p key, optionally suffixed with "-<suffix>".
+ *
+ * @param[in] key the base (un-numbered) key
+ * @param[in] suffix the run index (0 means no suffix)
+ * @return the newly allocated string, or NULL on failure
+ */
+static char *ui_712_alloc_numbered_key(const char *key, uint16_t suffix) {
+    size_t key_len = strlen(key);
+    char suffix_buf[8];  // '-' + up to 5 digits (uint16_t) + '\0'
+    int suffix_len;
     char *dst;
 
-    if (!ui_712_bounded_strlen(key, sizeof(strings.tmp.tmp2), &key_length)) {
-        return NULL;
-    }
     if (suffix == 0) {
-        return ui_712_alloc_review_string(key, key_length);
+        if ((dst = APP_MEM_ALLOC(key_len + 1)) == NULL) {
+            return NULL;
+        }
+        memcpy(dst, key, key_len + 1);
+        return dst;
     }
-
-    suffix_length = snprintf(suffix_buffer, sizeof(suffix_buffer), "%u", suffix);
-    if ((suffix_length <= 0) || ((size_t) suffix_length >= sizeof(suffix_buffer))) {
-        apdu_response_code = SWO_INCORRECT_DATA;
+    suffix_len = snprintf(suffix_buf, sizeof(suffix_buf), "-%u", suffix);
+    if ((suffix_len <= 0) || ((size_t) suffix_len >= sizeof(suffix_buf))) {
         return NULL;
     }
-
-    dst = APP_MEM_ALLOC(key_length + 1 + (size_t) suffix_length + 1);
-    if (dst == NULL) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    if ((dst = APP_MEM_ALLOC(key_len + (size_t) suffix_len + 1)) == NULL) {
         return NULL;
     }
-
-    memcpy(dst, key, key_length);
-    dst[key_length] = '-';
-    memcpy(dst + key_length + 1U, suffix_buffer, (size_t) suffix_length);
-    dst[key_length + 1U + (size_t) suffix_length] = '\0';
+    memcpy(dst, key, key_len);
+    memcpy(dst + key_len, suffix_buf, (size_t) suffix_len + 1);  // includes '\0'
     return dst;
 }
 
-static bool ui_712_push_pair(const char *key, const char *value) {
-    s_ui_712_pair *pair = NULL;
-    size_t key_length;
-    size_t value_length;
-    uint16_t key_suffix = 0;
+/**
+ * TRON: rename consecutive pages that share the same key and value into a
+ * numbered run ("trcTokenArr-1", "trcTokenArr-2", ...), so identical adjacent
+ * entries are distinguishable on screen. @p cur is the freshly completed tail
+ * page and @p prev the page before it.
+ */
+static void ui_712_number_duplicate_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
+    char *renamed;
 
-    if ((ui_ctx == NULL) || (key == NULL) || (value == NULL)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
+    if ((prev == NULL) || (prev->raw_key == NULL) || (prev->value == NULL) ||
+        (cur->raw_key == NULL) || (cur->value == NULL) ||
+        (strcmp(prev->raw_key, cur->raw_key) != 0) || (strcmp(prev->value, cur->value) != 0)) {
+        ui_ctx->ui_pairs_dup_count = 1;
+        return;
     }
-
-    if (!ui_712_bounded_strlen(key, sizeof(strings.tmp.tmp2), &key_length) ||
-        !ui_712_bounded_strlen(value, sizeof(strings.tmp.tmp), &value_length)) {
-        return false;
-    }
-    if (key_length == 0) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-
-    if ((ui_ctx->ui_pairs_tail != NULL) && (ui_ctx->ui_pairs_tail->raw_key_length == key_length) &&
-        (ui_ctx->ui_pairs_tail->value_length == value_length) &&
-        (memcmp(ui_ctx->ui_pairs_tail->raw_key, key, key_length) == 0) &&
-        (memcmp(ui_ctx->ui_pairs_tail->value, value, value_length) == 0)) {
-        // Only identical adjacent key/value pages are renamed into a numbered
-        // run: "key-1", "key-2", "key-3", etc.
-        if (ui_ctx->ui_pairs_consecutive_identical_count == 1) {
-            APP_MEM_FREE((void *) ui_ctx->ui_pairs_tail->key);
-            ui_ctx->ui_pairs_tail->key = ui_712_alloc_review_key(key, 1);
-            if (ui_ctx->ui_pairs_tail->key == NULL) {
-                return false;
-            }
+    if (ui_ctx->ui_pairs_dup_count == 1) {
+        // Start of a run: retroactively number the previous page "<key>-1"
+        if ((renamed = ui_712_alloc_numbered_key(prev->raw_key, 1)) != NULL) {
+            APP_MEM_FREE(prev->key);
+            prev->key = renamed;
         }
-        ui_ctx->ui_pairs_consecutive_identical_count += 1;
-        key_suffix = ui_ctx->ui_pairs_consecutive_identical_count;
-    } else {
-        ui_ctx->ui_pairs_consecutive_identical_count = 1;
     }
-
-    if (APP_MEM_CALLOC((void **) &pair, sizeof(*pair)) == false) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return false;
+    ui_ctx->ui_pairs_dup_count += 1;
+    if ((renamed = ui_712_alloc_numbered_key(cur->raw_key, ui_ctx->ui_pairs_dup_count)) != NULL) {
+        APP_MEM_FREE(cur->key);
+        cur->key = renamed;
     }
-
-    pair->raw_key = ui_712_alloc_review_string(key, key_length);
-    if (pair->raw_key == NULL) {
-        return false;
-    }
-    pair->raw_key_length = key_length;
-
-    pair->key = ui_712_alloc_review_key(key, key_suffix);
-    if (pair->key == NULL) {
-        return false;
-    }
-
-    pair->value = ui_712_alloc_review_string(value, value_length);
-    if (pair->value == NULL) {
-        return false;
-    }
-    pair->value_length = value_length;
-
-    if (ui_ctx->ui_pairs == NULL) {
-        ui_ctx->ui_pairs = pair;
-    } else {
-        ui_ctx->ui_pairs_tail->next = pair;
-    }
-    ui_ctx->ui_pairs_tail = pair;
-    ui_ctx->ui_pairs_count += 1;
-    return true;
 }
 
-bool ui_712_prepare_current_pair(void) {
-    return ui_712_push_pair(strings.tmp.tmp2, strings.tmp.tmp);
+// to be used as a \ref f_list_node_del
+static void delete_amount_join(s_amount_join *join) {
+    APP_MEM_FREE(join);
+}
+
+/**
+ * Called to fetch the next field if they have not all been processed yet
+ *
+ * Also handles the special "Review struct" screen of the verbose mode
+ *
+ * @return the next field state
+ */
+static bool ui_712_next_field(void) {
+    bool ret = false;
+
+    if (ui_ctx == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+    } else {
+        if (ui_ctx->structs_to_review > 0) {
+            ret = ui_712_review_struct(path_get_nth_field_to_last(ui_ctx->structs_to_review));
+            ui_ctx->structs_to_review -= 1;
+        } else if (!ui_ctx->end_reached) {
+            handle_tip712_return_code(true);
+            // So that later when we append to them, we start from an empty string
+            explicit_bzero(&strings, sizeof(strings));
+            ret = true;
+        }
+    }
+    return ret;
 }
 
 /**
@@ -268,52 +197,21 @@ bool ui_712_prepare_current_pair(void) {
  */
 static bool ui_712_field_shown(void) {
     bool ret = false;
+
     if (ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) {
 #ifdef SCREEN_SIZE_WALLET
-        if (true) {
+        ret = true;
 #else
         if (HAS_SETTING(S_VERBOSE_TIP712) || (path_get_root_type() == ROOT_DOMAIN)) {
-#endif
             ret = true;
         }
+#endif
     } else {  // TIP712_FILTERING_FULL
         if (ui_ctx->field_flags & UI_712_FIELD_SHOWN) {
             ret = true;
         }
     }
     return ret;
-}
-
-/**
- * Set UI buffer
- *
- * @param[in] src source buffer
- * @param[in] src_length source buffer size
- * @param[in] dst destination buffer
- * @param[in] dst_length destination buffer length
- * @param[in] explicit_trunc if truncation should be explicitly shown
- */
-static void ui_712_set_buf(const char *src,
-                           size_t src_length,
-                           char *dst,
-                           size_t dst_length,
-                           bool explicit_trunc) {
-    size_t cpy_length;
-
-    if ((src == NULL) || (dst == NULL) || (dst_length == 0)) {
-        return;
-    }
-
-    if (src_length < dst_length) {
-        cpy_length = src_length;
-    } else {
-        cpy_length = dst_length - 1;
-    }
-    memcpy(dst, src, cpy_length);
-    dst[cpy_length] = '\0';
-    if (explicit_trunc && (cpy_length < src_length) && (dst_length > 4) && (cpy_length >= 3)) {
-        memcpy(dst + cpy_length - 3, "...", 3);
-    }
 }
 
 /**
@@ -327,28 +225,102 @@ void ui_712_finalize_field(void) {
 }
 
 /**
+ * Set a new intent for the TIP-712 batch transaction
+ *
+ */
+void ui_712_set_intent(void) {
+    s_ui_712_pair *new_pair = NULL;
+    const char *title = "Review transaction";
+    size_t title_length = strlen(title);
+
+    // Allocate memory for the new pair
+    if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
+        return;
+    }
+    // Add it to the chained list
+    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
+
+    // Allocate and copy the title
+    if (APP_MEM_CALLOC((void **) &new_pair->key, title_length + 1) == false) {
+        return;
+    }
+    memcpy(new_pair->key, title, title_length);
+
+    // Allocate and clear the intent buffer
+    if (APP_MEM_CALLOC((void **) &new_pair->value, N_OF_M_LENGTH) == false) {
+        return;
+    }
+
+    // Mark it as an intent
+    new_pair->start_intent = true;
+}
+
+/**
  * Set a new title for the TIP-712 generic UX_STEP
  *
  * @param[in] str the new title
  * @param[in] length its length
  */
 void ui_712_set_title(const char *str, size_t length) {
-    ui_712_set_buf(str, length, strings.tmp.tmp2, sizeof(strings.tmp.tmp2), false);
+    s_ui_712_pair *new_pair = NULL;
+
+    if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
+        return;
+    }
+    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
+    if (APP_MEM_CALLOC((void **) &new_pair->key, length + 1) == false) {
+        return;
+    }
+    memcpy(new_pair->key, str, length);
+    // TRON: keep an un-numbered copy of the key for duplicate-run detection
+    if (APP_MEM_CALLOC((void **) &new_pair->raw_key, length + 1) == false) {
+        return;
+    }
+    memcpy(new_pair->raw_key, str, length);
 }
 
 /**
  * Set a new value for the TIP-712 generic UX_STEP
  *
+ * @note The parameters may be NULL if the value is already formatted into strings.tmp.tmp
+ *
  * @param[in] str the new value
  * @param[in] length its length
  */
 void ui_712_set_value(const char *str, size_t length) {
-    ui_712_set_buf(str, length, strings.tmp.tmp, sizeof(strings.tmp.tmp), true);
-}
+    s_ui_712_pair *prev = NULL;
+    s_ui_712_pair *tmp = ui_ctx->ui_pairs;
 
-// Used by the generic_tx_parser when grouping batched transactions under an
-// "intent" separator. Not reached by the current TIP712 flow; no-op stub.
-void ui_712_set_intent(void) {
+    if (tmp == NULL) {
+        // No pairs created yet
+        return;
+    }
+    while (((flist_node_t *) tmp)->next != NULL) {
+        prev = tmp;
+        tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
+    }
+    if (tmp->value != NULL) {
+        PRINTF("Value already exist for tag %s: %s\n", tmp->key, tmp->value);
+        return;
+    }
+    if ((str != NULL) && (length > 0)) {
+        // buffer is directly provided with parameters
+        if (APP_MEM_CALLOC((void **) &tmp->value, length + 1) == false) {
+            return;
+        }
+        memcpy(tmp->value, str, length);
+    } else {
+        // Add the value from the global variable strings.tmp.tmp
+        if ((tmp->value = APP_MEM_STRDUP(strings.tmp.tmp)) == NULL) {
+            return;
+        }
+    }
+    // TRON: number consecutive pages sharing the same key/value into a run
+    ui_712_number_duplicate_pair(prev, tmp);
+    tmp->end_intent = validate_instruction_hash();
+    if (tmp->end_intent) {
+        PRINTF("[Intent] End\n");
+    }
 }
 
 /**
@@ -357,69 +329,29 @@ void ui_712_set_intent(void) {
  * @return whether it was successful or not
  */
 bool ui_712_redraw_generic_step(void) {
-    if (!ui_ctx->shown) {  // Initialize if it is not already
+    if (appState != APP_STATE_SIGNING_EIP712) {  // Initialize if it is not already
         if ((ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) && !HAS_SETTING(S_SIGN_BY_HASH) &&
             !HAS_SETTING(S_VERBOSE_TIP712)) {
-            // Both settings not enabled => Error.
+            // Both settings not enabled => Error
             ui_error_blind_signing();
             apdu_response_code = SWO_INCORRECT_DATA;
             tip712_context->go_home_on_failure = false;
-            if (tip712_context != NULL) {
-                tip712_context->go_home_on_failure = false;
-            }
             return false;
         }
         apdu_response_code = ui_712_start(ui_ctx->filtering_mode);
-        ui_ctx->shown = true;
-    } else {
-        ui_712_switch_to_message();
-    }
-
-    if (!ui_ctx->end_reached) {
+        if (apdu_response_code != SWO_SUCCESS) {
+            return false;
+        }
         handle_tip712_return_code(true);
-        explicit_bzero(&strings, sizeof(strings));
-    }
-    return true;
-}
-
-/**
- * Called to fetch the next field if they have not all been processed yet
- *
- * Also handles the special "Review struct" screen of the verbose mode
- *
- * @return the next field state
- */
-e_tip712_nfs ui_712_next_field(void) {
-    e_tip712_nfs state = TIP712_NO_MORE_FIELD;
-    const void *review_struct = NULL;
-    uint8_t depth_count = 0;
-
-    if (ui_ctx == NULL) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
     } else {
-        if (ui_ctx->structs_to_review > 0) {
-            depth_count = path_get_depth_count();
-            if ((depth_count == 0U) || (ui_ctx->structs_to_review > depth_count)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                ui_ctx->structs_to_review = 0;
-                return TIP712_NO_MORE_FIELD;
+        if (ui_712_next_field() == false) {
+            apdu_response_code = ui_sign_712(ui_ctx->filtering_mode);
+            if (apdu_response_code != SWO_SUCCESS) {
+                return false;
             }
-            review_struct = path_get_nth_field_to_last(ui_ctx->structs_to_review);
-            if ((review_struct == NULL) || !ui_712_review_struct(review_struct)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                ui_ctx->structs_to_review = 0;
-                return TIP712_NO_MORE_FIELD;
-            }
-            ui_ctx->structs_to_review -= 1;
-            state = TIP712_FIELD_LATER;
-        } else if (!ui_ctx->end_reached) {
-            handle_tip712_return_code(true);
-            state = TIP712_FIELD_INCOMING;
-            // So that later when we append to them, we start from an empty string
-            explicit_bzero(&strings, sizeof(strings));
         }
     }
-    return state;
+    return true;
 }
 
 /**
@@ -432,19 +364,13 @@ bool ui_712_review_struct(const s_struct_712 *struct_ptr) {
     const char *struct_name;
     const char *title = "Review struct";
 
-    if ((ui_ctx == NULL) || (struct_ptr == NULL)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
+    if (ui_ctx == NULL) {
         return false;
     }
 
     ui_712_set_title(title, strlen(title));
-    if ((struct_name = struct_ptr->name) == NULL) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-    ui_712_set_value(struct_name, strlen(struct_name));
-    if (!ui_712_prepare_current_pair()) {
-        return false;
+    if ((struct_name = struct_ptr->name) != NULL) {
+        ui_712_set_value(struct_name, strlen(struct_name));
     }
     return ui_712_redraw_generic_step();
 }
@@ -456,7 +382,7 @@ bool ui_712_review_network(const uint64_t *chain_id) {
     if (*chain_id == chainConfig->chainId) {
         return true;
     }
-    ui_712_set_title(title, sizeof("Network") - 1U);
+    ui_712_set_title(title, strlen(title));
     if ((buf = get_network_name_from_chain_id(chain_id)) == NULL) {
         if (!u64_to_string(*chain_id, strings.tmp.tmp, NETWORK_STRING_MAX_SIZE)) {
             return false;
@@ -464,9 +390,6 @@ bool ui_712_review_network(const uint64_t *chain_id) {
         buf = strings.tmp.tmp;
     }
     ui_712_set_value(buf, strlen(buf));
-    if (!ui_712_prepare_current_pair()) {
-        return false;
-    }
     return ui_712_redraw_generic_step();
 }
 
@@ -476,15 +399,13 @@ bool ui_712_review_network(const uint64_t *chain_id) {
 bool ui_712_message_hash(void) {
     const char *title = "Message hash";
 
-    ui_712_set_title(title, sizeof("Message hash") - 1U);
+    ui_712_set_title(title, strlen(title));
     array_bytes_string(strings.tmp.tmp,
                        sizeof(strings.tmp.tmp),
                        tmpCtx.messageSigningContext712.messageHash,
                        KECCAK256_HASH_BYTESIZE);
+    ui_712_set_value(NULL, 0);
     ui_ctx->end_reached = true;
-    if (!ui_712_prepare_current_pair()) {
-        return false;
-    }
     return ui_712_redraw_generic_step();
 }
 
@@ -497,18 +418,45 @@ bool ui_712_message_hash(void) {
  */
 static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
     size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len;
+    size_t cur_len = strlen(strings.tmp.tmp);
+    size_t available;
+    size_t to_copy;
 
-    if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
+    if (cur_len >= max_len) {
+        // Ensure null-termination even if we're at capacity
+        strings.tmp.tmp[max_len] = '\0';
         return;
     }
 
-    memcpy(strings.tmp.tmp + cur_len, data, MIN(max_len - cur_len, length));
-    strings.tmp.tmp[MIN(max_len, cur_len + (size_t) length)] = '\0';
-    // truncated
-    if (last && ((max_len - cur_len) < length)) {
+    available = max_len - cur_len;
+    to_copy = MIN(available, length);
+
+    memcpy(strings.tmp.tmp + cur_len, data, to_copy);
+    strings.tmp.tmp[cur_len + to_copy] = '\0';
+
+    // truncated - add ellipsis if this is the last chunk and we couldn't fit everything
+    if (last && (to_copy < length)) {
         memcpy(strings.tmp.tmp + max_len - 3, "...", 3);
+        strings.tmp.tmp[max_len] = '\0';
     }
+}
+
+/**
+ * Format the given address into a Tron base58 string in strings.tmp.tmp
+ *
+ * @param[in] addr the address to format
+ * @return whether it was successful or not
+ */
+static bool ui_712_set_displayable_address(const uint8_t addr[ADDRESS_LENGTH]) {
+    char eth_addr[43];
+
+    if (!getEthDisplayableAddress((uint8_t *) addr,
+                                  eth_addr,
+                                  sizeof(eth_addr),
+                                  chainConfig->chainId)) {
+        return false;
+    }
+    return ethToTronBase58(eth_addr, strings.tmp.tmp, sizeof(strings.tmp.tmp));
 }
 
 /**
@@ -522,33 +470,16 @@ static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
 static bool ui_712_format_addr(const uint8_t *data, uint8_t length, bool first) {
     // no reason for an address to be received over multiple chunks
     if (!first) {
-        PRINTF("TIP712 addr: unexpected continuation chunk\n");
         return false;
     }
     if (length != ADDRESS_LENGTH) {
-        PRINTF("TIP712 addr: invalid length %u\n", length);
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-
-    char ethAddr[43];
-    if (!getEthDisplayableAddress((uint8_t *) data,
-                                  /* strings.tmp.tmp,
-                                  sizeof(strings.tmp.tmp), */
-                                  ethAddr,
-                                  sizeof(ethAddr),
-                                  chainConfig->chainId)) {
-        PRINTF("TIP712 addr: getEthDisplayableAddress failed\n");
+    if (!ui_712_set_displayable_address(data)) {
         apdu_response_code = SWO_PARAMETER_ERROR_NO_INFO;
         return false;
     }
-
-    if (!ethToTronBase58(ethAddr, strings.tmp.tmp, sizeof(strings.tmp.tmp))) {
-        PRINTF("TIP712 addr: ethToTronBase58 failed\n");
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-
     return true;
 }
 
@@ -565,7 +496,6 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
     const char *true_str = "true";
     const char *false_str = "false";
     const char *str;
-    size_t str_len;
 
     // no reason for a boolean to be received over multiple chunks
     if (!first) {
@@ -576,9 +506,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
     str = *data ? true_str : false_str;
-    str_len = *data ? (sizeof("true") - 1U) : (sizeof("false") - 1U);
-    memcpy(strings.tmp.tmp, str, MIN(max_len, str_len));
-    strings.tmp.tmp[MIN(max_len, str_len)] = '\0';
+    memcpy(strings.tmp.tmp, str, MIN(max_len, strlen(str)));
     return true;
 }
 
@@ -593,15 +521,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first, bool last) {
     size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len;
-
-    if ((data == NULL) && (length > 0U)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-    if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &cur_len)) {
-        return false;
-    }
+    size_t cur_len = strlen(strings.tmp.tmp);
 
     if (first) {
         memcpy(strings.tmp.tmp, "0x", MIN(max_len, 2));
@@ -632,77 +552,57 @@ static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first,
 static bool ui_712_format_int(const uint8_t *data,
                               uint8_t length,
                               bool first,
-                              const void *field_ptr) {
+                              const s_struct_712_field *field_ptr) {
     uint256_t value256;
     uint128_t value128;
     int32_t value32;
     int16_t value16;
-    uint16_t bit_size;
+    int8_t value8;
+    uint8_t tmp[sizeof(int32_t)] = {0};
 
     // no reason for an integer to be received over multiple chunks
     if (!first) {
         return false;
     }
-    bit_size = (uint16_t) get_struct_field_typesize(field_ptr) * 8U;
-    switch (bit_size) {
+    if (length < 1) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    if (length > field_ptr->type_size) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
+    switch (field_ptr->type_size * 8) {
         case 256:
-            if (length > INT256_LENGTH) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
             convertUint256BE(data, length, &value256);
             tostring256_signed(&value256, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 128:
-            if (length > INT128_LENGTH) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
             convertUint128BE(data, length, &value128);
             tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 64:
-            if (length > sizeof(uint64_t)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
             convertUint64BEto128(data, length, &value128);
             tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
             break;
         case 32:
-            if (length > sizeof(value32)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
-            value32 = 0;
-            for (int i = 0; i < length; ++i) {
-                ((uint8_t *) &value32)[length - 1 - i] = data[i];
-            }
+            buf_shrink_expand(data, length, tmp, sizeof(int32_t));
+            value32 = (int32_t) read_u32_be(tmp, 0);
             snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value32);
             break;
         case 16:
-            if (length > sizeof(value16)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
-            value16 = 0;
-            for (int i = 0; i < length; ++i) {
-                ((uint8_t *) &value16)[length - 1 - i] = data[i];
-            }
-            snprintf(strings.tmp.tmp,
-                     sizeof(strings.tmp.tmp),
-                     "%d",
-                     value16);  // expanded to 32 bits
+            buf_shrink_expand(data, length, tmp, sizeof(int16_t));
+            value16 = (int16_t) read_u16_be(tmp, 0);
+            snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value16);
             break;
         case 8:
-            if (length != 1U) {
+            if (length != sizeof(int8_t)) {
                 apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
-            snprintf(strings.tmp.tmp,
-                     sizeof(strings.tmp.tmp),
-                     "%d",
-                     ((int8_t *) data)[0]);  // expanded to 32 bits
+            value8 = (int8_t) data[0];
+            snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value8);
             break;
         default:
             PRINTF("Unhandled field typesize\n");
@@ -727,13 +627,29 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
     if (!first) {
         return false;
     }
-    if (length > INT256_LENGTH) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
     convertUint256BE(data, length, &value256);
     tostring256(&value256, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
     return true;
+}
+
+static s_amount_join *get_amount_join(uint8_t token_idx) {
+    s_amount_join *tmp;
+    s_amount_join *new;
+
+    for (tmp = ui_ctx->amount.joins; tmp != NULL;
+         tmp = (s_amount_join *) ((flist_node_t *) tmp)->next) {
+        if (tmp->token_idx == token_idx) break;
+    }
+    if (tmp != NULL) return tmp;
+
+    // does not exist, create it
+    if (APP_MEM_CALLOC((void **) &new, sizeof(*new)) == false) {
+        return NULL;
+    }
+    new->token_idx = token_idx;
+
+    flist_push_back((flist_node_t **) &ui_ctx->amount.joins, (flist_node_t *) new);
+    return new;
 }
 
 /**
@@ -743,56 +659,35 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
  */
 static bool ui_712_format_amount_join(void) {
     const tokenDefinition_t *token = NULL;
-    char ticker_buf[MAX_TICKER_LEN];
-    const char *ticker = "???";
-    size_t current_length;
-    size_t ticker_length;
+    s_amount_join *amount_join;
 
     if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
-    if ((token != NULL) && (token->ticker[0] != '\0')) {
-        if (!ui_712_copy_bounded_string(ticker_buf,
-                                        sizeof(ticker_buf),
-                                        token->ticker,
-                                        sizeof(token->ticker))) {
-            return false;
-        }
-        ticker = ticker_buf;
+    if ((amount_join = get_amount_join(ui_ctx->amount.idx)) == NULL) {
+        return false;
     }
-    if ((ui_ctx->amount.joins[ui_ctx->amount.idx].value_length == INT256_LENGTH) &&
-        ismaxint(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
-                 ui_ctx->amount.joins[ui_ctx->amount.idx].value_length)) {
-        if (!ui_712_copy_bounded_string(strings.tmp.tmp,
-                                        sizeof(strings.tmp.tmp),
-                                        "Unlimited ",
-                                        sizeof("Unlimited "))) {
-            return false;
-        }
-        if (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
-            !ui_712_bounded_strlen(ticker, MAX_TOKEN_LENGTH, &ticker_length)) {
-            return false;
-        }
-        memcpy(strings.tmp.tmp + current_length,
-               ticker,
-               MIN(sizeof(strings.tmp.tmp) - current_length - 1U, ticker_length));
-        strings.tmp.tmp[current_length +
-                        MIN(sizeof(strings.tmp.tmp) - current_length - 1U, ticker_length)] = '\0';
+    if ((amount_join->value_length == INT256_LENGTH) &&
+        ismaxint(amount_join->value, amount_join->value_length)) {
+        strlcpy(strings.tmp.tmp, "Unlimited ", sizeof(strings.tmp.tmp));
+        strlcat(strings.tmp.tmp,
+                (token != NULL) ? token->ticker : g_unknown_ticker,
+                sizeof(strings.tmp.tmp));
     } else {
-        if (!amountToString(ui_ctx->amount.joins[ui_ctx->amount.idx].value,
-                            ui_ctx->amount.joins[ui_ctx->amount.idx].value_length,
+        if (!amountToString(amount_join->value,
+                            amount_join->value_length,
                             (token != NULL) ? token->decimals : 0,
-                            ticker,
+                            (token != NULL) ? token->ticker : g_unknown_ticker,
                             strings.tmp.tmp,
                             sizeof(strings.tmp.tmp))) {
             return false;
         }
     }
     ui_ctx->field_flags |= UI_712_FIELD_SHOWN;
-    ui_712_set_title(ui_ctx->amount.joins[ui_ctx->amount.idx].name,
-                     ui_ctx->amount.joins[ui_ctx->amount.idx].name_length);
-    explicit_bzero(&ui_ctx->amount.joins[ui_ctx->amount.idx],
-                   sizeof(ui_ctx->amount.joins[ui_ctx->amount.idx]));
+    ui_712_set_title(amount_join->name, strlen(amount_join->name));
+    flist_remove((flist_node_t **) &ui_ctx->amount.joins,
+                 (flist_node_t *) amount_join,
+                 (f_list_node_del) delete_amount_join);
     return true;
 }
 
@@ -800,10 +695,10 @@ static bool ui_712_format_amount_join(void) {
  * Simply mark the current amount-join's token address as received
  */
 bool amount_join_set_token_received(void) {
-    if ((ui_ctx == NULL) || (ui_ctx->amount.idx >= MAX_ASSETS)) {
-        return false;
-    }
-    ui_ctx->amount.joins[ui_ctx->amount.idx].flags |= AMOUNT_JOIN_FLAG_TOKEN;
+    s_amount_join *amount_join = get_amount_join(ui_ctx->amount.idx);
+
+    if (amount_join == NULL) return false;
+    amount_join->flags |= AMOUNT_JOIN_FLAG_TOKEN;
     return true;
 }
 
@@ -816,6 +711,7 @@ bool amount_join_set_token_received(void) {
  */
 static bool update_amount_join(const uint8_t *data, uint8_t length) {
     const tokenDefinition_t *token = NULL;
+    s_amount_join *amount_join;
 
     if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
@@ -843,13 +739,16 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
             break;
 
         case AMOUNT_JOIN_STATE_VALUE:
-            if (length > sizeof(ui_ctx->amount.joins[ui_ctx->amount.idx].value)) {
+            if ((amount_join = get_amount_join(ui_ctx->amount.idx)) == NULL) {
+                return false;
+            }
+            if (length > sizeof(amount_join->value)) {
                 apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
-            memcpy(ui_ctx->amount.joins[ui_ctx->amount.idx].value, data, length);
-            ui_ctx->amount.joins[ui_ctx->amount.idx].value_length = length;
-            ui_ctx->amount.joins[ui_ctx->amount.idx].flags |= AMOUNT_JOIN_FLAG_VALUE;
+            memcpy(amount_join->value, data, length);
+            amount_join->value_length = length;
+            amount_join->flags |= AMOUNT_JOIN_FLAG_VALUE;
             break;
 
         default:
@@ -873,19 +772,13 @@ static bool ui_712_format_trusted_name(const uint8_t *data, uint8_t length) {
     if (length != ADDRESS_LENGTH) {
         return false;
     }
-    trusted_name = get_trusted_name(ui_ctx->tn_type_count,
-                                    ui_ctx->tn_types,
-                                    ui_ctx->tn_source_count,
-                                    ui_ctx->tn_sources,
-                                    &tip712_context->chain_id,
-                                    data);
-    if (trusted_name != NULL) {
-        if (!ui_712_copy_bounded_string(strings.tmp.tmp,
-                                        sizeof(strings.tmp.tmp),
-                                        trusted_name->name,
-                                        sizeof(trusted_name->name))) {
-            return false;
-        }
+    if ((trusted_name = get_trusted_name(ui_ctx->tn_type_count,
+                                         ui_ctx->tn_types,
+                                         ui_ctx->tn_source_count,
+                                         ui_ctx->tn_sources,
+                                         &tip712_context->chain_id,
+                                         data)) != NULL) {
+        strlcpy(strings.tmp.tmp, trusted_name->name, sizeof(strings.tmp.tmp));
     }
     return true;
 }
@@ -895,35 +788,20 @@ static bool ui_712_format_trusted_name(const uint8_t *data, uint8_t length) {
  *
  * @param[in] data the data that needs formatting
  * @param[in] length its length
+ * @param[in] field_ptr pointer to the new struct field
  * @return whether it was successful or not
  */
-static bool ui_712_format_datetime(const uint8_t *data, uint8_t length) {
-    struct tm tstruct;
-    int shown_hour;
-    time_t timestamp = u64_from_BE(data, length);
+static bool ui_712_format_datetime(const uint8_t *data,
+                                   uint8_t length,
+                                   const s_struct_712_field *field_ptr) {
+    time_t timestamp;
 
-    if (gmtime_r(&timestamp, &tstruct) == NULL) {
-        return false;
+    if ((length >= field_ptr->type_size) && ismaxint((uint8_t *) data, length)) {
+        snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "Unlimited");
+        return true;
     }
-    if (tstruct.tm_hour == 0) {
-        shown_hour = 12;
-    } else {
-        shown_hour = tstruct.tm_hour;
-        if (shown_hour > 12) {
-            shown_hour -= 12;
-        }
-    }
-    snprintf(strings.tmp.tmp,
-             sizeof(strings.tmp.tmp),
-             "%04d-%02d-%02d\n%02d:%02d:%02d %s UTC",
-             tstruct.tm_year + 1900,
-             tstruct.tm_mon + 1,
-             tstruct.tm_mday,
-             shown_hour,
-             tstruct.tm_min,
-             tstruct.tm_sec,
-             (tstruct.tm_hour < 12) ? "AM" : "PM");
-    return true;
+    timestamp = u64_from_BE(data, length);
+    return time_format_to_utc(&timestamp, strings.tmp.tmp, sizeof(strings.tmp.tmp));
 }
 
 static void ui_712_set_intent_field(const char *value) {
@@ -933,27 +811,14 @@ static void ui_712_set_intent_field(const char *value) {
     ui_712_set_value(value, strlen(value));
 }
 
-static bool ui_712_set_displayable_address(const uint8_t addr[ADDRESS_LENGTH]) {
-    char eth_addr[43];
-
-    if (!getEthDisplayableAddress((uint8_t *) addr, eth_addr, sizeof(eth_addr), chainConfig->chainId)) {
-        return false;
-    }
-    return ethToTronBase58(eth_addr, strings.tmp.tmp, sizeof(strings.tmp.tmp));
-}
-
 static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldata_info) {
     char *buf = strings.tmp.tmp;
     size_t buf_size = sizeof(strings.tmp.tmp);
     uint64_t chain_id;
     const char *ticker;
-    e_name_type types[] = {TN_TYPE_ACCOUNT};
-    e_name_source sources[] = {TN_SOURCE_ENS, TN_SOURCE_LAB, TN_SOURCE_MAB};
-    const s_trusted_name *trusted_name;
 
     if (calldata_info->amount_state == CALLDATA_INFO_PARAM_SET) {
         ui_712_set_intent_field("Send");
-        if (!ui_712_prepare_current_pair()) return false;
 
         if (calldata_info->chain_id != 0) {
             chain_id = calldata_info->chain_id;
@@ -972,11 +837,13 @@ static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldat
         }
         ui_712_set_title("Amount", 6);
         ui_712_set_value(buf, strlen(buf));
-        if (!ui_712_prepare_current_pair()) return false;
     } else {
         ui_712_set_intent_field("Empty transaction");
-        if (!ui_712_prepare_current_pair()) return false;
     }
+
+    e_name_type types[] = {TN_TYPE_ACCOUNT};
+    e_name_source sources[] = {TN_SOURCE_ENS, TN_SOURCE_LAB, TN_SOURCE_MAB};
+    const s_trusted_name *trusted_name;
 
     ui_712_set_title("To", 2);
     if ((trusted_name = get_trusted_name(ARRAYLEN(types),
@@ -990,9 +857,9 @@ static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldat
         if (!ui_712_set_displayable_address(calldata_info->callee)) {
             return false;
         }
+        ui_712_set_value(buf, strlen(buf));
     }
-    if (!ui_712_prepare_current_pair()) return false;
-    return ui_712_redraw_generic_step();
+    return true;
 }
 
 static bool update_calldata_value(const uint8_t *data,
@@ -1068,7 +935,7 @@ static bool update_calldata_selector(const uint8_t *data,
     if (!last) return false;
     buf_shrink_expand(data, length, calldata_info->selector, sizeof(calldata_info->selector));
     calldata_info->selector_state = CALLDATA_INFO_PARAM_SET;
-    if ((calldata_info->value_state == CALLDATA_INFO_PARAM_SET) && (g_parked_calldata != NULL)) {
+    if (calldata_info->value_state == CALLDATA_INFO_PARAM_SET) {
         calldata_set_selector(g_parked_calldata, calldata_info->selector);
     }
     return true;
@@ -1159,27 +1026,19 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
                             uint8_t length,
                             const uint16_t *complete_length,
                             bool last) {
-    size_t current_length;
     bool first = complete_length != NULL;
 
     if (ui_ctx == NULL) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
-        return false;
-    }
-    if (data == NULL) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
-    if (first &&
-        (!ui_712_bounded_strlen(strings.tmp.tmp, sizeof(strings.tmp.tmp), &current_length) ||
-         (current_length > 0))) {
+    if (first && (strlen(strings.tmp.tmp) > 0)) {
         return false;
     }
-
     // Value
     if (ui_712_field_shown()) {
-        switch (struct_field_type(field_ptr)) {
+        switch (field_ptr->type) {
             case TYPE_SOL_STRING:
                 ui_712_format_str(data, length, last);
                 break;
@@ -1219,13 +1078,17 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
                 return false;
         }
     }
+
     if (ui_ctx->field_flags & UI_712_AMOUNT_JOIN) {
         if (!update_amount_join(data, length)) {
             return false;
         }
 
-        if (ui_ctx->amount.joins[ui_ctx->amount.idx].flags ==
-            (AMOUNT_JOIN_FLAG_TOKEN | AMOUNT_JOIN_FLAG_VALUE)) {
+        s_amount_join *amount_join = get_amount_join(ui_ctx->amount.idx);
+        if (amount_join == NULL) {
+            return false;
+        }
+        if (amount_join->flags == (AMOUNT_JOIN_FLAG_TOKEN | AMOUNT_JOIN_FLAG_VALUE)) {
             if (!ui_712_format_amount_join()) {
                 return false;
             }
@@ -1233,7 +1096,7 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
     }
 
     if (ui_ctx->field_flags & UI_712_DATETIME) {
-        if (!ui_712_format_datetime(data, length)) {
+        if (!ui_712_format_datetime(data, length, field_ptr)) {
             return false;
         }
     }
@@ -1252,10 +1115,10 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
 
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
-        if (!ui_712_prepare_current_pair()) {
-            return false;
-        }
-        if (!ui_712_redraw_generic_step()) return false;
+        // This is the last chunk, we can now set the value
+        ui_712_set_value(NULL, 0);
+
+        return ui_712_redraw_generic_step();
     }
     return true;
 }
@@ -1266,11 +1129,18 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
  */
 void ui_712_end_sign(void) {
     if (ui_ctx == NULL) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
         return;
     }
-    ui_ctx->end_reached = true;
-    ui_712_switch_to_sign();
+
+#ifdef SCREEN_SIZE_WALLET
+    if (true) {
+#else
+    if (HAS_SETTING(S_VERBOSE_TIP712) || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
+#endif
+        ui_ctx->end_reached = true;
+        apdu_response_code = ui_sign_712(ui_ctx->filtering_mode);
+    }
 }
 
 /**
@@ -1281,13 +1151,14 @@ bool ui_712_init(void) {
         ui_712_deinit();
         return false;
     }
+
     if (APP_MEM_CALLOC((void **) &ui_ctx, sizeof(*ui_ctx)) == false) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return false;
+    } else {
+        ui_712_set_filtering_mode(TIP712_FILTERING_BASIC);
+        explicit_bzero(&strings, sizeof(strings));
     }
-    ui_ctx->filtering_mode = TIP712_FILTERING_BASIC;
-    explicit_bzero(&strings, sizeof(strings));
-    return true;
+    return ui_ctx != NULL;
 }
 
 static void delete_calldata_info(s_eip712_calldata_info *node) {
@@ -1299,21 +1170,23 @@ static void delete_calldata_info(s_eip712_calldata_info *node) {
  */
 void ui_712_deinit(void) {
     if (ui_ctx != NULL) {
-        s_ui_712_pair *pair = ui_ctx->ui_pairs;
-
-        while (pair != NULL) {
-            s_ui_712_pair *next = pair->next;
-
-            APP_MEM_FREE((void *) pair->raw_key);
-            APP_MEM_FREE((void *) pair->key);
-            APP_MEM_FREE((void *) pair->value);
-            APP_MEM_FREE(pair);
-            pair = next;
+        if (ui_ctx->filters_crc != NULL) {
+            flist_clear((flist_node_t **) &ui_ctx->filters_crc,
+                        (f_list_node_del) &delete_filter_crc);
         }
-        flist_clear((flist_node_t **) &ui_ctx->calldata_info,
-                    (f_list_node_del) &delete_calldata_info);
-        gcs_cleanup();
-        ui_712_nbgl_cleanup();
+        if (ui_ctx->ui_pairs != NULL) {
+            flist_clear((flist_node_t **) &ui_ctx->ui_pairs, (f_list_node_del) &delete_ui_pair);
+        }
+        if (ui_ctx->amount.joins != NULL) {
+            flist_clear((flist_node_t **) &ui_ctx->amount.joins,
+                        (f_list_node_del) &delete_amount_join);
+        }
+        if (ui_ctx->calldata_info != NULL) {
+            flist_clear((flist_node_t **) &ui_ctx->calldata_info,
+                        (f_list_node_del) &delete_calldata_info);
+            gcs_cleanup();
+        }
+        ui_712_clear_discarded_path();
         APP_MEM_FREE_AND_NULL((void **) &ui_ctx);
     }
 }
@@ -1321,26 +1194,20 @@ void ui_712_deinit(void) {
 /**
  * Approve button handling, calls the common handler function then
  * deinitializes the TIP712 context altogether.
- * @param[in] e unused here, just needed to match the UI function signature
- * @return unused here, just needed to match the UI function signature
  */
-unsigned int ui_712_approve(bool display_menu) {
-    ui_712_approve_cb(display_menu);
+void ui_712_approve(void) {
+    ui_712_approve_cb(true);
     tip712_context_deinit();
-    return 0;
 }
 
 /**
  * Reject button handling, calls the common handler function then
  * deinitializes the TIP712 context altogether.
 
- * @param[in] e unused here, just needed to match the UI function signature
- * @return unused here, just needed to match the UI function signature
  */
-unsigned int ui_712_reject(bool display_menu) {
-    ui_712_reject_cb(display_menu);
+void ui_712_reject(void) {
+    ui_712_reject_cb(true);
     tip712_context_deinit();
-    return 0;
 }
 
 /**
@@ -1412,7 +1279,7 @@ void ui_712_set_filters_count(uint8_t count) {
  * @return number of filters
  */
 uint8_t ui_712_remaining_filters(void) {
-    return ui_ctx->filters_to_process - ui_ctx->filters_received;
+    return ui_ctx->filters_to_process - flist_size((flist_node_t **) &ui_ctx->filters_crc);
 }
 
 bool ui_712_message_info_received(void) {
@@ -1437,37 +1304,27 @@ void ui_712_queue_struct_to_review(void) {
 #else
     if (HAS_SETTING(S_VERBOSE_TIP712)) {
 #endif
-        if ((ui_ctx != NULL) && (ui_ctx->structs_to_review < MAX_PATH_DEPTH)) {
-            ui_ctx->structs_to_review += 1;
-        }
+        ui_ctx->structs_to_review += 1;
     }
 }
 
-/**
- * Prepare a token join address check
- */
 void ui_712_token_join_prepare_addr_check(uint8_t index) {
-    if ((ui_ctx == NULL) || (index >= MAX_ASSETS)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return;
-    }
     ui_ctx->amount.idx = index;
     ui_ctx->amount.state = AMOUNT_JOIN_STATE_TOKEN;
 }
 
 bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length) {
+    s_amount_join *amount_join = get_amount_join(index);
     uint8_t cpy_len;
 
-    if ((ui_ctx == NULL) || (name == NULL) || (index >= MAX_ASSETS)) {
-        apdu_response_code = SWO_INCORRECT_DATA;
+    if (amount_join == NULL) {
         return false;
     }
-    cpy_len = MIN(sizeof(ui_ctx->amount.joins[index].name), name_length);
-
+    cpy_len = MIN(sizeof(amount_join->name) - 1, name_length);
     ui_ctx->amount.idx = index;
     ui_ctx->amount.state = AMOUNT_JOIN_STATE_VALUE;
-    memcpy(ui_ctx->amount.joins[index].name, name, cpy_len);
-    ui_ctx->amount.joins[index].name_length = cpy_len;
+    memcpy(amount_join->name, name, cpy_len);
+    amount_join->name[cpy_len] = '\0';
     return true;
 }
 
@@ -1480,7 +1337,7 @@ bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t n
 bool ui_712_show_raw_key(const s_struct_712_field *field_ptr) {
     const char *key;
 
-    if ((field_ptr == NULL) || ((key = field_ptr->key_name) == NULL)) {
+    if ((key = field_ptr->key_name) == NULL) {
         return false;
     }
 
@@ -1497,27 +1354,33 @@ bool ui_712_show_raw_key(const s_struct_712_field *field_ptr) {
  * @return whether it was successful or not
  */
 bool ui_712_push_new_filter_path(uint32_t path_crc) {
+    s_filter_crc *tmp;
+    s_filter_crc *new_crc;
     uint8_t filter_count = 0;
 
-    if (ui_ctx == NULL) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
     // check if already present
-    for (int i = 0; i < ui_ctx->filters_received; ++i) {
-        if (ui_ctx->filters_crc[i] == path_crc) {
+    for (tmp = ui_ctx->filters_crc; tmp != NULL;
+         tmp = (s_filter_crc *) ((flist_node_t *) tmp)->next) {
+        if (tmp->value == path_crc) {
             PRINTF("TIP-712 path CRC (%x) already found!\n", path_crc);
             return true;
         }
         filter_count += 1;
     }
-    if ((filter_count >= ui_ctx->filters_to_process) || (filter_count >= MAX_FILTERS)) {
+
+    if (filter_count >= ui_ctx->filters_to_process) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    PRINTF("Pushing new TIP-712 path CRC (%x) at index %u\n", path_crc, filter_count);
-    ui_ctx->filters_crc[filter_count] = path_crc;
-    ui_ctx->filters_received = filter_count + 1;
+    // allocate it
+    if (APP_MEM_CALLOC((void **) &new_crc, sizeof(*new_crc)) == false) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
+    }
+    new_crc->value = path_crc;
+
+    PRINTF("Pushing new TIP-712 path CRC (%x)\n", path_crc);
+    flist_push_back((flist_node_t **) &ui_ctx->filters_crc, (flist_node_t *) new_crc);
     return true;
 }
 
@@ -1526,15 +1389,17 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
  *
  * @param[in] path the given filter path
  * @param[in] length the path length
+ * @return whether it was successful or not
  */
 bool ui_712_set_discarded_path(const char *path, uint8_t length) {
-    if ((ui_ctx == NULL) || (path == NULL) || (length >= sizeof(ui_ctx->discarded_path))) {
-        apdu_response_code = SWO_INCORRECT_DATA;
+    if (ui_ctx->discarded_path != NULL) {
+        return false;
+    }
+    if ((ui_ctx->discarded_path = APP_MEM_ALLOC(length + 1)) == NULL) {
         return false;
     }
     memcpy(ui_ctx->discarded_path, path, length);
     ui_ctx->discarded_path[length] = '\0';
-    ui_ctx->discarded_path_length = length;
     return true;
 }
 
@@ -1544,75 +1409,67 @@ bool ui_712_set_discarded_path(const char *path, uint8_t length) {
  * @return filter path
  */
 const char *ui_712_get_discarded_path(void) {
-    if (ui_ctx == NULL) {
-        return NULL;
-    }
     return ui_ctx->discarded_path;
 }
 
 void ui_712_clear_discarded_path(void) {
-    if (ui_ctx == NULL) {
-        return;
-    }
-    ui_ctx->discarded_path[0] = '\0';
-    ui_ctx->discarded_path_length = 0;
+    APP_MEM_FREE_AND_NULL((void **) &ui_ctx->discarded_path);
 }
 
 void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources) {
-    if ((ui_ctx == NULL) || (type_count > TN_TYPE_COUNT) || (source_count > TN_SOURCE_COUNT) ||
-        ((type_count > 0) && (types == NULL)) || ((source_count > 0) && (sources == NULL))) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return;
-    }
     ui_ctx->tn_type_count = type_count;
-    memcpy(ui_ctx->tn_types, types, type_count * sizeof(*types));
+    memcpy(ui_ctx->tn_types, types, type_count);
     ui_ctx->tn_source_count = source_count;
-    memcpy(ui_ctx->tn_sources, sources, source_count * sizeof(*sources));
+    memcpy(ui_ctx->tn_sources, sources, source_count);
 }
 
-uint16_t ui_712_pairs_count(void) {
-    if (ui_ctx == NULL) {
-        return 0;
+/**
+ * Set the tag/value pairs for the review
+ *
+ */
+void ui_712_push_pairs(void) {
+    uint8_t nbPairs = 0;
+    uint8_t pair = 0;
+    s_ui_712_pair *tmp = NULL;
+    uint8_t tx_idx = 0;
+
+    // Initialize the pairs list
+    nbPairs = flist_size((flist_node_t **) &ui_ctx->ui_pairs);
+
+    ui_pairs_init(nbPairs);
+    // Initialize the tag/value pairs from the chain list
+    tmp = ui_ctx->ui_pairs;
+    while (tmp != NULL) {
+        if (tmp->start_intent) {
+            // Batch intermediate page
+            tx_idx++;
+            // Replace "nn of mm" placeholder, initialized in ui_712_set_intent()
+            snprintf(tmp->value, N_OF_M_LENGTH, "%d of %d", tx_idx, txContext.batch_nb_tx);
+            g_pairs[pair].centeredInfo = true;
+        }
+        g_pairs[pair].item = tmp->key;
+        g_pairs[pair].value = tmp->value;
+        LEDGER_ASSERT(pair < g_pairsList->nbPairs,
+                      "TIP-712 pair overflow (%d / %d)",
+                      pair,
+                      g_pairsList->nbPairs);
+        pair++;
+        if ((tmp->end_intent) && (txContext.batch_nb_tx > 1)) {
+            // End of batch transaction : start next info on full page
+            g_pairs[pair].forcePageStart = true;
+        }
+        tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
     }
-    return ui_ctx->ui_pairs_count;
-}
-
-bool ui_712_get_pair(uint16_t index, const char **item, const char **value) {
-    s_ui_712_pair *pair;
-    uint16_t i;
-
-    if ((ui_ctx == NULL) || (item == NULL) || (value == NULL)) {
-        return false;
-    }
-
-    pair = ui_ctx->ui_pairs;
-    for (i = 0; (pair != NULL) && (i < index); i++) {
-        pair = pair->next;
-    }
-
-    if ((pair == NULL) || (pair->key == NULL) || (pair->value == NULL)) {
-        return false;
-    }
-
-    *item = pair->key;
-    *value = pair->value;
-    return true;
 }
 
 void add_calldata_info(s_eip712_calldata_info *node) {
-    if ((ui_ctx == NULL) || (node == NULL)) {
-        return;
-    }
     flist_push_back((flist_node_t **) &ui_ctx->calldata_info, (flist_node_t *) node);
 }
 
 s_eip712_calldata_info *get_calldata_info(uint8_t index) {
-    if (ui_ctx == NULL) {
-        return NULL;
-    }
     for (s_eip712_calldata_info *tmp = ui_ctx->calldata_info; tmp != NULL;
          tmp = (s_eip712_calldata_info *) ((flist_node_t *) tmp)->next) {
         if (index == tmp->index) {
@@ -1623,16 +1480,10 @@ s_eip712_calldata_info *get_calldata_info(uint8_t index) {
 }
 
 s_eip712_calldata_info *get_current_calldata_info(void) {
-    if (ui_ctx == NULL) {
-        return NULL;
-    }
     return get_calldata_info(ui_ctx->calldata_index);
 }
 
 bool all_calldata_info_processed(void) {
-    if (ui_ctx == NULL) {
-        return false;
-    }
     for (const s_eip712_calldata_info *tmp = ui_ctx->calldata_info; tmp != NULL;
          tmp = (const s_eip712_calldata_info *) ((const flist_node_t *) tmp)->next) {
         if (!tmp->processed) return false;
@@ -1643,9 +1494,6 @@ bool all_calldata_info_processed(void) {
 void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state) {
     s_eip712_calldata_info *calldata_info = get_calldata_info(index);
 
-    if (ui_ctx == NULL) {
-        return;
-    }
     ui_ctx->calldata_index = index;
     if (calldata_info != NULL) {
         calldata_info->state = state;
@@ -1653,7 +1501,6 @@ void calldata_info_set_state(uint8_t index, e_eip712_calldata_state state) {
 }
 
 bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info) {
-    if (calldata_info == NULL) return false;
     if (calldata_info->value_state != CALLDATA_INFO_PARAM_SET) return false;
     if (calldata_info->callee_state != CALLDATA_INFO_PARAM_SET) return false;
     switch (calldata_info->chain_id_state) {

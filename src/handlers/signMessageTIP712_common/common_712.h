@@ -32,6 +32,10 @@
 
 uint16_t ui_712_start(e_tip712_filtering_mode filtering);
 
+// Triggers the TIP-712 review once all tag/value pairs have been accumulated.
+// Mirrors app-ethereum's ui_sign_712() in src/nbgl/ui_sign_712.c.
+uint16_t ui_sign_712(e_tip712_filtering_mode filtering);
+
 bool tip712_hash_to_sign(uint8_t hash[static 32]);
 
 void tip712_format_hash(uint8_t index, const char **item, const char **value);

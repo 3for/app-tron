@@ -10,11 +10,15 @@
 #include "calldata.h"
 
 typedef enum { TIP712_FILTERING_BASIC, TIP712_FILTERING_FULL } e_tip712_filtering_mode;
-typedef enum {
-    TIP712_FIELD_LATER,
-    TIP712_FIELD_INCOMING,
-    TIP712_NO_MORE_FIELD
-} e_tip712_nfs;  // next field state
+
+typedef struct ui_712_pair {
+    flist_node_t _list;
+    char *key;
+    char *value;
+    char *raw_key;      // TRON: un-numbered key, kept for duplicate-run detection
+    bool start_intent;  // This pair starts a new transaction in a batch
+    bool end_intent;    // This pair ends a transaction in a batch
+} s_ui_712_pair;
 
 typedef enum {
     CALLDATA_FLAG_ADDR_NONE = 0,
@@ -61,8 +65,6 @@ typedef struct {
 
 bool ui_712_init(void);
 void ui_712_deinit(void);
-void ui_712_nbgl_cleanup(void);
-e_tip712_nfs ui_712_next_field(void);
 bool ui_712_review_struct(const s_struct_712 *struct_ptr);
 bool ui_712_review_network(const uint64_t *chain_id);
 bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
@@ -71,16 +73,12 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
                             const uint16_t *complete_length,
                             bool last);
 void ui_712_end_sign(void);
-unsigned int ui_712_approve(bool);
-unsigned int ui_712_reject(bool);
+void ui_712_approve(void);
+void ui_712_reject(void);
+void ui_712_set_intent(void);
 void ui_712_set_title(const char *str, size_t length);
 void ui_712_set_value(const char *str, size_t length);
-// Used by the generic_tx_parser to mark a per-transaction "intent" separator
-// when clear-signing a batch. Only reached in EIP712/TIP712 mode (not in the
-// plain TriggerSmartContract path); currently a no-op stub.
-void ui_712_set_intent(void);
 bool ui_712_message_hash(void);
-bool ui_712_prepare_current_pair(void);
 bool ui_712_redraw_generic_step(void);
 void ui_712_flag_field(bool show,
                        bool name_provided,
@@ -108,8 +106,7 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
                                           const e_name_type *types,
                                           uint8_t source_count,
                                           const e_name_source *sources);
-uint16_t ui_712_pairs_count(void);
-bool ui_712_get_pair(uint16_t index, const char **item, const char **value);
+void ui_712_push_pairs(void);
 void add_calldata_info(s_eip712_calldata_info *node);
 s_eip712_calldata_info *get_calldata_info(uint8_t index);
 s_eip712_calldata_info *get_current_calldata_info(void);

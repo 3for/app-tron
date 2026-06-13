@@ -27,7 +27,7 @@
 #include "ui_idle_menu.h"   // ui_idle
 #include "app_errors.h"     // E_OK, E_SECURITY_STATUS_NOT_SATISFIED, SWO_SUCCESS
 #include "nbgl_use_case.h"  // BLIND_SIGNING_WARN
-#include "ui_logic.h"       // ui_712_nbgl_cleanup, e_tip712_filtering_mode
+#include "ui_logic.h"       // e_tip712_filtering_mode, ui_sign_712
 #include "ui_nbgl.h"        // warning
 #include "utils.h"          // SET_BIT
 
@@ -215,11 +215,11 @@ void tip712_format_hash(uint8_t index, const char **item, const char **value) {
  * @return status code indicating success or failure
  */
 uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
-    ui_712_nbgl_cleanup();
     if (appState != APP_STATE_IDLE) {
         reset_app_context();
     }
     appState = APP_STATE_SIGNING_TIP712;
+    explicit_bzero(&strings, sizeof(strings));
     explicit_bzero(&warning, sizeof(nbgl_warning_t));
     if (filtering == TIP712_FILTERING_BASIC) {
         // Not fully filtered: surface the blind-signing warning.
