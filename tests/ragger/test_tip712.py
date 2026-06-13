@@ -27,6 +27,7 @@ from settings import settings_toggle, SettingID, get_device_settings
 from client.command_builder import CommandBuilder
 import response_parser as ResponseParser
 from client.tip712 import InputData as InputData
+from client.trusted_name import TrustedName, TrustedNameType
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
 from utils import recover_message
 from ledgered.devices import Device, DeviceType
@@ -271,7 +272,7 @@ def trusted_name_fixture(request) -> tuple:
 
 
 @pytest.fixture(name="filt_tn_types", params=FILT_TN_TYPES)
-def filt_tn_types_fixture(request) -> list[InputData.TrustedNameType]:
+def filt_tn_types_fixture(request) -> list[TrustedNameType]:
     return request.param
 
 
@@ -441,7 +442,7 @@ class TestTRX():
             self, device: Device, backend: BackendInterface,
             navigator: Navigator, default_screenshot_path: Path,
             test_name: str, trusted_name: tuple,
-            filt_tn_types: list[InputData.TrustedNameType], golden_run: bool):
+            filt_tn_types: list[TrustedNameType], golden_run: bool):
         global snapshots_dirname
         test_name += f"_{trusted_name[0].name.lower()}_with"
         for trusted_name_type in filt_tn_types:
@@ -451,7 +452,7 @@ class TestTRX():
         client = TronClient(backend, device, navigator)
 
         cmd_builder = CommandBuilder()
-        if trusted_name[0] is InputData.TrustedNameType.ACCOUNT:
+        if trusted_name[0] is TrustedNameType.ACCOUNT:
             challenge = ResponseParser.challenge(
                 client.exchange_raw(cmd_builder.get_challenge()).data)
         else:
@@ -461,16 +462,17 @@ class TestTRX():
         advanced_trusted_name_test_data['filters']['fields']['validator'][
             'tn_type'] = filt_tn_types
 
-        InputData.provide_trusted_name_v2(
-            client,
-            cmd_builder,
-            bytes.fromhex(advanced_trusted_name_test_data['data']["message"]
-                          ["validator"][2:]),
-            trusted_name[2],
-            trusted_name[0],
-            trusted_name[1],
-            advanced_trusted_name_test_data['data']["domain"]["chainId"],
-            challenge=challenge)
+        client.provide_trusted_name(
+            TrustedName(
+                2,
+                bytes.fromhex(advanced_trusted_name_test_data['data']["message"]
+                              ["validator"][2:]),
+                trusted_name[2],
+                tn_type=trusted_name[0],
+                tn_source=trusted_name[1],
+                chain_id=advanced_trusted_name_test_data['data']["domain"]
+                ["chainId"],
+                challenge=challenge))
 
         vrs = tip712_new_common(device, navigator, default_screenshot_path,
                                 client, cmd_builder,

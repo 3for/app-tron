@@ -1,7 +1,7 @@
 from ctypes import c_uint64
 import web3
 import pytest
-from client.tip712 import InputData as InputData
+from client.trusted_name import TrustedNameType, TrustedNameSource
 
 
 class DataSet():
@@ -544,8 +544,8 @@ advanced_trusted_name_test_data = {
                 "tn_type":
                 None,
                 "tn_source": [
-                    InputData.TrustedNameSource.CAL,
-                    InputData.TrustedNameSource.ENS
+                    TrustedNameSource.CAL,
+                    TrustedNameSource.ENS
                 ],
             },
             "enable": {
@@ -557,15 +557,15 @@ advanced_trusted_name_test_data = {
 }
 
 TRUSTED_NAMES = [
-    (InputData.TrustedNameType.CONTRACT, InputData.TrustedNameSource.CAL,
+    (TrustedNameType.CONTRACT, TrustedNameSource.CAL,
      "Validator contract"),
-    (InputData.TrustedNameType.ACCOUNT, InputData.TrustedNameSource.ENS,
+    (TrustedNameType.ACCOUNT, TrustedNameSource.ENS,
      "validator.eth"),
 ]
 
 FILT_TN_TYPES = [
-    [InputData.TrustedNameType.CONTRACT],
-    [InputData.TrustedNameType.ACCOUNT],
-    [InputData.TrustedNameType.CONTRACT, InputData.TrustedNameType.ACCOUNT],
-    [InputData.TrustedNameType.ACCOUNT, InputData.TrustedNameType.CONTRACT],
+    [TrustedNameType.CONTRACT],
+    [TrustedNameType.ACCOUNT],
+    [TrustedNameType.CONTRACT, TrustedNameType.ACCOUNT],
+    [TrustedNameType.ACCOUNT, TrustedNameType.CONTRACT],
 ]

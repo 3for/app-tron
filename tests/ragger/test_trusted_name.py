@@ -11,10 +11,9 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 import response_parser as ResponseParser
 from tron import TronClient
 from client.status_word import StatusWord
-from client.tip712.InputData import TrustedNameType, TrustedNameSource
+from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from settings import SettingID, settings_toggle
 from client.command_builder import CommandBuilder
-from client.tip712 import InputData as InputData
 
 # Values used across all tests
 CHAIN_ID = 728126428
@@ -27,6 +26,8 @@ GAS_PRICE = 13
 GAS_LIMIT = 21000
 # TRX, decimal 10^6
 AMOUNT = 1_220_000
+# ETH in slip-44
+COIN_TYPE_ETH = 0x3c
 
 
 def common(device: Device,
@@ -48,8 +49,9 @@ def test_trusted_name_v1(device: Device, backend: BackendInterface,
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
-                                      challenge)
+    app_client.provide_trusted_name(
+        TrustedName(1, ADDR, NAME, challenge=challenge,
+                    coin_type=COIN_TYPE_ETH))
 
     end_text = None
     if device.is_nano:
@@ -75,8 +77,9 @@ def test_trusted_name_v1_wrong_challenge(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
-                                          ~challenge & 0xffffffff)
+        app_client.provide_trusted_name(
+            TrustedName(1, ADDR, NAME, challenge=~challenge & 0xffffffff,
+                        coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -90,8 +93,9 @@ def test_trusted_name_v1_wrong_addr(device: Device,
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
-                                      challenge)
+    app_client.provide_trusted_name(
+        TrustedName(1, ADDR, NAME, challenge=challenge,
+                    coin_type=COIN_TYPE_ETH))
 
     addr = bytearray(ADDR)
     addr.reverse()
@@ -123,8 +127,9 @@ def test_trusted_name_v1_non_mainnet(device: Device,
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
-                                      challenge)
+    app_client.provide_trusted_name(
+        TrustedName(1, ADDR, NAME, challenge=challenge,
+                    coin_type=COIN_TYPE_ETH))
 
     end_text = None
     if device.is_nano:
@@ -150,8 +155,9 @@ def test_trusted_name_v1_unknown_chain(
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR, NAME,
-                                      challenge)
+    app_client.provide_trusted_name(
+        TrustedName(1, ADDR, NAME, challenge=challenge,
+                    coin_type=COIN_TYPE_ETH))
 
     end_text = None
     if device.is_nano:
@@ -176,9 +182,9 @@ def test_trusted_name_v1_name_too_long(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
-                                          "ledger" + "0" * 25 + ".eth",
-                                          challenge)
+        app_client.provide_trusted_name(
+            TrustedName(1, ADDR, "ledger" + "0" * 25 + ".eth",
+                        challenge=challenge, coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -189,8 +195,9 @@ def test_trusted_name_v1_name_invalid_character(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
-                                          "l\xe8dger.eth", challenge)
+        app_client.provide_trusted_name(
+            TrustedName(1, ADDR, "l\xe8dger.eth", challenge=challenge,
+                        coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -201,8 +208,9 @@ def test_trusted_name_v1_uppercase(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
-                                          NAME.upper(), challenge)
+        app_client.provide_trusted_name(
+            TrustedName(1, ADDR, NAME.upper(), challenge=challenge,
+                        coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -213,8 +221,9 @@ def test_trusted_name_v1_name_non_ens(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v1(app_client, cmd_builder, ADDR,
-                                          "ledger.hte", challenge)
+        app_client.provide_trusted_name(
+            TrustedName(1, ADDR, "ledger.hte", challenge=challenge,
+                        coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -227,14 +236,12 @@ def test_trusted_name_v2(device: Device, backend: BackendInterface,
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    InputData.provide_trusted_name_v2(app_client,
-                                      cmd_builder,
-                                      ADDR,
-                                      NAME,
-                                      TrustedNameType.ACCOUNT,
-                                      TrustedNameSource.ENS,
-                                      CHAIN_ID,
-                                      challenge=challenge)
+    app_client.provide_trusted_name(
+        TrustedName(2, ADDR, NAME,
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge))
 
     end_text = None
     if device.is_nano:
@@ -260,14 +267,12 @@ def test_trusted_name_v2_wrong_chainid(
     app_client = TronClient(backend, device, navigator)
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
-    InputData.provide_trusted_name_v2(app_client,
-                                      cmd_builder,
-                                      ADDR,
-                                      NAME,
-                                      TrustedNameType.ACCOUNT,
-                                      TrustedNameSource.ENS,
-                                      CHAIN_ID,
-                                      challenge=challenge)
+    app_client.provide_trusted_name(
+        TrustedName(2, ADDR, NAME,
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge))
     end_text = None
     if device.is_nano:
         end_text = "Sign"
@@ -291,9 +296,11 @@ def test_trusted_name_v2_missing_challenge(device: Device,
     common(device, app_client, cmd_builder, False)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v2(app_client, cmd_builder, ADDR, NAME,
-                                          TrustedNameType.ACCOUNT,
-                                          TrustedNameSource.ENS, CHAIN_ID)
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR, NAME,
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=CHAIN_ID))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -304,15 +311,13 @@ def test_trusted_name_v2_expired(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v2(app_client,
-                                          cmd_builder,
-                                          ADDR,
-                                          NAME,
-                                          TrustedNameType.ACCOUNT,
-                                          TrustedNameSource.ENS,
-                                          CHAIN_ID,
-                                          challenge=challenge,
-                                          not_valid_after=(0, 1, 2))
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR, NAME,
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge,
+                        not_valid_after=(0, 1, 2)))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -324,16 +329,14 @@ def test_trusted_name_v2_mab_account_name(device: Device,
     owner_path = app_client.getAccount(0)["path"]
     owner = bytes.fromhex(app_client.getAccount(0)["addressHex"][2:])
 
-    rapdu = InputData.provide_trusted_name_v2(app_client,
-                                              cmd_builder,
-                                              ADDR,
-                                              "MyLedger",
-                                              TrustedNameType.ACCOUNT,
-                                              TrustedNameSource.MAB,
-                                              CHAIN_ID,
-                                              challenge=challenge,
-                                              owner=owner,
-                                              owner_deriv_path=owner_path)
+    rapdu = app_client.provide_trusted_name(
+        TrustedName(2, ADDR, "MyLedger",
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge,
+                    owner=owner,
+                    owner_deriv_path=owner_path))
     assert rapdu.status == StatusWord.OK
 
 
@@ -344,14 +347,12 @@ def test_trusted_name_v2_mab_missing_owner_metadata(device: Device,
     challenge = common(device, app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v2(app_client,
-                                          cmd_builder,
-                                          ADDR,
-                                          "MyLedger",
-                                          TrustedNameType.ACCOUNT,
-                                          TrustedNameSource.MAB,
-                                          CHAIN_ID,
-                                          challenge=challenge)
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR, "MyLedger",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -364,16 +365,14 @@ def test_trusted_name_v2_mab_wrong_owner(device: Device,
     wrong_owner = bytes.fromhex(app_client.getAccount(1)["addressHex"][2:])
 
     with pytest.raises(ExceptionRAPDU) as e:
-        InputData.provide_trusted_name_v2(app_client,
-                                          cmd_builder,
-                                          ADDR,
-                                          "MyLedger",
-                                          TrustedNameType.ACCOUNT,
-                                          TrustedNameSource.MAB,
-                                          CHAIN_ID,
-                                          challenge=challenge,
-                                          owner=wrong_owner,
-                                          owner_deriv_path=owner_path)
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR, "MyLedger",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge,
+                        owner=wrong_owner,
+                        owner_deriv_path=owner_path))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -382,13 +381,11 @@ def test_trusted_name_v2_token_cal(device: Device,
     app_client = TronClient(backend, device, None)
     cmd_builder = CommandBuilder()
 
-    rapdu = InputData.provide_trusted_name_v2(app_client,
-                                              cmd_builder,
-                                              ADDR,
-                                              "USDT",
-                                              TrustedNameType.TOKEN,
-                                              TrustedNameSource.CAL,
-                                              CHAIN_ID)
+    rapdu = app_client.provide_trusted_name(
+        TrustedName(2, ADDR, "USDT",
+                    tn_type=TrustedNameType.TOKEN,
+                    tn_source=TrustedNameSource.CAL,
+                    chain_id=CHAIN_ID))
     assert rapdu.status == StatusWord.OK
 
 
@@ -398,21 +395,17 @@ def test_trusted_name_v2_multiple_names_same_session(device: Device,
     cmd_builder = CommandBuilder()
     challenge = common(device, app_client, cmd_builder)
 
-    rapdu = InputData.provide_trusted_name_v2(app_client,
-                                              cmd_builder,
-                                              ADDR,
-                                              NAME,
-                                              TrustedNameType.ACCOUNT,
-                                              TrustedNameSource.ENS,
-                                              CHAIN_ID,
-                                              challenge=challenge)
+    rapdu = app_client.provide_trusted_name(
+        TrustedName(2, ADDR, NAME,
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge))
     assert rapdu.status == StatusWord.OK
 
-    rapdu = InputData.provide_trusted_name_v2(app_client,
-                                              cmd_builder,
-                                              ADDR,
-                                              "USDT",
-                                              TrustedNameType.TOKEN,
-                                              TrustedNameSource.CAL,
-                                              CHAIN_ID)
+    rapdu = app_client.provide_trusted_name(
+        TrustedName(2, ADDR, "USDT",
+                    tn_type=TrustedNameType.TOKEN,
+                    tn_source=TrustedNameSource.CAL,
+                    chain_id=CHAIN_ID))
     assert rapdu.status == StatusWord.OK

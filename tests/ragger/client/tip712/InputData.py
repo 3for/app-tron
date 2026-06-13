@@ -6,80 +6,19 @@ import sys
 import copy
 from typing import Any, Callable, Optional, Union
 import struct
-from enum import IntEnum
 
 from client.command_builder import CommandBuilder
 from client.ledger_pki import PKIPubKeyUsage
 from client.status_word import StatusWord
 from client.tip712 import TIP712FieldType
 from client import keychain
-from ragger.bip import pack_derivation_path
 from ragger.utils import RAPDU
-from client.keychain import sign_data, Key
 import base58
 from pathlib import Path
 from ledgered.devices import DeviceType
 
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}")
 from address import to_raw_address, to_tvm_address
-
-
-class TrustedNameType(IntEnum):
-    ACCOUNT = 0x01
-    CONTRACT = 0x02
-    NFT = 0x03
-    TOKEN = 0x04
-
-
-class TrustedNameSource(IntEnum):
-    LAB = 0x00
-    CAL = 0x01
-    ENS = 0x02
-    UD = 0x03
-    FN = 0x04
-    DNS = 0x05
-    DYNAMIC_RESOLVER = 0x06
-    MAB = 0x07
-
-
-class TrustedNameTag(IntEnum):
-    STRUCT_TYPE = 0x01
-    STRUCT_VERSION = 0x02
-    NOT_VALID_AFTER = 0x10
-    CHALLENGE = 0x12
-    SIGNER_KEY_ID = 0x13
-    SIGNER_ALGO = 0x14
-    SIGNATURE = 0x15
-    NAME = 0x20
-    COIN_TYPE = 0x21
-    ADDRESS = 0x22
-    CHAIN_ID = 0x23
-    NAME_TYPE = 0x70
-    NAME_SOURCE = 0x71
-    NFT_ID = 0x72
-
-
-class FieldTag(IntEnum):
-    STRUCT_TYPE = 0x01
-    STRUCT_VERSION = 0x02
-    NOT_VALID_AFTER = 0x10
-    CHALLENGE = 0x12
-    SIGNER_KEY_ID = 0x13
-    SIGNER_ALGO = 0x14
-    DER_SIGNATURE = 0x15
-    TRUSTED_NAME = 0x20
-    COIN_TYPE = 0x21
-    ADDRESS = 0x22
-    CHAIN_ID = 0x23
-    TICKER = 0x24
-    BLOCKCHAIN_FAMILY = 0x51
-    NETWORK_NAME = 0x52
-    NETWORK_ICON_HASH = 0x53
-    TRUSTED_NAME_TYPE = 0x70
-    TRUSTED_NAME_SOURCE = 0x71
-    TRUSTED_NAME_NFT_ID = 0x72
-    TRUSTED_NAME_OWNER = 0x74
-    TRUSTED_NAME_OWNER_DERIV_PATH = 0x75
 
 
 # global variables
@@ -89,32 +28,6 @@ filtering_paths: dict = {}
 filtering_tokens: list[dict] = []
 current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
-
-
-def der_encode(value: int) -> bytes:
-    # max() to have minimum length of 1
-    value_bytes = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
-    if value >= 0x80:
-        value_bytes = (0x80 | len(value_bytes)).to_bytes(1,
-                                                         'big') + value_bytes
-    return value_bytes
-
-
-def format_tlv(tag: int, value: Union[int, str, bytes]) -> bytes:
-    if isinstance(value, int):
-        # max() to have minimum length of 1
-        value = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
-    elif isinstance(value, str):
-        value = value.encode()
-
-    assert isinstance(
-        value, bytes), f"Unhandled TLV formatting for type : {type(value)}"
-
-    tlv = bytearray()
-    tlv += der_encode(tag)
-    tlv += der_encode(len(value))
-    tlv += value
-    return tlv
 
 
 def default_handler():
@@ -685,75 +598,3 @@ def process_data(aclient,
         return False
 
     return True
-
-
-def provide_trusted_name_common(app_client, cmd_builder, payload: bytes,
-                                name_source: TrustedNameSource) -> RAPDU:
-    payload += format_tlv(FieldTag.STRUCT_TYPE, 3)  # TrustedName
-    if name_source == TrustedNameSource.CAL:
-        key_id = 9
-        key = Key.CAL
-        from_CAL = True
-    else:
-        key_id = 7
-        key = Key.TRUSTED_NAME
-        from_CAL = False
-
-    if app_client._pki_client is not None:
-        app_client._pki_client.send_certificate(
-            PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME, from_CAL=from_CAL)
-
-    payload += format_tlv(FieldTag.SIGNER_KEY_ID, key_id)  # test key
-    payload += format_tlv(FieldTag.SIGNER_ALGO, 1)  # secp256k1
-    payload += format_tlv(FieldTag.DER_SIGNATURE, sign_data(key, payload))
-    chunks = cmd_builder.provide_trusted_name(payload)
-    for chunk in chunks[:-1]:
-        app_client.exchange_raw(chunk)
-    return app_client.exchange_raw(chunks[-1])
-
-
-def provide_trusted_name_v1(app_client, cmd_builder, addr: bytes, name: str,
-                            challenge: int) -> RAPDU:
-    payload = format_tlv(FieldTag.STRUCT_VERSION, 1)
-    payload += format_tlv(FieldTag.CHALLENGE, challenge)
-    payload += format_tlv(FieldTag.COIN_TYPE, 0x3c)  # ETH in slip-44
-    payload += format_tlv(FieldTag.TRUSTED_NAME, name)
-    payload += format_tlv(FieldTag.ADDRESS, addr)
-    return provide_trusted_name_common(app_client, cmd_builder, payload,
-                                       TrustedNameSource.ENS)
-
-
-def provide_trusted_name_v2(
-        app_client,
-        cmd_builder,
-        addr: bytes,
-        name: str,
-        name_type: TrustedNameType,
-        name_source: TrustedNameSource,
-        chain_id: int,
-        nft_id: Optional[int] = None,
-        challenge: Optional[int] = None,
-        not_valid_after: Optional[tuple[int]] = None,
-        owner: Optional[bytes] = None,
-        owner_deriv_path: Optional[str] = None) -> RAPDU:
-    payload = format_tlv(FieldTag.STRUCT_VERSION, 2)
-    payload += format_tlv(FieldTag.TRUSTED_NAME, name)
-    payload += format_tlv(FieldTag.ADDRESS, addr)
-    payload += format_tlv(FieldTag.TRUSTED_NAME_TYPE, name_type)
-    payload += format_tlv(FieldTag.TRUSTED_NAME_SOURCE, name_source)
-    payload += format_tlv(FieldTag.CHAIN_ID, chain_id)
-    if nft_id is not None:
-        payload += format_tlv(FieldTag.TRUSTED_NAME_NFT_ID, nft_id)
-    if challenge is not None:
-        payload += format_tlv(FieldTag.CHALLENGE, challenge)
-    if not_valid_after is not None:
-        assert len(not_valid_after) == 3
-        payload += format_tlv(FieldTag.NOT_VALID_AFTER,
-                              struct.pack("BBB", *not_valid_after))
-    if owner is not None:
-        payload += format_tlv(FieldTag.TRUSTED_NAME_OWNER, owner)
-    if owner_deriv_path is not None:
-        payload += format_tlv(FieldTag.TRUSTED_NAME_OWNER_DERIV_PATH,
-                              pack_derivation_path(owner_deriv_path))
-    return provide_trusted_name_common(app_client, cmd_builder, payload,
-                                       name_source)
