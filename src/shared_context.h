@@ -78,12 +78,6 @@ typedef enum {
     PLUGIN_TYPE_OLD_INTERNAL,
 } pluginType_t;
 
-typedef enum { STATE_191_HASH_DISPLAY = 0, STATE_191_HASH_ONLY } sign_message_state;
-typedef struct states191_t {
-    sign_message_state sign_state : 1;
-    bool ui_started : 1;
-} states191_t;
-
 typedef struct txContext_t {
     cx_sha256_t sha2;
     bool initialized;
@@ -193,8 +187,6 @@ extern txContext_t txContext;
 extern dataContext_t dataContext;
 extern pluginType_t pluginType;
 extern uint8_t appState;
-extern states191_t states191;
-extern uint8_t processed_size_191;
 extern uint16_t apdu_response_code;
 
 void reset_app_context(void);

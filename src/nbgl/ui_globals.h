@@ -64,22 +64,10 @@ bool ui_callback_address_ok(bool display_menu);
 bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
 
-#define UI_191_BUFFER strings.tmp.tmp
-
-void reset_ui_191_buffer(void);
-size_t ui_191_buffer_length(void);
-size_t remaining_ui_191_buffer_length(void);
-char *remaining_ui_191_buffer(void);
-
+// TIP-191 personal-message review entry point. The message is rendered from a
+// heap-allocated display buffer (signMsgCtx, see sign_personal_message_full_display.c),
+// mirroring app-ethereum's ui_191_start(const char *message).
 void ui_191_start(const char *message);
-void ui_191_switch_to_message(void);
-void ui_191_switch_to_sign(void);
-void ui_191_switch_to_question(void);
-
-void feed_display(void);
-void skip_rest_of_message(void);
-void question_switcher(void);
-void continue_displaying_message(void);
 
 void ui_typed_message_review_choice(bool confirm);
 

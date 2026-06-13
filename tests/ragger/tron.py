@@ -74,6 +74,9 @@ class TronClient:
         self.hardware = True
         self._pki_client: Optional[PKIClient] = None
         self._pki_client = PKIClient(self._client)
+        # app-ethereum parity: the shared EIP-712 InputData driver references
+        # app_client.pki_client (see EthAppClient).
+        self.pki_client = self._pki_client
 
         # Init account with default address to compare with ledger
         for i in range(2):
@@ -106,6 +109,95 @@ class TronClient:
         for chunk in chunks[:-1]:
             self.exchange_raw(chunk)
         return self.exchange_async_raw(chunks[-1])
+
+    # ------------------------------------------------------------------ #
+    # app-ethereum EIP-712 client parity.
+    #
+    # These mirror EthAppClient.tip712_* (app-ethereum client.py) so the
+    # shared EIP-712 InputData driver and test bodies are byte-for-byte
+    # comparable with app-ethereum. They wrap the TIP712 CommandBuilder
+    # serializers; exchange_raw/exchange_async_raw map 1:1 to app-ethereum's
+    # _exchange/_exchange_async, and response() == last_async_response.
+    # ------------------------------------------------------------------ #
+    def response(self) -> RAPDU:
+        return self._client.last_async_response
+
+    def tip712_send_struct_def_struct_name(self, name: str):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_send_struct_def_struct_name(name))
+
+    def tip712_send_struct_def_struct_field(self, field_type, type_name,
+                                            type_size, array_levels, key_name):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_send_struct_def_struct_field(
+                field_type, type_name, type_size, array_levels, key_name))
+
+    def tip712_send_struct_impl_root_struct(self, name: str):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_send_struct_impl_root_struct(name))
+
+    def tip712_send_struct_impl_array(self, size: int):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_send_struct_impl_array(size))
+
+    def tip712_send_struct_impl_struct_field(self, raw_value: bytes):
+        chunks = CommandBuilder().tip712_send_struct_impl_struct_field(
+            bytearray(raw_value))
+        for chunk in chunks[:-1]:
+            self._client.exchange_raw(chunk)
+        return self._client.exchange_async_raw(chunks[-1])
+
+    def tip712_sign_new(self, bip32_path: str):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_sign_new(bip32_path))
+
+    def tip712_sign_legacy(self, bip32_path: str, domain_hash: bytes,
+                           message_hash: bytes):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_sign_legacy(bip32_path, domain_hash,
+                                                message_hash))
+
+    def tip712_filtering_activate(self):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_activate())
+
+    def tip712_filtering_discarded_path(self, path: str):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_discarded_path(path))
+
+    def tip712_filtering_message_info(self, name: str, filters_count: int,
+                                      sig: bytes):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_message_info(name, filters_count,
+                                                           sig))
+
+    def tip712_filtering_amount_join_token(self, token_idx: int, sig: bytes,
+                                           discarded: bool):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_amount_join_token(token_idx, sig,
+                                                               discarded))
+
+    def tip712_filtering_amount_join_value(self, token_idx: int, name: str,
+                                           sig: bytes, discarded: bool):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_amount_join_value(token_idx, name,
+                                                               sig, discarded))
+
+    def tip712_filtering_datetime(self, name: str, sig: bytes, discarded: bool):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_datetime(name, sig, discarded))
+
+    def tip712_filtering_trusted_name(self, name: str, name_type: list,
+                                      name_source: list, sig: bytes,
+                                      discarded: bool):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_trusted_name(name, name_type,
+                                                           name_source, sig,
+                                                           discarded))
+
+    def tip712_filtering_raw(self, name: str, sig: bytes, discarded: bool):
+        return self._client.exchange_async_raw(
+            CommandBuilder().tip712_filtering_raw(name, sig, discarded))
 
     def address_hex(self, address):
         return base58.b58decode_check(address).hex().upper()

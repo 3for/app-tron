@@ -71,10 +71,6 @@ void reset_app_context() {
     gcs_cleanup();
     // Free the cached proxy<->implementation mapping (INS_PROVIDE_PROXY_INFO).
     proxy_cleanup();
-    // Reset the legacy TIP-191 streamed-display state (defined in
-    // sign_message_entry.c).
-    processed_size_191 = 0;
-    explicit_bzero(&states191, sizeof(states191));
     appState = APP_STATE_IDLE;
     G_called_from_swap = false;
     G_swap_response_ready = false;
