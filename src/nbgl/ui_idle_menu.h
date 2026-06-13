@@ -17,4 +17,6 @@
 
 #pragma once
 
+// Home / settings entry points (mirrors app-ethereum's common_ui.h grouping).
 void ui_idle(void);
+void ui_settings(void);

@@ -13,7 +13,7 @@
 
 #define BLIND_SIGN(msg)        "Accept risk and sign " msg "?"
 #define TEXT_BLIND_SIGN_TIP712 BLIND_SIGN(TEXT_TYPED_MESSAGE)
-void ui_settings(void);
+// ui_settings() is declared in ui_idle_menu.h (home/settings entry points).
 
 #ifdef TARGET_APEX_P
 #define ICON_APP_WARNING LARGE_WARNING_ICON
