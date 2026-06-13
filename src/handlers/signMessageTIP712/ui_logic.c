@@ -79,6 +79,7 @@ typedef struct {
     e_name_source tn_sources[TN_SOURCE_COUNT];
     s_ui_712_pair *ui_pairs;
     uint16_t ui_pairs_dup_count;  // TRON: length of the current identical-page run
+    uint16_t dynamic_value_remaining;
     s_eip712_calldata_info *calldata_info;
     uint8_t calldata_index;
 } t_ui_context;
@@ -162,6 +163,31 @@ static void ui_712_number_duplicate_pair(s_ui_712_pair *prev, s_ui_712_pair *cur
 // to be used as a \ref f_list_node_del
 static void delete_amount_join(s_amount_join *join) {
     APP_MEM_FREE(join);
+}
+
+static bool ui_712_current_pair(s_ui_712_pair **prev, s_ui_712_pair **cur) {
+    s_ui_712_pair *tmp = ui_ctx->ui_pairs;
+
+    if ((prev == NULL) || (cur == NULL) || (tmp == NULL)) {
+        return false;
+    }
+    *prev = NULL;
+    while (((flist_node_t *) tmp)->next != NULL) {
+        *prev = tmp;
+        tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
+    }
+    *cur = tmp;
+    return true;
+}
+
+static void ui_712_finalize_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
+    ui_ctx->dynamic_value_remaining = 0;
+    // TRON: number consecutive pages sharing the same key/value into a run
+    ui_712_number_duplicate_pair(prev, cur);
+    cur->end_intent = validate_instruction_hash();
+    if (cur->end_intent) {
+        PRINTF("[Intent] End\n");
+    }
 }
 
 /**
@@ -289,15 +315,11 @@ void ui_712_set_title(const char *str, size_t length) {
  */
 void ui_712_set_value(const char *str, size_t length) {
     s_ui_712_pair *prev = NULL;
-    s_ui_712_pair *tmp = ui_ctx->ui_pairs;
+    s_ui_712_pair *tmp = NULL;
 
-    if (tmp == NULL) {
+    if (!ui_712_current_pair(&prev, &tmp)) {
         // No pairs created yet
         return;
-    }
-    while (((flist_node_t *) tmp)->next != NULL) {
-        prev = tmp;
-        tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
     }
     if (tmp->value != NULL) {
         PRINTF("Value already exist for tag %s: %s\n", tmp->key, tmp->value);
@@ -315,12 +337,7 @@ void ui_712_set_value(const char *str, size_t length) {
             return;
         }
     }
-    // TRON: number consecutive pages sharing the same key/value into a run
-    ui_712_number_duplicate_pair(prev, tmp);
-    tmp->end_intent = validate_instruction_hash();
-    if (tmp->end_intent) {
-        PRINTF("[Intent] End\n");
-    }
+    ui_712_finalize_pair(prev, tmp);
 }
 
 /**
@@ -409,36 +426,52 @@ bool ui_712_message_hash(void) {
     return ui_712_redraw_generic_step();
 }
 
-/**
- * Format a given data as a string
- *
- * @param[in] data the data that needs formatting
- * @param[in] length its length
- * @param[in] last if this is the last chunk
- */
-static void ui_712_format_str(const uint8_t *data, uint8_t length, bool last) {
-    size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len = strlen(strings.tmp.tmp);
-    size_t available;
-    size_t to_copy;
+static bool ui_712_append_str(const uint8_t *data,
+                              uint8_t length,
+                              const uint16_t *complete_length,
+                              bool last) {
+    s_ui_712_pair *prev = NULL;
+    s_ui_712_pair *pair = NULL;
+    size_t cur_len;
 
-    if (cur_len >= max_len) {
-        // Ensure null-termination even if we're at capacity
-        strings.tmp.tmp[max_len] = '\0';
-        return;
+    if (!ui_712_current_pair(&prev, &pair)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
     }
 
-    available = max_len - cur_len;
-    to_copy = MIN(available, length);
-
-    memcpy(strings.tmp.tmp + cur_len, data, to_copy);
-    strings.tmp.tmp[cur_len + to_copy] = '\0';
-
-    // truncated - add ellipsis if this is the last chunk and we couldn't fit everything
-    if (last && (to_copy < length)) {
-        memcpy(strings.tmp.tmp + max_len - 3, "...", 3);
-        strings.tmp.tmp[max_len] = '\0';
+    if (complete_length != NULL) {
+        if (pair->value != NULL) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+        if (APP_MEM_CALLOC((void **) &pair->value, ((size_t) *complete_length) + 1) == false) {
+            apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            return false;
+        }
+        ui_ctx->dynamic_value_remaining = *complete_length;
+    } else if (pair->value == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
     }
+
+    if (length > ui_ctx->dynamic_value_remaining) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
+    cur_len = strlen(pair->value);
+    memcpy(pair->value + cur_len, data, length);
+    pair->value[cur_len + length] = '\0';
+    ui_ctx->dynamic_value_remaining -= length;
+
+    if (last) {
+        if (ui_ctx->dynamic_value_remaining != 0) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+        ui_712_finalize_pair(prev, pair);
+    }
+    return true;
 }
 
 /**
@@ -1040,7 +1073,9 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
     if (ui_712_field_shown()) {
         switch (field_ptr->type) {
             case TYPE_SOL_STRING:
-                ui_712_format_str(data, length, last);
+                if (!ui_712_append_str(data, length, complete_length, last)) {
+                    return false;
+                }
                 break;
             case TYPE_SOL_ADDRESS:
                 if (ui_712_format_addr(data, length, first) == false) {
@@ -1116,7 +1151,9 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
         // This is the last chunk, we can now set the value
-        ui_712_set_value(NULL, 0);
+        if (field_ptr->type != TYPE_SOL_STRING) {
+            ui_712_set_value(NULL, 0);
+        }
 
         return ui_712_redraw_generic_step();
     }
