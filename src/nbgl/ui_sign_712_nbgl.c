@@ -2,7 +2,6 @@
 
 #include "app_errors.h"
 #include "nbgl_use_case.h"
-#include "shared_context.h"  // SHARED_BUFFER_SIZE (used by ui_nbgl.h)
 #include "settings.h"
 #include "utils.h"
 #include "common_712.h"
@@ -43,7 +42,12 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                  ? "Accept risk and sign"
                                  : "Sign message";
 #endif
-    strlcpy(g_stax_shared_buffer, sign_label, sizeof(g_stax_shared_buffer));
+    // Allocate the finish title buffer (app-ethereum parity: g_finishMsg).
+    uint8_t finish_len = strlen(sign_label) + 1;  // +1 for '\0'
+    if (!ui_buffers_init(0, 0, finish_len)) {
+        return;
+    }
+    snprintf(g_finishMsg, finish_len, "%s", sign_label);
 
 #ifndef FUZZ
     nbgl_useCaseAdvancedReview(operation_type,
@@ -51,7 +55,7 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                &ICON_APP_REVIEW,
                                TEXT_REVIEW_TIP712,
                                NULL,
-                               g_stax_shared_buffer,
+                               g_finishMsg,
                                NULL,
                                &warning,
                                choice_callback);

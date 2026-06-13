@@ -10,8 +10,6 @@
 #define TEXT_REVIEW_TIP191 REVIEW(TEXT_MESSAGE)
 #define TEXT_SIGN_TIP191   SIGN(TEXT_MESSAGE)
 
-char g_stax_shared_buffer[SHARED_BUFFER_SIZE] = {0};
-
 static nbgl_contentTagValue_t pair;
 static nbgl_contentTagValueList_t pairs_list;
 static const char *g_message;

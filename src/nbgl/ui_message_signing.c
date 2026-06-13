@@ -1,6 +1,6 @@
 #include "nbgl_use_case.h"
 #include "ui_logic.h"  // ui_712_approve / ui_712_reject
-#include "ui_utils.h"  // ui_pairs_cleanup
+#include "ui_utils.h"  // ui_all_cleanup
 #include "ui_message_signing.h"
 
 // Mirrors app-ethereum's src/nbgl/ui_message_signing.c (the typed-message review
@@ -12,12 +12,12 @@
 // status screen is dismissed, otherwise the response return interrupts the NBGL
 // flow (timeout). So the approve/reject are run as the status-dismiss callbacks.
 static void ui_message_712_approved(void) {
-    ui_pairs_cleanup();
+    ui_all_cleanup();
     ui_712_approve();
 }
 
 static void ui_message_712_rejected(void) {
-    ui_pairs_cleanup();
+    ui_all_cleanup();
     ui_712_reject();
 }
 

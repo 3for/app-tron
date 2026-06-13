@@ -26,5 +26,4 @@
 #define ICON_APP_REVIEW  C_icon_certificate
 #endif
 
-extern char g_stax_shared_buffer[SHARED_BUFFER_SIZE];
 extern nbgl_warning_t warning;
