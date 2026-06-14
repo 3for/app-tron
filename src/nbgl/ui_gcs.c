@@ -440,9 +440,8 @@ bool ui_gcs(void) {
     // app-ethereum there is no set_tx_simulation_warning() here.
 #ifdef HAVE_GATING_SUPPORT
     // A gated-signing descriptor (INS_PROVIDE_GATING) may augment this review with a
-    // "discover safer signing" prelude. set_gating_warning() only sets the warning
-    // when a descriptor matching this transaction was provided, so clear-signed
-    // transactions without a descriptor are unaffected.
+    // "discover safer signing" prelude. set_gating_warning() only updates the
+    // warning state when a descriptor matching this transaction was provided.
     if (set_gating_warning() == false) {
         return false;
     }

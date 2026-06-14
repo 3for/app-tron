@@ -27,6 +27,7 @@ import hashlib
 import json
 from pathlib import Path
 from struct import pack
+from typing import Optional
 
 import pytest
 from web3 import Web3
@@ -34,6 +35,7 @@ from web3 import Web3
 from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
                                     P1Type, P2Type)
 from client.enum_value import EnumValue
+from client.gating import Gating
 from client.proxy_info import ProxyInfo
 from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmount,
                         ParamCalldata, ParamDatetime, ParamEnum, ParamRaw,
@@ -76,12 +78,24 @@ ROOT_SCREENSHOT_PATH = Path(__file__).parent.resolve()
 
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
+# Same contract as a 20-byte TVM address (0x41 mainnet prefix stripped), i.e.
+# `base58check_decode(TRC20_CONTRACT_B58)[1:]` -- the form generic_tx_parser (and a
+# gating descriptor) matches against.
+TRC20_CONTRACT_ADDR20 = bytes.fromhex("14183f3bbca4ae9fc1de55b9bbe2d071942dc1a6")
 TRC20_TRANSFER_SELECTOR = bytes.fromhex("a9059cbb")
 TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "a9059cbb"
     "000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d7"
     "00000000000000000000000000000000000000000000000000000000000f4240")
 BATCH_CONTRACT20 = bytes.fromhex("2cc8475177918e8c4d840150b68815a4b6f0f5f3")
+
+# Proxy fixtures shared with test_gcs_proxy / the proxied gating test: a
+# `transferOwnership(address)` call whose TO is the proxy but whose descriptor
+# (and gating descriptor) targets the implementation behind it.
+PROXY_ADDR20 = bytes.fromhex("39053d51b77dc0d36036fc1fcc8cb819df8ef37a")
+PROXY_IMPL_ADDR20 = bytes.fromhex("1784be6401339fc0fedf7e9379409f5c1bfe9dda")
+# keccak256("transferOwnership(address)")[:4]
+TRANSFER_OWNERSHIP_SELECTOR = bytes.fromhex("f2fde38b")
 
 
 @pytest.fixture(name="tron_client")
@@ -266,15 +280,23 @@ def _client_from_scenario(scenario_navigator: NavigateWithScenario) -> TronClien
 
 def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
                                client: TronClient, tx: bytes,
-                               test_name: str | None = None) -> None:
+                               test_name: str | None = None,
+                               nb_warnings: int = 0) -> None:
     backend = scenario_navigator.backend
     custom_screen_text = ("Sign transaction"
                           if scenario_navigator.device.is_nano else None)
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
-        scenario_navigator.review_approve(path=ROOT_SCREENSHOT_PATH,
-                                          test_name=test_name,
-                                          custom_screen_text=custom_screen_text)
+        if nb_warnings:
+            scenario_navigator.review_approve_with_warning(
+                path=ROOT_SCREENSHOT_PATH,
+                test_name=test_name,
+                custom_screen_text=custom_screen_text,
+                nb_warnings=nb_warnings)
+        else:
+            scenario_navigator.review_approve(path=ROOT_SCREENSHOT_PATH,
+                                              test_name=test_name,
+                                              custom_screen_text=custom_screen_text)
 
     resp = backend.last_async_response
     assert resp.status == StatusWord.OK
@@ -287,12 +309,31 @@ def _get_challenge(client: TronClient) -> int:
         client.exchange_raw(CommandBuilder().get_challenge()).data)
 
 
-def test_gcs_sign(scenario_navigator: NavigateWithScenario):
+def _provide_gating(client: TronClient, gating_params: Optional[Gating]) -> None:
+    """Provide a gated-signing descriptor (INS_PROVIDE_GATING) before the review,
+    matching app-ethereum's test_blind_sign()/test_eip712_new() gating wiring."""
+    if gating_params is not None:
+        assert client.provide_gating(gating_params.serialize()).status == StatusWord.OK
+
+
+def _gating_warnings(scenario_navigator: NavigateWithScenario,
+                     gating_params: Optional[Gating]) -> int:
+    if gating_params is None or scenario_navigator.device.is_nano:
+        return 0
+    return 1
+
+
+def test_gcs_sign(scenario_navigator: NavigateWithScenario,
+                  gating_params: Optional[Gating] = None):
     """Full keystone flow: STORE -> 0x26 -> 0x28 -> START_FLOW -> approve.
 
     Asserts the firmware renders the GCS review and returns a signature over
     sha256(tx) recoverable to the device key -- the first real end-to-end GCS
     signature (this is also the first execution of ui_gcs()).
+
+    `gating_params` threads an optional gated-signing descriptor (INS_PROVIDE_GATING)
+    into the flow, mirroring app-ethereum's test_blind_sign(); test_gating reuses this
+    to exercise the "Discover safer signing" prelude.
     """
     backend = scenario_navigator.backend
     client = _client_from_scenario(scenario_navigator)
@@ -311,8 +352,14 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
+    _provide_gating(client, gating_params)
+
     # START_FLOW triggers the async GCS review; approve it, then collect the reply.
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator,
+                               client,
+                               tx,
+                               nb_warnings=_gating_warnings(scenario_navigator,
+                                                            gating_params))
 
 
 def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
@@ -974,7 +1021,8 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_proxy(scenario_navigator: NavigateWithScenario):
+def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
+                   gating_params: Optional[Gating] = None):
     backend = scenario_navigator.backend
     client = _client_from_scenario(scenario_navigator)
     new_owner = bytes.fromhex("2222222222222222222222222222222222222222")
@@ -986,8 +1034,9 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario):
             address=None,
         )
     data = contract.encode_abi("transferOwnership", [new_owner])
-    proxy_addr20 = bytes.fromhex("39053d51b77dc0d36036fc1fcc8cb819df8ef37a")
-    impl_addr20 = bytes.fromhex("1784be6401339fc0fedf7e9379409f5c1bfe9dda")
+    assert get_selector_from_data(data) == TRANSFER_OWNERSHIP_SELECTOR
+    proxy_addr20 = PROXY_ADDR20
+    impl_addr20 = PROXY_IMPL_ADDR20
     tx = build_trigger_smart_contract_tx(client, proxy_addr20,
                                          bytes.fromhex(data[2:]))
     assert gcs_store_calldata(client, backend,
@@ -1045,7 +1094,22 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario):
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    # test_gcs_proxy provides a second proxy_info to resolve the displayed trusted
+    # name. The firmware stores one proxy_info at a time, so restore the tx proxy
+    # descriptor before the gated-signing match.
+    if gating_params is not None:
+        client.provide_proxy_info(
+            ProxyInfo(_get_challenge(client),
+                      proxy_addr20,
+                      tx_info.chain_id,
+                      tx_info.contract_addr,
+                      selector=tx_info.selector).serialize())
+    _provide_gating(client, gating_params)
+    _start_gcs_flow_and_assert(scenario_navigator,
+                               client,
+                               tx,
+                               nb_warnings=_gating_warnings(scenario_navigator,
+                                                            gating_params))
 
 
 def test_gcs_4226(scenario_navigator: NavigateWithScenario):

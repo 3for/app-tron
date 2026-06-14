@@ -648,11 +648,12 @@ static void set_gating_ui_screen(void) {
     prelude_details.footerText = "Continue to blind signing";
     prelude_details.details = &generic_details;
 
-    warning.prelude = &prelude_details;
-    // TRON: set the warning bit here (only when a matching descriptor is found) so
-    // the TX/GCS clear-signing review does not surface a gated-signing warning when
-    // no gating descriptor applies. The TIP-712 path also sets it in ui_712_start().
     warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
+    // Nano uses the predefined warning flow; the custom prelude is a wallet-only
+    // NBGL page.
+#ifdef SCREEN_SIZE_WALLET
+    warning.prelude = &prelude_details;
+#endif
 }
 
 /**

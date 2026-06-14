@@ -28,6 +28,8 @@ from client.command_builder import CommandBuilder
 import response_parser as ResponseParser
 from client.tip712 import InputData as InputData
 from client.trusted_name import TrustedName, TrustedNameType
+from client.gating import Gating
+from client.status_word import StatusWord
 from dataset import DataSet, ADVANCED_DATA_SETS, TOKENS, TRUSTED_NAMES, FILT_TN_TYPES
 from utils import recover_message
 from ledgered.devices import Device, DeviceType
@@ -96,7 +98,8 @@ def tip712_new_common(device: Device,
                       filters,
                       verbose_raw: bool,
                       golden_run: bool,
-                      extra_left: bool = False):
+                      extra_left: bool = False,
+                      gating_params: Optional[Gating] = None):
     global autonext_idx
     global unfiltered_flow
     global skip_flow
@@ -107,10 +110,22 @@ def tip712_new_common(device: Device,
     autonext_running = False
     default_screenshot_path = Path(__file__).parent.resolve()
     try:
+        # Mirrors app-ethereum's schema-hash selector for typed-data gating. Nano
+        # keeps the existing blind-signing warning; Stax/Flex add the gating prelude.
+        nb_warnings = 1 if unfiltered_flow else 0
+        if gating_params is not None:
+            InputData.init_signature_context(json_data["types"], json_data["domain"])
+            gating_params.selector = bytes(InputData.sig_ctx["schema_hash"])
+            if not device.is_nano:
+                nb_warnings += 1
+
         assert InputData.process_data(
             client, json_data, filters,
             partial(autonext, device, navigator, default_screenshot_path),
             golden_run)
+
+        if gating_params is not None:
+            assert client.provide_gating(gating_params.serialize()).status == StatusWord.OK
 
         with client.exchange_async_raw(
                 builder.tip712_sign_new(client.getAccount(0)['path'])):
@@ -130,16 +145,20 @@ def tip712_new_common(device: Device,
                     warning_approve=warning_approve,
                     warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
             else:
-                if warning_approve:
+                if nb_warnings > 0:
                     if device.is_nano:
-                        navigator.navigate(
-                            [NavInsID.BOTH_CLICK],
-                            screen_change_before_first_instruction=False)
+                        warning_moves = [NavInsID.RIGHT_CLICK] * (nb_warnings - 1)
+                        warning_moves += [NavInsID.BOTH_CLICK]
                     else:
-                        navigator.navigate(
-                            [NavInsID.USE_CASE_CHOICE_REJECT],
-                            screen_change_before_first_instruction=False)
-                navigator.navigate_until_text(nav_ins, [val_ins], text)
+                        warning_moves = [NavInsID.USE_CASE_CHOICE_REJECT] * nb_warnings
+                    navigator.navigate(
+                        warning_moves,
+                        screen_change_before_first_instruction=False)
+                navigator.navigate_until_text(
+                    nav_ins,
+                    [val_ins],
+                    text,
+                    screen_change_before_first_instruction=(nb_warnings == 0))
     finally:
         InputData.disable_autonext()
         unfiltered_flow = False
