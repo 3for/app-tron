@@ -59,6 +59,9 @@ ENABLE_TLV_LIBRARY = 1
 ENABLE_LISTS_LIBRARY = 1
 DEFINES += HAVE_SDK_LL_LIB
 
+# Gated/"dated" signing (INS_PROVIDE_GATING 0x38), ported from app-ethereum.
+DEFINES += HAVE_GATING_SUPPORT
+
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
 DEBUG ?= 0
 

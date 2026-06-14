@@ -499,6 +499,11 @@ class TronClient:
             PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME)
         return self._provide_tlv(CommandBuilder().provide_proxy_info(payload))
 
+    def provide_gating(self, payload: bytes) -> RAPDU:
+        # Send ledgerPKI certificate
+        self._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_GATING)
+        return self._provide_tlv(CommandBuilder().provide_gating(payload))
+
     def provide_trusted_name(self, trusted_name: TrustedName) -> RAPDU:
         self._pki_client.send_certificate(
             PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME,

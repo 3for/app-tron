@@ -11,6 +11,14 @@ typedef uint8_t internal_storage_t;
 // the settings, stored in NVRAM. Initializer is ignored by ledger.
 extern const internal_storage_t N_storage_real;
 
+#ifdef HAVE_GATING_SUPPORT
+// Gated-signing throttle counter, stored in NVRAM. app-ethereum keeps this in the
+// N_storage struct (N_storage.gating_counter); TRON's settings are a flat bitfield,
+// so it lives in its own NVRAM byte instead.
+extern const uint8_t N_gating_counter_real;
+#define N_gating_counter (*(volatile uint8_t *) PIC(&N_gating_counter_real))
+#endif  // HAVE_GATING_SUPPORT
+
 // flip a bit k = 0 to 7 for u8
 #define _FLIP_BIT(n, k) (((n) ^ (1 << (k))))
 

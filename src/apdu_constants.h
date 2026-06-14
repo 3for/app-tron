@@ -56,6 +56,9 @@
 #define INS_GTP_FIELD            0x28
 #define INS_PROVIDE_PROXY_INFO   0x2A
 
+// Gated/"dated" signing descriptor. Same opcode as app-ethereum.
+#define INS_PROVIDE_GATING 0x38
+
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
 

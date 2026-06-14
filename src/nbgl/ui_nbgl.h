@@ -26,4 +26,8 @@
 #define ICON_APP_REVIEW  C_icon_certificate
 #endif
 
+// app-ethereum uses its own Ledger-logo glyph (C_ledger_*) for the gated-signing
+// prelude; that glyph is not bundled in the TRON app, so reuse the review icon.
+#define ICON_LEDGER ICON_APP_REVIEW
+
 extern nbgl_warning_t warning;

@@ -37,6 +37,10 @@
 #include "proxy_info.h"    // proxy_cleanup
 #include "enum_value.h"    // enum_value_cleanup
 
+#ifdef HAVE_GATING_SUPPORT
+#include "cmd_get_gating.h"  // clear_gating
+#endif  // HAVE_GATING_SUPPORT
+
 #ifdef HAVE_SWAP
 #include "swap.h"
 #endif  // HAVE_SWAP
@@ -49,6 +53,11 @@ uint16_t apdu_response_code;
 
 // The settings, stored in NVRAM.
 const internal_storage_t N_storage_real;
+
+#ifdef HAVE_GATING_SUPPORT
+// Gated-signing throttle counter, stored in NVRAM (see settings.h).
+const uint8_t N_gating_counter_real;
+#endif  // HAVE_GATING_SUPPORT
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -71,6 +80,10 @@ void reset_app_context() {
     gcs_cleanup();
     // Free the cached proxy<->implementation mapping (INS_PROVIDE_PROXY_INFO).
     proxy_cleanup();
+#ifdef HAVE_GATING_SUPPORT
+    // Free the cached gated-signing descriptor (INS_PROVIDE_GATING).
+    clear_gating();
+#endif  // HAVE_GATING_SUPPORT
     appState = APP_STATE_IDLE;
     G_called_from_swap = false;
     G_swap_response_ready = false;

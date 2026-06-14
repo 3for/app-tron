@@ -33,6 +33,10 @@
 #include "cmd_proxy_info.h"
 #include "cmd_enum_value.h"
 
+#ifdef HAVE_GATING_SUPPORT
+#include "cmd_get_gating.h"
+#endif  // HAVE_GATING_SUPPORT
+
 #ifdef HAVE_SWAP
 #include "swap.h"
 #endif  // HAVE_SWAP
@@ -152,6 +156,11 @@ int apdu_dispatcher(const command_t *cmd) {
 
         case INS_PROVIDE_PROXY_INFO:
             return io_send_sw(handle_proxy_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+
+#ifdef HAVE_GATING_SUPPORT
+        case INS_PROVIDE_GATING:
+            return io_send_sw(handle_gating(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+#endif  // HAVE_GATING_SUPPORT
 
         case INS_SET_EXTERNAL_PLUGIN:
             // Set External Plugin

@@ -10,6 +10,10 @@
 #include "ui_utils.h"  // g_pairsList
 #include "ui_nbgl.h"
 
+#ifdef HAVE_GATING_SUPPORT
+#include "cmd_get_gating.h"  // set_gating_warning
+#endif  // HAVE_GATING_SUPPORT
+
 // Global Warning struct for the NBGL review flow (TIP-712 blind-signing warning).
 nbgl_warning_t warning;
 
@@ -71,6 +75,17 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
 uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     // Build the global tag/value pairs list from the accumulated TIP-712 pairs.
     ui_712_push_pairs();
+
+#ifdef HAVE_GATING_SUPPORT
+    if (filtering == TIP712_FILTERING_BASIC) {
+        // A gated-signing descriptor (INS_PROVIDE_GATING) may augment the review
+        // with a "discover safer signing" prelude. Mirrors app-ethereum's
+        // ui_sign_712().
+        if (set_gating_warning() == false) {
+            return SWO_INCORRECT_DATA;
+        }
+    }
+#endif  // HAVE_GATING_SUPPORT
 
     ui_712_start_review(filtering, TYPE_MESSAGE, ui_typed_message_review_choice);
     return SWO_SUCCESS;

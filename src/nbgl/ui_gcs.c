@@ -22,6 +22,10 @@
 #include "trusted_name.h"
 #include "tx_ctx.h"  // get_current_tx_info, get_tx_chain_id
 
+#ifdef HAVE_GATING_SUPPORT
+#include "cmd_get_gating.h"  // set_gating_warning
+#endif  // HAVE_GATING_SUPPORT
+
 // TRON contract addresses are 20-byte EVM internally; displayed as Base58Check
 // (0x41 prefix + 20 bytes). This buffer holds one such "T..." string.
 #define TRON_ADDR_STR_SIZE (BASE58CHECK_ADDRESS_SIZE + 1)
@@ -434,6 +438,15 @@ bool ui_gcs(void) {
     explicit_bzero(&warning, sizeof(nbgl_warning_t));
     // TRON has no transaction-simulation (HAVE_TRANSACTION_CHECKS) path, so unlike
     // app-ethereum there is no set_tx_simulation_warning() here.
+#ifdef HAVE_GATING_SUPPORT
+    // A gated-signing descriptor (INS_PROVIDE_GATING) may augment this review with a
+    // "discover safer signing" prelude. set_gating_warning() only sets the warning
+    // when a descriptor matching this transaction was provided, so clear-signed
+    // transactions without a descriptor are unaffected.
+    if (set_gating_warning() == false) {
+        return false;
+    }
+#endif  // HAVE_GATING_SUPPORT
 
     snprintf(tmp_buf, tmp_buf_size, "Review transaction to %s", get_operation_type(info_tx));
     if ((g_titleMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {

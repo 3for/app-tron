@@ -224,6 +224,9 @@ uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
     if (filtering == TIP712_FILTERING_BASIC) {
         // Not fully filtered: surface the blind-signing warning.
         warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
+#ifdef HAVE_GATING_SUPPORT
+        warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
+#endif  // HAVE_GATING_SUPPORT
     }
     return SWO_SUCCESS;
 }

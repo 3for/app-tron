@@ -37,6 +37,7 @@ class InsType(IntEnum):
     PROVIDE_TRANSACTION_INFO = 0x26
     PROVIDE_TRANSACTION_FIELD_DESC = 0x28
     PROVIDE_PROXY_INFO = 0x2a
+    PROVIDE_GATING = 0x38
     EXTERNAL_PLUGIN_SETUP = 0x12
     SET_EXTERNAL_PLUGIN = EXTERNAL_PLUGIN_SETUP
     SIGN_EXTERNAL_PLUGIN = 0xc4
@@ -438,3 +439,6 @@ class CommandBuilder:
     def provide_proxy_info(self, tlv_payload: bytes) -> list[bytes]:
         return self.common_tlv_serialize(InsType.PROVIDE_PROXY_INFO,
                                          tlv_payload)
+
+    def provide_gating(self, tlv_payload: bytes) -> list[bytes]:
+        return self.common_tlv_serialize(InsType.PROVIDE_GATING, tlv_payload)
