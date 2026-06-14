@@ -350,7 +350,7 @@ static void external_plugin_prepare_title_msg(void) {
 
         getBase58FromAddress(txContent.contractAddress,
                              contract_addr,
-                             HAS_SETTING(S_TRUNCATE_ADDRESS));
+                             N_storage.truncateAddress);
         snprintf(external_plugin_ui_cache->g_titleMsg,
                  sizeof(external_plugin_ui_cache->g_titleMsg),
                  "%s %s",
@@ -1012,10 +1012,10 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
 
         getBase58FromAddress(txContent.account,
                              fromAddress + prefix_len,
-                             HAS_SETTING(S_TRUNCATE_ADDRESS));
+                             N_storage.truncateAddress);
     } else {
         PRINTF("Regular transaction...\n");
-        getBase58FromAddress(txContent.account, fromAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+        getBase58FromAddress(txContent.account, fromAddress, N_storage.truncateAddress);
     }
 
     if (txContent.contractType != TRIGGERSMARTCONTRACT) {
@@ -1023,12 +1023,12 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    /* if (!HAS_SETTING(S_CUSTOM_CONTRACT)) {
+    /* if (!N_storage.customContract) {
         return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
     } */ //TODO. ZYD
     customContractField = 1;
 
-    getBase58FromAddress(txContent.contractAddress, fullContract, HAS_SETTING(S_TRUNCATE_ADDRESS));
+    getBase58FromAddress(txContent.contractAddress, fullContract, N_storage.truncateAddress);
     snprintf((char *) TRC20Action, sizeof(TRC20Action), "%08x", txContent.customSelector);
     G_io_apdu_buffer[0] = '\0';
     G_io_apdu_buffer[100] = '\0';

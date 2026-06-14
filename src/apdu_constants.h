@@ -30,6 +30,14 @@
 // Define command events
 #define CLA 0xE0  // Start byte for any communications
 
+// GET_APP_CONFIGURATION flag byte (resp[0]). Mirrors app-ethereum's APP_FLAG_*; the
+// bit positions are the wire contract the host decodes, so they must stay stable.
+#define APP_FLAG_DATA_ALLOWED     0x01
+#define APP_FLAG_CUSTOM_CONTRACT  0x02
+#define APP_FLAG_TRUNCATE_ADDRESS 0x04
+#define APP_FLAG_SIGN_BY_HASH     0x08
+#define APP_FLAG_VERBOSE_TIP712   0x10
+
 #define INS_GET_PUBLIC_KEY                     0x02
 #define INS_SIGN                               0x04
 #define INS_SIGN_TXN_HASH                      0x05  // unsafe

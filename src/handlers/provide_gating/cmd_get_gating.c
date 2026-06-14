@@ -30,7 +30,7 @@
 #include "os_pki.h"
 #include "network.h"  // get_tx_chain_id
 #include "ui_nbgl.h"  // warning, ICON_LEDGER
-#include "settings.h"  // N_gating_counter
+#include "settings.h"  // N_storage.gating_counter
 #include "proxy_info.h"
 #include "context_712.h"  // tip712_context
 #include "schema_hash.h"  // compute_schema_hash
@@ -41,9 +41,9 @@
 // This module mirrors app-ethereum's src/features/provide_gating/cmd_get_gating.c
 // (gated/"dated" signing). The TLV parsing/verification is a faithful port; the
 // TRON divergences are: the TX path reads the generic_tx_parser context (TRON has
-// no RLP tx structures), the NVM counter is a standalone `N_gating_counter` byte
-// (TRON settings are a flat bitfield, not a struct), and the prelude icon reuses
-// the app review icon (no Ledger-logo glyph in the TRON build).
+// no RLP tx structures), and the prelude icon reuses the app review icon (no
+// Ledger-logo glyph in the TRON build). The NVM counter lives in N_storage.gating_counter,
+// exactly like app-ethereum.
 
 // Display the Dated Signing screen 1/X times
 #define GATED_SIGNING_MAX_COUNT 10
@@ -675,9 +675,9 @@ bool set_gating_warning(void) {
     }
 
     // Check the counter
-    counter = N_gating_counter + 1;
+    counter = N_storage.gating_counter + 1;
     PRINTF("[GATING] Counter: %d/%d\n", counter, GATED_SIGNING_MAX_COUNT);
-    nvm_write((void *) &N_gating_counter, (void *) &counter, sizeof(counter));
+    nvm_write((void *) &N_storage.gating_counter, (void *) &counter, sizeof(counter));
     if (((counter - 1) % GATED_SIGNING_MAX_COUNT) != 0) {
         PRINTF("[GATING] Skip gating screen\n");
         return true;

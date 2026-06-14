@@ -46,8 +46,7 @@ enum {
     SWITCH_TIP712_VERBOSE_TOKEN,
 };
 
-// Settings switch indices (same order as the tokens above and the settings[]
-// table below, so SETTING_IDX(token) maps a token to both arrays).
+// Settings switch indices into switches[] (same order as the tokens above).
 enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
@@ -71,38 +70,40 @@ static nbgl_genericContents_t settingContents = {0};
 // Buffer used for the plugin tagline (never deallocated, like app-ethereum)
 static char *g_tag_line = NULL;
 
-// Maps a switch token to its index in switches[] / settings[].
-#define SETTING_IDX(token) (token - SWITCH_ALLOW_TX_DATA_TOKEN)
-
-// Persisted setting bit backing each switch (TRON stores settings as a NVRAM
-// bitfield toggled through SETTING_TOGGLE / HAS_SETTING, unlike app-ethereum's
-// per-field N_storage entries).
-static const uint8_t settings[SETTINGS_SWITCHES_NB] = {
-    S_DATA_ALLOWED,
-    S_CUSTOM_CONTRACT,
-#if !defined(SCREEN_SIZE_WALLET)
-    S_TRUNCATE_ADDRESS,
-#endif
-    S_SIGN_BY_HASH,
-    S_VERBOSE_TIP712,
-};
-
+// Toggle the N_storage flag backing the touched switch. Mirrors app-ethereum's
+// setting_toggle_callback(): read the current value, flip it, persist the single field.
 static void setting_toggle_callback(int token, uint8_t index, int page) {
     UNUSED(index);
     UNUSED(page);
-    uint8_t id;
+    bool value;
 
     switch (token) {
         case SWITCH_ALLOW_TX_DATA_TOKEN:
+            value = !N_storage.dataAllowed;
+            switches[TX_DATA_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.dataAllowed, (void *) &value, sizeof(value));
+            break;
         case SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN:
+            value = !N_storage.customContract;
+            switches[CSTM_CONTRACTS_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.customContract, (void *) &value, sizeof(value));
+            break;
 #if !defined(SCREEN_SIZE_WALLET)
         case SWITCH_TRUNCATE_ADDRESS_TOKEN:
+            value = !N_storage.truncateAddress;
+            switches[TRUNCATE_ADDRESS_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.truncateAddress, (void *) &value, sizeof(value));
+            break;
 #endif
         case SWITCH_ALLOW_HASH_TX_TOKEN:
+            value = !N_storage.signByHash;
+            switches[HASH_TX_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.signByHash, (void *) &value, sizeof(value));
+            break;
         case SWITCH_TIP712_VERBOSE_TOKEN:
-            id = SETTING_IDX(token);
-            SETTING_TOGGLE(settings[id]);
-            switches[id].initState = HAS_SETTING(settings[id]) ? ON_STATE : OFF_STATE;
+            value = !N_storage.verbose_tip712;
+            switches[TIP712_VERBOSE_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.verbose_tip712, (void *) &value, sizeof(value));
             break;
         default:
             PRINTF("Should not happen !\n");
@@ -133,13 +134,13 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
     switches[TX_DATA_ID].subText = "Allow extra data in\ntransactions";
     switches[TX_DATA_ID].token = SWITCH_ALLOW_TX_DATA_TOKEN;
     switches[TX_DATA_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[TX_DATA_ID].initState = HAS_SETTING(S_DATA_ALLOWED) ? ON_STATE : OFF_STATE;
+    switches[TX_DATA_ID].initState = N_storage.dataAllowed ? ON_STATE : OFF_STATE;
 
     switches[CSTM_CONTRACTS_ID].text = "Custom contracts";
     switches[CSTM_CONTRACTS_ID].subText = "Allow unverified contracts";
     switches[CSTM_CONTRACTS_ID].token = SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN;
     switches[CSTM_CONTRACTS_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[CSTM_CONTRACTS_ID].initState = HAS_SETTING(S_CUSTOM_CONTRACT) ? ON_STATE : OFF_STATE;
+    switches[CSTM_CONTRACTS_ID].initState = N_storage.customContract ? ON_STATE : OFF_STATE;
 
 #if !defined(SCREEN_SIZE_WALLET)
     switches[TRUNCATE_ADDRESS_ID].text = "Truncate Address";
@@ -147,7 +148,7 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
     switches[TRUNCATE_ADDRESS_ID].token = SWITCH_TRUNCATE_ADDRESS_TOKEN;
     switches[TRUNCATE_ADDRESS_ID].tuneId = TUNE_TAP_CASUAL;
     switches[TRUNCATE_ADDRESS_ID].initState =
-        HAS_SETTING(S_TRUNCATE_ADDRESS) ? ON_STATE : OFF_STATE;
+        N_storage.truncateAddress ? ON_STATE : OFF_STATE;
 
     switches[HASH_TX_ID].text = "Sign by Hash";
     switches[HASH_TX_ID].subText = "Allow hash-only\ntransactions";
@@ -157,13 +158,13 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
 #endif
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[HASH_TX_ID].initState = HAS_SETTING(S_SIGN_BY_HASH) ? ON_STATE : OFF_STATE;
+    switches[HASH_TX_ID].initState = N_storage.signByHash ? ON_STATE : OFF_STATE;
 
     switches[TIP712_VERBOSE_ID].text = "Raw messages";
     switches[TIP712_VERBOSE_ID].subText = "Displays raw content of TIP712 messages";
     switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[TIP712_VERBOSE_ID].initState = HAS_SETTING(S_VERBOSE_TIP712) ? ON_STATE : OFF_STATE;
+    switches[TIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
 
     contents[0].type = SWITCHES_LIST;
     contents[0].content.switchesList.nbSwitches = SETTINGS_SWITCHES_NB;

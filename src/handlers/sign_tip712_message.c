@@ -35,7 +35,7 @@ extern void reset_app_context();
 uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t dataLength) {
     uint8_t i;
 
-    if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+    if (!N_storage.signByHash) {
         return E_MISSING_SETTING_SIGN_BY_HASH;
     }
 

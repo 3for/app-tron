@@ -192,10 +192,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     if (txContent.permission_id > 0) {
         PRINTF("Set permission_id...\n");
         snprintf((char *) fromAddress, 5, "P%d - ", txContent.permission_id);
-        getBase58FromAddress(txContent.account, fromAddress + 4, HAS_SETTING(S_TRUNCATE_ADDRESS));
+        getBase58FromAddress(txContent.account, fromAddress + 4, N_storage.truncateAddress);
     } else {
         PRINTF("Regular transaction...\n");
-        getBase58FromAddress(txContent.account, fromAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+        getBase58FromAddress(txContent.account, fromAddress, N_storage.truncateAddress);
     }
 
     data_warning = ((txContent.dataBytes > 0) ? true : false);
@@ -236,14 +236,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     strcpy(TRC20ActionSendAllow, "Allow");
                     strcpy(TRC20Action, "Approve");
                 } else {
-                    if (!HAS_SETTING(S_CUSTOM_CONTRACT)) {
+                    if (!N_storage.customContract) {
                         return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
                     }
                     customContractField = 1;
 
                     getBase58FromAddress(txContent.contractAddress,
                                          fullContract,
-                                         HAS_SETTING(S_TRUNCATE_ADDRESS));
+                                         N_storage.truncateAddress);
                     snprintf((char *) TRC20Action,
                              sizeof(TRC20Action),
                              "%08x",
@@ -295,7 +295,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     (txContent.contractType == TRANSFERCONTRACT) ? SUN_DIG : txContent.decimals[0]);
             }
 
-            getBase58FromAddress(txContent.destination, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
 
             // get token name if any
             memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
@@ -397,7 +397,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             for (int i = 0; i < contract->votes_count; i++) {
                 getBase58FromAddress(contract->votes[i].vote_address,
                                      fullContract,
-                                     HAS_SETTING(S_TRUNCATE_ADDRESS));
+                                     N_storage.truncateAddress);
                 total_votes += (unsigned int) contract->votes[i].vote_count;
                 fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) fullContract, i);
                 fillVoteAmountSlot((void *) G_io_apdu_buffer, contract->votes[i].vote_count, i);
@@ -422,9 +422,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
                                      toAddress,
-                                     HAS_SETTING(S_TRUNCATE_ADDRESS));
+                                     N_storage.truncateAddress);
             } else {
-                getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+                getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
             }
 
             ux_flow_display(APPROVAL_FREEZEASSET_TRANSACTION, data_warning);
@@ -439,9 +439,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
                                      toAddress,
-                                     HAS_SETTING(S_TRUNCATE_ADDRESS));
+                                     N_storage.truncateAddress);
             } else {
-                getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+                getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
             }
 
             ux_flow_display(APPROVAL_UNFREEZEASSET_TRANSACTION, data_warning);
@@ -454,7 +454,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strcpy(fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
@@ -465,7 +465,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strcpy(fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNFREEZEASSETV2_TRANSACTION, data_warning);
 
@@ -483,7 +483,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.destination, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_DELEGATE_RESOURCE_TRANSACTION, data_warning);
 
@@ -495,25 +495,25 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strcpy(fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.destination, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWEXPIREUNFREEZECONTRACT:  // Withdraw Expire Unfreeze
-            getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
-            getBase58FromAddress(txContent.account, toAddress, HAS_SETTING(S_TRUNCATE_ADDRESS));
+            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_WITHDRAWBALANCE_TRANSACTION, data_warning);
 
             break;
         case ACCOUNTPERMISSIONUPDATECONTRACT:
-            if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+            if (!N_storage.signByHash) {
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash
@@ -540,7 +540,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;
         default:
-            if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+            if (!N_storage.signByHash) {
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write fullHash

@@ -16,8 +16,6 @@ enum {
     OP_SET_SETTINGS = 5,
 };
 
-extern uint8_t g_fuzz_settings;
-
 static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
     while (size > 0U) {
         const uint8_t op = *data++;
@@ -33,7 +31,7 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
             if (size < 1U) {
                 break;
             }
-            g_fuzz_settings = *data++ & ((1U << S_SIGN_BY_HASH) | (1U << S_VERBOSE_TIP712));
+            fuzz_set_settings(*data++ & ((1U << S_SIGN_BY_HASH) | (1U << S_VERBOSE_TIP712)));
             size--;
             continue;
         }

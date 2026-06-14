@@ -1,41 +1,29 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "os.h"
 
-typedef uint8_t internal_storage_t;
+#define N_storage (*(volatile internalStorage_t *) PIC(&N_storage_real))
 
-#define N_settings (*(volatile internal_storage_t *) PIC(&N_storage_real))
+// The settings, stored in NVRAM. Mirrors app-ethereum's internalStorage_t: a struct of
+// named flags (rather than a flat bitfield), so each setting reads as N_storage.<field>.
+// The field order also defines the GET_APP_CONFIGURATION wire bits -- see the APP_FLAG_*
+// constants in apdu_constants.h, which the host relies on.
+typedef struct internalStorage_t {
+    bool dataAllowed;
+    bool customContract;
+    bool truncateAddress;
+    bool signByHash;
+    bool verbose_tip712;
+#ifdef HAVE_GATING_SUPPORT
+    // Gated-signing throttle counter (see provide_gating). app-ethereum keeps this in the
+    // same N_storage struct (N_storage.gating_counter), so TRON does too.
+    uint8_t gating_counter;
+#endif  // HAVE_GATING_SUPPORT
+    bool initialized;
+} internalStorage_t;
 
 // the settings, stored in NVRAM. Initializer is ignored by ledger.
-extern const internal_storage_t N_storage_real;
-
-#ifdef HAVE_GATING_SUPPORT
-// Gated-signing throttle counter, stored in NVRAM. app-ethereum keeps this in the
-// N_storage struct (N_storage.gating_counter); TRON's settings are a flat bitfield,
-// so it lives in its own NVRAM byte instead.
-extern const uint8_t N_gating_counter_real;
-#define N_gating_counter (*(volatile uint8_t *) PIC(&N_gating_counter_real))
-#endif  // HAVE_GATING_SUPPORT
-
-// flip a bit k = 0 to 7 for u8
-#define _FLIP_BIT(n, k) (((n) ^ (1 << (k))))
-
-// toggle a setting item
-#define SETTING_TOGGLE(_set)                                                                   \
-    do {                                                                                       \
-        internal_storage_t _temp_settings = _FLIP_BIT(N_settings, _set);                       \
-        nvm_write((void *) &N_settings, (void *) &_temp_settings, sizeof(internal_storage_t)); \
-    } while (0)
-
-// check a setting item
-#define HAS_SETTING(k) ((N_settings & (1 << (k))) >> (k))
-
-#define S_DATA_ALLOWED     0
-#define S_CUSTOM_CONTRACT  1
-#define S_TRUNCATE_ADDRESS 2
-#define S_SIGN_BY_HASH     3
-#define S_VERBOSE_TIP712   4
-
-#define S_INITIALIZED 7
+extern const internalStorage_t N_storage_real;

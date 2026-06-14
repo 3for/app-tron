@@ -37,7 +37,7 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                  : TEXT_SIGN_TIP712;
 
     // Use review with skip button when not fully filtered or in verbose mode.
-    if ((filtering_mode == TIP712_FILTERING_BASIC) || HAS_SETTING(S_VERBOSE_TIP712)) {
+    if ((filtering_mode == TIP712_FILTERING_BASIC) || N_storage.verbose_tip712) {
         operation_type |= SKIPPABLE_OPERATION;
     }
 #else

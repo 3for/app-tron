@@ -146,7 +146,7 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
 #ifdef SCREEN_SIZE_WALLET
                     if (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC) {
 #else
-                    if (HAS_SETTING(S_VERBOSE_TIP712)) {
+                    if (N_storage.verbose_tip712) {
 #endif
                         if ((ret = ui_712_review_struct(path_get_root()))) {
                             reply_apdu = false;
@@ -207,7 +207,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
-            if (!HAS_SETTING(S_VERBOSE_TIP712)) {
+            if (!N_storage.verbose_tip712) {
                 ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
                 ret = compute_schema_hash();
             }
@@ -307,7 +307,7 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
     } else {
         ret = true;
 #ifndef SCREEN_SIZE_WALLET
-        if (!HAS_SETTING(S_VERBOSE_TIP712) &&
+        if (!N_storage.verbose_tip712 &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ret = ui_712_message_hash();
         }

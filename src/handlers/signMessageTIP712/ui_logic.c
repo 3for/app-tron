@@ -9,7 +9,7 @@
 #include "app_errors.h"   // SWO_* status words
 #include "typed_data.h"
 #include "commands_712.h"
-#include "settings.h"  // HAS_SETTING
+#include "settings.h"  // N_storage
 #include "filtering.h"
 #include "trusted_name.h"
 #include "network.h"
@@ -228,7 +228,7 @@ static bool ui_712_field_shown(void) {
 #ifdef SCREEN_SIZE_WALLET
         ret = true;
 #else
-        if (HAS_SETTING(S_VERBOSE_TIP712) || (path_get_root_type() == ROOT_DOMAIN)) {
+        if (N_storage.verbose_tip712 || (path_get_root_type() == ROOT_DOMAIN)) {
             ret = true;
         }
 #endif
@@ -347,8 +347,8 @@ void ui_712_set_value(const char *str, size_t length) {
  */
 bool ui_712_redraw_generic_step(void) {
     if (appState != APP_STATE_SIGNING_EIP712) {  // Initialize if it is not already
-        if ((ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) && !HAS_SETTING(S_SIGN_BY_HASH) &&
-            !HAS_SETTING(S_VERBOSE_TIP712)) {
+        if ((ui_ctx->filtering_mode == TIP712_FILTERING_BASIC) && !N_storage.signByHash &&
+            !N_storage.verbose_tip712) {
             // Both settings not enabled => Error
             ui_error_blind_signing();
             apdu_response_code = SWO_INCORRECT_DATA;
@@ -1173,7 +1173,7 @@ void ui_712_end_sign(void) {
 #ifdef SCREEN_SIZE_WALLET
     if (true) {
 #else
-    if (HAS_SETTING(S_VERBOSE_TIP712) || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
+    if (N_storage.verbose_tip712 || (ui_ctx->filtering_mode == TIP712_FILTERING_FULL)) {
 #endif
         ui_ctx->end_reached = true;
         apdu_response_code = ui_sign_712(ui_ctx->filtering_mode);
@@ -1339,7 +1339,7 @@ void ui_712_queue_struct_to_review(void) {
 #ifdef SCREEN_SIZE_WALLET
     if (true) {
 #else
-    if (HAS_SETTING(S_VERBOSE_TIP712)) {
+    if (N_storage.verbose_tip712) {
 #endif
         ui_ctx->structs_to_review += 1;
     }

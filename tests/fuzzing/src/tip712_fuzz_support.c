@@ -26,8 +26,16 @@ uint8_t appState;
 uint16_t apdu_response_code;
 cx_sha3_t global_sha3;
 strings_t strings;
-internal_storage_t g_fuzz_settings;
-const internal_storage_t N_storage_real = 0;
+internalStorage_t g_fuzz_storage;
+const internalStorage_t N_storage_real = {0};
+
+void fuzz_set_settings(uint8_t bits) {
+    g_fuzz_storage.dataAllowed = (bits >> S_DATA_ALLOWED) & 1U;
+    g_fuzz_storage.customContract = (bits >> S_CUSTOM_CONTRACT) & 1U;
+    g_fuzz_storage.truncateAddress = (bits >> S_TRUNCATE_ADDRESS) & 1U;
+    g_fuzz_storage.signByHash = (bits >> S_SIGN_BY_HASH) & 1U;
+    g_fuzz_storage.verbose_tip712 = (bits >> S_VERBOSE_TIP712) & 1U;
+}
 const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
 bool g_fuzz_signature_valid = true;
 
@@ -122,7 +130,7 @@ void reset_app_context(void) {
 
 void init_tip712_fuzz_environment(void) {
     reset_app_context();
-    g_fuzz_settings = 0;
+    fuzz_set_settings(0);
     memset(&global_sha3, 0, sizeof(global_sha3));
 }
 

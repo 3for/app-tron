@@ -141,7 +141,7 @@ void init_external_plugin_fuzz_environment(const uint8_t *config, size_t config_
     }
 
     reset_app_context();
-    g_fuzz_settings = g_plugin_behavior.settings;
+    fuzz_set_settings(g_plugin_behavior.settings);
     g_fuzz_signature_valid = g_plugin_behavior.signature_valid;
     fuzz_os_lib_exception_code = 0;
     ((chain_config_t *) chainConfig)->chainId = 0x2BU;

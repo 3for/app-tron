@@ -32,7 +32,7 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_P1_P2);
     }
 
-    if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+    if (!N_storage.signByHash) {
         return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
     }
 

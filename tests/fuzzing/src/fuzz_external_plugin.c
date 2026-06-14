@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "apdu_constants.h"
+#include "settings.h"
 
 void init_external_plugin_fuzz_environment(const uint8_t *config, size_t config_len);
 void reset_app_context(void);
@@ -13,8 +14,6 @@ enum {
     OP_SIGN_EXTERNAL_PLUGIN = 2,
     OP_SET_SETTINGS = 3,
 };
-
-extern uint8_t g_fuzz_settings;
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     const uint8_t *stream = data;
@@ -50,7 +49,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             if (remaining == 0U) {
                 break;
             }
-            g_fuzz_settings = *stream++;
+            fuzz_set_settings(*stream++);
             remaining--;
             continue;
         }

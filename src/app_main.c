@@ -52,12 +52,7 @@
 uint16_t apdu_response_code;
 
 // The settings, stored in NVRAM.
-const internal_storage_t N_storage_real;
-
-#ifdef HAVE_GATING_SUPPORT
-// Gated-signing throttle counter, stored in NVRAM (see settings.h).
-const uint8_t N_gating_counter_real;
-#endif  // HAVE_GATING_SUPPORT
+const internalStorage_t N_storage_real;
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -117,9 +112,15 @@ void handle_return_code(uint16_t response_code) {
 }
 
 static void nv_app_state_init(void) {
-    if (!HAS_SETTING(S_INITIALIZED)) {
-        SETTING_TOGGLE(S_INITIALIZED);
+    // Mirrors app-ethereum's storage_init(): on first run, zero the whole struct and
+    // mark it initialized in a single NVRAM write (all settings default to off).
+    if (N_storage.initialized) {
+        return;
     }
+    internalStorage_t storage;
+    explicit_bzero(&storage, sizeof(storage));
+    storage.initialized = true;
+    nvm_write((void *) &N_storage, (void *) &storage, sizeof(internalStorage_t));
 }
 
 void init_coin_config(chain_config_t *coin_config) {

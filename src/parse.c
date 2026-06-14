@@ -791,7 +791,7 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         return USTREAM_FAULT;
     }
 
-    if (!HAS_SETTING(S_DATA_ALLOWED) && content->dataBytes != 0) {
+    if (!N_storage.dataAllowed && content->dataBytes != 0) {
         return USTREAM_MISSING_SETTING_DATA_ALLOWED;
     }
 

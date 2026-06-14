@@ -20,7 +20,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     init_tip712_fuzz_environment();
 
-    g_fuzz_settings = data[0];
+    fuzz_set_settings(data[0]);
     appState = data[1] % (APP_STATE_SIGNING_TIP712 + 1U);
 
     payload_size = size - 4U;
