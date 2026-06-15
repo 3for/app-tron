@@ -199,6 +199,48 @@ class TronClient:
         return self._client.exchange_async_raw(
             CommandBuilder().tip712_filtering_raw(name, sig, discarded))
 
+    def tip712_filtering_calldata_info(self, index: int, value_filter_flag: bool,
+                                       callee_filter_flag: int,
+                                       chain_id_filter_flag: bool,
+                                       selector_filter_flag: bool,
+                                       amount_filter_flag: bool,
+                                       spender_filter_flag: int, sig: bytes):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_info(
+                index, value_filter_flag, callee_filter_flag,
+                chain_id_filter_flag, selector_filter_flag, amount_filter_flag,
+                spender_filter_flag, sig))
+
+    def tip712_filtering_calldata_value(self, index: int, sig: bytes,
+                                        discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_value(index, sig, discarded))
+
+    def tip712_filtering_calldata_callee(self, index: int, sig: bytes,
+                                         discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_callee(index, sig, discarded))
+
+    def tip712_filtering_calldata_chain_id(self, index: int, sig: bytes,
+                                           discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_chain_id(index, sig, discarded))
+
+    def tip712_filtering_calldata_selector(self, index: int, sig: bytes,
+                                           discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_selector(index, sig, discarded))
+
+    def tip712_filtering_calldata_amount(self, index: int, sig: bytes,
+                                         discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_amount(index, sig, discarded))
+
+    def tip712_filtering_calldata_spender(self, index: int, sig: bytes,
+                                          discarded: bool):
+        return self._client.exchange_raw(
+            CommandBuilder().tip712_filtering_calldata_spender(index, sig, discarded))
+
     def address_hex(self, address):
         return base58.b58decode_check(address).hex().upper()
 

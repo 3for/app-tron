@@ -75,6 +75,13 @@ class P2Type(IntEnum):
     FILTERING_RAW = 0xff
     FILTERING_DISCARDED_PATH = 0x01
     FILTERING_TRUSTED_NAME = 0xfb
+    FILTERING_CALLDATA_SPENDER = 0xf4
+    FILTERING_CALLDATA_AMOUNT = 0xf5
+    FILTERING_CALLDATA_SELECTOR = 0xf6
+    FILTERING_CALLDATA_CHAIN_ID = 0xf7
+    FILTERING_CALLDATA_CALLEE = 0xf8
+    FILTERING_CALLDATA_VALUE = 0xf9
+    FILTERING_CALLDATA_INFO = 0xfa
     GCS_STORE = 0x10
     GCS_START_FLOW = 0x11
 
@@ -249,6 +256,82 @@ class CommandBuilder:
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_RAW,
                                self._tip712_filtering_send_name(name, sig))
+
+    def tip712_filtering_calldata_info(self, index: int,
+                                       value_filter_flag: bool,
+                                       callee_filter_flag: int,
+                                       chain_id_filter_flag: bool,
+                                       selector_filter_flag: bool,
+                                       amount_filter_flag: bool,
+                                       spender_filter_flag: int,
+                                       sig: bytes) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data += struct.pack(">B", value_filter_flag)
+        data += struct.pack(">?", callee_filter_flag)
+        data += struct.pack(">B", chain_id_filter_flag)
+        data += struct.pack(">B", selector_filter_flag)
+        data += struct.pack(">B", amount_filter_flag)
+        data += struct.pack(">?", spender_filter_flag)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING,
+                               P1Type.COMPLETE_SEND,
+                               P2Type.FILTERING_CALLDATA_INFO, data)
+
+    def tip712_filtering_calldata_value(self, index: int, sig: bytes,
+                                        discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_VALUE, data)
+
+    def tip712_filtering_calldata_callee(self, index: int, sig: bytes,
+                                         discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_CALLEE, data)
+
+    def tip712_filtering_calldata_chain_id(self, index: int, sig: bytes,
+                                           discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_CHAIN_ID, data)
+
+    def tip712_filtering_calldata_selector(self, index: int, sig: bytes,
+                                           discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_SELECTOR, data)
+
+    def tip712_filtering_calldata_amount(self, index: int, sig: bytes,
+                                         discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_AMOUNT, data)
+
+    def tip712_filtering_calldata_spender(self, index: int, sig: bytes,
+                                          discarded: bool) -> bytes:
+        data = bytearray()
+        data += struct.pack(">B", index)
+        data.append(len(sig))
+        data += sig
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_CALLDATA_SPENDER, data)
 
     def set_external_plugin(self, plugin_name: str, contract_address: bytes,
                             selector: bytes, sig: bytes) -> bytes:

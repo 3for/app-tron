@@ -4,6 +4,7 @@ import re
 import signal
 import sys
 import copy
+import functools
 from typing import Any, Callable, Optional, Union
 import struct
 
@@ -23,6 +24,7 @@ from address import to_raw_address, to_tvm_address
 app_client = None
 filtering_paths: dict = {}
 filtering_tokens: list[dict] = []
+filtering_calldatas: list[dict] = []
 current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
 
@@ -226,7 +228,8 @@ def send_filtering_token(token_idx: int):
             token["sent"] = True
 
 
-def send_filter(path: str, discarded: bool):
+def send_filter(path: str, discarded: bool) -> Optional[Callable]:
+    ret: Optional[Callable] = None
     assert path in filtering_paths.keys()
 
     if filtering_paths[path]["type"].startswith("amount_join_"):
@@ -251,25 +254,63 @@ def send_filter(path: str, discarded: bool):
                                     filtering_paths[path]["tn_type"],
                                     filtering_paths[path]["tn_source"],
                                     discarded)
+    elif filtering_paths[path]["type"].startswith("calldata_"):
+        calldata_index = filtering_paths[path]["index"]
+        for calldata in filtering_calldatas:
+            if calldata["index"] == calldata_index:
+                if not calldata["sent"]:
+                    send_filtering_calldata_info(calldata["index"],
+                                                 calldata["value_flag"],
+                                                 calldata["callee_flag"],
+                                                 calldata["chain_id_flag"],
+                                                 calldata["selector_flag"],
+                                                 calldata["amount_flag"],
+                                                 calldata["spender_flag"])
+                    calldata["sent"] = True
+                break
+        if filtering_paths[path]["type"].endswith("_value"):
+            send_filtering_calldata_value(path, calldata_index, discarded)
+        elif filtering_paths[path]["type"].endswith("_callee"):
+            send_filtering_calldata_callee(path, calldata_index, discarded)
+        elif filtering_paths[path]["type"].endswith("_chain_id"):
+            send_filtering_calldata_chain_id(path, calldata_index, discarded)
+        elif filtering_paths[path]["type"].endswith("_selector"):
+            send_filtering_calldata_selector(path, calldata_index, discarded)
+        elif filtering_paths[path]["type"].endswith("_amount"):
+            send_filtering_calldata_amount(path, calldata_index, discarded)
+        elif filtering_paths[path]["type"].endswith("_spender"):
+            send_filtering_calldata_spender(path, calldata_index, discarded)
+        else:
+            assert False
+        calldata["path_count"] -= 1
+        if calldata["path_count"] == 0:
+            ret = calldata["handler"]
     elif filtering_paths[path]["type"] == "raw":
         print(path, filtering_paths[path]["name"], discarded)
         send_filtering_raw(path, filtering_paths[path]["name"], discarded)
     else:
         assert False
 
+    return ret
+
 
 def send_struct_impl_field(value, field):
     assert not isinstance(value, list)
     assert field["enum"] != TIP712FieldType.CUSTOM
 
+    callback: Optional[Callable] = None
     data = encoding_functions[field["enum"]](value, field["typesize"])
     if filtering_paths:
         path = ".".join(current_path)
         if path in filtering_paths.keys():
-            send_filter(path, False)
+            callback = send_filter(path, False)
     with app_client.tip712_send_struct_impl_struct_field(data):
         enable_autonext()
     disable_autonext()
+    # A completed nested-calldata filter returns a handler that streams the GCS
+    # descriptor (TX_INFO + fields) for the calldata once its value field is sent.
+    if callback is not None:
+        callback()
 
 
 def evaluate_field(structs, data, field, lvls_left, new_level=True):
@@ -418,6 +459,94 @@ def send_filtering_raw(path: str, display_name: str, discarded: bool):
         pass
 
 
+def send_filtering_calldata_info(index: int,
+                                 value_filter_flag: bool,
+                                 callee_filter_flag: int,
+                                 chain_id_filter_flag: bool,
+                                 selector_filter_flag: bool,
+                                 amount_filter_flag: bool,
+                                 spender_filter_flag: int):
+    to_sign = start_signature_payload(sig_ctx, 55)
+    to_sign.append(index)
+    to_sign.append(value_filter_flag)
+    to_sign.append(int(callee_filter_flag))
+    to_sign.append(chain_id_filter_flag)
+    to_sign.append(selector_filter_flag)
+    to_sign.append(amount_filter_flag)
+    to_sign.append(int(spender_filter_flag))
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_info(index,
+                                                         value_filter_flag,
+                                                         callee_filter_flag,
+                                                         chain_id_filter_flag,
+                                                         selector_filter_flag,
+                                                         amount_filter_flag,
+                                                         spender_filter_flag,
+                                                         sig)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata info : {response.status}"
+
+
+def send_filtering_calldata_value(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 66)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_value(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata value for {path}: {response.status}"
+
+
+def send_filtering_calldata_callee(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 77)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_callee(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata callee for {path}: {response.status}"
+
+
+def send_filtering_calldata_chain_id(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 88)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_chain_id(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata chain_id for {path}: {response.status}"
+
+
+def send_filtering_calldata_selector(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 99)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_selector(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata selector for {path}: {response.status}"
+
+
+def send_filtering_calldata_amount(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 110)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_amount(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata amount for {path}: {response.status}"
+
+
+def send_filtering_calldata_spender(path: str, index: int, discarded: bool):
+    to_sign = start_signature_payload(sig_ctx, 121)
+    to_sign += path.encode()
+    to_sign.append(index)
+    sig = keychain.sign_data(keychain.Key.CAL, to_sign)
+    response = app_client.tip712_filtering_calldata_spender(index, sig, discarded)
+    assert response.status == StatusWord.OK, \
+        f"Error sending filtering calldata spender for {path}: {response.status}"
+
+
 def send_coin_meta_certificate(app_client) -> None:
     if app_client._pki_client is None:
         print(f"Ledger-PKI Not supported on '{app_client._device.name}'")
@@ -426,9 +555,10 @@ def send_coin_meta_certificate(app_client) -> None:
     app_client._pki_client.send_certificate(PKIPubKeyUsage.PUBKEY_USAGE_COIN_META)
 
 
-def prepare_filtering(filter_data, message):
+def prepare_filtering(data_json, filter_data):
     global filtering_paths
     global filtering_tokens
+    global filtering_calldatas
 
     if "fields" in filter_data:
         filtering_paths = filter_data["fields"]
@@ -441,6 +571,23 @@ def prepare_filtering(filter_data, message):
                 token["sent"] = False
     else:
         filtering_tokens = []
+
+    if "calldatas" in filter_data:
+        filtering_calldatas = filter_data["calldatas"]
+        for calldata in filtering_calldatas:
+            calldata["sent"] = False
+            calldata["path_count"] = 0
+            for path in filtering_paths.values():
+                if path["type"].startswith("calldata_"):
+                    if path["index"] == calldata["index"]:
+                        calldata["path_count"] += 1
+            if "handler" in calldata:
+                if calldata["handler"] is not None:
+                    calldata["handler"] = functools.partial(calldata["handler"], app_client, data_json)
+            else:
+                calldata["handler"] = None
+    else:
+        filtering_calldatas = []
 
 
 def handle_optional_domain_values(domain):
@@ -464,6 +611,15 @@ def init_signature_context(types, domain):
     for i in range(8):
         sig_ctx["chainid"].append((chainid >> (i * 8)) & 0xff)
     sig_ctx["chainid"].reverse()
+
+    # Order each field's keys ("name" before "type") so the serialized schema matches
+    # the firmware's reconstruction (compute_schema_hash() always emits {"name":...,
+    # "type":...}), regardless of the key order in the source JSON. Mirrors
+    # app-ethereum's init_signature_context().
+    for type_name in types.keys():
+        for i in range(len(types[type_name])):
+            types[type_name][i] = dict(sorted(types[type_name][i].items()))
+
     schema_str = json.dumps(types).replace(" ", "")
     schema_hash = hashlib.sha224(schema_str.encode())
     sig_ctx["schema_hash"] = bytearray.fromhex(schema_hash.hexdigest())
@@ -532,7 +688,7 @@ def process_data(aclient,
     if filters:
         with app_client.tip712_filtering_activate():
             pass
-        prepare_filtering(filters, message)
+        prepare_filtering(data_json, filters)
 
     send_coin_meta_certificate(app_client)
 

@@ -7,11 +7,12 @@ import json
 import fnmatch
 import os
 import web3
+import hashlib
 
 from ctypes import c_uint64
 from functools import partial
 
-from typing import Optional
+from typing import Optional, Callable
 
 from ragger.error import ExceptionRAPDU
 from pathlib import Path
@@ -28,11 +29,17 @@ from ragger.navigator import Navigator, NavInsID, NavIns
 from settings import settings_toggle, SettingID, get_device_settings
 from client.command_builder import CommandBuilder
 import response_parser as ResponseParser
-from client.tip712 import InputData as InputData
+from client.tip712 import InputData as InputData, EIP712CalldataParamPresence
 from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from client.gating import Gating
 from client.status_word import StatusWord
-from utils import recover_message
+from client.proxy_info import ProxyInfo
+from client.gcs import (Field, ParamRaw, Value, TypeFamily, DataPath, PathTuple,
+                        ParamTokenAmount, ParamCalldata, ContainerPath, PathLeaf,
+                        PathLeafType, TxInfo)
+from utils import recover_message, get_selector_from_data
+from test_gcs import compute_inst_hash, ABIS_FOLDER
+from fields_utils import get_all_paths, get_all_tuple_array_paths
 from ledgered.devices import Device, DeviceType
 from ragger.firmware.touch.positions import POSITIONS
 
@@ -544,6 +551,276 @@ def filt_tn_types_fixture(request) -> list[TrustedNameType]:
     return request.param
 
 
+def _get_challenge(client: TronClient) -> int:
+    return ResponseParser.challenge(
+        client.exchange_raw(CommandBuilder().get_challenge()).data)
+
+
+# GCS (Generic Clear Signing) handlers for the nested-calldata TIP-712 tests. Each
+# is bound -- via the filter's "handler" -- to (client, json_data) and invoked once a
+# calldata's value field has been sent, streaming the GTP descriptor (TX_INFO +
+# fields) that clear-signs the embedded transaction. Mirrors app-ethereum's
+# gcs_handler* in test_eip712.py.
+def gcs_handler(client: TronClient, json_data: dict) -> None:
+    fields = [
+        Field(
+            1,
+            "Amount",
+            ParamTokenAmount(
+                1,
+                Value(
+                    1,
+                    TypeFamily.UINT,
+                    type_size=32,
+                    data_path=DataPath(
+                        1,
+                        [
+                            PathTuple(1),
+                            PathLeaf(PathLeafType.STATIC),
+                        ]
+                    ),
+                ),
+                token=Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    container_path=ContainerPath.TO,
+                ),
+            )
+        ),
+    ]
+    # compute instructions hash
+    inst_hash = compute_inst_hash(fields)
+    tx_info = TxInfo(
+        1,
+        json_data["domain"]["chainId"],
+        bytes.fromhex(json_data["message"]["to"][2:]),
+        get_selector_from_data(json_data["message"]["data"]),
+        inst_hash,
+        "Token transfer",
+        contract_name="USDC",
+    )
+    client.provide_token_metadata(tx_info.contract_name, tx_info.contract_addr, 6, tx_info.chain_id)
+
+    client.provide_transaction_info(tx_info.serialize())
+
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+
+def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
+    # Load TIP-712 JSON data
+    with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    # Define tokens
+    tokens = [
+        {
+            "ticker": "USDC",
+            "address": bytes.fromhex("3c499c542cef5e3811e1192ce70d8cc03d5c3359"),
+            "decimals": 6,
+        },
+        {
+            "ticker": "USDC",
+            "address": bytes.fromhex("3c499c542cef5e3811e1192ce70d8cc03d5c3359"),
+            "decimals": 6,
+        },
+    ]
+    # Encode token transfer data
+    with open(f"{ABIS_FOLDER}/erc20.json", encoding="utf-8") as f:
+        contract = web3.Web3().eth.contract(
+            abi=json.load(f),
+            address=None
+        )
+    tokenData0 = contract.encode_abi("transfer", [
+        bytes.fromhex("B8C8EB8EFC68796E766F6AB320DB8C165C064949"),
+        int(0.004 * pow(10, tokens[0]["decimals"])),
+    ])
+    tokenData1 = contract.encode_abi("transfer", [
+        bytes.fromhex("4DDA64E1EC1A2C00D0766F25877F6A3BC77F717E"),
+        int(0.008 * pow(10, tokens[1]["decimals"])),
+    ])
+
+    # Encode batchExecute data using token transfer data
+    with open(f"{ABIS_FOLDER}/batch.json", encoding="utf-8") as f:
+        contract = web3.Web3().eth.contract(
+            abi=json.load(f),
+            address=tokens[1]["address"]
+        )
+    batchData = contract.encode_abi("batchExecute", [[
+        (
+            tokens[0]["address"],
+            web3.Web3.to_wei(0, "ether"),
+            tokenData0
+        ),
+        (
+            tokens[1]["address"],
+            web3.Web3.to_wei(0, "ether"),
+            tokenData1
+        ),
+    ]])
+
+    # Top level transaction fields definition
+    param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json", "batchExecute", "calls")
+    L0_fields = [
+        Field(
+            1,
+            "Transaction",
+            ParamCalldata(
+                1,
+                Value(
+                    1,
+                    TypeFamily.BYTES,
+                    data_path=DataPath(
+                        1,
+                        param_paths["data"]
+                    ),
+                ),
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    data_path=DataPath(
+                        1,
+                        param_paths["to"]
+                    ),
+                ),
+                amount=Value(
+                    1,
+                    TypeFamily.UINT,
+                    data_path=DataPath(
+                        1,
+                        param_paths["value"]
+                    ),
+                ),
+            )
+        ),
+    ]
+    # compute instructions hash
+    L0_hash = compute_inst_hash(L0_fields)
+
+    # Define intermediate execTransaction transaction info
+    L0_tx_info = TxInfo(
+        1,
+        data["domain"]["chainId"],
+        bytes.fromhex(json_data["domain"]["verifyingContract"][2:]),
+        get_selector_from_data(batchData),
+        L0_hash,
+        "Batch transactions",
+        creator_name="Ledger",
+        creator_legal_name="Ledger Multisig",
+        creator_url="https://www.ledger.com",
+        contract_name="BatchExecutor",
+    )
+
+    # Lower batchExecute transaction fields definition
+    param_paths = get_all_paths(f"{ABIS_FOLDER}/erc20.json", "transfer")
+    L1_fields = [
+        Field(
+            1,
+            "Amount",
+            ParamTokenAmount(
+                1,
+                Value(
+                    1,
+                    TypeFamily.UINT,
+                    data_path=DataPath(
+                        1,
+                        param_paths["_value"]
+                    ),
+                    type_size=32,
+                ),
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    container_path=ContainerPath.TO,
+                ),
+            )
+        ),
+        Field(
+            1,
+            "To",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.ADDRESS,
+                    data_path=DataPath(
+                        1,
+                        param_paths["_to"]
+                    ),
+                )
+            )
+        ),
+    ]
+    # compute instructions hash
+    L1_hash = compute_inst_hash(L1_fields)
+
+    # Define lower batchExecute transaction info
+    L1_tx_info = [
+        TxInfo(
+            1,
+            data["domain"]["chainId"],
+            tokens[0]["address"],
+            get_selector_from_data(tokenData0),
+            L1_hash,
+            "Send",
+            contract_name="USD_Coin",
+        ),
+        TxInfo(
+            1,
+            data["domain"]["chainId"],
+            tokens[1]["address"],
+            get_selector_from_data(tokenData1),
+            L1_hash,
+            "Send",
+            contract_name="USD_Coin",
+        )
+    ]
+
+    proxy_info = ProxyInfo(
+        _get_challenge(client),
+        bytes.fromhex(json_data["message"]["to"][2:]),
+        L0_tx_info.chain_id,
+        L0_tx_info.contract_addr,
+    )
+
+    # Send Proxy information
+    client.provide_proxy_info(proxy_info.serialize())
+
+    # Send intermediate execTransaction info description
+    client.provide_transaction_info(L0_tx_info.serialize())
+    for f0 in L0_fields:
+        # Send intermediate execTransaction fields description
+        client.provide_transaction_field_desc(f0.serialize())
+
+    # Lower batchExecute description
+    for idx, i1 in enumerate(L1_tx_info):
+        # Send lower batchExecute info description
+        client.provide_transaction_info(i1.serialize())
+        client.provide_token_metadata(tokens[idx]["ticker"],
+                                      tokens[idx]["address"],
+                                      tokens[idx]["decimals"],
+                                      data["domain"]["chainId"])
+        for f1 in L1_fields:
+            # Send lower batchExecute fields description
+            client.provide_transaction_field_desc(f1.serialize())
+
+
+def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
+    tx_info = TxInfo(
+        1,
+        json_data["domain"]["chainId"],
+        bytes.fromhex(json_data["message"]["to"][2:]),
+        get_selector_from_data(json_data["message"]["data"]),
+        hashlib.sha3_256().digest(),
+        "get total supply",
+        creator_name="WETH",
+        creator_legal_name="Wrapped Ether",
+        creator_url="weth.io",
+    )
+
+    client.provide_transaction_info(tx_info.serialize())
+
+
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
 
@@ -889,6 +1166,174 @@ class TestTRX():
                 chain_id=data["domain"]["chainId"],
                 challenge=challenge))
 
+        vrs = tip712_new_common(device, navigator, default_screenshot_path,
+                                client, cmd_builder, data, filters,
+                                False, golden_run)
+
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)
+
+    def _tip712_calldata_common(self, device: Device,
+                                backend: BackendInterface, navigator: Navigator,
+                                default_screenshot_path: Path, test_name: str,
+                                golden_run: bool, filename: str,
+                                handler: Optional[Callable] = None):
+        global snapshots_dirname
+
+        client = TronClient(backend, device, navigator)
+        snapshots_dirname = test_name
+
+        with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+            data = json.load(file)
+
+        filters = {
+            "name": "Calldata test",
+            "calldatas": [
+                {
+                    "index": 0,
+                    "handler": handler,
+                    "value_flag": True,
+                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                    "chain_id_flag": False,
+                    "selector_flag": False,
+                    "amount_flag": True,
+                    "spender_flag": EIP712CalldataParamPresence.NONE,
+                },
+            ],
+            "fields": {
+                "to": {
+                    "type": "calldata_callee",
+                    "index": 0,
+                },
+                "value": {
+                    "type": "calldata_amount",
+                    "index": 0,
+                },
+                "data": {
+                    "type": "calldata_value",
+                    "index": 0,
+                },
+            }
+        }
+
+        cmd_builder = CommandBuilder()
+        vrs = tip712_new_common(device, navigator, default_screenshot_path,
+                                client, cmd_builder, data, filters,
+                                False, golden_run)
+
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)
+
+    def test_trx_tip712_calldata(self, device: Device,
+                                 backend: BackendInterface, navigator: Navigator,
+                                 default_screenshot_path: Path, test_name: str,
+                                 golden_run: bool):
+        self._tip712_calldata_common(device, backend, navigator,
+                                     default_screenshot_path, test_name,
+                                     golden_run, "safe", gcs_handler)
+
+    def test_trx_tip712_calldata_empty_send(self, device: Device,
+                                            backend: BackendInterface,
+                                            navigator: Navigator,
+                                            default_screenshot_path: Path,
+                                            test_name: str, golden_run: bool):
+        client = TronClient(backend, device, navigator)
+        filename = "safe_empty"
+
+        with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+            json_data = json.load(file)
+
+        client.provide_trusted_name(
+            TrustedName(2,
+                        bytes.fromhex(json_data["message"]["to"][2:]),
+                        "MAB_addr",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                        chain_id=json_data["domain"]["chainId"],
+                        challenge=_get_challenge(client),
+                        owner=bytes.fromhex(client.getAccount(0)["addressHex"])[1:],
+                        owner_deriv_path=client.getAccount(0)["path"]))
+        self._tip712_calldata_common(device, backend, navigator,
+                                     default_screenshot_path, test_name,
+                                     golden_run, filename)
+
+    def test_trx_tip712_calldata_no_param(self, device: Device,
+                                          backend: BackendInterface,
+                                          navigator: Navigator,
+                                          default_screenshot_path: Path,
+                                          test_name: str, golden_run: bool):
+        self._tip712_calldata_common(device, backend, navigator,
+                                     default_screenshot_path, test_name,
+                                     golden_run, "safe_calldata_no_param",
+                                     gcs_handler_no_param)
+
+    def test_trx_tip712_batch(self, device: Device,
+                              backend: BackendInterface, navigator: Navigator,
+                              default_screenshot_path: Path, test_name: str,
+                              golden_run: bool):
+        global snapshots_dirname
+
+        client = TronClient(backend, device, navigator)
+        snapshots_dirname = test_name
+
+        with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
+            data = json.load(file)
+
+        filters = {
+            "name": "Calldata test",
+            "calldatas": [
+                {
+                    "index": 0,
+                    "handler": gcs_handler_batch,
+                    "value_flag": True,
+                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                    "chain_id_flag": False,
+                    "selector_flag": False,
+                    "amount_flag": True,
+                    "spender_flag": EIP712CalldataParamPresence.NONE,
+                },
+            ],
+            "fields": {
+                "to": {
+                    "type": "calldata_callee",
+                    "index": 0,
+                },
+                "value": {
+                    "type": "calldata_amount",
+                    "index": 0,
+                },
+                "data": {
+                    "type": "calldata_value",
+                    "index": 0,
+                },
+                "operation": {
+                    "type": "raw",
+                    "name": "Operation type",
+                },
+                "baseGas": {
+                    "type": "raw",
+                    "name": "Gas amount",
+                },
+                "gasPrice": {
+                    "type": "raw",
+                    "name": "Gas price",
+                },
+                "gasToken": {
+                    "type": "raw",
+                    "name": "Gas token",
+                },
+                "refundReceiver": {
+                    "type": "trusted_name",
+                    "name": "Gas receiver",
+                    "tn_type": [TrustedNameType.ACCOUNT, TrustedNameType.CONTRACT,
+                                TrustedNameType.TOKEN],
+                    "tn_source": [TrustedNameSource.CAL, TrustedNameSource.ENS,
+                                  TrustedNameSource.UD, TrustedNameSource.FN],
+                },
+            }
+        }
+
+        cmd_builder = CommandBuilder()
         vrs = tip712_new_common(device, navigator, default_screenshot_path,
                                 client, cmd_builder, data, filters,
                                 False, golden_run)
