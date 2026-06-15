@@ -44,6 +44,7 @@ enum {
 #endif
     SWITCH_ALLOW_HASH_TX_TOKEN,
     SWITCH_TIP712_VERBOSE_TOKEN,
+    SWITCH_DISPLAY_HASH_TOKEN,
 };
 
 // Settings switch indices into switches[] (same order as the tokens above).
@@ -55,6 +56,7 @@ enum {
 #endif
     HASH_TX_ID,
     TIP712_VERBOSE_ID,
+    DISPLAY_HASH_ID,
     SETTINGS_SWITCHES_NB
 };
 
@@ -104,6 +106,11 @@ static void setting_toggle_callback(int token, uint8_t index, int page) {
             value = !N_storage.verbose_tip712;
             switches[TIP712_VERBOSE_ID].initState = (nbgl_state_t) value;
             nvm_write((void *) &N_storage.verbose_tip712, (void *) &value, sizeof(value));
+            break;
+        case SWITCH_DISPLAY_HASH_TOKEN:
+            value = !N_storage.displayHash;
+            switches[DISPLAY_HASH_ID].initState = (nbgl_state_t) value;
+            nvm_write((void *) &N_storage.displayHash, (void *) &value, sizeof(value));
             break;
         default:
             PRINTF("Should not happen !\n");
@@ -165,6 +172,16 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
     switches[TIP712_VERBOSE_ID].token = SWITCH_TIP712_VERBOSE_TOKEN;
     switches[TIP712_VERBOSE_ID].tuneId = TUNE_TAP_CASUAL;
     switches[TIP712_VERBOSE_ID].initState = N_storage.verbose_tip712 ? ON_STATE : OFF_STATE;
+
+    switches[DISPLAY_HASH_ID].text = "Transaction hash";
+#ifdef SCREEN_SIZE_WALLET
+    switches[DISPLAY_HASH_ID].subText = "Always display the transaction or message hash";
+#else
+    switches[DISPLAY_HASH_ID].subText = "Always display the transaction hash";
+#endif
+    switches[DISPLAY_HASH_ID].token = SWITCH_DISPLAY_HASH_TOKEN;
+    switches[DISPLAY_HASH_ID].tuneId = TUNE_TAP_CASUAL;
+    switches[DISPLAY_HASH_ID].initState = N_storage.displayHash ? ON_STATE : OFF_STATE;
 
     contents[0].type = SWITCHES_LIST;
     contents[0].content.switchesList.nbSwitches = SETTINGS_SWITCHES_NB;

@@ -17,6 +17,8 @@ typedef struct internalStorage_t {
     bool truncateAddress;
     bool signByHash;
     bool verbose_tip712;
+    // Always display the transaction hash in the review (app-ethereum's displayHash).
+    bool displayHash;
 #ifdef HAVE_GATING_SUPPORT
     // Gated-signing throttle counter (see provide_gating). app-ethereum keeps this in the
     // same N_storage struct (N_storage.gating_counter), so TRON does too.

@@ -25,7 +25,7 @@ from eth_keys import KeyAPI
 from ragger.backend.interface import RaisePolicy
 from ragger.navigator import NavInsID, NavIns
 
-from settings import settings_toggle
+from settings import settings_toggle, SettingID
 from client import keychain
 from web3 import Web3
 '''
@@ -108,6 +108,21 @@ class TestTRX():
                 amount=100000000),
             b'CryptoChain-TronSR Ledger Transactions Tests')
         self.sign_and_validate(client, device, 0, tx, warning_approve=True)
+
+    def test_trx_send_display_hash(self, backend, device, navigator):
+        # With the "Transaction hash" setting (app-ethereum's displayHash) enabled,
+        # the review of a clear-signed transfer gains an extra "Transaction hash" field.
+        client = TronClient(backend, device, navigator)
+        settings_toggle(device, navigator, [SettingID.DISPLAY_HASH])
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000))
+        self.sign_and_validate(client, device, 0, tx)
 
     def test_trx_send_wrong_path(self, backend, device, navigator):
         client = TronClient(backend, device, navigator)

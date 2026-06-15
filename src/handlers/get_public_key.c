@@ -56,7 +56,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
-    memcpy(toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
+    memcpy(strings.common.toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
 
     if (p1 == P1_NON_CONFIRM) {
         return helper_send_response_pubkey(&tmpCtx.publicKeyContext);

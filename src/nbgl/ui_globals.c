@@ -31,15 +31,11 @@
 #include "../swap/handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
+// The transaction display strings (fromAddress, toAddress, addressSummary,
+// fullContract, url, TRC20Action, TRC20ActionSendAllow, fullHash) now live in
+// txStringProperties_t and are accessed via `strings.common.*`, mirroring
+// app-ethereum's shared_context.h layout.
 volatile uint8_t customContractField;
-char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
-char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
-char addressSummary[40];
-char fullContract[MAX_TOKEN_LENGTH];
-char url[MAX_URL_SIZE];
-char TRC20Action[9];
-char TRC20ActionSendAllow[8];
-char fullHash[HASH_SIZE * 2 + 1];
 int8_t votes_count;
 cx_sha3_t global_sha3;
 strings_t strings;

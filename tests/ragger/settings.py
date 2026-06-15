@@ -13,6 +13,7 @@ class SettingID(Enum):
     TRUNCATE_ADDRESS = auto()
     SIGN_BY_HASH = auto()
     VERBOSE_TIP712 = auto()
+    DISPLAY_HASH = auto()
 
 
 SETTING_BITS = {
@@ -21,6 +22,7 @@ SETTING_BITS = {
     SettingID.TRUNCATE_ADDRESS: 2,
     SettingID.SIGN_BY_HASH: 3,
     SettingID.VERBOSE_TIP712: 4,
+    SettingID.DISPLAY_HASH: 5,
 }
 
 APP_CLA = 0xE0
@@ -33,24 +35,28 @@ SETTINGS_POSITIONS = {
         SettingID.CUSTOM_CONTRACT: (0, 350, 335),
         SettingID.SIGN_BY_HASH: (0, 350, 445),
         SettingID.VERBOSE_TIP712: (1, 350, 130),
+        SettingID.DISPLAY_HASH: (1, 350, 335),
     },
     DeviceType.FLEX: {
         SettingID.DATA_ALLOWED: (0, 420, 130),
         SettingID.CUSTOM_CONTRACT: (0, 420, 350),
         SettingID.SIGN_BY_HASH: (1, 420, 130),
         SettingID.VERBOSE_TIP712: (1, 420, 270),
+        SettingID.DISPLAY_HASH: (2, 420, 130),
     },
     DeviceType.APEX_P: {
         SettingID.DATA_ALLOWED: (0, 260, 90),
         SettingID.CUSTOM_CONTRACT: (0, 260, 235),
         SettingID.SIGN_BY_HASH: (1, 260, 90),
         SettingID.VERBOSE_TIP712: (1, 260, 190),
+        SettingID.DISPLAY_HASH: (2, 260, 90),
     },
     DeviceType.APEX_M: {
         SettingID.DATA_ALLOWED: (0, 260, 90),
         SettingID.CUSTOM_CONTRACT: (0, 260, 235),
         SettingID.SIGN_BY_HASH: (1, 260, 90),
         SettingID.VERBOSE_TIP712: (1, 260, 190),
+        SettingID.DISPLAY_HASH: (2, 260, 90),
     },
 }
 
@@ -65,12 +71,14 @@ def get_device_settings(device: Device) -> list[SettingID]:
             SettingID.TRUNCATE_ADDRESS,
             SettingID.SIGN_BY_HASH,
             SettingID.VERBOSE_TIP712,
+            SettingID.DISPLAY_HASH,
         ]
     return [
         SettingID.DATA_ALLOWED,
         SettingID.CUSTOM_CONTRACT,
         SettingID.SIGN_BY_HASH,
         SettingID.VERBOSE_TIP712,
+        SettingID.DISPLAY_HASH,
     ]
 
 
@@ -118,4 +126,21 @@ def settings_toggle(device: Device, navigator: Navigator,
                     to_toggle: list[SettingID]):
     """Toggle the settings"""
     moves = get_settings_moves(device, to_toggle)
+    if device.is_nano:
+        content = navigator._backend.get_current_screen_content()
+        if isinstance(content, dict):
+            texts = [
+                event.get("text", "").strip().lower()
+                for event in content.get("events", [])
+                if event.get("text", "").strip()
+            ]
+        elif isinstance(content, list):
+            texts = [str(item).strip().lower() for item in content if str(item).strip()]
+        else:
+            texts = []
+
+        if any("app settings" in text for text in texts):
+            moves = moves[1:]
+        elif any("quit" in text for text in texts):
+            moves = [NavInsID.LEFT_CLICK] + moves[1:]
     navigator.navigate(moves, screen_change_before_first_instruction=False)

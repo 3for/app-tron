@@ -22,6 +22,7 @@
 #include "app_errors.h"
 #include "apdu_constants.h"
 #include "ux.h"
+#include "format.h"
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
 #include "ui_review_menu.h"
@@ -29,6 +30,7 @@
 #include "ui_nbgl.h"
 #include "common_712.h"
 #include "trusted_name.h"
+#include "settings.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER          2
@@ -44,6 +46,11 @@ static const char *stringLabelRecipientAddress = "To";
 static const char *stringLabelTxAmount = "Amount";
 static const char *stringLabelResource = "Resource";
 static const char *stringLabelHash = "Hash";
+#ifdef SCREEN_SIZE_WALLET
+static const char *stringLabelTxHash = "Transaction hash";
+#else
+static const char *stringLabelTxHash = "Tx hash";
+#endif
 static const char *stringLabelUrl = "Url";
 static const char *stringLabelGain = "Gain";
 
@@ -191,7 +198,7 @@ static bool prepareClearSignCustomContractPluginUi(void) {
     }
 
     txInfos.fields[fieldIndex].item = "From Address";
-    txInfos.fields[fieldIndex++].value = fromAddress;
+    txInfos.fields[fieldIndex++].value = strings.common.fromAddress;
     pairList.nbPairs = fieldIndex;
 
     return true;
@@ -249,6 +256,27 @@ static void rejectChoice(void) {
     nbgl_useCaseReviewStatus(reject_status, ui_idle);
 }
 
+// Whether the optional "Transaction hash" field (the displayHash setting) applies to
+// this review. Mirrors app-ethereum's displayHash, which augments clear-signed
+// transactions. Excluded are: the states that already display a hash
+// (SIMPLE_TRANSACTION / PERMISSION_UPDATE -> blind hash signing), the message/ECDH
+// flows (which show their own message hash), address verification, and the external
+// plugin flow (its fields are built dynamically).
+static bool state_shows_tx_hash(ui_approval_state_t state) {
+    switch (state) {
+        case APPROVAL_SIMPLE_TRANSACTION:
+        case APPROVAL_PERMISSION_UPDATE:
+        case APPROVAL_SIGN_PERSONAL_MESSAGE:
+        case APPROVAL_SIGN_TIP72_TRANSACTION:
+        case APPROVAL_SHARED_ECDH_SECRET:
+        case APPROVAL_VERIFY_ADDRESS:
+        case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     memset(&txInfos, 0, sizeof(txInfos));
     memset(&infoLongPress, 0, sizeof(infoLongPress));
@@ -285,16 +313,16 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelTxAmount;
             txInfos.fields[0].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[1].item = "Token";
-            txInfos.fields[1].value = fullContract;
+            txInfos.fields[1].value = strings.common.fullContract;
             if (trusted_name_match) {
                 txInfos.fields[2].item = "To (Domain)";
                 txInfos.fields[2].value = trusted_name->name;
             } else {
-                txInfos.fields[2].item = TRC20ActionSendAllow;
-                txInfos.fields[2].value = toAddress;
+                txInfos.fields[2].item = strings.common.TRC20ActionSendAllow;
+                txInfos.fields[2].value = strings.common.toAddress;
             }
             txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
+            txInfos.fields[3].value = strings.common.fromAddress;
             txInfos.flowTitle = "Review Transaction";
             infoLongPress.text = "Sign Transaction";
             pairList.nbPairs = 4;
@@ -305,9 +333,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelHash;
-            txInfos.fields[0].value = fullHash;
+            txInfos.fields[0].value = strings.common.fullHash;
             txInfos.fields[1].item = stringLabelSenderAddress;
-            txInfos.fields[1].value = fromAddress;
+            txInfos.fields[1].value = strings.common.fromAddress;
             pairList.nbPairs = 2;
             break;
         case APPROVAL_WITNESSCREATE_TRANSACTION:
@@ -316,9 +344,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
-            txInfos.fields[0].value = fromAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = stringLabelUrl;
-            txInfos.fields[1].value = url;
+            txInfos.fields[1].value = strings.common.url;
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nCreate Witness";
             infoLongPress.text = "Sign transaction to\nCreate Witness";
@@ -329,9 +357,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelHash;
-            txInfos.fields[0].value = fullHash;
+            txInfos.fields[0].value = strings.common.fullHash;
             txInfos.fields[1].item = stringLabelSenderAddress;
-            txInfos.fields[1].value = fromAddress;
+            txInfos.fields[1].value = strings.common.fromAddress;
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Permission";
             infoLongPress.text = "Sign transaction to\nUpdate Permission";
@@ -342,15 +370,15 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = "Token 1";
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Amount 1";
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = "Token 2";
-            txInfos.fields[2].value = toAddress;
+            txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = "Amount 2";
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
+            txInfos.fields[4].value = strings.common.fromAddress;
             pairList.nbPairs = 5;
             txInfos.flowTitle = "Review transaction to\nExchange";
             infoLongPress.text = "Sign transaction to\nExchange";
@@ -361,15 +389,15 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = "Exchange ID";
-            txInfos.fields[0].value = toAddress;
+            txInfos.fields[0].value = strings.common.toAddress;
             txInfos.fields[1].item = "Token pair";
-            txInfos.fields[1].value = fullContract;
+            txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = "Expected";
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
+            txInfos.fields[4].value = strings.common.fromAddress;
             pairList.nbPairs = 5;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
@@ -380,13 +408,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = "Action";
             txInfos.fields[0].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[1].item = "Exchange ID";
-            txInfos.fields[1].value = toAddress;
+            txInfos.fields[1].value = strings.common.toAddress;
             txInfos.fields[2].item = "Token Name";
-            txInfos.fields[2].value = fullContract;
+            txInfos.fields[2].value = strings.common.fullContract;
             txInfos.fields[3].item = stringLabelTxAmount;
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
+            txInfos.fields[4].value = strings.common.fromAddress;
             pairList.nbPairs = 5;
             break;
         case APPROVAL_WITNESSVOTE_TRANSACTION:
@@ -404,9 +432,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                     ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
             }
             txInfos.fields[votes_count].item = "Total Vote Count";
-            txInfos.fields[votes_count].value = fullContract;
+            txInfos.fields[votes_count].value = strings.common.fullContract;
             txInfos.fields[votes_count + 1].item = stringLabelSenderAddress;
-            txInfos.fields[votes_count + 1].value = fromAddress;
+            txInfos.fields[votes_count + 1].value = strings.common.fromAddress;
             pairList.nbPairs = votes_count + 2;
             txInfos.flowTitle = "Review transaction to\nVote";
             infoLongPress.text = "Sign transaction to\nVote";
@@ -417,13 +445,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelGain;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = "Freeze To";
-            txInfos.fields[2].value = toAddress;
+            txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
+            txInfos.fields[3].value = strings.common.fromAddress;
             pairList.nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nFreeze";
             infoLongPress.text = "Sign transaction to\nFreeze";
@@ -434,11 +462,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelResource;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Delegated To";
-            txInfos.fields[1].value = toAddress;
+            txInfos.fields[1].value = strings.common.toAddress;
             txInfos.fields[2].item = stringLabelSenderAddress;
-            txInfos.fields[2].value = fromAddress;
+            txInfos.fields[2].value = strings.common.fromAddress;
             pairList.nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nUnfreeze";
             infoLongPress.text = "Sign transaction to\nUnfreeze";
@@ -449,7 +477,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
-            txInfos.fields[0].value = fromAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
             pairList.nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nClaim Rewards";
             infoLongPress.text = "Sign transaction to\nClaim Rewards";
@@ -460,9 +488,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = "Message hash";
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Sign with";
-            txInfos.fields[1].value = fromAddress;
+            txInfos.fields[1].value = strings.common.fromAddress;
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
@@ -485,15 +513,15 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             txInfos.warnings[CUSTOM_CONTRACT_WARNING] = true;
             txInfos.fields[0].item = "Contract";
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Selector";
-            txInfos.fields[1].value = TRC20Action;
+            txInfos.fields[1].value = strings.common.TRC20Action;
             txInfos.fields[2].item = "Pay Token";
-            txInfos.fields[2].value = toAddress;
+            txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = "Call Amount";
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
+            txInfos.fields[4].value = strings.common.fromAddress;
             pairList.nbPairs = 5;
             txInfos.flowSubtitle = "Custom Contract";
             break;
@@ -515,9 +543,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = "ECDH Address";
-            txInfos.fields[0].value = fromAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Shared With";
-            txInfos.fields[1].value = toAddress;
+            txInfos.fields[1].value = strings.common.toAddress;
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nShare ECDH Secret";
             infoLongPress.text = "Sign transaction to\nShare ECDH Secret";
@@ -528,13 +556,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelGain;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = stringLabelRecipientAddress;
-            txInfos.fields[2].value = toAddress;
+            txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
+            txInfos.fields[3].value = strings.common.fromAddress;
             pairList.nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nFreezeV2";
             infoLongPress.text = "Sign transaction to\nFreezeV2";
@@ -545,13 +573,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelResource;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = stringLabelRecipientAddress;
-            txInfos.fields[2].value = toAddress;
+            txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
+            txInfos.fields[3].value = strings.common.fromAddress;
             pairList.nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nUnfreezeV2";
             infoLongPress.text = "Sign transaction to\nUnfreezeV2";
@@ -562,15 +590,15 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelResource;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = "Lock";
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[3].item = stringLabelRecipientAddress;
-            txInfos.fields[3].value = toAddress;
+            txInfos.fields[3].value = strings.common.toAddress;
             txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
+            txInfos.fields[4].value = strings.common.fromAddress;
             pairList.nbPairs = 5;
             txInfos.flowTitle = "Review transaction to\nDelegate Resource";
             infoLongPress.text = "Sign transaction to\nDelegate";
@@ -581,13 +609,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelResource;
-            txInfos.fields[0].value = fullContract;
+            txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = stringLabelRecipientAddress;
-            txInfos.fields[2].value = fromAddress;
+            txInfos.fields[2].value = strings.common.fromAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = toAddress;
+            txInfos.fields[3].value = strings.common.toAddress;
             pairList.nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nUndelegate Resource";
             infoLongPress.text = "Sign transaction to\nUndelegate";
@@ -598,7 +626,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
-            txInfos.fields[0].value = fromAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
             pairList.nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nWithdraw Unfreeze";
             infoLongPress.text = "Sign transaction to\nWithdraw";
@@ -607,6 +635,21 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             PRINTF("This should not happen !\n");
             break;
     }
+
+    // Optionally append the transaction hash (app-ethereum's displayHash setting). Only
+    // for clear-signed transactions and only if there is room left in the fields array.
+    if (N_storage.displayHash && state_shows_tx_hash(state) &&
+        (pairList.nbPairs < MAX_TX_FIELDS)) {
+        strlcpy(strings.common.fullHash, "0x", 3);
+        bytes_to_lowercase_hex(strings.common.fullHash + 2,
+                               sizeof(strings.common.fullHash) - 2,
+                               tmpCtx.transactionContext.hash,
+                               HASH_SIZE);
+        txInfos.fields[pairList.nbPairs].item = stringLabelTxHash;
+        txInfos.fields[pairList.nbPairs].value = strings.common.fullHash;
+        pairList.nbPairs++;
+    }
+
     return true;
 }
 
@@ -622,7 +665,7 @@ static void display_address_callback(bool confirm) {
 
 void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     if (state == APPROVAL_VERIFY_ADDRESS) {
-        nbgl_useCaseAddressReview(toAddress,
+        nbgl_useCaseAddressReview(strings.common.toAddress,
                                   NULL,
                                   &APP_TRON_HOME_ICON,
                                   "Verify Tron\naddress",

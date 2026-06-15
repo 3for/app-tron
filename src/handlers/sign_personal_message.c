@@ -99,11 +99,11 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    32));
         format_hex(tmpCtx.transactionContext.hash,
                    sizeof(tmpCtx.transactionContext.hash),
-                   fullContract,
-                   sizeof(fullContract));
+                   strings.common.fullContract,
+                   sizeof(strings.common.fullContract));
         publicKeyContext_t tmp_public_key_ctx;
         if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
-                                 fromAddress,
+                                 strings.common.fromAddress,
                                  &tmp_public_key_ctx) != 0) {
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }

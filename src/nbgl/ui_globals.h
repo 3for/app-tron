@@ -43,15 +43,10 @@
 #endif
 
 extern volatile uint8_t customContractField;
-extern char
-    fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
-extern char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
-extern char addressSummary[40];
-extern char fullContract[MAX_TOKEN_LENGTH];
-extern char url[MAX_URL_SIZE];
-extern char TRC20Action[9];
-extern char TRC20ActionSendAllow[8];
-extern char fullHash[HASH_SIZE * 2 + 1];
+// The transaction display strings (fromAddress, toAddress, addressSummary,
+// fullContract, url, TRC20Action, TRC20ActionSendAllow, fullHash) live in
+// txStringProperties_t (shared_context.h) and are accessed via `strings.common.*`,
+// mirroring app-ethereum.
 extern int8_t votes_count;
 extern cx_sha3_t global_sha3;
 extern strings_t strings;

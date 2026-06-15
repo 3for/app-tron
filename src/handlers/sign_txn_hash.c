@@ -43,10 +43,10 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     workBuffer += ret;
     dataLength -= ret;
 
-    // fromAddress
+    // strings.common.fromAddress
     publicKeyContext_t tmp_public_key_ctx;
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
-                             fromAddress,
+                             strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
@@ -56,11 +56,15 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_LENGTH);
     }
     memcpy(tmpCtx.transactionContext.hash, workBuffer, HASH_SIZE);
-    // Write fullHash
-    format_hex(tmpCtx.transactionContext.hash, HASH_SIZE, fullHash, sizeof(fullHash));
+    // Write strings.common.fullHash ("0x" + lowercase hex)
+    strlcpy(strings.common.fullHash, "0x", 3);
+    bytes_to_lowercase_hex(strings.common.fullHash + 2,
+                           sizeof(strings.common.fullHash) - 2,
+                           tmpCtx.transactionContext.hash,
+                           HASH_SIZE);
 
     // Contract Type = Unknown Type
-    setContractType(UNKNOWN_CONTRACT, fullContract, sizeof(fullContract));
+    setContractType(UNKNOWN_CONTRACT, strings.common.fullContract, sizeof(strings.common.fullContract));
 
     ux_flow_display(APPROVAL_SIMPLE_TRANSACTION, false);
 

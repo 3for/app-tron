@@ -16,6 +16,7 @@ from settings import SettingID, get_settings_moves
     ("custom_contract", [SettingID.CUSTOM_CONTRACT]),
     ("blind_sign", [SettingID.SIGN_BY_HASH]),
     ("tip712_token", [SettingID.VERBOSE_TIP712]),
+    ("display_hash", [SettingID.DISPLAY_HASH]),
     ("multiple1", [SettingID.SIGN_BY_HASH, SettingID.VERBOSE_TIP712]),
     ("multiple2", [SettingID.SIGN_BY_HASH, SettingID.CUSTOM_CONTRACT]),
     ("multiple3", [SettingID.SIGN_BY_HASH, SettingID.DATA_ALLOWED]),

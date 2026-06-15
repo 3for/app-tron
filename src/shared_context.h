@@ -154,13 +154,14 @@ typedef union {
 } dataContext_t;
 
 typedef struct txStringProperties_s {
-    char fromAddress[43];
-    char toAddress[43];
-    char fullAmount[MAX_TICKER_LEN + 1 + 78 + 1];  // 2^256 is 78 digits long
-    char maxFee[50];
-    char nonce[8];  // 10M tx per account ought to be enough for everybody
-    char network_name[NETWORK_STRING_MAX_SIZE + 1];
-    char tx_hash[2 + (INT256_LENGTH * 2) + 1];
+    char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
+    char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
+    char addressSummary[40];
+    char fullContract[MAX_TOKEN_LENGTH];
+    char url[MAX_URL_SIZE];
+    char TRC20Action[9];
+    char TRC20ActionSendAllow[8];
+    char fullHash[2 + HASH_SIZE * 2 + 1];  // "0x" + lowercase hex + '\0'
 } txStringProperties_t;
 
 typedef struct strDataTmp_t {

@@ -191,11 +191,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     if (txContent.permission_id > 0) {
         PRINTF("Set permission_id...\n");
-        snprintf((char *) fromAddress, 5, "P%d - ", txContent.permission_id);
-        getBase58FromAddress(txContent.account, fromAddress + 4, N_storage.truncateAddress);
+        snprintf((char *) strings.common.fromAddress, 5, "P%d - ", txContent.permission_id);
+        getBase58FromAddress(txContent.account, strings.common.fromAddress + 4, N_storage.truncateAddress);
     } else {
         PRINTF("Regular transaction...\n");
-        getBase58FromAddress(txContent.account, fromAddress, N_storage.truncateAddress);
+        getBase58FromAddress(txContent.account, strings.common.fromAddress, N_storage.truncateAddress);
     }
 
     data_warning = ((txContent.dataBytes > 0) ? true : false);
@@ -228,13 +228,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
         case TRIGGERSMARTCONTRACT:   // TRC20 Transfer
 
-            strcpy(TRC20ActionSendAllow, "To");
+            strcpy(strings.common.TRC20ActionSendAllow, "To");
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
                 if (txContent.TRC20Method == 1)
-                    strcpy(TRC20Action, "Asset");
+                    strcpy(strings.common.TRC20Action, "Asset");
                 else if (txContent.TRC20Method == 2) {
-                    strcpy(TRC20ActionSendAllow, "Allow");
-                    strcpy(TRC20Action, "Approve");
+                    strcpy(strings.common.TRC20ActionSendAllow, "Allow");
+                    strcpy(strings.common.TRC20Action, "Approve");
                 } else {
                     if (!N_storage.customContract) {
                         return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
@@ -242,33 +242,33 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     customContractField = 1;
 
                     getBase58FromAddress(txContent.contractAddress,
-                                         fullContract,
+                                         strings.common.fullContract,
                                          N_storage.truncateAddress);
-                    snprintf((char *) TRC20Action,
-                             sizeof(TRC20Action),
+                    snprintf((char *) strings.common.TRC20Action,
+                             sizeof(strings.common.TRC20Action),
                              "%08x",
                              txContent.customSelector);
                     G_io_apdu_buffer[0] = '\0';
                     G_io_apdu_buffer[100] = '\0';
-                    toAddress[0] = '\0';
+                    strings.common.toAddress[0] = '\0';
                     if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
                         return io_send_sw(E_INCORRECT_DATA);
                     }
                     // call has value
                     if (txContent.amount[0] > 0) {
-                        strcpy(toAddress, "TRX");
+                        strcpy(strings.common.toAddress, "TRX");
                         print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
                     } else if (txContent.amount[1] > 0) {
-                        memcpy(toAddress,
+                        memcpy(strings.common.toAddress,
                                txContent.tokenNames[0],
                                txContent.tokenNamesLength[0] + 1);
                         print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
                     } else {
-                        strcpy(toAddress, "-");
+                        strcpy(strings.common.toAddress, "-");
                         strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
                     }
 
@@ -295,18 +295,18 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     (txContent.contractType == TRANSFERCONTRACT) ? SUN_DIG : txContent.decimals[0]);
             }
 
-            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
             // get token name if any
-            memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
 #ifdef HAVE_SWAP
             // If we are in swap context, do not redisplay the message data
             // Instead, ensure they are identical with what was previously displayed
             if (G_called_from_swap) {
                 if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
-                                        fullContract,               // Token name
-                                        TRC20ActionSendAllow,       // "Send To"
-                                        toAddress)) {
+                                        strings.common.fullContract,               // Token name
+                                        strings.common.TRC20ActionSendAllow,       // "Send To"
+                                        strings.common.toAddress)) {
                     PRINTF("Signing valid swap transaction\n");
                     ui_callback_tx_ok(false);
                 } else {
@@ -323,8 +323,8 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case EXCHANGECREATECONTRACT:
 
-            memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-            memcpy(toAddress, txContent.tokenNames[1], txContent.tokenNamesLength[1] + 1);
+            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            memcpy(strings.common.toAddress, txContent.tokenNames[1], txContent.tokenNamesLength[1] + 1);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,
@@ -344,8 +344,8 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case EXCHANGEINJECTCONTRACT:
         case EXCHANGEWITHDRAWCONTRACT:
 
-            memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-            print_amount(txContent.exchangeID, (void *) toAddress, sizeof(toAddress), 0);
+            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,
@@ -363,14 +363,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case EXCHANGETRANSACTIONCONTRACT:
-            // memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0]+1);
-            snprintf(fullContract,
-                     sizeof(fullContract),
+            // memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0]+1);
+            snprintf(strings.common.fullContract,
+                     sizeof(strings.common.fullContract),
                      "%s -> %s",
                      txContent.tokenNames[0],
                      txContent.tokenNames[1]);
 
-            print_amount(txContent.exchangeID, (void *) toAddress, sizeof(toAddress), 0);
+            print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,
@@ -396,15 +396,15 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             for (int i = 0; i < contract->votes_count; i++) {
                 getBase58FromAddress(contract->votes[i].vote_address,
-                                     fullContract,
+                                     strings.common.fullContract,
                                      N_storage.truncateAddress);
                 total_votes += (unsigned int) contract->votes[i].vote_count;
-                fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) fullContract, i);
+                fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) strings.common.fullContract, i);
                 fillVoteAmountSlot((void *) G_io_apdu_buffer, contract->votes[i].vote_count, i);
             }
 
-            snprintf((char *) fullContract,
-                     sizeof(fullContract),
+            snprintf((char *) strings.common.fullContract,
+                     sizeof(strings.common.fullContract),
                      "%d: %u",
                      contract->votes_count,
                      total_votes);
@@ -414,17 +414,17 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         } break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
-                                     toAddress,
+                                     strings.common.toAddress,
                                      N_storage.truncateAddress);
             } else {
-                getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+                getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
             }
 
             ux_flow_display(APPROVAL_FREEZEASSET_TRANSACTION, data_warning);
@@ -432,16 +432,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case UNFREEZEBALANCECONTRACT:  // unreeze TRX
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
-                                     toAddress,
+                                     strings.common.toAddress,
                                      N_storage.truncateAddress);
             } else {
-                getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+                getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
             }
 
             ux_flow_display(APPROVAL_UNFREEZEASSET_TRANSACTION, data_warning);
@@ -449,32 +449,32 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNFREEZEASSETV2_TRANSACTION, data_warning);
 
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             if (txContent.customData == 0) {
                 strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
@@ -483,31 +483,31 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_DELEGATE_RESOURCE_TRANSACTION, data_warning);
 
             break;
         case UNDELEGATERESOURCECONTRACT:  // Undelegate resource
             if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
+                strcpy(strings.common.fullContract, "Bandwidth");
             else
-                strcpy(fullContract, "Energy");
+                strcpy(strings.common.fullContract, "Energy");
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
-            getBase58FromAddress(txContent.destination, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWEXPIREUNFREEZECONTRACT:  // Withdraw Expire Unfreeze
-            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
-            getBase58FromAddress(txContent.account, toAddress, N_storage.truncateAddress);
+            getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_WITHDRAWBALANCE_TRANSACTION, data_warning);
 
@@ -516,10 +516,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!N_storage.signByHash) {
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
-            // Write fullHash
-            format_hex(tmpCtx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            // Write strings.common.fullHash ("0x" + lowercase hex)
+            strlcpy(strings.common.fullHash, "0x", 3);
+            bytes_to_lowercase_hex(strings.common.fullHash + 2,
+                                   sizeof(strings.common.fullHash) - 2,
+                                   tmpCtx.transactionContext.hash,
+                                   HASH_SIZE);
             // write contract type
-            if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
             }
 
@@ -527,9 +531,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case WITNESSCREATECONTRACT:
-            memcpy(url, txContent.url, sizeof(txContent.url));
+            memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type
-            if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
             }
 
@@ -543,10 +547,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!N_storage.signByHash) {
                 return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
-            // Write fullHash
-            format_hex(tmpCtx.transactionContext.hash, 32, fullHash, sizeof(fullHash));
+            // Write strings.common.fullHash ("0x" + lowercase hex)
+            strlcpy(strings.common.fullHash, "0x", 3);
+            bytes_to_lowercase_hex(strings.common.fullHash + 2,
+                                   sizeof(strings.common.fullHash) - 2,
+                                   tmpCtx.transactionContext.hash,
+                                   HASH_SIZE);
             // write contract type
-            if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
             }
 

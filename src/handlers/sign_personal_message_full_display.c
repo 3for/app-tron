@@ -83,7 +83,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 
     publicKeyContext_t tmp_public_key_ctx;
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
-                             fromAddress,
+                             strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
         return E_SECURITY_STATUS_NOT_SATISFIED;
     }

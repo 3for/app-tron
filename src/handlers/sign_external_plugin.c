@@ -998,24 +998,24 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         int prefix_written;
 
         PRINTF("Set permission_id...\n");
-        prefix_written = snprintf((char *) fromAddress,
-                                  sizeof(fromAddress),
+        prefix_written = snprintf((char *) strings.common.fromAddress,
+                                  sizeof(strings.common.fromAddress),
                                   "P%d - ",
                                   txContent.permission_id);
         if ((prefix_written > 0) &&
             ((size_t) prefix_written <=
-             (sizeof(fromAddress) - (BASE58CHECK_ADDRESS_SIZE + 1U)))) {
+             (sizeof(strings.common.fromAddress) - (BASE58CHECK_ADDRESS_SIZE + 1U)))) {
             prefix_len = (size_t) prefix_written;
         } else {
-            fromAddress[0] = '\0';
+            strings.common.fromAddress[0] = '\0';
         }
 
         getBase58FromAddress(txContent.account,
-                             fromAddress + prefix_len,
+                             strings.common.fromAddress + prefix_len,
                              N_storage.truncateAddress);
     } else {
         PRINTF("Regular transaction...\n");
-        getBase58FromAddress(txContent.account, fromAddress, N_storage.truncateAddress);
+        getBase58FromAddress(txContent.account, strings.common.fromAddress, N_storage.truncateAddress);
     }
 
     if (txContent.contractType != TRIGGERSMARTCONTRACT) {
@@ -1028,34 +1028,34 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     } */ //TODO. ZYD
     customContractField = 1;
 
-    getBase58FromAddress(txContent.contractAddress, fullContract, N_storage.truncateAddress);
-    snprintf((char *) TRC20Action, sizeof(TRC20Action), "%08x", txContent.customSelector);
+    getBase58FromAddress(txContent.contractAddress, strings.common.fullContract, N_storage.truncateAddress);
+    snprintf((char *) strings.common.TRC20Action, sizeof(strings.common.TRC20Action), "%08x", txContent.customSelector);
     G_io_apdu_buffer[0] = '\0';
     G_io_apdu_buffer[100] = '\0';
-    toAddress[0] = '\0';
+    strings.common.toAddress[0] = '\0';
     if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
     // call has value
     if (txContent.amount[0] > 0) {
-        strcpy(toAddress, "TRX");
+        strcpy(strings.common.toAddress, "TRX");
         print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
         customContractField |= (1 << 0x05);
         customContractField |= (1 << 0x06);
     } else if (txContent.amount[1] > 0) {
         size_t token_name_len = txContent.tokenNamesLength[0];
 
-        if (token_name_len >= sizeof(toAddress)) {
-            token_name_len = sizeof(toAddress) - 1U;
+        if (token_name_len >= sizeof(strings.common.toAddress)) {
+            token_name_len = sizeof(strings.common.toAddress) - 1U;
         }
-        memcpy(toAddress, txContent.tokenNames[0], token_name_len);
-        toAddress[token_name_len] = '\0';
+        memcpy(strings.common.toAddress, txContent.tokenNames[0], token_name_len);
+        strings.common.toAddress[token_name_len] = '\0';
         print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
         customContractField |= (1 << 0x05);
         customContractField |= (1 << 0x06);
     } else {
-        strcpy(toAddress, "-");
+        strcpy(strings.common.toAddress, "-");
         strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
     }
 
