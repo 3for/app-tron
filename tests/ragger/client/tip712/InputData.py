@@ -598,11 +598,17 @@ def handle_optional_domain_values(domain):
             "verifyingContract"] = "0x0000000000000000000000000000000000000000"
 
 
-def init_signature_context(types, domain):
+def init_signature_context(types, domain, filters=None):
     global sig_ctx
 
     handle_optional_domain_values(domain)
-    caddr = domain["verifyingContract"]
+    # When a filter overrides the address (e.g. the proxy test resolves the
+    # verifyingContract to a different implementation), sign the filters against that
+    # address instead. Mirrors app-ethereum's init_signature_context().
+    if filters and "address" in filters:
+        caddr = filters["address"]
+    else:
+        caddr = domain["verifyingContract"]
     if caddr.startswith("0x"):
         caddr = caddr[2:]
     sig_ctx["caddr"] = bytearray.fromhex(caddr)
@@ -675,7 +681,7 @@ def process_data(aclient,
     is_golden_run = golden_run
 
     if filters:
-        init_signature_context(types, domain)
+        init_signature_context(types, domain, filters)
 
     # send types definition
     for key in types.keys():

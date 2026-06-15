@@ -89,6 +89,48 @@ TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "00000000000000000000000000000000000000000000000000000000000f4240")
 BATCH_CONTRACT20 = bytes.fromhex("2cc8475177918e8c4d840150b68815a4b6f0f5f3")
 
+# A deliberately over-long calldata for the streaming-decode test (see
+# test_gcs_long_calldata). Shielded-mint signature, ~1 KB:
+#   mint(uint256 rawValue, bytes32[9] output, bytes32[2] bindingSignature, bytes32[21] c)
+# Mirrors dev_app-plugin-boilerplate's test_long_mint.py MINT_CALLDATA.
+MINT_CONTRACT_B58 = "TNnFMMykZzwhPZkurKtNMyVGvgeSkCrnPi"
+MINT_CALLDATA = bytes.fromhex(
+    "855d175e"
+    "0000000000000000000000000000000000000000000000003782dace9d900000"
+    "432464fe1e9c33eaf99edad710ef11359d0291506bc81f7445f1447ba112ab18"
+    "30579dd4decdd0ed38f33215375c00e1fb324f0f35892991aa0b8f5eb2a9dfcb"
+    "1533ca563b77de5177a41e8ffefb2fd688334af95bcd1143470318c026b00e2e"
+    "86227c50592880dd3f0c362258714e50b9b9d54eb193b0bba6cc04cf348d841d"
+    "55261810658d9eeaeb2920005179f9e099c9eaf06c793ccc3ec2f30c8f52d939"
+    "4d0f6084bc53f142663d713f6ef575db86b0c55abfe9aacf6515bb0a5986a0b2"
+    "14bc1c48c9678906c88a4c625336b8d8a9be49d1ec75762bb60338f738ad9989"
+    "1b98ce18c723e76e70f53dce7c03b247aa937354a6954feac4f8858ae5830b3c"
+    "fc0466421864b2ffc5740dc19210e691d5d4fccf9a3e7d1f4ef6e2a676975dec"
+    "cd63c5990d8275dc35d0922be3bd5dc7c4a81494e8276b282e61a19fbe9cca05"
+    "32592b05623b7bffee09ef81fb298cbaf4ece9c42fe5ac80a716e90c7dff7f01"
+    "2c1215f739c89e715ffab693eff699b5eb6368753af0c0087274db0f14c38ce7"
+    "b0b36100f9a2f51cc7f6eca87eb750544f9fbe18ea79dbd8595028c4d33da6ee"
+    "62afe4eca52cfe40f164f00063abe1c76e3d0fc0af2db17aad96b3f472d41f0b"
+    "56d8dd4fa5b9d6de028678731425871cbf134701c351aba7edeaad07e8d40060"
+    "1e245bc1751ebb514365c774e5108c348a39533e836a10338ab8ae00ceb0f819"
+    "f3f45268ee88bdf9fdadf6c921269d707fe457fa25d6997a5da382ac8b4f960a"
+    "381ab539c33421931569785dbe6dfa59914ca6bc597576e9e33314eb62326658"
+    "c8548c22622f3a9a06b3fe40842210018bedbda8e95662a2a7bb1db9121e39bc"
+    "c2f6d004c9b7cf5131d3989a32a3ade8c447d34b4244841a0cb071efdd7ed68e"
+    "7c02d1aeadbda9ab1f6e5f3f2b0227e07a8d5e30418e354f000329f12f4462aa"
+    "c4db0dbd034e85ed9b3dc2cac483c41bdfa690fefacfc038dd20067b1e8dc1e7"
+    "72e1c719ad4e6b14c87c779b4477daa5edb47a5218ad5d4afb6983d460aa012e"
+    "6415ac67135a9f9cb438ca9f9655fd2dfd44a43785d2eb7e8b4d77e81573f7f0"
+    "2355f114601e9909793ec437d9d2257512c799c0ee769876bb98842995d73468"
+    "e1a81ef9c8dc5e6702179d25632cfe8ec8214b76b6bceab5741ade28f5fa10ff"
+    "a72abfcfaffb7e8224fc89fe65a2c440fa9a291e974f366ec5c87302e86d1df7"
+    "4b73396f5e35030106dcc9ac54f20557a58dabba7975decbce146536f4a1b13d"
+    "71f549e7b7d8c5e61b3c92118dbf0f6dacd09a24f3514d1642f711d02b6c29d4"
+    "7f5d3f4a2b7c66dd941eb9f02ba311a72c00f449a837767c5d71e99414c84cf9"
+    "e8c37ef731efaaa8266cdd309311615aea396f264389fe115abb0a1967a9af14"
+    "b972f20d8bf31550d9c4e67366161b5546b58003000000000000000000000000")
+MINT_SELECTOR = MINT_CALLDATA[:4]
+
 # Proxy fixtures shared with test_gcs_proxy / the proxied gating test: a
 # `transferOwnership(address)` call whose TO is the proxy but whose descriptor
 # (and gating descriptor) targets the implementation behind it.
@@ -360,6 +402,38 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                                tx,
                                nb_warnings=_gating_warnings(scenario_navigator,
                                                             gating_params))
+
+
+def test_gcs_long_calldata(scenario_navigator: NavigateWithScenario):
+    """Over-long (~1 KB) calldata streamed through 0xC4/STORE then clear-signed via GCS.
+
+    Mirrors dev_app-plugin-boilerplate's test_long_mint.py, but on the GCS path: the
+    shielded-`mint` calldata is far larger than one APDU, so `gcs_store_calldata` parks
+    it across several MAX_APDU_LEN chunks. This verifies generic_tx_parser reassembles
+    the streamed calldata and can decode a field out of it (here `rawValue`, arg 0).
+    """
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    # generic_tx_parser works on 20-byte EVM addresses (0x41 prefix stripped).
+    contract_addr20 = bytes.fromhex(client.address_hex(MINT_CONTRACT_B58))[1:]
+    tx = build_trigger_smart_contract_tx(client, contract_addr20, MINT_CALLDATA)
+
+    # Guard the premise: the calldata alone overflows a single APDU, so STORE must
+    # stream it in multiple chunks (otherwise the test wouldn't exercise streaming).
+    assert len(MINT_CALLDATA) > MAX_APDU_LEN
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    # mint(uint256 rawValue, ...): rawValue is arg index 0, static.
+    fields = [build_field_raw("Amount", 32, data_path=build_data_path_static(0))]
+    tx_info = build_tx_info(contract_addr20, MINT_SELECTOR, fields, "mint")
+
+    client.provide_transaction_info(tx_info)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):

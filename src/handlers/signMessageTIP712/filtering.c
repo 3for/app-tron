@@ -15,6 +15,7 @@
 #include "trusted_name.h"
 #include "app_mem_utils.h"
 #include "get_public_key.h"
+#include "proxy_info.h"  // get_implem_contract
 
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_CALLDATA_INFO     55
@@ -91,6 +92,7 @@ static bool hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
  */
 static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     uint64_t chain_id;
+    const uint8_t *addr;
 
     cx_sha256_init(hash_ctx);
 
@@ -101,10 +103,16 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     chain_id = __builtin_bswap64(tip712_context->chain_id);
     hash_nbytes((uint8_t *) &chain_id, sizeof(chain_id), (cx_hash_t *) hash_ctx);
 
-    // Contract address
-    hash_nbytes(tip712_context->contract_addr,
-                sizeof(tip712_context->contract_addr),
-                (cx_hash_t *) hash_ctx);
+    // Contract address: resolve a proxy implementation if one was provided (the
+    // filtering payloads are signed against the resolved address), like app-ethereum.
+    // get_implem_contract() returns NULL when no proxy matches, so the unproxied case
+    // falls back to the verifyingContract unchanged.
+    if ((addr = get_implem_contract(&tip712_context->chain_id,
+                                    tip712_context->contract_addr,
+                                    NULL)) == NULL) {
+        addr = tip712_context->contract_addr;
+    }
+    hash_nbytes(addr, sizeof(tip712_context->contract_addr), (cx_hash_t *) hash_ctx);
 
     // Schema hash
     hash_nbytes(tip712_context->schema_hash,

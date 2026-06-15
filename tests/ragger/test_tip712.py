@@ -1341,6 +1341,101 @@ class TestTRX():
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
+    def test_trx_tip712_proxy(self, device: Device,
+                              backend: BackendInterface, navigator: Navigator,
+                              default_screenshot_path: Path, test_name: str,
+                              golden_run: bool):
+        # Filtered TIP-712 where the descriptor targets a different address than the
+        # domain's verifyingContract, resolved via provide_proxy_info. Mirrors
+        # app-ethereum's test_eip712_proxy.
+        global snapshots_dirname
+
+        client = TronClient(backend, device, navigator)
+        snapshots_dirname = test_name
+
+        input_file = Path(input_files()[0])
+        test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
+        with open(input_file, encoding="utf-8") as file:
+            data = json.load(file)
+        with open(f"{test_path}-filter.json", encoding="utf-8") as file:
+            filters = json.load(file)
+        # Change its name & set a different address than the one in verifyingContract.
+        filters["name"] = "Proxy test"
+        filters["address"] = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+        cmd_builder = CommandBuilder()
+        proxy_info = ProxyInfo(
+            _get_challenge(client),
+            bytes.fromhex(data["domain"]["verifyingContract"][2:]),
+            int(data["domain"]["chainId"]),
+            bytes.fromhex(filters["address"][2:]),
+        )
+        client.provide_proxy_info(proxy_info.serialize())
+
+        vrs = tip712_new_common(device, navigator, default_screenshot_path,
+                                client, cmd_builder, data, filters,
+                                False, golden_run)
+
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)
+
+    def test_trx_tip712_gondi(self, device: Device,
+                              backend: BackendInterface, navigator: Navigator,
+                              default_screenshot_path: Path, test_name: str,
+                              golden_run: bool):
+        """Basic blind (unfiltered) TIP-712 signature over a nested struct/array
+        payload. Mirrors app-ethereum's test_eip712_gondi. Blind signing
+        (SettingID.SIGN_BY_HASH) is already enabled by the `configuration` fixture."""
+        global unfiltered_flow
+        global snapshots_dirname
+
+        client = TronClient(backend, device, navigator)
+        snapshots_dirname = test_name
+
+        data = {
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
+                ],
+                "Root": [
+                    {"name": "child", "type": "Inner[]"},
+                ],
+                "Inner": [
+                    {"name": "child", "type": "Leaf"},
+                ],
+                "Leaf": [
+                    {"name": "value", "type": "uint256"},
+                ],
+            },
+            "primaryType": "Root",
+            "domain": {
+                "name": "DOMAIN",
+                "version": "3.1",
+                "chainId": 31337,
+                "verifyingContract": "0x95401dc811bb5740090279ba06cfa8fcf6113778",
+            },
+            "message": {
+                "child": [
+                    {
+                        "child": {
+                            "value": 2,
+                        },
+                    }
+                ],
+            }
+        }
+
+        unfiltered_flow = True
+        cmd_builder = CommandBuilder()
+        vrs = tip712_new_common(device, navigator, default_screenshot_path,
+                                client, cmd_builder, data, None, False, golden_run)
+
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)
+
     def test_trx_tip712_bs_not_activated_error(self, device: Device,
                                                backend: BackendInterface,
                                                navigator: Navigator,
