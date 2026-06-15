@@ -131,6 +131,104 @@ MINT_CALLDATA = bytes.fromhex(
     "b972f20d8bf31550d9c4e67366161b5546b58003000000000000000000000000")
 MINT_SELECTOR = MINT_CALLDATA[:4]
 
+# Shielded `transfer(bytes32[10][] input, bytes32[2][] spendAuthoritySignature,
+# bytes32[9][] output, bytes32[2] bindingSignature, bytes32[21][] c)` -- all dynamic
+# arrays, so (like the boilerplate plugin's SHIELDED_TRANSFER) there is no scalar value
+# to show; the GCS descriptor carries no fields, only the contract/intent header.
+# Same contract as MINT_CONTRACT_B58. See dev_app-plugin-boilerplate/test_long_transfer.py.
+SHIELDED_TRANSFER_SELECTOR = bytes.fromhex("9110a55b")
+SHIELDED_TRANSFER_CALLDATA = SHIELDED_TRANSFER_SELECTOR + bytes.fromhex(
+    "00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000"
+    "0000000000000000000000000000000000000220000000000000000000000000000000000000000000000000"
+    "0000000000000280ce6afaf724f66efac204f6368123fcd2ef6ab565477400bab70e39ca68a581b94fc11db9"
+    "de0f6951270d3fd7bea878fe4bad59f126fe446b33a66bfc8af3f70600000000000000000000000000000000"
+    "000000000000000000000000000003c000000000000000000000000000000000000000000000000000000000"
+    "00000001951e4c9456e7dbeed6831cd60b75d4727badc33e03bb08ab0ada011b9213747ac26c3206afaba02c"
+    "8454263eb9bb6c9e2506704995b4e41989f9f47550045e5b616035300ff5e029ccdebfe596d4723f370b85e6"
+    "88e21aacd6083e6139af5ca175efb6b823520d481440d1474b5b6f5bc2d1d534a7763ac5a688d2d1ec529898"
+    "a040447b31a528060bcc561cc2a8d7adc6f726a6f6c7d6f03bab88d21af12f3b97a48b52da15c01cd5043b32"
+    "f21d3454a742654aa4985072c9cedb8934a65c30d6e373e104e428b80c966dad68d28a5440d8f09e629009e2"
+    "ca43774a7307e01e112691a20dedb4f79c182531ced0a5dce04b5e78836425d5ecf45d8fe5221b6da53d6f10"
+    "ea310afd1d16184e502d00e3b1c43f91a2bf21c5a003fe9f106a51fc861ef502b01e82c6df897ae4786645db"
+    "8f4f6a453be039f6bfaaf501ecaacf9200000000000000000000000000000000000000000000000000000000"
+    "000000016ce9d10243a28f900cf2d2b5e9bec5cb3615ce2fa36e5e16050cb81865ae43b874e74feb01c94b3d"
+    "282e46e39e615431a2aed82c10dc26cfb6f6e0227c2503050000000000000000000000000000000000000000"
+    "000000000000000000000001233c627d5b726522420f072681c0905e3b13bfc68605a74eee2cc9b55acb2350"
+    "7ae1e689515ff7301f3777ce11378b17c86ec6a443c79def76bd9eca613aa4b3b96780a9e19627cedf75b2a3"
+    "c3bd3f4dda950fcec42e63f1696f12928ce1638b94f265307618c4dce68bd992e21fee80083870faca0ccbfd"
+    "e2b32689327d37e1564f4c58eb9aaf87777c42a238569cb7b9aeae4478650121c0913b41319b165000eb0e88"
+    "da3a041242f9c5961ae8367df889dd8018053f1cea342524b606467202635eafe3eb084a530bf024151c27be"
+    "783662c9d29de7ea03d2ad8d8b39fec98348addd026f862ff9d06bebf0ad75a097f9a82d5bb1965d8fc3f7ca"
+    "01688bf7e3f84b206fbab3baab8f9a9bf5b240e3726bf5293d7a862bd511fc80b0e1bf380000000000000000"
+    "000000000000000000000000000000000000000000000001e47864bd06637a361b0567f911da6a3d6fb1eb78"
+    "8b2348b90edf9d76b2906e59fc6a8923bfe76b1eb541170b85b9ff923d8da00deeefd5a2a93d1243845de484"
+    "7712504f32927f792a1c81de64cc4e05d79882f80eccad69e2b0152470fdf65a5e0ee20e1d6c84e992267cb0"
+    "931eb2c4f42eb95c1cdee9ee12da86f2d3e8da644df188bf81507da1409d3aef51dd7b3408bdb787acc9baae"
+    "eb91b23d11727e6e111489852685aa809d97d6b066f73c54e88540e0fadacf3a7cae30c5f94527e485a1e324"
+    "9f7bc3a82f80dc815f3a9172e61bc1bdd57de58826856957e989048f185bf6dcdd2b508b5761fb34c603df7a"
+    "cb997ead52a5c6194c9bae77851f87fc4d0eb504e1c0b9dfd1a0f9c5593b5cf766eb00743043ca8441577c84"
+    "536c7d9dc9203ff8911c1020f553c57ba34f59a7f3270eca785ca4a33c60f8df19fcbeab6c757093b4c89e18"
+    "6c9956d9e3ee7610537f590bfb740fa1f544d4b797a0dd8a578817c41770ac0627ff4c8b4be7061a11768227"
+    "5a5e38c9509c6deaa48929c908efb32d8a430c780d319157a24f020afad022494d72345ff64c3620afb6a0e6"
+    "70dd4641b182ac97bd79b8052b97cefb0f1f5a8c6e26f0dea53c4a79cc4965fcddf3bf7d1b726c717d5ec1ee"
+    "aca9b07ba83f0cd209f59bb35ccb59127919fcf080a1c04b63683e7159d78bb419cc84df6adf1849130e602d"
+    "114ff54bf6b6e11544f17959af97cc83a16aa734ff740300538739e10dac20c7c4af8ddfef14d4f8e786162b"
+    "5efbe9975acfa3cf13bf17c4c1857ef12858a5db6186570570b0a33368aa026221933e96c83d173937ef3703"
+    "acea5c1cde95de19fbb9b46fdb0ed9a7395caad66ad89ec3f3a5ff35d5c49decaffbb34e9d5f05275139c15d"
+    "bfd4b54d5f9284afea671fc7c913ad6097dc9ff021daf4a7000000000000000000000000")
+
+# Shielded `burn(bytes32[10] input, bytes32[2] spendAuthoritySignature, uint256 rawValue,
+# bytes32[2] bindingSignature, address payTo, bytes32[3] burnCipher, bytes32[9][] output,
+# bytes32[21][] c)` -- the head's fixed arrays push `rawValue` to calldata word 12 (10 +
+# 2). Like the boilerplate's SHIELDED_BURN, show `rawValue` as a token amount + the
+# contract. See dev_app-plugin-boilerplate/test_long_burn.py.
+SHIELDED_BURN_SELECTOR = bytes.fromhex("cc105875")
+# 0x41-prefixed mainnet address; strip the prefix for generic_tx_parser (20-byte form).
+SHIELDED_BURN_CONTRACT20 = bytes.fromhex("8C8705769E5ec53F5F9C42A3bc3305624AD37192")
+SHIELDED_BURN_RAW_VALUE_WORD = 12
+# payTo (address) sits after rawValue + bindingSignature[2]: word 12 + 1 + 2 = 15.
+SHIELDED_BURN_PAY_TO_WORD = 15
+SHIELDED_BURN_CALLDATA = SHIELDED_BURN_SELECTOR + bytes.fromhex(
+    "411fcd54cea8939bd45b9ad7b2c0001872eb50903f8e6e063bd6d46aff890206afa8e0e221d5997d57547d76"
+    "66a7c2f776317b2a2906c58055551972622a7d6fc9074c2907d279a4e6cf6d5c7098516b338564c554010876"
+    "05e2b1f554f146d83c71fc1792c27f464fc1c5a7dfe0a6806cc6921cef46a41008de6a18e78dfee7a0e0f3ec"
+    "e3fd4d7a3db027e11c3fa8f58346539502eb9dd17db76fd60f79657303b95dcfa2e2e8bc069a793fc71d501d"
+    "a737ff5deee54e1f659f1fda4ce5428c18b3cca5f816ef3308dd3d2bf323de1bd361183d829ebd21b3198c30"
+    "6d30176506efba80a1a341ea8eae32d3f263294b5cd48e16a7f481230c83cb0fa198718fba949736aba6e1b7"
+    "cfcffbb7aca62624867e948c97cda7e4e4b0038bd51933bed2d56ff884d4ac7c12e8fb3a84ccddb6f3830b36"
+    "424ac2f1c09b2ed784d2208cb8dfa7a9aa61016cc74876572938c48edd9ae4e9061501db182991030596aca5"
+    "791900aba9c4dfb97f1ebb328f27b7d470e90aa4d7c56ad2184abb4c45b1f408000000000000000000000000"
+    "00000000000000000000000029a2241af62c00000423e07a9c2e1f4bc5192f5dc42e413e508cc85bbd4bdfb5"
+    "1022c626e890cadedf7737598997f77d9639ca3764f56e54950f6e4dc3148c3bf585135af1108f0200000000"
+    "000000000000004119580b8d292f590d254ab037320975ab367891945d4188e801642649a5d69f6ba4a174aa"
+    "57b97410d5a2ba17c7dae76462b3e1e23e3007946b5f21510ed860e048e638a6dbd76c5670b753b83383962e"
+    "b486e693e92fbbdc97a835c02a93c33030a888f5000000000000000000000000000000000000000000000000"
+    "0000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000"
+    "0000000000000000000003e00000000000000000000000000000000000000000000000000000000000000001"
+    "f4f835357d8ca230e33488f80c83bacc79bc234333d60b5a73c1a8e5255b336263861fb9e1882c9be89afe4f"
+    "7c5529c87e38c8aa5da2a663dddce5d620f786247ff151f8bcca7cc3c968a18fab7ea8f291263356ad18a45a"
+    "b37d6235689be33aa7a0d63bb0247c9b8fa870f496ced81c1096e7a35f171d10b704f098e91d6be554f8248b"
+    "86566c5a6f66af4cca0b9557a1a11a6aaa8d054f644dbcba9a77ada5e245870d23f1ee4e29c1063507bbba52"
+    "6a596b93930fb5d8ae6895bace0818430e75585a8a655b342c2c9239675c95a54cabdd83d1590aa62acf3b47"
+    "86648d94084084484f19496a722eb387b24599a688126cfc46dc75a8872e923add73763c74369413a73b9ce2"
+    "0c44bfba051ebfd43bd075b1ca5d1eb11568a0721b8a63280000000000000000000000000000000000000000"
+    "000000000000000000000001ff387be3765524f0b6ebb5552402188980d16e63559fc62f7b7e89720b213121"
+    "ba385494a87c778d5c2ccd745888321f882658c2e26687ead9b21f46f3c7364388ed7c63ecb1aa66fe86e036"
+    "ad2b40d2a1df90fa0c7a81aa24bd9e6010231e2d94a874954245fd48bbe6521933fef5f8bd78ae07dea625eb"
+    "b2c0273cde2b1acf7f07883e5f4f05fb70b3f1b45735addcdf9410c81444d0575d177c5a5676b44c666948ce"
+    "09cac6a1ea0d5710652f0ce31d372648b874f64ba487579a0045b4b44949a9fa1a22fc949c3cad5da1c334ee"
+    "25d5357ae41dad9ed54e6433c5ba2d31101f652e992c7e922e1fd40ba9221a0c53c54eb89c49c68395eb61e1"
+    "b489882759a788a4ea383167950e3adc80ebd3bbea11b490d402a64634006cd10170ad84cbb34c6c4a239df3"
+    "3b962fb4dedd62fefc1c03089a5481da96f6e09c47c5197ea58dfd3193cde8e9e3acf4fa74beefca94df5bf9"
+    "c99dacfc298e14cab2360a10f7d76a77ecc4471d513be5262a7ffe52177c11ba24e626cbc33e12cddbf02bb4"
+    "2d80aabcd86e03fd4f733ede78a9682842803605a924b99cd1048984a4131780935d70975f99c5685445e1d3"
+    "345cb4848e4fc68df984049cf5abd02abb5525c8df5870797d8a0905ecff4f37b9f0e1d25ae99c6d31174983"
+    "0208f7c2cb47043afc1dc44c9f2dbdbeeb54e352d77ab5b629917b659f7e69e91521577ae1b3c7aff99ed318"
+    "48ea7302e07cff9851213bda670cd6c895bbeb37a991ca09d2debe034fb37e1a0aa791323217790f72cde2d4"
+    "1c1f5e32878253d8b0f5db896a22a6ab2437c5f8d126e7505412a109939ccdd634cc04993a197725d0b8e2f4"
+    "350f3d041199c9b6d7756a863afa9793293b25ff17d2472499b64f321c4e9fecf4fcee7e79ba7e62fe2c3dc0"
+    "34d381f7d65c9d310349a8e4000000000000000000000000")
+
 # Proxy fixtures shared with test_gcs_proxy / the proxied gating test: a
 # `transferOwnership(address)` call whose TO is the proxy but whose descriptor
 # (and gating descriptor) targets the implementation behind it.
@@ -225,6 +323,19 @@ def _address_value(data_path: DataPath) -> Value:
 
 def build_field_raw(name: str, type_size: int, data_path: DataPath) -> Field:
     return Field(1, name, ParamRaw(1, _uint_value(type_size, data_path)))
+
+
+def build_field_address(name: str, data_path: DataPath) -> Field:
+    """Render a static calldata word as an address (e.g. burn's `payTo`)."""
+    return Field(1, name, ParamRaw(1, _address_value(data_path)))
+
+
+def build_field_from_address(name: str) -> Field:
+    """Render the trigger tx's owner ("From") address via ContainerPath.FROM, which
+    the generic_tx_parser resolves to get_current_tx_from() (the parked tx owner)."""
+    return Field(1, name,
+                 ParamRaw(1, Value(1, TypeFamily.ADDRESS,
+                                   container_path=ContainerPath.FROM)))
 
 
 def build_field_amount(name: str, type_size: int, data_path: DataPath) -> Field:
@@ -404,13 +515,19 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                                                             gating_params))
 
 
-def test_gcs_long_calldata(scenario_navigator: NavigateWithScenario):
+def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
     """Over-long (~1 KB) calldata streamed through 0xC4/STORE then clear-signed via GCS.
 
-    Mirrors dev_app-plugin-boilerplate's test_long_mint.py, but on the GCS path: the
-    shielded-`mint` calldata is far larger than one APDU, so `gcs_store_calldata` parks
-    it across several MAX_APDU_LEN chunks. This verifies generic_tx_parser reassembles
-    the streamed calldata and can decode a field out of it (here `rawValue`, arg 0).
+    Mirrors dev_app-plugin-boilerplate's test_long_mint.py, both for the streaming and
+    the on-screen result: the shielded-`mint` calldata is far larger than one APDU, so
+    `gcs_store_calldata` parks it across several MAX_APDU_LEN chunks. This verifies
+    generic_tx_parser reassembles the streamed calldata and decodes a field out of it.
+
+    The field set reproduces the boilerplate plugin's SHIELDED_MINT screens (per
+    shielded.abi.json `mint(uint256 rawValue, bytes32[9] output, bytes32[2]
+    bindingSignature, bytes32[21] c)`): a "Value" screen rendering `rawValue` (arg 0)
+    as a JST token amount (18 decimals), the token being the contract itself, plus the
+    "Shielded Mint" contract/intent header.
     """
     backend = scenario_navigator.backend
     client = _client_from_scenario(scenario_navigator)
@@ -425,9 +542,107 @@ def test_gcs_long_calldata(scenario_navigator: NavigateWithScenario):
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
-    # mint(uint256 rawValue, ...): rawValue is arg index 0, static.
-    fields = [build_field_raw("Amount", 32, data_path=build_data_path_static(0))]
-    tx_info = build_tx_info(contract_addr20, MINT_SELECTOR, fields, "mint")
+    # Token metadata for the contract itself (the tx TO) so the amount renders as
+    # "<rawValue> JST", like test_long_mint.py's provide_trc20_token_information.
+    client.provide_token_metadata("JST", contract_addr20, 18, TRON_MAINNET_CHAINID)
+
+    # `rawValue` (arg 0, static) shown as a token amount; the token is the TO address.
+    # Plus the trigger tx's owner ("From") address, resolved from the parked tx.
+    fields = [
+        Field(1,
+              "Value",
+              ParamTokenAmount(1,
+                               value=_uint_value(32, build_data_path_static(0)),
+                               token=Value(1,
+                                           TypeFamily.ADDRESS,
+                                           container_path=ContainerPath.TO))),
+        build_field_from_address("From"),
+    ]
+    tx_info = TxInfo(1, TRON_MAINNET_CHAINID, contract_addr20, MINT_SELECTOR,
+                     compute_inst_hash(fields), "Shielded Mint", creator_name="ShieldedJST",
+                     contract_name="Shielded").serialize()
+
+    client.provide_transaction_info(tx_info)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+
+
+def test_gcs_transfer_long_calldata(scenario_navigator: NavigateWithScenario):
+    """Over-long shielded-`transfer` calldata streamed through 0xC4/STORE, GCS-signed.
+
+    Mirrors dev_app-plugin-boilerplate's test_long_transfer.py: `transfer` takes only
+    dynamic arrays, so there is no scalar calldata value to render. The descriptor still
+    shows the trigger tx's owner ("From") address (a tx-level container value, not from
+    the calldata) on top of the "Shielded Transfer" contract/intent header. Exercises
+    the streaming reassembly of a ~1.5 KB calldata.
+    """
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    contract_addr20 = bytes.fromhex(client.address_hex(MINT_CONTRACT_B58))[1:]
+    tx = build_trigger_smart_contract_tx(client, contract_addr20,
+                                         SHIELDED_TRANSFER_CALLDATA)
+
+    assert len(SHIELDED_TRANSFER_CALLDATA) > MAX_APDU_LEN
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    # No calldata to decode; show only the trigger tx's owner ("From") address.
+    fields = [build_field_from_address("From")]
+    tx_info = TxInfo(1, TRON_MAINNET_CHAINID, contract_addr20,
+                     SHIELDED_TRANSFER_SELECTOR, compute_inst_hash(fields),
+                     "Shielded Transfer", creator_name="ShieldedJST",
+                     contract_name="Shielded").serialize()
+    client.provide_transaction_info(tx_info)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+
+
+def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
+    """Over-long shielded-`burn` calldata streamed through 0xC4/STORE, GCS-signed.
+
+    Mirrors dev_app-plugin-boilerplate's test_long_burn.py: the plugin's SHIELDED_BURN
+    shows "Value" + "Contract". The `burn` head's fixed arrays (input[10],
+    spendAuthoritySignature[2]) push `rawValue` to calldata word 12 and `payTo` to word
+    15, so the descriptor decodes those words (a JST token amount and an address) -- plus
+    the trigger tx's owner ("From") address -- verifying field decode at deep static
+    offsets out of the reassembled long calldata, alongside a tx-level container value.
+    """
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    contract_addr20 = SHIELDED_BURN_CONTRACT20
+    tx = build_trigger_smart_contract_tx(client, contract_addr20,
+                                         SHIELDED_BURN_CALLDATA)
+
+    assert len(SHIELDED_BURN_CALLDATA) > MAX_APDU_LEN
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    client.provide_token_metadata("JST", contract_addr20, 18, TRON_MAINNET_CHAINID)
+
+    # `rawValue` (word 12) as a token amount, `payTo` (word 15) as an address, and the
+    # trigger tx's owner ("From") address resolved from the parked tx.
+    fields = [
+        Field(1,
+              "Value",
+              ParamTokenAmount(1,
+                               value=_uint_value(
+                                   32, build_data_path_static(SHIELDED_BURN_RAW_VALUE_WORD)),
+                               token=Value(1,
+                                           TypeFamily.ADDRESS,
+                                           container_path=ContainerPath.TO))),
+        build_field_address("Pay To",
+                            build_data_path_static(SHIELDED_BURN_PAY_TO_WORD)),
+        build_field_from_address("From"),
+    ]
+    tx_info = TxInfo(1, TRON_MAINNET_CHAINID, contract_addr20, SHIELDED_BURN_SELECTOR,
+                     compute_inst_hash(fields), "Shielded Burn", creator_name="ShieldedJST",
+                     contract_name="Shielded").serialize()
 
     client.provide_transaction_info(tx_info)
     for field in fields:
