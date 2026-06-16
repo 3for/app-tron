@@ -420,9 +420,10 @@ static bool handle_extra_data(const s_field_table_entry *field, nbgl_contentTagV
  *
  * Mirrors app-ethereum's ui_gcs() core flow (a leading contract-info pair, one
  * pair per rendered field, an optional Network pair, then an NBGL review).
- * TRON adaptations: no batch sub-pages, no gas "max fees" pair (TRON uses an
- * energy/bandwidth fee model, not gas), no transaction-simulation warning, the
- * TRON app icon, and signing through ui_callback_tx_ok/cancel.
+ * Like app-ethereum it inserts a centered "Review transaction / n of m" separator
+ * page before each sub-transaction of a batch. TRON adaptations: no gas "max fees"
+ * pair (TRON uses an energy/bandwidth fee model, not gas), no transaction-simulation
+ * warning, the TRON app icon, and signing through ui_callback_tx_ok/cancel.
  */
 bool ui_gcs(void) {
     char *tmp_buf = strings.tmp.tmp;
@@ -433,6 +434,8 @@ bool ui_gcs(void) {
     nbgl_contentInfoList_t *infolist = NULL;
     uint8_t nbPairs = 0;
     uint8_t pair = 0;
+    uint8_t tx_idx = 0;
+    uint8_t batch_nb_tx = 0;
     const s_tx_info *info_tx = get_current_tx_info();
 
     explicit_bzero(&warning, sizeof(nbgl_warning_t));
@@ -456,8 +459,20 @@ bool ui_gcs(void) {
         return false;
     }
 
-    // Contract info (1) + TX fields + optional Network (1).
+    // Count batched sub-transactions: each nested calldata begins a new "intent",
+    // so the number of start_intent fields is the number of sub-transactions.
+    for (int i = 0; i < (int) field_table_size(); ++i) {
+        const s_field_table_entry *f = get_from_field_table(i);
+        if ((f != NULL) && f->start_intent) {
+            batch_nb_tx++;
+        }
+    }
+
+    // Contract info (1) + optional batch separators + TX fields + optional Network (1).
     nbPairs += 1;
+    if (batch_nb_tx > 1) {
+        nbPairs += batch_nb_tx;  // one "n of m" separator page per sub-transaction
+    }
     nbPairs += field_table_size();
     show_network = get_tx_chain_id() != chainConfig->chainId;
     if (show_network) {
@@ -506,6 +521,17 @@ bool ui_gcs(void) {
         if ((field = get_from_field_table(i)) == NULL) {
             return false;
         }
+        // Batch intermediate page: a centered "Review transaction / n of m" before
+        // each sub-transaction's first field (mirrors app-ethereum's ui_gcs).
+        if (field->start_intent && (batch_nb_tx > 1)) {
+            tx_idx++;
+            snprintf(tmp_buf, tmp_buf_size, "%d of %d", tx_idx, batch_nb_tx);
+            g_pairs[pair].item = APP_MEM_STRDUP("Review transaction");
+            g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf);
+            index_allocated[pair] = true;
+            g_pairs[pair].centeredInfo = true;
+            pair++;
+        }
         g_pairs[pair].item = field->key;
         g_pairs[pair].value = field->value;
         if (field->extra_data != NULL) {
@@ -514,6 +540,10 @@ bool ui_gcs(void) {
             }
         }
         pair++;
+        // End of a sub-transaction: force the next pair onto a fresh page.
+        if (field->end_intent && (batch_nb_tx > 1) && (pair < nbPairs)) {
+            g_pairs[pair].forcePageStart = true;
+        }
     }
 
     if (show_network) {
