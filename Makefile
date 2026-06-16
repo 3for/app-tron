@@ -86,6 +86,14 @@ ifneq ($(BYPASS_SIGNATURES),0)
     DEFINES += HAVE_BYPASS_SIGNATURES
 endif
 
+# Use a fixed challenge (0x12345678) and skip its verification, so trusted-name /
+# proxy descriptors that embed a challenge can be pre-generated for tests/examples
+# without a live GET_CHALLENGE round-trip. Mirrors app-ethereum's CHALLENGE_NO_CHECK.
+CHALLENGE_NO_CHECK ?= 0
+ifneq ($(CHALLENGE_NO_CHECK),0)
+    DEFINES += HAVE_CHALLENGE_NO_CHECK
+endif
+
 # CryptoAssetsList key
 CAL_TEST_KEY ?= 0
 ifneq ($(CAL_TEST_KEY),0)

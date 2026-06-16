@@ -38,7 +38,7 @@ TESTS_RAGGER_DIR = REPO_ROOT / "tests" / "ragger"
 if str(TESTS_RAGGER_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_RAGGER_DIR))
 
-import keychain  # noqa: E402
+from client import keychain  # noqa: E402
 from tron_encode_typed_data.encoding_and_hashing import hash_eip712_message, hash_struct  # noqa: E402
 
 
