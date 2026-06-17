@@ -190,9 +190,25 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                32));
 
     if (txContent.permission_id > 0) {
+        size_t prefix_len = 0U;
+        int prefix_written;
+
         PRINTF("Set permission_id...\n");
-        snprintf((char *) strings.common.fromAddress, 5, "P%d - ", txContent.permission_id);
-        getBase58FromAddress(txContent.account, strings.common.fromAddress + 4, N_storage.truncateAddress);
+        prefix_written = snprintf((char *) strings.common.fromAddress,
+                                  sizeof(strings.common.fromAddress),
+                                  "P%d - ",
+                                  txContent.permission_id);
+        if ((prefix_written > 0) &&
+            ((size_t) prefix_written <=
+             (sizeof(strings.common.fromAddress) - (BASE58CHECK_ADDRESS_SIZE + 1U)))) {
+            prefix_len = (size_t) prefix_written;
+        } else {
+            strings.common.fromAddress[0] = '\0';
+        }
+
+        getBase58FromAddress(txContent.account,
+                             strings.common.fromAddress + prefix_len,
+                             N_storage.truncateAddress);
     } else {
         PRINTF("Regular transaction...\n");
         getBase58FromAddress(txContent.account, strings.common.fromAddress, N_storage.truncateAddress);

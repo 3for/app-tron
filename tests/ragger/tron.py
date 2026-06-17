@@ -64,6 +64,38 @@ class TronClient:
     HOST, PORT = ('127.0.0.1', 9999)
     CLA = 0xE0
 
+    def __init__(self,
+                 backend: BackendInterface,
+                 device: Optional[Device] = None,
+                 navigator=None):
+        self._backend = backend
+        self._device = device if device is not None else backend.device
+        self._navigator = navigator
+        self.device = self._device
+        self._cmd_builder = CommandBuilder()
+        self._pki_client = PKIClient(self._backend)
+        self.pki_client = self._pki_client
+        self.accounts = [None, None]
+        self.hardware = True
+
+        # Init account with default address to compare with ledger.
+        for i in range(2):
+            hd = self.getPrivateKey(MNEMONIC, i, 0, 0)
+            key = keys.PrivateKey(hd)
+            diffie_hellman = ec.derive_private_key(int.from_bytes(hd, "big"),
+                                                   ec.SECP256K1(),
+                                                   default_backend())
+            self.accounts[i] = {
+                "path": f"m/44'/195'/{i}'/0/0",
+                "privateKeyHex": hd.hex(),
+                "key": key,
+                "addressHex":
+                "41" + key.public_key.to_checksum_address()[2:].upper(),
+                "publicKey": key.public_key.to_hex().upper(),
+                "dh": diffie_hellman,
+            }
+
+    """
     def __init__(self, client: BackendInterface, device: Device, navigator):
         if not isinstance(client, BackendInterface):
             raise TypeError('client must be an instance of BackendInterface')
@@ -97,106 +129,104 @@ class TronClient:
                 key.public_key.to_hex().upper(),
                 "dh":
                 diffieHellman,
-            }
+            } """
 
-    def exchange_async_raw(self, payload: bytes):
-        return self._client.exchange_async_raw(payload)
+    def exchange_async_raw(self, *args):
+        if len(args) == 1:
+            return self._backend.exchange_async_raw(args[0])
+        return self._backend.exchange_async(*args)
 
-    def exchange_raw(self, payload: bytes):
-        return self._client.exchange_raw(payload)
+    def exchange_raw(self, *args):
+        if len(args) == 1:
+            return self._backend.exchange_raw(args[0])
+        return self._backend.exchange(*args)
+
+    def exchange_async(self, *args):
+        return self._backend.exchange_async(*args)
+
+    def exchange(self, *args):
+        return self._backend.exchange(*args)
 
     def exchange_async_raw_chunks(self, chunks):
         for chunk in chunks[:-1]:
             self.exchange_raw(chunk)
         return self.exchange_async_raw(chunks[-1])
 
-    # ------------------------------------------------------------------ #
-    # app-ethereum EIP-712 client parity.
-    #
-    # These mirror EthAppClient.tip712_* (app-ethereum client.py) so the
-    # shared EIP-712 InputData driver and test bodies are byte-for-byte
-    # comparable with app-ethereum. They wrap the TIP712 CommandBuilder
-    # serializers; exchange_raw/exchange_async_raw map 1:1 to app-ethereum's
-    # _exchange/_exchange_async, and response() == last_async_response.
-    # ------------------------------------------------------------------ #
-    def response(self) -> RAPDU:
-        return self._client.last_async_response
-
     def tip712_send_struct_def_struct_name(self, name: str):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_send_struct_def_struct_name(name))
 
     def tip712_send_struct_def_struct_field(self, field_type, type_name,
                                             type_size, array_levels, key_name):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_send_struct_def_struct_field(
                 field_type, type_name, type_size, array_levels, key_name))
 
     def tip712_send_struct_impl_root_struct(self, name: str):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_send_struct_impl_root_struct(name))
 
     def tip712_send_struct_impl_array(self, size: int):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_send_struct_impl_array(size))
 
     def tip712_send_struct_impl_struct_field(self, raw_value: bytes):
         chunks = CommandBuilder().tip712_send_struct_impl_struct_field(
             bytearray(raw_value))
         for chunk in chunks[:-1]:
-            self._client.exchange_raw(chunk)
-        return self._client.exchange_async_raw(chunks[-1])
+            self.exchange_raw(chunk)
+        return self.exchange_async_raw(chunks[-1])
 
     def tip712_sign_new(self, bip32_path: str):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_sign_new(bip32_path))
 
     def tip712_sign_legacy(self, bip32_path: str, domain_hash: bytes,
                            message_hash: bytes):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_sign_legacy(bip32_path, domain_hash,
                                                 message_hash))
 
     def tip712_filtering_activate(self):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_activate())
 
     def tip712_filtering_discarded_path(self, path: str):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_discarded_path(path))
 
     def tip712_filtering_message_info(self, name: str, filters_count: int,
                                       sig: bytes):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_message_info(name, filters_count,
                                                            sig))
 
     def tip712_filtering_amount_join_token(self, token_idx: int, sig: bytes,
                                            discarded: bool):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_amount_join_token(token_idx, sig,
                                                                discarded))
 
     def tip712_filtering_amount_join_value(self, token_idx: int, name: str,
                                            sig: bytes, discarded: bool):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_amount_join_value(token_idx, name,
                                                                sig, discarded))
 
     def tip712_filtering_datetime(self, name: str, sig: bytes, discarded: bool):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_datetime(name, sig, discarded))
 
     def tip712_filtering_trusted_name(self, name: str, name_type: list,
                                       name_source: list, sig: bytes,
                                       discarded: bool):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_trusted_name(name, name_type,
                                                            name_source, sig,
                                                            discarded))
 
     def tip712_filtering_raw(self, name: str, sig: bytes, discarded: bool):
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             CommandBuilder().tip712_filtering_raw(name, sig, discarded))
 
     def tip712_filtering_calldata_info(self, index: int, value_filter_flag: bool,
@@ -205,7 +235,7 @@ class TronClient:
                                        selector_filter_flag: bool,
                                        amount_filter_flag: bool,
                                        spender_filter_flag: int, sig: bytes):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_info(
                 index, value_filter_flag, callee_filter_flag,
                 chain_id_filter_flag, selector_filter_flag, amount_filter_flag,
@@ -213,32 +243,32 @@ class TronClient:
 
     def tip712_filtering_calldata_value(self, index: int, sig: bytes,
                                         discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_value(index, sig, discarded))
 
     def tip712_filtering_calldata_callee(self, index: int, sig: bytes,
                                          discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_callee(index, sig, discarded))
 
     def tip712_filtering_calldata_chain_id(self, index: int, sig: bytes,
                                            discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_chain_id(index, sig, discarded))
 
     def tip712_filtering_calldata_selector(self, index: int, sig: bytes,
                                            discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_selector(index, sig, discarded))
 
     def tip712_filtering_calldata_amount(self, index: int, sig: bytes,
                                          discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_amount(index, sig, discarded))
 
     def tip712_filtering_calldata_spender(self, index: int, sig: bytes,
                                           discarded: bool):
-        return self._client.exchange_raw(
+        return self.exchange_raw(
             CommandBuilder().tip712_filtering_calldata_spender(index, sig, discarded))
 
     def address_hex(self, address):
@@ -366,7 +396,7 @@ class TronClient:
                 [],
                 screen_change_before_first_instruction=screen_change_before_first_instruction)
             snap_idx = 0
-            while not self._client.compare_screen_with_text(text):
+            while not self.compare_screen_with_text(text):
                 snap_idx += 1
                 self._navigator.navigate([NavInsID.USE_CASE_REVIEW_TAP],
                                          screen_change_before_first_instruction=False,
@@ -386,11 +416,11 @@ class TronClient:
                 snap_start_idx=snap_idx)
 
     def getVersion(self):
-        return self._client.exchange(CLA, InsType.GET_APP_CONFIGURATION, 0x00,
+        return self.exchange(CLA, InsType.GET_APP_CONFIGURATION, 0x00,
                                      0x00)
 
     def get_async_response(self) -> RAPDU:
-        return self._client.last_async_response
+        return self.last_async_response
 
     def compute_address_from_public_key(self, public_key: bytes) -> str:
         return TrxAddrEncoder.EncodeKey(public_key)
@@ -430,7 +460,7 @@ class TronClient:
         p1 = P1.NON_CONFIRM
         p2 = P2.CHAINCODE if request_chaincode else P2.NO_CHAINCODE
         payload = pack_derivation_path(derivation_path)
-        return self._client.exchange(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
+        return self.exchange_raw(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
                                      payload)
 
     @contextmanager
@@ -440,7 +470,7 @@ class TronClient:
         p1 = P1.CONFIRM
         p2 = P2.CHAINCODE if request_chaincode else P2.NO_CHAINCODE
         payload = pack_derivation_path(derivation_path)
-        with self._client.exchange_async(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
+        with self.exchange_async_raw(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
                                          payload):
             yield
 
@@ -450,19 +480,16 @@ class TronClient:
         major, minor, patch = unpack("BBB", response[1:])
         return major, minor, patch
 
-    def sign(self,
-             path: str,
-             tx,
-             signatures=[],
-             snappath: Path = None,
-             text: str = "",
-             navigate: bool = True,
-             warning_approve: bool = False,
-             ins: InsType = InsType.SIGN,
-             include_tx_len: bool = False):
-        messages = []
+    def _prepare_sign_messages(self,
+                               path: str,
+                               tx,
+                               signatures=None,
+                               ins: InsType = InsType.SIGN,
+                               include_tx_len: bool = False):
+        if signatures is None:
+            signatures = []
 
-        # Split transaction in multiples APDU
+        messages = []
         tx_len = len(tx)
         data = pack_derivation_path(path)
         if ins == InsType.SIGN_EXTERNAL_PLUGIN:
@@ -481,26 +508,24 @@ class TronClient:
             if include_tx_len:
                 data += pack(">I", tx_len)
             while len(tx) > 0:
-                # get next message field
                 newpos = self.get_next_length(tx)
                 assert (newpos < MAX_APDU_LEN)
                 if (len(data) + newpos) < MAX_APDU_LEN:
-                    # append to data
                     data += tx[:newpos]
                     tx = tx[newpos:]
                 else:
-                    # add chunk
                     messages.append(data)
                     data = bytearray()
                     continue
-            # append last
             messages.append(data)
             token_pos = len(messages)
 
         for signature in signatures:
             messages.append(bytearray.fromhex(signature))
 
-        # Send all the messages except the last
+        return messages, token_pos
+
+    def _send_sign_prefix_messages(self, messages, token_pos, ins: InsType):
         for i, data in enumerate(messages[:-1]):
             if i == 0:
                 p1 = P1.FIRST
@@ -510,46 +535,77 @@ class TronClient:
                 else:
                     p1 = P1.TRC10_NAME | P1.FIRST | i - token_pos
 
-            self._client.exchange(CLA, ins, p1, 0x00, data)
+            self.exchange(CLA, ins, p1, 0x00, data)
 
-        # Send last message
+    def _last_sign_p1(self, messages, signatures) -> int:
         if len(messages) == 1:
-            p1 = P1.SIGN
-        elif signatures:
-            p1 = P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE | len(
+            return P1.SIGN
+        if signatures:
+            return P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE | len(
                 signatures) - 1
-        else:
-            p1 = P1.LAST
+        return P1.LAST
+
+    @contextmanager
+    def sign_async(self,
+                   path: str,
+                   tx,
+                   signatures=None,
+                   ins: InsType = InsType.SIGN,
+                   include_tx_len: bool = False) -> Generator[None, None, None]:
+        if signatures is None:
+            signatures = []
+
+        messages, token_pos = self._prepare_sign_messages(
+            path, tx, signatures, ins, include_tx_len)
+        self._send_sign_prefix_messages(messages, token_pos, ins)
+        p1 = self._last_sign_p1(messages, signatures)
+
+        with self.exchange_async(CLA, ins, p1, 0x00, messages[-1]):
+            yield
+
+    def sign_sync(self,
+                  path: str,
+                  tx,
+                  signatures=None,
+                  ins: InsType = InsType.SIGN,
+                  include_tx_len: bool = False):
+        if signatures is None:
+            signatures = []
+
+        messages, token_pos = self._prepare_sign_messages(
+            path, tx, signatures, ins, include_tx_len)
+        self._send_sign_prefix_messages(messages, token_pos, ins)
+        p1 = self._last_sign_p1(messages, signatures)
+
+        return self.exchange(CLA, ins, p1, 0x00, messages[-1])
+
+    def sign(self,
+             path: str,
+             tx,
+             signatures=None,
+             snappath: Path = None,
+             text: str = "",
+             navigate: bool = True,
+             warning_approve: bool = False,
+             ins: InsType = InsType.SIGN,
+             include_tx_len: bool = False):
+        if signatures is None:
+            signatures = []
+
+        messages, token_pos = self._prepare_sign_messages(
+            path, tx, signatures, ins, include_tx_len)
+        self._send_sign_prefix_messages(messages, token_pos, ins)
+        p1 = self._last_sign_p1(messages, signatures)
 
         if navigate:
-            with self._client.exchange_async(CLA, ins, p1, 0x00, messages[-1]):
+            with self.exchange_async(CLA, ins, p1, 0x00, messages[-1]):
                 self.navigate(snappath, text, warning_approve)
-            return self._client.last_async_response
+            return self.last_async_response
         else:
-            return self._client.exchange(CLA, ins, p1, 0x00, messages[-1])
-
-    def sign_for_trusted_name(self,
-                              bip32_path: str,
-                              tx_params: dict,
-                              snap_path: str,
-                              text: str,
-                              warning_approve: bool = False):
-        tx = self.packContract(
-            tron.Transaction.Contract.TransferContract,
-            contract.TransferContract(owner_address=bytes.fromhex(
-                self.getAccount(0)['addressHex']),
-                                      to_address=bytes.fromhex(
-                                          ("41" + tx_params["to"].hex())),
-                                      amount=tx_params["value"]))
-
-        return self.sign(bip32_path,
-                         tx,
-                         text=text,
-                         snappath=snap_path,
-                         warning_approve=warning_approve)
+            return self.exchange(CLA, ins, p1, 0x00, messages[-1])
 
     def response(self) -> Optional[RAPDU]:
-        return self._client.last_async_response
+        return self._backend.last_async_response
 
     def get_public_addr(self,
                         display: bool = True,
@@ -557,7 +613,7 @@ class TronClient:
                         bip32_path: str = "m/44'/195'/0'/0/0",
                         chain_id: Optional[int] = None):
         cmd_builder = CommandBuilder()
-        return self._client.exchange_async_raw(
+        return self.exchange_async_raw(
             cmd_builder.get_public_addr(display, chaincode, bip32_path,
                                         chain_id))
 
@@ -565,16 +621,16 @@ class TronClient:
         cmd_builder = CommandBuilder()
         chunks = cmd_builder.personal_sign_full_display(path, msg)
         for chunk in chunks[:-1]:
-            self._client.exchange_raw(chunk)
-        return self._client.exchange_async_raw(chunks[-1])
+            self.exchange_raw(chunk)
+        return self.exchange_async_raw(chunks[-1])
 
     def _provide_tlv(self, chunks: list) -> RAPDU:
         # Generic clear-signing descriptors (0x24/0x26/0x28) are streamed as a
         # chunked TLV payload; every chunk must return 0x9000.
         for chunk in chunks[:-1]:
-            response = self._client.exchange_raw(chunk)
+            response = self.exchange_raw(chunk)
             assert response.status == StatusWord.OK
-        response = self._client.exchange_raw(chunks[-1])
+        response = self.exchange_raw(chunks[-1])
         assert response.status == StatusWord.OK
         return response
 
@@ -635,7 +691,7 @@ class TronClient:
             # skip APDU header & empty sig
             sig = sign_data(Key.CAL, tmp[6:])
 
-        response = self._client.exchange_raw(
+        response = self.exchange_raw(
             cmd_builder.provide_trc20_token_information(ticker,
                                                         addr,
                                                         decimals,
@@ -677,7 +733,7 @@ class TronClient:
             # skip APDU header & empty sig
             sig = sign_data(Key.NFT, tmp[5:-1])
 
-        response = self._client.exchange_raw(
+        response = self.exchange_raw(
             cmd_builder.provide_nft_information(type_,
                                                 version,
                                                 collection,

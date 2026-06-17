@@ -1,11 +1,9 @@
 from ragger.backend import SpeculosBackend
 from ragger.backend.interface import RaisePolicy
 from ragger.bip import calculate_public_key_and_chaincode, CurveChoice
-from ragger.navigator import NavInsID, NavIns
 
-from ledgered.devices import DeviceType
 from client.status_word import StatusWord
-from tron import TronClient, ROOT_SCREENSHOT_PATH
+from tron import TronClient
 from conftest import MNEMONIC
 
 # Proposed TRX derivation paths for tests ###
@@ -23,64 +21,51 @@ def check_get_public_key_resp(backend, path, public_key, chaincode):
 
 class Test_GET_PUBLIC_KEY():
 
-    @staticmethod
-    def _qr_exit_touch(device):
-        if device.type in (DeviceType.STAX, DeviceType.FLEX):
-            return (100, 500 if device.type == DeviceType.STAX else 400)
-        if device.type == DeviceType.APEX_P:
-            return (65, 300)
-        return (100, 500)
-
     def test_get_public_key_non_confirm(self, backend, device, navigator):
-        client = TronClient(backend, device, navigator)
+        client = TronClient(backend)
 
-        rapdu = client.send_get_public_key_non_confirm(TRX_PATH, True)
+        with client.get_public_addr(display=False,
+                                    chaincode=True,
+                                    bip32_path=TRX_PATH):
+            pass
+        rapdu = client.response()
         public_key, address, chaincode = client.parse_get_public_key_response(
             rapdu.data, True)
         check_get_public_key_resp(backend, TRX_PATH, public_key, chaincode)
 
         # Check that with NO_CHAINCODE, value stay the same
-        rapdu = client.send_get_public_key_non_confirm(TRX_PATH, False)
+        with client.get_public_addr(display=False,
+                                    chaincode=False,
+                                    bip32_path=TRX_PATH):
+            pass
+        rapdu = client.response()
         public_key_2, address_2, chaincode_2 = client.parse_get_public_key_response(
             rapdu.data, False)
         assert public_key_2 == public_key
         assert address_2 == address
         assert chaincode_2 is None
 
-    def test_get_public_key_confirm_accepted(self, device, backend,
-                                             navigator, test_name):
-        client = TronClient(backend, device, navigator)
-        with client.send_async_get_public_key_confirm(TRX_PATH, True):
-            if device.is_nano:
-                navigator.navigate_until_text_and_compare(
-                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
-                    ROOT_SCREENSHOT_PATH, test_name)
-            else:
-                instructions = [
-                    NavInsID.SWIPE_CENTER_TO_LEFT,
-                    NavIns(NavInsID.TOUCH, self._qr_exit_touch(device)),
-                    NavInsID.USE_CASE_ADDRESS_CONFIRMATION_EXIT_QR,
-                    NavInsID.USE_CASE_ADDRESS_CONFIRMATION_CONFIRM,
-                    NavInsID.USE_CASE_STATUS_DISMISS
-                ]
-                navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH, test_name,
-                                               instructions)
+    def test_get_public_key_confirm_accepted(self, scenario_navigator,
+                                             test_name):
+        backend = scenario_navigator.backend
+        client = TronClient(backend)
 
-        response = client.get_async_response().data
+        with client.get_public_addr(display=True,
+                                    chaincode=True,
+                                    bip32_path=TRX_PATH):
+            scenario_navigator.address_review_approve(test_name=test_name)
+
+        response = client.response().data
         public_key, address, chaincode = client.parse_get_public_key_response(
             response, True)
         check_get_public_key_resp(backend, TRX_PATH, public_key, chaincode)
 
         # Check that with NO_CHAINCODE, value and screens stay the same
-        with client.send_async_get_public_key_confirm(TRX_PATH, False):
-            if device.is_nano:
-                navigator.navigate_until_text_and_compare(
-                    NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Confirm",
-                    ROOT_SCREENSHOT_PATH, test_name)
-            else:
-                navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH, test_name,
-                                               instructions)
-        response = client.get_async_response().data
+        with client.get_public_addr(display=True,
+                                    chaincode=False,
+                                    bip32_path=TRX_PATH):
+            scenario_navigator.address_review_approve(test_name=test_name)
+        response = client.response().data
         public_key_2, address_2, chaincode_2 = client.parse_get_public_key_response(
             response, False)
         assert public_key_2 == public_key
@@ -88,40 +73,17 @@ class Test_GET_PUBLIC_KEY():
         assert chaincode_2 is None
 
     # In this test we check that the GET_PUBLIC_KEY in confirmation mode replies an error if the user refuses
-    def test_get_public_key_confirm_refused(self, device, backend, navigator,
+    def test_get_public_key_confirm_refused(self, scenario_navigator,
                                             test_name):
-        client = TronClient(backend, device, navigator)
+        backend = scenario_navigator.backend
+        client = TronClient(backend)
+
         for chaincode_param in [True, False]:
-            if device.is_nano:
-                with client.send_async_get_public_key_confirm(
-                        TRX_PATH, chaincode_param):
-                    backend.raise_policy = RaisePolicy.RAISE_NOTHING
-                    navigator.navigate_until_text_and_compare(
-                        NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Cancel",
-                        ROOT_SCREENSHOT_PATH, test_name)
-                rapdu = client.get_async_response()
-                assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
-                assert len(rapdu.data) == 0
-            else:
-                instructions_set = [
-                    [
-                        NavInsID.USE_CASE_REVIEW_REJECT,
-                        NavInsID.USE_CASE_STATUS_DISMISS
-                    ],
-                    [
-                        NavInsID.SWIPE_CENTER_TO_LEFT,
-                        NavInsID.USE_CASE_ADDRESS_CONFIRMATION_CANCEL,
-                        NavInsID.USE_CASE_STATUS_DISMISS
-                    ]
-                ]
-                for i, instructions in enumerate(instructions_set):
-                    for chaincode_param in [True, False]:
-                        with client.send_async_get_public_key_confirm(
-                                TRX_PATH, chaincode_param):
-                            backend.raise_policy = RaisePolicy.RAISE_NOTHING
-                            navigator.navigate_and_compare(
-                                ROOT_SCREENSHOT_PATH, test_name + f"/part{i}",
-                                instructions)
-                        rapdu = client.get_async_response()
-                        assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
-                        assert len(rapdu.data) == 0
+            with client.get_public_addr(display=True,
+                                        chaincode=chaincode_param,
+                                        bip32_path=TRX_PATH):
+                backend.raise_policy = RaisePolicy.RAISE_NOTHING
+                scenario_navigator.address_review_reject()
+            rapdu = client.response()
+            assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
+            assert len(rapdu.data) == 0

@@ -441,7 +441,7 @@ bool ui_gcs(void) {
     if ((g_titleMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
         return false;
     }
-    snprintf(tmp_buf, tmp_buf_size, "Sign transaction to %s?", get_operation_type(info_tx));
+    snprintf(tmp_buf, tmp_buf_size, "Sign transaction");
     if ((g_finishMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
         return false;
     }

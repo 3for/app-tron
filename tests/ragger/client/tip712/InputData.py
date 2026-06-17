@@ -1,7 +1,6 @@
 import hashlib
 import json
 import re
-import signal
 import sys
 import copy
 import functools
@@ -14,7 +13,6 @@ from client.tip712 import TIP712FieldType
 from client import keychain
 import base58
 from pathlib import Path
-from ledgered.devices import DeviceType
 
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}")
 from address import to_raw_address, to_tvm_address
@@ -27,14 +25,6 @@ filtering_tokens: list[dict] = []
 filtering_calldatas: list[dict] = []
 current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
-
-
-def default_handler():
-    raise RuntimeError("Uninitialized handler")
-
-
-autonext_handler: Callable = default_handler
-is_golden_run: bool
 
 
 # From a string typename, extract the type and all the array depth
@@ -305,8 +295,7 @@ def send_struct_impl_field(value, field):
         if path in filtering_paths.keys():
             callback = send_filter(path, False)
     with app_client.tip712_send_struct_impl_struct_field(data):
-        enable_autonext()
-    disable_autonext()
+        pass
     # A completed nested-calldata filter returns a handler that streams the GCS
     # descriptor (TX_INFO + fields) for the calldata once its value field is sent.
     if callback is not None:
@@ -387,8 +376,7 @@ def send_filtering_message_info(display_name: str, filters_count: int):
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_message_info(display_name, filters_count,
                                                   sig):
-        enable_autonext()
-    disable_autonext()
+        pass
 
 
 def send_filtering_amount_join_token(path: str, token_idx: int,
@@ -631,38 +619,11 @@ def init_signature_context(types, domain, filters=None):
     sig_ctx["schema_hash"] = bytearray.fromhex(schema_hash.hexdigest())
 
 
-def next_timeout(_signum: int, _frame):
-    autonext_handler()
-
-
-def enable_autonext():
-    if app_client._device.type in (DeviceType.STAX, DeviceType.FLEX,
-                                   DeviceType.APEX_P):
-        delay = 1 * 3 / 2
-    else:
-        delay = 1 * 3 / 4
-
-    # golden run has to be slower to make sure we take good snapshots
-    # and not processing/loading screens
-    if is_golden_run:
-        delay *= 3
-
-    signal.setitimer(signal.ITIMER_REAL, delay, delay)
-
-
-def disable_autonext():
-    signal.setitimer(signal.ITIMER_REAL, 0, 0)
-
-
 def process_data(aclient,
                  data_json: dict,
-                 filters: Optional[dict] = None,
-                 autonext: Optional[Callable] = None,
-                 golden_run: bool = False) -> bool:
+                 filters: Optional[dict] = None) -> bool:
     global sig_ctx
     global app_client
-    global autonext_handler
-    global is_golden_run
     global current_path
 
     current_path = []  # init to be empty
@@ -674,11 +635,6 @@ def process_data(aclient,
     types = data_json["types"]
     domain = data_json["domain"]
     message = data_json["message"]
-    if autonext:
-        autonext_handler = autonext
-        signal.signal(signal.SIGALRM, next_timeout)
-
-    is_golden_run = golden_run
 
     if filters:
         init_signature_context(types, domain, filters)
@@ -700,8 +656,7 @@ def process_data(aclient,
 
     # send domain implementation
     with app_client.tip712_send_struct_impl_root_struct(domain_typename):
-        enable_autonext()
-    disable_autonext()
+        pass
     if not send_struct_impl(types, domain, domain_typename):
         return False
 
@@ -713,8 +668,7 @@ def process_data(aclient,
 
     # send message implementation
     with app_client.tip712_send_struct_impl_root_struct(message_typename):
-        enable_autonext()
-    disable_autonext()
+        pass
     if not send_struct_impl(types, message, message_typename):
         print("Failed to send message implementation")
         return False

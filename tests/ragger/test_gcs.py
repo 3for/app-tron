@@ -45,11 +45,9 @@ from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmoun
 from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from fields_utils import (get_all_paths, get_all_tuple_array_paths,
                           get_all_tuple_paths)
-from ledgered.devices import Device
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
-from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 import response_parser as ResponseParser
 from client.status_word import StatusWord
@@ -75,8 +73,6 @@ TRON_MAINNET_CHAINID = 728126428
 # TRON mainnet address prefix byte (parse.h ADD_PRE_FIX_BYTE_MAINNET).
 ADD_PRE_FIX_BYTE_MAINNET = 0x41
 ABIS_FOLDER = Path(__file__).parent / "abis"
-ROOT_SCREENSHOT_PATH = Path(__file__).parent.resolve()
-
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
 # Same contract as a 20-byte TVM address (0x41 mainnet prefix stripped), i.e.
@@ -240,8 +236,8 @@ TRANSFER_OWNERSHIP_SELECTOR = bytes.fromhex("f2fde38b")
 
 
 @pytest.fixture(name="tron_client")
-def tron_client_fixture(device: Device, backend: BackendInterface) -> TronClient:
-    return TronClient(backend, device, None)
+def tron_client_fixture(backend: BackendInterface) -> TronClient:
+    return TronClient(backend)
 
 
 def build_trc20_transfer_tx(client: TronClient) -> bytes:
@@ -428,8 +424,7 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
 
 
 def _client_from_scenario(scenario_navigator: NavigateWithScenario) -> TronClient:
-    return TronClient(scenario_navigator.backend, scenario_navigator.device,
-                      scenario_navigator.navigator)
+    return TronClient(scenario_navigator.backend)
 
 
 def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
@@ -437,19 +432,14 @@ def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
                                test_name: str | None = None,
                                nb_warnings: int = 0) -> None:
     backend = scenario_navigator.backend
-    is_nano = scenario_navigator.device.is_nano
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
         if nb_warnings:
-            client.navigate(test_name or scenario_navigator.test_name,
-                            "Sign transaction" if is_nano else "Hold to sign",
-                            nb_warnings=nb_warnings,
-                            warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
+            scenario_navigator.review_approve_with_warning(
+                test_name=test_name,
+                nb_warnings=nb_warnings)
         else:
-            custom_screen_text = "Sign transaction" if is_nano else None
-            scenario_navigator.review_approve(path=ROOT_SCREENSHOT_PATH,
-                                              test_name=test_name,
-                                              custom_screen_text=custom_screen_text)
+            scenario_navigator.review_approve(test_name=test_name)
 
     resp = backend.last_async_response
     assert resp.status == StatusWord.OK

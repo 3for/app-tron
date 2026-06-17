@@ -19,7 +19,7 @@
 #define ICON_APP_WARNING LARGE_WARNING_ICON
 #define ICON_APP_REVIEW  LARGE_REVIEW_ICON
 #define ICON_LEDGER      C_ledger_48px
-#elifdef SCREEN_SIZE_WALLET  // for both flex and stax
+#elif defined(SCREEN_SIZE_WALLET)  // for both flex and stax
 #define ICON_APP_WARNING C_Warning_64px
 #define ICON_APP_REVIEW  C_Review_64px
 #define ICON_LEDGER      C_ledger_64px

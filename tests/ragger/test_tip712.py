@@ -10,21 +10,18 @@ import web3
 import hashlib
 
 from ctypes import c_uint64
-from functools import partial
 
 from typing import Optional, Callable
 
 from ragger.error import ExceptionRAPDU
 from pathlib import Path
 from Crypto.Hash import keccak
-from inspect import currentframe
-from client.command_builder import CLA, InsType
 from tron import TronClient
-from ragger.bip import pack_derivation_path
 from utils import check_hash_signature
 
 from ragger.backend import BackendInterface
-from ragger.navigator import Navigator, NavInsID, NavIns
+from ragger.navigator import Navigator, NavInsID
+from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from settings import settings_toggle, SettingID, get_device_settings
 from client.command_builder import CommandBuilder
@@ -40,142 +37,43 @@ from client.gcs import (Field, ParamRaw, Value, TypeFamily, DataPath, PathTuple,
 from utils import recover_message, get_selector_from_data
 from test_gcs import compute_inst_hash, ABIS_FOLDER
 from fields_utils import get_all_paths, get_all_tuple_array_paths
-from ledgered.devices import Device, DeviceType
-from ragger.firmware.touch.positions import POSITIONS
+from ledgered.devices import Device
 
-autonext_idx: int
-snapshots_dirname: Optional[str] = None
 WALLET_ADDR: Optional[bytes] = None
-unfiltered_flow: bool = False
-skip_flow: bool = False
-autonext_running: bool = False
 
 
-def autonext(device: Device, navigator: Navigator,
-             default_screenshot_path: Path):
-    global autonext_idx
-    global autonext_running
-
-    if autonext_running:
-        return
-    autonext_running = True
-
-    try:
-        moves = []
-        if device.is_nano:
-            if autonext_idx == 0 and unfiltered_flow:
-                moves = [NavInsID.BOTH_CLICK]
-            else:
-                moves = [NavInsID.RIGHT_CLICK]
-        else:
-            if autonext_idx == 0 and unfiltered_flow:
-                moves = [NavInsID.USE_CASE_CHOICE_REJECT]
-            else:
-                if autonext_idx == 2 and skip_flow:
-                    InputData.disable_autonext()
-                    moves = [
-                        NavIns(NavInsID.TOUCH,
-                               POSITIONS["RightHeader"][device.type]),
-                        NavInsID.USE_CASE_CHOICE_CONFIRM,
-                    ]
-                else:
-                    moves = [NavInsID.USE_CASE_REVIEW_TAP]
-        if snapshots_dirname is not None:
-            navigator.navigate_and_compare(
-                default_screenshot_path,
-                snapshots_dirname,
-                moves,
-                screen_change_before_first_instruction=False,
-                screen_change_after_last_instruction=False,
-                snap_start_idx=autonext_idx)
-        else:
-            navigator.navigate(moves,
-                               screen_change_before_first_instruction=False,
-                               screen_change_after_last_instruction=False)
-        autonext_idx += len(moves)
-    finally:
-        autonext_running = False
-
-
-def tip712_new_common(device: Device,
-                      navigator,
-                      default_screenshot_path: Path,
+def tip712_new_common(scenario_navigator: NavigateWithScenario,
                       client: TronClient,
-                      builder: CommandBuilder,
                       json_data: dict,
-                      filters,
-                      verbose_raw: bool,
-                      golden_run: bool,
-                      extra_left: bool = False,
+                      filters: Optional[dict] = None,
+                      snapshots_dirname: Optional[str] = None,
+                      nb_warnings: int = 0,
                       gating_params: Optional[Gating] = None):
-    global autonext_idx
-    global unfiltered_flow
-    global skip_flow
-    global snapshots_dirname
-    global autonext_running
+    # Mirrors app-ethereum's schema-hash selector for typed-data gating. The
+    # gating prelude is shown on every device, so it adds one more warning page
+    # on top of the blind-signing one.
+    if gating_params is not None:
+        InputData.init_signature_context(json_data["types"], json_data["domain"])
+        gating_params.selector = bytes(InputData.sig_ctx["schema_hash"])
+        nb_warnings += 1
 
-    autonext_idx = 0
-    autonext_running = False
-    default_screenshot_path = Path(__file__).parent.resolve()
-    try:
-        # Mirrors app-ethereum's schema-hash selector for typed-data gating. The
-        # gating prelude is shown on every device (nano included, like app-ethereum),
-        # so it always adds one more warning page on top of the blind-signing one.
-        nb_warnings = 1 if unfiltered_flow else 0
-        if gating_params is not None:
-            InputData.init_signature_context(json_data["types"], json_data["domain"])
-            gating_params.selector = bytes(InputData.sig_ctx["schema_hash"])
-            nb_warnings += 1
+    assert InputData.process_data(client, json_data, filters)
 
-        assert InputData.process_data(
-            client, json_data, filters,
-            partial(autonext, device, navigator, default_screenshot_path),
-            golden_run)
+    if gating_params is not None:
+        assert client.provide_gating(gating_params.serialize()).status == StatusWord.OK
 
-        if gating_params is not None:
-            assert client.provide_gating(gating_params.serialize()).status == StatusWord.OK
+    do_compare = snapshots_dirname is not None
+    with client.tip712_sign_new(client.getAccount(0)['path']):
+        if nb_warnings > 0:
+            scenario_navigator.review_approve_with_warning(
+                test_name=snapshots_dirname,
+                do_comparison=do_compare,
+                nb_warnings=nb_warnings)
+        else:
+            scenario_navigator.review_approve(test_name=snapshots_dirname,
+                                              do_comparison=do_compare)
 
-        with client.exchange_async_raw(
-                builder.tip712_sign_new(client.getAccount(0)['path'])):
-            warning_approve = unfiltered_flow
-            warning_ins = NavInsID.USE_CASE_CHOICE_CONFIRM
-            if device.is_nano:
-                nav_ins = NavInsID.RIGHT_CLICK
-                val_ins = NavInsID.BOTH_CLICK
-                text = "Accept risk and" if warning_approve else "Sign message"
-            else:
-                nav_ins = NavInsID.USE_CASE_REVIEW_TAP
-                val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
-                text = "Hold to sign"
-                warning_ins = NavInsID.USE_CASE_CHOICE_REJECT
-            if snapshots_dirname is not None:
-                client.navigate(
-                    snapshots_dirname,
-                    text,
-                    nb_warnings=nb_warnings,
-                    warning_instruction=warning_ins)
-            else:
-                if nb_warnings > 0:
-                    if device.is_nano:
-                        warning_moves = [NavInsID.RIGHT_CLICK] * (nb_warnings - 1)
-                        warning_moves += [NavInsID.BOTH_CLICK]
-                    else:
-                        warning_moves = [warning_ins] * nb_warnings
-                    navigator.navigate(
-                        warning_moves,
-                        screen_change_before_first_instruction=False)
-                navigator.navigate_until_text(
-                    nav_ins,
-                    [val_ins],
-                    text,
-                    screen_change_before_first_instruction=(nb_warnings == 0))
-    finally:
-        InputData.disable_autonext()
-        unfiltered_flow = False
-        skip_flow = False
-        snapshots_dirname = None
-
-    return ResponseParser.signature(client._client.last_async_response.data)
+    return ResponseParser.signature(client.response().data)
 
 
 def get_wallet_addr(client: TronClient) -> bytes:
@@ -190,7 +88,7 @@ def get_wallet_addr(client: TronClient) -> bytes:
                     chain_id=None)):
             pass
         _, WALLET_ADDR, _ = ResponseParser.pk_addr(
-            client._client.last_async_response.data)
+            client.response().data)
     return WALLET_ADDR[1:]
 
 
@@ -826,25 +724,20 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
 
-    def test_trx_sign_tip712(self, backend, device, navigator):
-        client = TronClient(backend, device, navigator)
+    def test_trx_sign_tip712(self,
+                             scenario_navigator: NavigateWithScenario):
+        client = TronClient(scenario_navigator.backend)
         domainHash = bytes.fromhex(
             '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
         messageHash = bytes.fromhex(
             'eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8')
-        data = pack_derivation_path(client.getAccount(0)['path'])
-        data += domainHash
-        data += messageHash
 
-        with backend.exchange_async(CLA, InsType.SIGN_TIP_712_MESSAGE, 0x00,
-                                    0x00, data):
-            if device.is_nano:
-                text = "Sign message"
-            else:
-                text = "Hold to sign"
-            client.navigate(Path(currentframe().f_code.co_name), text)
+        with client.tip712_sign_legacy(client.getAccount(0)['path'],
+                                       domainHash,
+                                       messageHash):
+            scenario_navigator.review_approve(do_comparison=False)
 
-        resp = backend.last_async_response
+        resp = scenario_navigator.backend.last_async_response
 
         sign_magic = b'\x19\x01'
         msg_to_sign = sign_magic + domainHash + messageHash
@@ -853,23 +746,20 @@ class TestTRX():
         assert check_hash_signature(digest, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
 
-    def test_trx_tip712_new(self, device: Device,
-                            backend: BackendInterface, navigator: Navigator,
-                            default_screenshot_path: Path,
+    def test_trx_tip712_new(self,
+                            scenario_navigator: NavigateWithScenario,
                             tip712_case: tuple[Path, bool], verbose_raw: bool,
-                            golden_run: bool, test_name: str):
-        global unfiltered_flow
-        global snapshots_dirname
-
+                            test_name: str):
         settings_to_toggle: list[SettingID] = []
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
         input_file, filtering = tip712_case
 
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
-        cmd_builder = CommandBuilder()
 
         test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
-        snapshots_dirname = test_name
 
         filters = None
         if filtering:
@@ -883,8 +773,7 @@ class TestTRX():
         if verbose_raw:
             settings_to_toggle.append(SettingID.VERBOSE_TIP712)
 
-        if not filters or verbose_raw:
-            unfiltered_flow = True
+        nb_warnings = 1 if not filters or verbose_raw else 0
         try:
             if len(settings_to_toggle) > 0:
                 if device.is_nano:
@@ -895,19 +784,12 @@ class TestTRX():
 
             with open(input_file, encoding="utf-8") as file:
                 data = json.load(file)
-                extra_left = test_path.endswith(
-                    '01-addresses_array_mail'
-                ) and verbose_raw and filters is None
-                vrs = tip712_new_common(device,
-                                        navigator,
-                                        default_screenshot_path,
+                vrs = tip712_new_common(scenario_navigator,
                                         client,
-                                        cmd_builder,
                                         data,
                                         filters,
-                                        verbose_raw,
-                                        golden_run,
-                                        extra_left=extra_left)
+                                        snapshots_dirname=test_name,
+                                        nb_warnings=nb_warnings)
                 recovered_addr = recover_message(data, vrs)
 
             assert recovered_addr == get_wallet_addr(client)
@@ -919,38 +801,29 @@ class TestTRX():
                 else:
                     settings_toggle(device, navigator, settings_to_toggle)
 
-    def test_trx_tip712_advanced_filtering(self, device: Device,
-                                           backend: BackendInterface,
-                                           navigator: Navigator,
-                                           default_screenshot_path: Path,
-                                           test_name: str, data_set: DataSet,
-                                           golden_run: bool):
-        global snapshots_dirname
-
+    def test_trx_tip712_advanced_filtering(
+            self, scenario_navigator: NavigateWithScenario,
+            test_name: str, data_set: DataSet):
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-        cmd_builder = CommandBuilder()
-        snapshots_dirname = test_name + data_set.suffix
 
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data_set.data,
-                                data_set.filters, False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data_set.data,
+                                data_set.filters,
+                                snapshots_dirname=test_name + data_set.suffix)
         recovered_addr = recover_message(data_set.data, vrs)
         assert client.getAccount(
             0)['addressHex'][2:] == recovered_addr.hex().upper()
 
         assert recovered_addr == get_wallet_addr(client)
 
-    def test_trx_tip712_filtering_empty_array(self, device: Device,
-                                              backend: BackendInterface,
-                                              navigator: Navigator,
-                                              default_screenshot_path: Path,
-                                              test_name: str,
-                                              golden_run: bool):
-        global snapshots_dirname
-
+    def test_trx_tip712_filtering_empty_array(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-
-        snapshots_dirname = test_name
 
         data = {
             "types": {
@@ -1016,23 +889,20 @@ class TestTRX():
             }
         }
 
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
     def test_trx_tip712_advanced_missing_token(
-            self, device: Device, backend: BackendInterface,
-            navigator: Navigator, default_screenshot_path: Path,
-            test_name: str, tokens: list[dict], golden_run: bool):
-        global snapshots_dirname
-
+            self, scenario_navigator: NavigateWithScenario,
+            test_name: str, tokens: list[dict]):
         test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
-        snapshots_dirname = test_name
 
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
 
         data = {
@@ -1089,25 +959,23 @@ class TestTRX():
             }
         }
 
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
     def test_trx_tip712_advanced_trusted_name(
-            self, device: Device, backend: BackendInterface,
-            navigator: Navigator, default_screenshot_path: Path,
+            self, scenario_navigator: NavigateWithScenario,
             test_name: str, trusted_name: tuple,
-            filt_tn_types: list[TrustedNameType], golden_run: bool):
-        global snapshots_dirname
+            filt_tn_types: list[TrustedNameType]):
         test_name += f"_{trusted_name[0].name.lower()}_with"
         for trusted_name_type in filt_tn_types:
             test_name += f"_{trusted_name_type.name.lower()}"
-        snapshots_dirname = test_name
 
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
 
         data = {
@@ -1168,22 +1036,21 @@ class TestTRX():
                 chain_id=data["domain"]["chainId"],
                 challenge=challenge))
 
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
-    def _tip712_calldata_common(self, device: Device,
-                                backend: BackendInterface, navigator: Navigator,
-                                default_screenshot_path: Path, test_name: str,
-                                golden_run: bool, filename: str,
+    def _tip712_calldata_common(self,
+                                scenario_navigator: NavigateWithScenario,
+                                test_name: str,
+                                filename: str,
                                 handler: Optional[Callable] = None):
-        global snapshots_dirname
-
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-        snapshots_dirname = test_name
 
         with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
             data = json.load(file)
@@ -1218,27 +1085,22 @@ class TestTRX():
             }
         }
 
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_calldata(self, device: Device,
-                                 backend: BackendInterface, navigator: Navigator,
-                                 default_screenshot_path: Path, test_name: str,
-                                 golden_run: bool):
-        self._tip712_calldata_common(device, backend, navigator,
-                                     default_screenshot_path, test_name,
-                                     golden_run, "safe", gcs_handler)
+    def test_trx_tip712_calldata(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        self._tip712_calldata_common(scenario_navigator, test_name, "safe",
+                                     gcs_handler)
 
-    def test_trx_tip712_calldata_empty_send(self, device: Device,
-                                            backend: BackendInterface,
-                                            navigator: Navigator,
-                                            default_screenshot_path: Path,
-                                            test_name: str, golden_run: bool):
+    def test_trx_tip712_calldata_empty_send(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
         filename = "safe_empty"
 
@@ -1255,28 +1117,20 @@ class TestTRX():
                         challenge=_get_challenge(client),
                         owner=bytes.fromhex(client.getAccount(0)["addressHex"])[1:],
                         owner_deriv_path=client.getAccount(0)["path"]))
-        self._tip712_calldata_common(device, backend, navigator,
-                                     default_screenshot_path, test_name,
-                                     golden_run, filename)
+        self._tip712_calldata_common(scenario_navigator, test_name, filename)
 
-    def test_trx_tip712_calldata_no_param(self, device: Device,
-                                          backend: BackendInterface,
-                                          navigator: Navigator,
-                                          default_screenshot_path: Path,
-                                          test_name: str, golden_run: bool):
-        self._tip712_calldata_common(device, backend, navigator,
-                                     default_screenshot_path, test_name,
-                                     golden_run, "safe_calldata_no_param",
+    def test_trx_tip712_calldata_no_param(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        self._tip712_calldata_common(scenario_navigator, test_name,
+                                     "safe_calldata_no_param",
                                      gcs_handler_no_param)
 
-    def test_trx_tip712_batch(self, device: Device,
-                              backend: BackendInterface, navigator: Navigator,
-                              default_screenshot_path: Path, test_name: str,
-                              golden_run: bool):
-        global snapshots_dirname
-
+    def test_trx_tip712_batch(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-        snapshots_dirname = test_name
 
         with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
             data = json.load(file)
@@ -1335,25 +1189,21 @@ class TestTRX():
             }
         }
 
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_proxy(self, device: Device,
-                              backend: BackendInterface, navigator: Navigator,
-                              default_screenshot_path: Path, test_name: str,
-                              golden_run: bool):
+    def test_trx_tip712_proxy(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
         # Filtered TIP-712 where the descriptor targets a different address than the
         # domain's verifyingContract, resolved via provide_proxy_info. Mirrors
         # app-ethereum's test_eip712_proxy.
-        global snapshots_dirname
-
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-        snapshots_dirname = test_name
 
         input_file = Path(input_files()[0])
         test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
@@ -1374,25 +1224,21 @@ class TestTRX():
         )
         client.provide_proxy_info(proxy_info.serialize())
 
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, filters,
-                                False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_gondi(self, device: Device,
-                              backend: BackendInterface, navigator: Navigator,
-                              default_screenshot_path: Path, test_name: str,
-                              golden_run: bool):
+    def test_trx_tip712_gondi(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
         """Basic blind (unfiltered) TIP-712 signature over a nested struct/array
         payload. Mirrors app-ethereum's test_eip712_gondi. Blind signing
         (SettingID.SIGN_BY_HASH) is already enabled by the `configuration` fixture."""
-        global unfiltered_flow
-        global snapshots_dirname
-
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
-        snapshots_dirname = test_name
 
         data = {
             "types": {
@@ -1430,18 +1276,18 @@ class TestTRX():
             }
         }
 
-        unfiltered_flow = True
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, None, False, golden_run)
+        vrs = tip712_new_common(scenario_navigator, client, data, None,
+                                snapshots_dirname=test_name,
+                                nb_warnings=1)
 
         addr = recover_message(data, vrs)
         assert addr == get_wallet_addr(client)
 
-    def test_trx_tip712_bs_not_activated_error(self, device: Device,
-                                               backend: BackendInterface,
-                                               navigator: Navigator,
-                                               default_screenshot_path: Path):
+    def test_trx_tip712_bs_not_activated_error(
+            self, scenario_navigator: NavigateWithScenario):
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
 
         setting_id = SettingID.SIGN_BY_HASH
@@ -1450,53 +1296,12 @@ class TestTRX():
                                                    [setting_id])
         else:
             settings_toggle(device, navigator, [setting_id])
-        cmd_builder = CommandBuilder()
         with pytest.raises(ExceptionRAPDU) as exc_info:
-            tip712_new_common(device, navigator, default_screenshot_path,
-                              client, cmd_builder, ADVANCED_DATA_SETS[0].data,
-                              None, False, False)
-        InputData.disable_autonext()
+            tip712_new_common(scenario_navigator, client,
+                              ADVANCED_DATA_SETS[0].data, None,
+                              nb_warnings=1)
         assert exc_info.value.status == InputData.StatusWord.INVALID_DATA
 
-        if device.is_nano:
-            navigator.navigate([NavInsID.BOTH_CLICK],
-                               screen_change_before_first_instruction=True)
-        elif device.type == DeviceType.STAX:
-            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 620))],
-                               screen_change_before_first_instruction=True)
-        elif device.type == DeviceType.FLEX:
-            navigator.navigate([NavIns(NavInsID.TOUCH, (130, 550))],
-                               screen_change_before_first_instruction=True)
-        elif device.type == DeviceType.APEX_P:
-            navigator.navigate([NavIns(NavInsID.TOUCH, (100, 350))],
-                               screen_change_before_first_instruction=True)
-        if device.is_nano:
-            settings_toggle_from_current_nano_home(backend, device, navigator,
-                                                   [setting_id])
-        else:
-            settings_toggle(device, navigator, [setting_id])
-
-    def test_trx_tip712_skip(self, device: Device,
-                             backend: BackendInterface, navigator: Navigator,
-                             default_screenshot_path: Path, test_name: str,
-                             golden_run: bool):
-        global unfiltered_flow
-        global skip_flow
-
-        client = TronClient(backend, device, navigator)
-        if device.is_nano:
-            pytest.skip("Not supported on Nano devices")
-
-        unfiltered_flow = True
-        skip_flow = True
-
-        with open(input_files()[0], encoding="utf-8") as file:
-            data = json.load(file)
-
-        cmd_builder = CommandBuilder()
-        vrs = tip712_new_common(device, navigator, default_screenshot_path,
-                                client, cmd_builder, data, None, False,
-                                golden_run)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
+    def test_trx_tip712_skip(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        pytest.skip("Skip action is not exposed by scenario_navigator")
