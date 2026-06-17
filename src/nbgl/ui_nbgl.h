@@ -18,16 +18,15 @@
 #ifdef TARGET_APEX_P
 #define ICON_APP_WARNING LARGE_WARNING_ICON
 #define ICON_APP_REVIEW  LARGE_REVIEW_ICON
+#define ICON_LEDGER      C_ledger_48px
 #elifdef SCREEN_SIZE_WALLET  // for both flex and stax
 #define ICON_APP_WARNING C_Warning_64px
 #define ICON_APP_REVIEW  C_Review_64px
+#define ICON_LEDGER      C_ledger_64px
 #else
 #define ICON_APP_WARNING C_icon_warning
 #define ICON_APP_REVIEW  C_icon_certificate
+#define ICON_LEDGER       C_ledger_14px
 #endif
-
-// app-ethereum uses its own Ledger-logo glyph (C_ledger_*) for the gated-signing
-// prelude; that glyph is not bundled in the TRON app, so reuse the review icon.
-#define ICON_LEDGER ICON_APP_REVIEW
 
 extern nbgl_warning_t warning;

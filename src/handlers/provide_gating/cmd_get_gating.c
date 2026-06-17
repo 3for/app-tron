@@ -648,12 +648,7 @@ static void set_gating_ui_screen(void) {
     prelude_details.footerText = "Continue to blind signing";
     prelude_details.details = &generic_details;
 
-    warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
-    // Nano uses the predefined warning flow; the custom prelude is a wallet-only
-    // NBGL page.
-#ifdef SCREEN_SIZE_WALLET
     warning.prelude = &prelude_details;
-#endif
 }
 
 /**

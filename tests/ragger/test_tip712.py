@@ -118,14 +118,14 @@ def tip712_new_common(device: Device,
     autonext_running = False
     default_screenshot_path = Path(__file__).parent.resolve()
     try:
-        # Mirrors app-ethereum's schema-hash selector for typed-data gating. Nano
-        # keeps the existing blind-signing warning; Stax/Flex add the gating prelude.
+        # Mirrors app-ethereum's schema-hash selector for typed-data gating. The
+        # gating prelude is shown on every device (nano included, like app-ethereum),
+        # so it always adds one more warning page on top of the blind-signing one.
         nb_warnings = 1 if unfiltered_flow else 0
         if gating_params is not None:
             InputData.init_signature_context(json_data["types"], json_data["domain"])
             gating_params.selector = bytes(InputData.sig_ctx["schema_hash"])
-            if not device.is_nano:
-                nb_warnings += 1
+            nb_warnings += 1
 
         assert InputData.process_data(
             client, json_data, filters,
@@ -138,6 +138,7 @@ def tip712_new_common(device: Device,
         with client.exchange_async_raw(
                 builder.tip712_sign_new(client.getAccount(0)['path'])):
             warning_approve = unfiltered_flow
+            warning_ins = NavInsID.USE_CASE_CHOICE_CONFIRM
             if device.is_nano:
                 nav_ins = NavInsID.RIGHT_CLICK
                 val_ins = NavInsID.BOTH_CLICK
@@ -146,19 +147,20 @@ def tip712_new_common(device: Device,
                 nav_ins = NavInsID.USE_CASE_REVIEW_TAP
                 val_ins = NavInsID.USE_CASE_REVIEW_CONFIRM
                 text = "Hold to sign"
+                warning_ins = NavInsID.USE_CASE_CHOICE_REJECT
             if snapshots_dirname is not None:
                 client.navigate(
                     snapshots_dirname,
                     text,
-                    warning_approve=warning_approve,
-                    warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
+                    nb_warnings=nb_warnings,
+                    warning_instruction=warning_ins)
             else:
                 if nb_warnings > 0:
                     if device.is_nano:
                         warning_moves = [NavInsID.RIGHT_CLICK] * (nb_warnings - 1)
                         warning_moves += [NavInsID.BOTH_CLICK]
                     else:
-                        warning_moves = [NavInsID.USE_CASE_CHOICE_REJECT] * nb_warnings
+                        warning_moves = [warning_ins] * nb_warnings
                     navigator.navigate(
                         warning_moves,
                         screen_change_before_first_instruction=False)

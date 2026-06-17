@@ -291,15 +291,27 @@ class TronClient:
             self,
             snappath: Path = None,
             text: str = "",
-            warning_approve: bool = False,
-            warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM):
+            nb_warnings: int = 0,
+            warning_instruction: NavInsID = NavInsID.USE_CASE_CHOICE_CONFIRM,
+            warning_approve: bool = False):
+        if warning_approve and nb_warnings == 0:
+            nb_warnings = 1
+
+        # Page through every warning screen (blind-signing and/or the gating
+        # prelude) under "part1", then run the review under "part2". Mirrors
+        # app-ethereum, which navigates each warning page rather than assuming a
+        # single one.
         if self._device.is_nano:
             path_name = ""
             screen_change_before_first_instruction = True
-            if warning_approve:
-                self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
-                                                     str(snappath) + "/part1",
-                                                     [NavInsID.BOTH_CLICK])
+            if nb_warnings > 0:
+                warning_moves = [NavInsID.RIGHT_CLICK] * (nb_warnings - 1)
+                warning_moves += [NavInsID.BOTH_CLICK]
+                self._navigator.navigate_and_compare(
+                    ROOT_SCREENSHOT_PATH,
+                    str(snappath) + "/part1",
+                    warning_moves,
+                    screen_change_before_first_instruction=False)
                 path_name = "/part2"
                 screen_change_before_first_instruction = False
             self._navigator.navigate_until_text_and_compare(
@@ -312,12 +324,41 @@ class TronClient:
         else:
             path_name = ""
             screen_change_before_first_instruction = True
-            if warning_approve:
-                self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
-                                                     str(snappath) + "/part1",
-                                                     [warning_instruction])
+            if nb_warnings > 0:
+                warning_path = str(snappath) + "/part1"
+                if nb_warnings == 1:
+                    self._navigator.navigate_and_compare(
+                        ROOT_SCREENSHOT_PATH,
+                        warning_path,
+                        [warning_instruction],
+                        screen_change_before_first_instruction=False,
+                        screen_change_after_last_instruction=False)
+                else:
+                    # Touch devices briefly redraw the pressed footer before the
+                    # next warning page is displayed. Split the navigation so the
+                    # next snapshot is taken after the new warning page settles,
+                    # not during the button feedback redraw.
+                    self._navigator.navigate_and_compare(
+                        ROOT_SCREENSHOT_PATH,
+                        warning_path,
+                        [warning_instruction],
+                        screen_change_before_first_instruction=False,
+                        screen_change_after_last_instruction=False)
+                    for snap_idx in range(1, nb_warnings):
+                        self._navigator.navigate_and_compare(
+                            ROOT_SCREENSHOT_PATH,
+                            warning_path,
+                            [],
+                            snap_start_idx=snap_idx)
+                        if snap_idx < nb_warnings - 1:
+                            self._navigator.navigate([warning_instruction],
+                                                     screen_change_before_first_instruction=False,
+                                                     screen_change_after_last_instruction=False)
+                    self._navigator.navigate([warning_instruction],
+                                             screen_change_before_first_instruction=False,
+                                             screen_change_after_last_instruction=False)
                 path_name = "/part2"
-                screen_change_before_first_instruction = False
+                screen_change_before_first_instruction = True
             self._navigator.navigate_until_text_and_compare(
                 NavInsID.USE_CASE_REVIEW_TAP, [
                     NavInsID.USE_CASE_REVIEW_CONFIRM,

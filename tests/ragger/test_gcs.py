@@ -49,6 +49,7 @@ from ledgered.devices import Device
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
+from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 import response_parser as ResponseParser
 from client.status_word import StatusWord
@@ -436,17 +437,16 @@ def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
                                test_name: str | None = None,
                                nb_warnings: int = 0) -> None:
     backend = scenario_navigator.backend
-    custom_screen_text = ("Sign transaction"
-                          if scenario_navigator.device.is_nano else None)
+    is_nano = scenario_navigator.device.is_nano
     with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
         if nb_warnings:
-            scenario_navigator.review_approve_with_warning(
-                path=ROOT_SCREENSHOT_PATH,
-                test_name=test_name,
-                custom_screen_text=custom_screen_text,
-                nb_warnings=nb_warnings)
+            client.navigate(test_name or scenario_navigator.test_name,
+                            "Sign transaction" if is_nano else "Hold to sign",
+                            nb_warnings=nb_warnings,
+                            warning_instruction=NavInsID.USE_CASE_CHOICE_REJECT)
         else:
+            custom_screen_text = "Sign transaction" if is_nano else None
             scenario_navigator.review_approve(path=ROOT_SCREENSHOT_PATH,
                                               test_name=test_name,
                                               custom_screen_text=custom_screen_text)
@@ -471,9 +471,13 @@ def _provide_gating(client: TronClient, gating_params: Optional[Gating]) -> None
 
 def _gating_warnings(scenario_navigator: NavigateWithScenario,
                      gating_params: Optional[Gating]) -> int:
-    if gating_params is None or scenario_navigator.device.is_nano:
+    if gating_params is None:
         return 0
-    return 1
+
+    # Match test_gating_tip712's navigation shape: an existing signing warning plus
+    # the gating prelude. On Nano the prelude first shows the tiny URL, then needs one
+    # more confirmation click to enter the actual review flow.
+    return 2
 
 
 def test_gcs_sign(scenario_navigator: NavigateWithScenario,

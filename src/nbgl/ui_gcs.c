@@ -13,6 +13,7 @@
 #include "network.h"
 #include "common_utils.h"  // ADDRESS_LENGTH
 #include "helpers.h"       // getBase58FromAddress
+#include "utils.h"         // SET_BIT
 #include "parse.h"         // ADDRESS_SIZE, ADD_PRE_FIX_BYTE_MAINNET, BASE58CHECK_ADDRESS_SIZE
 #include "gtp_tx_info.h"
 #include "gtp_field_table.h"
@@ -447,6 +448,9 @@ bool ui_gcs(void) {
     // warning state when a descriptor matching this transaction was provided.
     if (set_gating_warning() == false) {
         return false;
+    }
+    if (warning.predefinedSet & SET_BIT(GATED_SIGNING_WARN)) {
+        warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
     }
 #endif  // HAVE_GATING_SUPPORT
 

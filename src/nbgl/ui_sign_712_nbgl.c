@@ -81,7 +81,6 @@ uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
         // A gated-signing descriptor (INS_PROVIDE_GATING) may augment the review
         // with a "discover safer signing" prelude. Mirrors app-ethereum's
         // ui_sign_712().
-        warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
         if (set_gating_warning() == false) {
             return SWO_INCORRECT_DATA;
         }
