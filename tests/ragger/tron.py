@@ -330,9 +330,10 @@ class TronClient:
                     self._navigator.navigate_and_compare(
                         ROOT_SCREENSHOT_PATH,
                         warning_path,
-                        [warning_instruction],
-                        screen_change_before_first_instruction=False,
-                        screen_change_after_last_instruction=False)
+                        [],
+                        screen_change_before_first_instruction=False)
+                    self._navigator.navigate([warning_instruction],
+                                             screen_change_before_first_instruction=False)
                 else:
                     # Touch devices briefly redraw the pressed footer before the
                     # next warning page is displayed. Split the navigation so the
@@ -355,20 +356,34 @@ class TronClient:
                                                      screen_change_before_first_instruction=False,
                                                      screen_change_after_last_instruction=False)
                     self._navigator.navigate([warning_instruction],
-                                             screen_change_before_first_instruction=False,
-                                             screen_change_after_last_instruction=False)
+                                             screen_change_before_first_instruction=False)
                 path_name = "/part2"
-                screen_change_before_first_instruction = True
-            self._navigator.navigate_until_text_and_compare(
-                NavInsID.USE_CASE_REVIEW_TAP, [
+                screen_change_before_first_instruction = False
+            review_path = str(snappath) + path_name
+            self._navigator.navigate_and_compare(
+                ROOT_SCREENSHOT_PATH,
+                review_path,
+                [],
+                screen_change_before_first_instruction=screen_change_before_first_instruction)
+            snap_idx = 0
+            while not self._client.compare_screen_with_text(text):
+                snap_idx += 1
+                self._navigator.navigate([NavInsID.USE_CASE_REVIEW_TAP],
+                                         screen_change_before_first_instruction=False,
+                                         screen_change_after_last_instruction=False)
+                self._navigator.navigate_and_compare(ROOT_SCREENSHOT_PATH,
+                                                     review_path,
+                                                     [],
+                                                     snap_start_idx=snap_idx)
+            self._navigator.navigate_and_compare(
+                ROOT_SCREENSHOT_PATH,
+                review_path,
+                [
                     NavInsID.USE_CASE_REVIEW_CONFIRM,
                     NavInsID.USE_CASE_STATUS_DISMISS
                 ],
-                text,
-                ROOT_SCREENSHOT_PATH,
-                str(snappath) + path_name,
-                screen_change_before_first_instruction=
-                screen_change_before_first_instruction)
+                screen_change_before_first_instruction=False,
+                snap_start_idx=snap_idx)
 
     def getVersion(self):
         return self._client.exchange(CLA, InsType.GET_APP_CONFIGURATION, 0x00,
