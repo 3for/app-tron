@@ -140,6 +140,23 @@ def settings_toggle_from_current_nano_home(backend: BackendInterface,
     settings_toggle(device, navigator, to_toggle)
 
 
+def toggle_settings(backend: BackendInterface, device: Device,
+                    navigator: Navigator, to_toggle: list[SettingID]):
+    """Toggle device settings, picking the Nano-aware helper when needed.
+
+    With the class-level `configuration` fixture removed (mirroring
+    app-ethereum's test_eip712), each test must explicitly enable the
+    settings it relies on; the device boots with everything disabled.
+    """
+    if not to_toggle:
+        return
+    if device.is_nano:
+        settings_toggle_from_current_nano_home(backend, device, navigator,
+                                               to_toggle)
+    else:
+        settings_toggle(device, navigator, to_toggle)
+
+
 def input_files() -> list[str]:
     files = []
     for file in os.scandir(tip712_json_path()):
@@ -761,12 +778,16 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
     client.provide_transaction_info(tx_info.serialize())
 
 
-@pytest.mark.usefixtures('configuration')
 class TestTRX():
 
     def test_trx_sign_tip712(self,
                              scenario_navigator: NavigateWithScenario):
-        client = TronClient(scenario_navigator.backend)
+        backend = scenario_navigator.backend
+        device = backend.device
+        navigator = scenario_navigator.navigator
+        client = TronClient(backend, device, navigator)
+        # Legacy hash-based TIP-712 signing requires blind signing to be enabled.
+        toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
         domainHash = bytes.fromhex(
             '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
         messageHash = bytes.fromhex(
@@ -809,17 +830,15 @@ class TestTRX():
                     filters = json.load(f)
             except (IOError, json.decoder.JSONDecodeError) as e:
                 pytest.skip(f"{filterfile.name}: {e.strerror}")
+        else:
+            # Unfiltered (blind) signing needs SIGN_BY_HASH enabled.
+            settings_to_toggle.append(SettingID.SIGN_BY_HASH)
 
         if verbose_raw:
             settings_to_toggle.append(SettingID.VERBOSE_TIP712)
 
         nb_warnings = 1 if not filters or verbose_raw else 0
-        if len(settings_to_toggle) > 0:
-            if device.is_nano:
-                settings_toggle_from_current_nano_home(
-                    backend, device, navigator, settings_to_toggle)
-            else:
-                settings_toggle(device, navigator, settings_to_toggle)
+        toggle_settings(backend, device, navigator, settings_to_toggle)
 
         with open(input_file, encoding="utf-8") as file:
             data = json.load(file)
@@ -835,15 +854,24 @@ class TestTRX():
 
     def test_trx_tip712_advanced_filtering(
             self, scenario_navigator: NavigateWithScenario,
-            test_name: str, data_set: DataSet):
+            test_name: str, data_set: DataSet, verbose_raw: bool):
+        if verbose_raw and data_set.suffix:
+            pytest.skip("Skipping Verbose mode for this data sets")
+
         backend = scenario_navigator.backend
         device = scenario_navigator.backend.device
         navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
 
+        snapshots_dirname = test_name + data_set.suffix
+        if verbose_raw:
+            # Verbose mode additionally renders the message hash.
+            toggle_settings(backend, device, navigator, [SettingID.DISPLAY_HASH])
+            snapshots_dirname += "-verbose"
+
         vrs = tip712_new_common(scenario_navigator, client, data_set.data,
                                 data_set.filters,
-                                snapshots_dirname=test_name + data_set.suffix)
+                                snapshots_dirname=snapshots_dirname)
         recovered_addr = recover_message(data_set.data, vrs)
         assert client.getAccount(
             0)['addressHex'][2:] == recovered_addr.hex().upper()
@@ -1313,12 +1341,14 @@ class TestTRX():
     def test_trx_tip712_gondi(
             self, scenario_navigator: NavigateWithScenario, test_name: str):
         """Basic blind (unfiltered) TIP-712 signature over a nested struct/array
-        payload. Mirrors app-ethereum's test_eip712_gondi. Blind signing
-        (SettingID.SIGN_BY_HASH) is already enabled by the `configuration` fixture."""
+        payload. Mirrors app-ethereum's test_eip712_gondi."""
         backend = scenario_navigator.backend
         device = scenario_navigator.backend.device
         navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
+
+        # Blind signing for the unfiltered payload.
+        toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
 
         data = {
             "types": {
@@ -1365,17 +1395,13 @@ class TestTRX():
 
     def test_trx_tip712_bs_not_activated_error(
             self, scenario_navigator: NavigateWithScenario):
+        # Blind signing is disabled by default, so an unfiltered payload must be
+        # rejected. Mirrors app-ethereum's test_eip712_bs_not_activated_error.
         backend = scenario_navigator.backend
         device = scenario_navigator.backend.device
         navigator = scenario_navigator.navigator
         client = TronClient(backend, device, navigator)
 
-        setting_id = SettingID.SIGN_BY_HASH
-        if device.is_nano:
-            settings_toggle_from_current_nano_home(backend, device, navigator,
-                                                   [setting_id])
-        else:
-            settings_toggle(device, navigator, [setting_id])
         with pytest.raises(ExceptionRAPDU) as exc_info:
             tip712_new_common(scenario_navigator, client,
                               ADVANCED_DATA_SETS[0].data, None,

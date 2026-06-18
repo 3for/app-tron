@@ -64,7 +64,6 @@ def sign_trusted_name(scenario_navigator: NavigateWithScenario,
             custom_screen_text=custom_screen_text)
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1(scenario_navigator: NavigateWithScenario,
                          test_name: str):
     backend = scenario_navigator.backend
@@ -99,7 +98,6 @@ def test_trusted_name_v1_wrong_challenge(backend: BackendInterface):
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1_wrong_addr(
                                     scenario_navigator: NavigateWithScenario,
                                     test_name: str):
@@ -126,7 +124,6 @@ def test_trusted_name_v1_wrong_addr(
         }, test_name)
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1_non_mainnet(
                                      scenario_navigator: NavigateWithScenario,
                                      test_name: str):
@@ -150,7 +147,6 @@ def test_trusted_name_v1_non_mainnet(
         }, test_name)
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v1_unknown_chain(
         scenario_navigator: NavigateWithScenario, test_name: str):
     backend = scenario_navigator.backend
@@ -221,7 +217,6 @@ def test_trusted_name_v1_name_non_ens(backend: BackendInterface):
     assert e.value.status == StatusWord.INVALID_DATA
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
                          test_name: str):
     backend = scenario_navigator.backend
@@ -247,7 +242,6 @@ def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
         }, test_name)
 
 
-@pytest.mark.usefixtures('configuration')
 def test_trusted_name_v2_wrong_chainid(
         scenario_navigator: NavigateWithScenario, test_name: str):
     backend = scenario_navigator.backend
@@ -351,6 +345,27 @@ def test_trusted_name_v2_mab_wrong_owner(backend: BackendInterface):
                         challenge=challenge,
                         owner=wrong_owner,
                         owner_deriv_path=owner_path))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_mab_missing_owner_deriv_path(
+        backend: BackendInterface):
+    app_client = TronClient(backend)
+    cmd_builder = CommandBuilder()
+    challenge = common(app_client, cmd_builder)
+    owner = bytes.fromhex(app_client.getAccount(0)["addressHex"][2:])
+
+    # The owner address is provided, but its derivation path is missing: the
+    # firmware cannot prove ownership and must reject. Mirrors app-ethereum's
+    # test_trusted_name_mab_missing_owner_deriv_path.
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR, "MyLedger",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge,
+                        owner=owner))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
