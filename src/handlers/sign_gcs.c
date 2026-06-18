@@ -32,13 +32,11 @@
 
 extern void reset_app_context();
 
-// Generic Clear Signing signing instruction (INS_SIGN_GCS). Split out of
-// handleSignExternalPlugin so GCS no longer rides on the external-plugin opcode:
+// Generic Clear Signing signing instruction (INS_SIGN_GCS):
 //   - P2_GCS_START_FLOW: run the GCS review UI and sign (no streamed data).
 //   - P2_GCS_STORE: stream a TriggerSmartContract and park its calldata into the
 //     generic_tx_parser context for the 0x26 / 0x28 descriptors. No UI here.
-// The streaming scaffolding is identical to the legacy path but uses the neutral
-// tron_tx_stream module instead of sign_external_plugin.c internals.
+// The TriggerSmartContract streaming is done through the neutral tron_tx_stream module.
 int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     // Generic Clear Signing "start flow": carries no streamed data, so handle it
     // before the streaming logic below.

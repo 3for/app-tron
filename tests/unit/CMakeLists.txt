@@ -134,7 +134,7 @@ target_include_directories(test_trusted_name_whitebox
                            ../../src
                            ../../src/handlers/provideTrustedName
                            ../../src/handlers/getChallenge
-                           ../../tron-plugin-sdk/src)
+                           ../../src/tron-sdk)
 target_link_libraries(test_trusted_name_whitebox PUBLIC cmocka)
 if(NOT APPLE)
     target_link_libraries(test_trusted_name_whitebox PUBLIC gcov)

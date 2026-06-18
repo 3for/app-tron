@@ -774,32 +774,24 @@ class TestTRX():
             settings_to_toggle.append(SettingID.VERBOSE_TIP712)
 
         nb_warnings = 1 if not filters or verbose_raw else 0
-        try:
-            if len(settings_to_toggle) > 0:
-                if device.is_nano:
-                    settings_toggle_from_current_nano_home(
-                        backend, device, navigator, settings_to_toggle)
-                else:
-                    settings_toggle(device, navigator, settings_to_toggle)
+        if len(settings_to_toggle) > 0:
+            if device.is_nano:
+                settings_toggle_from_current_nano_home(
+                    backend, device, navigator, settings_to_toggle)
+            else:
+                settings_toggle(device, navigator, settings_to_toggle)
 
-            with open(input_file, encoding="utf-8") as file:
-                data = json.load(file)
-                vrs = tip712_new_common(scenario_navigator,
-                                        client,
-                                        data,
-                                        filters,
-                                        snapshots_dirname=test_name,
-                                        nb_warnings=nb_warnings)
-                recovered_addr = recover_message(data, vrs)
+        with open(input_file, encoding="utf-8") as file:
+            data = json.load(file)
+            vrs = tip712_new_common(scenario_navigator,
+                                    client,
+                                    data,
+                                    filters,
+                                    snapshots_dirname=test_name,
+                                    nb_warnings=nb_warnings)
+            recovered_addr = recover_message(data, vrs)
 
-            assert recovered_addr == get_wallet_addr(client)
-        finally:
-            if len(settings_to_toggle) > 0:
-                if device.is_nano:
-                    settings_toggle_from_current_nano_home(
-                        backend, device, navigator, settings_to_toggle)
-                else:
-                    settings_toggle(device, navigator, settings_to_toggle)
+        assert recovered_addr == get_wallet_addr(client)
 
     def test_trx_tip712_advanced_filtering(
             self, scenario_navigator: NavigateWithScenario,

@@ -262,11 +262,10 @@ def build_trigger_smart_contract_tx(client: TronClient,
 
 def gcs_store_calldata(client: TronClient, backend: BackendInterface, path: str,
                        tx: bytes) -> int:
-    """Stream a TriggerSmartContract through 0xC4 with P2=STORE.
+    """Stream a TriggerSmartContract through INS_SIGN_GCS (0xD4) with P2=GCS_STORE.
 
-    Mirrors TronClient.sign()'s external-plugin branch, but with P2=GCS_STORE so
-    the firmware parks the calldata into the generic_tx_parser context instead of
-    showing the external-plugin UI. Returns the final status word.
+    The firmware parks the calldata into the generic_tx_parser context and waits for
+    the 0x26 / 0x28 descriptors; no UI is shown. Returns the final status word.
     """
     data = bytearray(pack_derivation_path(path))
     data += pack(">I", len(tx))  # include_tx_len

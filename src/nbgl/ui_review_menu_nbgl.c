@@ -33,13 +33,8 @@
 #include "settings.h"
 
 // Macros
-#define WARNING_TYPES_NUMBER          2
-#define MAX_TX_FIELDS                 20
-#define MAX_EXTERNAL_PLUGIN_UI_FIELDS EXTERNAL_PLUGIN_UI_MAX_ITEMS_NBGL
-
-#if (MAX_EXTERNAL_PLUGIN_UI_FIELDS != (MAX_TX_FIELDS - 3))
-#error "MAX_EXTERNAL_PLUGIN_UI_FIELDS must be MAX_TX_FIELDS - 3"
-#endif
+#define WARNING_TYPES_NUMBER 2
+#define MAX_TX_FIELDS        20
 
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
@@ -82,7 +77,6 @@ static void displayDataWarning(void);
 static void displayCustomContractWarning(void);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
-static bool prepareClearSignCustomContractPluginUi(void);
 
 #ifdef SCREEN_SIZE_WALLET
 static void dataWarningChoice(bool accept) {
@@ -185,47 +179,6 @@ static void displayTransaction(void) {
                        reviewChoice);
 }
 
-static bool prepareClearSignCustomContractPluginUi(void) {
-    uint8_t pluginUiItems = 0;
-    uint8_t fieldIndex = 0;
-    const char *title_msg;
-    const char *finish_msg;
-    const char *item_title;
-    const char *item_msg;
-
-    if (!external_plugin_get_cached_ui_items_count(&pluginUiItems)) {
-        return false;
-    }
-
-    if ((pluginUiItems == 0) || (pluginUiItems > MAX_EXTERNAL_PLUGIN_UI_FIELDS)) {
-        return false;
-    }
-
-    title_msg = external_plugin_get_cached_title_msg_ref();
-    finish_msg = external_plugin_get_cached_finish_msg_ref();
-    if ((title_msg == NULL) || (finish_msg == NULL)) {
-        return false;
-    }
-
-    txInfos.flowTitle = title_msg;
-    txInfos.flowSubtitle = NULL;
-    infoLongPress.text = finish_msg;
-
-    for (uint8_t i = 0; i < pluginUiItems; i++) {
-        if (!external_plugin_get_cached_contract_ui_ref(i, &item_title, &item_msg)) {
-            return false;
-        }
-        txInfos.fields[fieldIndex].item = item_title;
-        txInfos.fields[fieldIndex++].value = item_msg;
-    }
-
-    txInfos.fields[fieldIndex].item = "From Address";
-    txInfos.fields[fieldIndex++].value = strings.common.fromAddress;
-    pairList.nbPairs = fieldIndex;
-
-    return true;
-}
-
 static void reviewStart() {
     // Custom contract goes straight to the advanced review, which renders the
     // blind-signing (and optional gating) warning itself, so skip the bespoke
@@ -290,8 +243,7 @@ static void rejectChoice(void) {
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
 // (SIMPLE_TRANSACTION / PERMISSION_UPDATE -> blind hash signing), the message/ECDH
-// flows (which show their own message hash), address verification, and the external
-// plugin flow (its fields are built dynamically).
+// flows (which show their own message hash), and address verification.
 static bool state_shows_tx_hash(ui_approval_state_t state) {
     switch (state) {
         case APPROVAL_SIMPLE_TRANSACTION:
@@ -300,7 +252,6 @@ static bool state_shows_tx_hash(ui_approval_state_t state) {
         case APPROVAL_SIGN_TIP72_TRANSACTION:
         case APPROVAL_SHARED_ECDH_SECRET:
         case APPROVAL_VERIFY_ADDRESS:
-        case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
             return false;
         default:
             return true;
@@ -554,18 +505,6 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].value = strings.common.fromAddress;
             pairList.nbPairs = 4;
             txInfos.flowSubtitle = "Custom Contract";
-            break;
-        case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
-#ifndef SCREEN_SIZE_WALLET
-            // Limited by the screen size of Nano-series devices
-            // External plugin flows already have a descriptive title, so keep the intro card text-only.
-            txInfos.flowIcon = NULL;
-#endif
-            if (!prepareClearSignCustomContractPluginUi()) {
-                ui_callback_tx_cancel(false);
-                nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
-                return false;
-            }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
 #if !defined(SCREEN_SIZE_WALLET)

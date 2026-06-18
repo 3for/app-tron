@@ -9,18 +9,18 @@ tests/ragger/test_gcs.py::test_gcs_mint_long_calldata.
 Target network: TRON Nile testnet.
   NOTE on chain id: the GCS "store" path pins the parked transaction's chain id to
   TRON mainnet (`gcs_bridge_finalize(..., TRON_MAINNET_CHAINID)` in
-  src/handlers/sign_external_plugin.c), and `app_compatible_with_chain_id()` accepts
+  src/handlers/sign_gcs.c), and `app_compatible_with_chain_id()` accepts
   both Tron and Tron Nile. So the GCS descriptor + token metadata MUST use the mainnet
   chain id (728126428) even when the app/device is connected to Nile; "Nile" here refers
   to the network the `mint` contract lives on, not the value carried in the descriptor.
 
 Flow (each step is one or more APDUs):
   1. 0x02            get the device address (becomes the tx owner / GCS "From")
-  2. 0xC4 P2=0x10    STORE: stream the TriggerSmartContract protobuf (parks the calldata,
+  2. 0xD4 P2=0x10    STORE: stream the TriggerSmartContract protobuf (parks the calldata,
                      chunked because the ~1 KB calldata overflows a single APDU)
   3. 0xB0 PKI        coin-metadata certificate, then 0xCA token metadata (CAL-signed)
   4. 0xB0 PKI        calldata certificate, then 0x26 TX_INFO (CALLDATA-signed) + 0x28 FIELDs
-  5. 0xC4 P2=0x11    START_FLOW: render the review, user approves, device returns the sig
+  5. 0xD4 P2=0x11    START_FLOW: render the review, user approves, device returns the sig
 
 Prerequisites:
   - app-tron installed on the device (mainnet or Nile build both work, see note above)
@@ -74,12 +74,12 @@ PKI_CLA = 0xB0
 PKI_INS = 0x06
 
 INS_GET_PUBLIC_ADDR = 0x02
-INS_SIGN_EXTERNAL_PLUGIN = 0xC4
+INS_SIGN_GCS = 0xD4
 INS_PROVIDE_TRC20_TOKEN_INFORMATION = 0xCA
 INS_GTP_TRANSACTION_INFO = 0x26
 INS_GTP_FIELD = 0x28
 
-# 0xC4 streaming P1s / GCS P2s
+# INS_SIGN_GCS (0xD4) streaming P1s / GCS P2s
 P1_FIRST = 0x00
 P1_MORE = 0x80
 P1_LAST = 0x90
@@ -279,7 +279,7 @@ def broadcast_tx(node: str, tx, signature: bytes) -> Tuple[str, dict]:
 
 
 def gcs_store_apdus(path: str, tx: bytes) -> List[bytes]:
-    """0xC4 P2=STORE stream: derivation path + 4-byte tx length + tx, chunked."""
+    """0xD4 P2=STORE stream: derivation path + 4-byte tx length + tx, chunked."""
     head = bytearray(pack_derivation_path(path))
     head += struct.pack(">I", len(tx))
     first_room = MAX_APDU_LEN - len(head)
@@ -301,7 +301,7 @@ def gcs_store_apdus(path: str, tx: bytes) -> List[bytes]:
             p1 = P1_LAST
         else:
             p1 = P1_MORE
-        apdus.append(serialize_apdu(CLA, INS_SIGN_EXTERNAL_PLUGIN, p1, P2_GCS_STORE, chunk))
+        apdus.append(serialize_apdu(CLA, INS_SIGN_GCS, p1, P2_GCS_STORE, chunk))
     return apdus
 
 
@@ -454,7 +454,7 @@ def main() -> int:
 
     print("[INFO] START_FLOW: review the transaction on device, then approve to sign")
     signature = exchange(dongle,
-                         serialize_apdu(CLA, INS_SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+                         serialize_apdu(CLA, INS_SIGN_GCS, P1_FIRST,
                                         P2_GCS_START_FLOW, b""),
                          "gcs_start_flow")
     print(f"[INFO] Signature: {signature[:65].hex()}")

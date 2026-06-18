@@ -38,10 +38,7 @@ class InsType(IntEnum):
     PROVIDE_TRANSACTION_FIELD_DESC = 0x28
     PROVIDE_PROXY_INFO = 0x2a
     PROVIDE_GATING = 0x38
-    EXTERNAL_PLUGIN_SETUP = 0x12
-    SET_EXTERNAL_PLUGIN = EXTERNAL_PLUGIN_SETUP
-    SIGN_EXTERNAL_PLUGIN = 0xc4
-    SIGN_GCS = 0xd4  # Generic Clear Signing (was SIGN_EXTERNAL_PLUGIN P2=GCS_STORE/START_FLOW)
+    SIGN_GCS = 0xd4  # Generic Clear Signing
 
 
 class P1Type(IntEnum):
@@ -333,18 +330,6 @@ class CommandBuilder:
         data += sig
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_SPENDER, data)
-
-    def set_external_plugin(self, plugin_name: str, contract_address: bytes,
-                            selector: bytes, sig: bytes) -> bytes:
-        data = bytearray()
-        data.append(len(plugin_name))
-        data += plugin_name.encode()
-        data += contract_address
-        data += selector
-        data += sig
-
-        return self._serialize(InsType.EXTERNAL_PLUGIN_SETUP,
-                               P1Type.COMPLETE_SEND, 0x00, data)
 
     def sign(self, bip32_path: str, rlp_data: bytes, vrs: list) -> list[bytes]:
         apdus = list()

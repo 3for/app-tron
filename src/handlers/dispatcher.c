@@ -162,14 +162,6 @@ int apdu_dispatcher(const command_t *cmd) {
             return io_send_sw(handle_gating(cmd->p1, cmd->p2, cmd->lc, cmd->data));
 #endif  // HAVE_GATING_SUPPORT
 
-        case INS_SET_EXTERNAL_PLUGIN:
-            // Set External Plugin
-            return handleSetExternalPlugin(cmd->p1, cmd->p2, cmd->data, cmd->lc);
-
-        case INS_SIGN_EXTERNAL_PLUGIN:
-            // Plugin Request Signature
-            return handleSignExternalPlugin(cmd->p1, cmd->p2, cmd->data, cmd->lc);
-
         case INS_SIGN_GCS:
             // Generic Clear Signing: store calldata (P2=STORE) or review + sign (P2=START_FLOW)
             return handleSignGcs(cmd->p1, cmd->p2, cmd->data, cmd->lc);

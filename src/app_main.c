@@ -34,6 +34,7 @@
 #include "ui_globals.h"
 #include "trusted_name.h"
 #include "tx_ctx.h"        // gcs_cleanup (Generic Clear Signing)
+#include "tron_tx_stream.h"  // tron_tx_stream_free
 #include "proxy_info.h"    // proxy_cleanup
 #include "enum_value.h"    // enum_value_cleanup
 
@@ -57,8 +58,6 @@ const internalStorage_t N_storage_real;
 tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
-dataContext_t dataContext;
-pluginType_t pluginType;
 
 app_state_t appState;
 
@@ -69,7 +68,8 @@ extern void roll_challenge(void);
 
 void reset_app_context() {
     message_cleanup();
-    cleanupSignExternalPlugin();
+    // Free the shared TriggerSmartContract stream decoder (GCS / legacy signing).
+    tron_tx_stream_free();
     // Free any Generic Clear Signing state (tx contexts, field table, parked
     // calldata) so it never leaks across signing sessions.
     gcs_cleanup();
@@ -82,7 +82,6 @@ void reset_app_context() {
     appState = APP_STATE_IDLE;
     G_called_from_swap = false;
     G_swap_response_ready = false;
-    pluginType = PLUGIN_TYPE_NONE;
     trusted_name_cleanup();
     // Free cached enum-value descriptors (INS_PROVIDE_ENUM_VALUE).
     enum_value_cleanup();

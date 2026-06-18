@@ -13,8 +13,8 @@ uint16_t get_public_key(uint8_t *out, uint8_t outLength) {
         return SWO_WRONG_DATA_LENGTH;
     }
     // TRON adaptation: the signing BIP32 path lives in
-    // tmpCtx.transactionContext.bip32_path (indices/length), set by
-    // handleSignExternalPlugin (including the GCS STORE flow).
+    // tmpCtx.transactionContext.bip32_path (indices/length), set by the GCS STORE
+    // flow (handleSignGcs).
     if ((error = bip32_derive_get_pubkey_256(CX_CURVE_256K1,
                                              tmpCtx.transactionContext.bip32_path.indices,
                                              tmpCtx.transactionContext.bip32_path.length,

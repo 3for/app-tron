@@ -3,11 +3,12 @@
 #include <stdbool.h>
 #include "lists.h"
 #include "common_utils.h"  // ADDRESS_LENGTH
-#include "plugin_utils.h"  // SELECTOR_SIZE
 #include "tlv_library.h"
 #include "cx.h"
 
 #define MAX_ENUM_NAME_SIZE 21
+// 4-byte EVM function selector.
+#define SELECTOR_SIZE      4
 
 typedef struct {
     flist_node_t _list;

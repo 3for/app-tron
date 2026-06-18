@@ -7,7 +7,6 @@
 #include "asset_info.h"
 #include "bip32_utils.h"
 #include "common_utils.h"
-#include "tron_plugin_interface.h"
 #include "tx_content.h"
 
 #define MAX_BIP32_PATH 10
@@ -19,8 +18,6 @@
 #define SHARED_CTX_FIELD_1_SIZE 256
 #define SHARED_CTX_FIELD_2_SIZE 40
 #define MAX_ASSETS 5
-#define SELECTOR_LENGTH 4
-#define PLUGIN_ID_LENGTH 30
 
 typedef struct {
     uint8_t pathLength;
@@ -45,40 +42,9 @@ typedef union {
 } tmpCtx_t;
 
 typedef struct {
-    char pluginName[PLUGIN_ID_LENGTH];
-    uint8_t data[INT256_LENGTH];
-    uint16_t fieldIndex;
-    uint8_t fieldOffset;
-    uint8_t pluginUiMaxItems;
-    uint8_t pluginUiCurrentItem;
-    uint8_t pluginUiState;
-    union {
-        struct {
-            uint8_t contractAddress[TRON_ADDRESS_SIZE];
-            uint8_t methodSelector[SELECTOR_LENGTH];
-        };
-        uint8_t pluginContext[PLUGIN_CONTEXT_SIZE];
-    };
-    uint8_t pluginStatus;
-} tokenContext_t;
-
-typedef union {
-    tokenContext_t tokenContext;
-} dataContext_t;
-
-typedef struct {
     cx_sha256_t sha2;
     bool initialized;
 } txContext_t;
-
-typedef enum {
-    PLUGIN_TYPE_NONE = 0,
-    PLUGIN_TYPE_EXTERNAL,
-    PLUGIN_TYPE_SWAP_WITH_CALLDATA,
-    PLUGIN_TYPE_ERC721,
-    PLUGIN_TYPE_ERC1155,
-    PLUGIN_TYPE_OLD_INTERNAL,
-} pluginType_t;
 
 typedef enum {
     APP_STATE_IDLE,
@@ -91,8 +57,6 @@ typedef enum {
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
-extern dataContext_t dataContext;
-extern pluginType_t pluginType;
 extern uint8_t appState;
 extern uint16_t apdu_response_code;
 extern const chain_config_t *chainConfig;

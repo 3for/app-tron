@@ -2,7 +2,7 @@
 
 // Generic Clear Signing "start flow" trigger.
 //
-// Sent by the host (INS_SIGN_EXTERNAL_PLUGIN, P2_GCS_START_FLOW) after the GCS
+// Sent by the host (INS_SIGN_GCS, P2_GCS_START_FLOW) after the GCS
 // STORE has parked the calldata and all 0x26/0x28 descriptors have been
 // provided. It checks the field set is complete, then runs the GCS review UI
 // (ui_gcs) and signs on approval. Mirrors app-ethereum's SIGN_MODE_START_FLOW.

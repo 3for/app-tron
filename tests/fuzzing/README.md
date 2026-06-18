@@ -25,7 +25,7 @@ To run a different target:
 
 ```sh
 cd tests/fuzzing
-FUZZ_TARGET=fuzz_external_plugin ./local_run.sh
+FUZZ_TARGET=fuzz_tip712_legacy ./local_run.sh
 ```
 
 To use a custom corpus directory:
@@ -43,7 +43,6 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
 | `fuzz_tip712_wallet` | Same TIP712 harness with `SCREEN_SIZE_WALLET` enabled | `./corpus/fuzz_tip712` |
 | `fuzz_tip712_legacy` | Legacy `SIGN_TIP_712_MESSAGE` pre-hash handler | `./corpus/fuzz_tip712_legacy` |
-| `fuzz_external_plugin` | External plugin setup/signing APDU flow | `./corpus/fuzz_external_plugin` |
 
 ## Manual Local Runs
 
@@ -93,7 +92,6 @@ cd tests/fuzzing
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
 ./build/fuzz_tip712_wallet ./corpus/fuzz_tip712
 ./build/fuzz_tip712_legacy ./corpus/fuzz_tip712_legacy
-./build/fuzz_external_plugin ./corpus/fuzz_external_plugin
 ./build/transaction_trigger_decode_fuzzer ./corpus
 ```
 
@@ -131,15 +129,6 @@ This refreshes both:
 - `./corpus/fuzz_tip712`
 - `./corpus/fuzz_tip712_legacy`
 
-External plugin seeds:
-
-```sh
-cd tests/fuzzing
-python3 generate_external_plugin_corpus.py
-```
-
-This refreshes `./corpus/fuzz_external_plugin`.
-
 ## Coverage
 
 `local_run.sh` asks whether to compute coverage after the fuzzing run. Coverage requires `llvm-profdata` and `llvm-cov` in `PATH`, plus a Clang setup that emits `*.profraw` data for the built binary.
@@ -167,7 +156,7 @@ On non-Apple-Silicon hosts, `--platform linux/amd64` is usually optional.
 The default `.clusterfuzzlite/build.sh` exports only:
 
 - `transaction_trigger_decode_fuzzer`
-- `fuzz_external_plugin`
+- `fuzz_tip712`
 
 Run that default build and write artifacts to `tests/fuzzing/out`:
 
@@ -190,7 +179,7 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd):/src/app-tron" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   app-tron-fuzz \
-  /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target transaction_trigger_decode_fuzzer fuzz_external_plugin fuzz_tip712 fuzz_tip712_wallet fuzz_tip712_legacy && cp ./build/transaction_trigger_decode_fuzzer ./build/fuzz_external_plugin ./build/fuzz_tip712 ./build/fuzz_tip712_wallet ./build/fuzz_tip712_legacy /out/'
+  /bin/bash -lc 'cd /src/app-tron/tests/fuzzing && rm -rf build && cmake -B build -S . && cmake --build build --target transaction_trigger_decode_fuzzer fuzz_tip712 fuzz_tip712_wallet fuzz_tip712_legacy && cp ./build/transaction_trigger_decode_fuzzer ./build/fuzz_tip712 ./build/fuzz_tip712_wallet ./build/fuzz_tip712_legacy /out/'
 ```
 
 Run an exported target with the OSS-Fuzz runner. Each target needs the matching
@@ -199,7 +188,6 @@ seed corpus:
 | Target | Host corpus mount |
 | --- | --- |
 | `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus` |
-| `fuzz_external_plugin` | `$(pwd)/tests/fuzzing/corpus/fuzz_external_plugin` |
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_tip712_wallet` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_tip712_legacy` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712_legacy` |
@@ -230,19 +218,6 @@ docker run --platform linux/amd64 --rm --privileged \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -runs=10000 -max_len=8192'
-```
-
-`fuzz_external_plugin`:
-
-```sh
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_external_plugin_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_plugin:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_plugin -runs=10000 -max_len=8192'
 ```
 
 `fuzz_tip712`:
@@ -318,8 +293,6 @@ Each input is replayed through top-level and raw transaction modes, exact and ma
 It runs the production TIP712 core logic on host-side shims for SDK, UI, settings, and signature-verification dependencies. Coverage includes BIP32 path parsing, BASIC and FULL modes, filtering, trusted-name and amount formatting, partial payloads, permit-style token resolution, signed integers, reset/replay flows, and the `SCREEN_SIZE_WALLET` variant.
 
 `fuzz_tip712_legacy` covers the older pre-hashed TIP712 signing handler.
-
-`fuzz_external_plugin` drives production `SET_EXTERNAL_PLUGIN` and `SIGN_EXTERNAL_PLUGIN` handlers through host-side stubs for plugin calls, signature verification, UI transitions, and formatting helpers. Coverage includes setup payload validation, plugin-name/signature/presence handling, signing APDU sequencing, selector and contract matching, full and partial parameter delivery, callback branches, UI-cache preparation, and reset/error flows.
 
 The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
 

@@ -24,7 +24,6 @@
 #include "asset_info.h"             // union extraInfo_t
 #include "tx_content.h"             // txContent_t
 #include "bip32_utils.h"            // bip32_path_t
-#include "tron_plugin_interface.h"  // PLUGIN_CONTEXT_SIZE
 #include "chain_config.h"           // chain_config_t
 
 // Sizes & limits shared across the application contexts
@@ -40,9 +39,6 @@
 #define SHARED_CTX_FIELD_2_SIZE 40
 
 #define MAX_ASSETS 5
-
-#define SELECTOR_LENGTH  4
-#define PLUGIN_ID_LENGTH 30
 
 // must be able to hold in decimal up to : floor(MAX_UINT64 / 2) - 36
 #define NETWORK_STRING_MAX_SIZE 19
@@ -62,20 +58,6 @@ typedef enum {
 // EIP712 signing state by its Ethereum name. Tron's equivalent is TIP712.
 #define APP_STATE_SIGNING_EIP712 APP_STATE_SIGNING_TIP712
 
-typedef enum {
-    PLUGIN_TYPE_NONE = 0,
-    // External plugin, set by setExternalPlugin
-    PLUGIN_TYPE_EXTERNAL,
-    // Specific SWAP_WITH_CALLDATA internal plugin
-    // set as fallback when started if calldata is provided in swap mode
-    PLUGIN_TYPE_SWAP_WITH_CALLDATA,
-    // Specific ERC721 internal plugin, set by setPlugin
-    PLUGIN_TYPE_ERC721,
-    // Specific ERC1155 internal plugin, set by setPlugin
-    PLUGIN_TYPE_ERC1155,
-    // Old internal plugin, not set by any command
-    PLUGIN_TYPE_OLD_INTERNAL,
-} pluginType_t;
 
 typedef struct txContext_t {
     cx_sha256_t sha2;
@@ -122,36 +104,6 @@ typedef union {
     messageSigningContext712_t messageSigningContext712;
 } tmpCtx_t;
 
-typedef struct tokenContext_t {
-    char pluginName[PLUGIN_ID_LENGTH];
-
-    uint8_t data[INT256_LENGTH];
-    uint16_t fieldIndex;
-    uint8_t fieldOffset;
-
-    uint8_t pluginUiMaxItems;
-    uint8_t pluginUiCurrentItem;
-    uint8_t pluginUiState;
-
-    union {
-        struct {
-            uint8_t contractAddress[TRON_ADDRESS_SIZE];
-            uint8_t methodSelector[SELECTOR_LENGTH];
-        };
-        // This needs to be strictly 4 bytes aligned since pointers to it will be casted as
-        // plugin context struct pointers (structs that contain up to 4 bytes wide elements)
-        uint8_t pluginContext[PLUGIN_CONTEXT_SIZE] __attribute__((aligned(4)));
-    };
-
-    uint8_t pluginStatus;
-
-} tokenContext_t;
-
-_Static_assert((offsetof(tokenContext_t, pluginContext) % 4) == 0, "Plugin context not aligned");
-
-typedef union {
-    tokenContext_t tokenContext;
-} dataContext_t;
 
 typedef struct txStringProperties_s {
     char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
@@ -184,8 +136,6 @@ extern strings_t strings;
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
-extern dataContext_t dataContext;
-extern pluginType_t pluginType;
 extern uint8_t appState;
 extern uint16_t apdu_response_code;
 

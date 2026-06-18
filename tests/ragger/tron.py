@@ -492,33 +492,20 @@ class TronClient:
         messages = []
         tx_len = len(tx)
         data = pack_derivation_path(path)
-        if ins == InsType.SIGN_EXTERNAL_PLUGIN:
-            if include_tx_len:
-                data += pack(">I", tx_len)
-            max_first = MAX_APDU_LEN - len(data)
-            assert (max_first >= 0)
-            data += tx[:max_first]
-            tx = tx[max_first:]
-            messages.append(data)
-            while len(tx) > 0:
-                messages.append(tx[:MAX_APDU_LEN])
-                tx = tx[MAX_APDU_LEN:]
-            token_pos = len(messages)
-        else:
-            if include_tx_len:
-                data += pack(">I", tx_len)
-            while len(tx) > 0:
-                newpos = self.get_next_length(tx)
-                assert (newpos < MAX_APDU_LEN)
-                if (len(data) + newpos) < MAX_APDU_LEN:
-                    data += tx[:newpos]
-                    tx = tx[newpos:]
-                else:
-                    messages.append(data)
-                    data = bytearray()
-                    continue
-            messages.append(data)
-            token_pos = len(messages)
+        if include_tx_len:
+            data += pack(">I", tx_len)
+        while len(tx) > 0:
+            newpos = self.get_next_length(tx)
+            assert (newpos < MAX_APDU_LEN)
+            if (len(data) + newpos) < MAX_APDU_LEN:
+                data += tx[:newpos]
+                tx = tx[newpos:]
+            else:
+                messages.append(data)
+                data = bytearray()
+                continue
+        messages.append(data)
+        token_pos = len(messages)
 
         for signature in signatures:
             messages.append(bytearray.fromhex(signature))

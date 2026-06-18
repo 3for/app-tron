@@ -22,10 +22,8 @@
 
 #include "transaction_trigger_decode.h"  // tron_stream_decoder_t, observer, result
 
-// Neutral owner of the streamed TriggerSmartContract decoder, shared by the GCS
-// signing path (INS_SIGN_GCS) and the legacy external-plugin path
-// (INS_SIGN_EXTERNAL_PLUGIN). Decoupling the decoder lets the GCS handler avoid any
-// dependency on sign_external_plugin.c so the latter can be removed wholesale later.
+// Neutral owner of the streamed TriggerSmartContract decoder used by the GCS signing
+// path (INS_SIGN_GCS, sign_gcs.c).
 
 // (Re)allocate the decoder for `total_len` bytes and install `observer`. Any previous
 // decoder is freed first. Returns false on allocation failure.

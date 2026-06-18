@@ -20,8 +20,6 @@
 tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
-dataContext_t dataContext;
-pluginType_t pluginType;
 uint8_t appState;
 uint16_t apdu_response_code;
 cx_sha3_t global_sha3;
@@ -119,12 +117,10 @@ void reset_app_context(void) {
     memset(&tmpCtx, 0, sizeof(tmpCtx));
     memset(&txContent, 0, sizeof(txContent));
     memset(&txContext, 0, sizeof(txContext));
-    memset(&dataContext, 0, sizeof(dataContext));
     memset(&strings, 0, sizeof(strings));
     memset(&g_fuzz_trusted_name, 0, sizeof(g_fuzz_trusted_name));
     apdu_response_code = SWO_SUCCESS;
     appState = APP_STATE_IDLE;
-    pluginType = PLUGIN_TYPE_NONE;
     seed_default_assets();
 }
 

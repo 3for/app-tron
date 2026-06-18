@@ -10,7 +10,6 @@
 #include "asset_info.h"
 #include "tx_content.h"
 #include "bip32_utils.h"
-#include "tron_plugin_interface.h"
 #include "caller_api.h"
 #include "swap_lib_calls.h"
 #include "main_std_app.h"

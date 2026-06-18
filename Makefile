@@ -66,11 +66,6 @@ DEFINES += HAVE_GATING_SUPPORT
 DEBUG ?= 0
 
 APP_SOURCE_PATH  += src
-APP_SOURCE_FILES += $(filter-out ./tron-plugin-sdk/src/main.c, $(wildcard ./tron-plugin-sdk/src/*.c))
-INCLUDES_PATH += ./tron-plugin-sdk/src
-
-# Don't define plugin function in the plugin SDK
-DEFINES += IS_NOT_A_PLUGIN
 
 # ENS
 TRUSTED_NAME_TEST_KEY ?= 0
