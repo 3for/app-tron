@@ -183,24 +183,6 @@ bool adjustDecimals(const char *src,
 void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
                              uint8_t out[static ADDRESS_LENGTH]);
 
-/**
- * @brief Converts a raw public key to its Ethereum address string
- * representation.
- *
- * This function takes a 65-byte raw public key, computes its Keccak-256 hash,
- * extracts the last 20 bytes as the Ethereum address, and converts it to a
- * hexadecimal string with EIP-55 checksum, supporting EIP-1191 checksumming for
- * specific chain IDs.
- *
- * @param raw_pubkey A pointer to the raw public key (65 bytes).
- * @param out A pointer to the buffer where the checksum string representation
- * will be stored. The buffer must be at least (ADDRESS_LENGTH * 2) + 1 bytes
- * long.
- * @param chainId The chain ID to be used for EIP-1191 checksum (if applicable).
- */
-void getEthAddressStringFromRawKey(const uint8_t raw_pubkey[static 65],
-                                   char out[static(ADDRESS_LENGTH * 2) + 1],
-                                   uint64_t chainId);
 
 /**
  * @brief Converts a binary Ethereum address to its checksum string

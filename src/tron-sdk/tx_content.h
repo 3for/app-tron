@@ -34,11 +34,6 @@ This structure is provided in every handler.
 */
 
 // --8<-- [start:tx_content_structures]
-typedef struct txInt256_t {
-    uint8_t value[INT256_LENGTH];
-    uint8_t length;
-} txInt256_t;
-
 typedef enum contractType_e {
     ACCOUNTCREATECONTRACT = 0,
     TRANSFERCONTRACT,

@@ -33,7 +33,7 @@
 #include "settings.h"
 
 // Macros
-#define WARNING_TYPES_NUMBER 2
+#define WARNING_TYPES_NUMBER 1
 #define MAX_TX_FIELDS        20
 
 static const char *stringLabelSenderAddress = "From";
@@ -52,7 +52,6 @@ static const char *stringLabelGain = "Gain";
 // Enums and structs
 enum {
     DATA_WARNING = 0,
-    CUSTOM_CONTRACT_WARNING,
 };
 
 typedef struct {
@@ -74,25 +73,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
 static void reviewStart(void);
 static void displayTransaction(void);
 static void displayDataWarning(void);
-static void displayCustomContractWarning(void);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 
 #ifdef SCREEN_SIZE_WALLET
 static void dataWarningChoice(bool accept) {
-    if (accept) {
-        if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
-            displayCustomContractWarning();
-        } else {
-            displayTransaction();
-        }
-    } else {
-        ui_callback_tx_cancel(false);
-        nbgl_useCaseReviewStatus(STATUS_TYPE_TRANSACTION_REJECTED, ui_idle);
-    }
-}
-
-static void customContractWarningChoice(bool accept) {
     if (accept) {
         displayTransaction();
     } else {
@@ -101,10 +86,6 @@ static void customContractWarningChoice(bool accept) {
     }
 }
 #else
-static void continueCustomContractWarning(void) {
-    displayTransaction();
-}
-
 static void continueDataWarning(void) {
     displayTransaction();
 }
@@ -120,22 +101,6 @@ static void displayDataWarning(void) {
                        dataWarningChoice);
 #else
     nbgl_useCaseAction(&ICON_APP_WARNING, "Data Present", "Continue", continueDataWarning);
-#endif
-}
-
-static void displayCustomContractWarning(void) {
-#ifdef SCREEN_SIZE_WALLET
-    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
-                       "WARNING\nCustom Contract\nProceed with care",
-                       "Reject if you're not sure",
-                       "Continue",
-                       "Reject transaction",
-                       customContractWarningChoice);
-#else
-    nbgl_useCaseAction(&ICON_APP_WARNING,
-                       "Custom Contract",
-                       "Continue",
-                       continueCustomContractWarning);
 #endif
 }
 
@@ -190,8 +155,6 @@ static void reviewStart() {
     }
     if (txInfos.warnings[DATA_WARNING] == true) {
         displayDataWarning();
-    } else if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
-        displayCustomContractWarning();
     } else {
         displayTransaction();
     }
@@ -492,7 +455,6 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            txInfos.warnings[CUSTOM_CONTRACT_WARNING] = true;
             txInfos.fields[0].item = "Contract";
             txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Selector";

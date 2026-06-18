@@ -13,7 +13,6 @@ MAX_APDU_LEN: int = 255
 class InsType(IntEnum):
     GET_PUBLIC_KEY = 0x02
     GET_PUBLIC_ADDR = GET_PUBLIC_KEY
-    GET_TRC2_PUBLIC_ADDR = 0x0e
     SIGN = 0x04
     SIGN_TXN_HASH = 0x05
     GET_APP_CONFIGURATION = 0x06
@@ -24,8 +23,6 @@ class InsType(IntEnum):
     GET_ECDH_SECRET = 0x0a
     PROVIDE_TRC20_TOKEN_INFORMATION = 0xca  # 0x0a in eth
     PROVIDE_NFT_INFORMATION = 0x14
-    SET_PLUGIN = 0x16
-    PERFORM_PRIVACY_OPERATION = 0x18
     TIP712_SEND_STRUCT_DEF = 0x1a
     TIP712_SEND_STRUCT_IMPL = 0x1c
     TIP712_SEND_FILTERING = 0x1e
@@ -376,34 +373,6 @@ class CommandBuilder:
             payload += struct.pack(">Q", chain_id)
         return self._serialize(InsType.GET_PUBLIC_ADDR, int(display),
                                int(chaincode), payload)
-
-    def get_trc2_public_addr(self, display: bool, bip32_path: str) -> bytes:
-        payload = pack_derivation_path(bip32_path)
-        return self._serialize(InsType.GET_TRC2_PUBLIC_ADDR, int(display),
-                               0x00, payload)
-
-    def perform_privacy_operation(self, display: bool, bip32_path: str,
-                                  pubkey: bytes) -> bytes:
-        payload = pack_derivation_path(bip32_path)
-        return self._serialize(InsType.PERFORM_PRIVACY_OPERATION, int(display),
-                               0x01 if pubkey else 0x00, payload + pubkey)
-
-    def set_plugin(self, type_: int, version: int, plugin_name: str,
-                   contract_addr: bytes, selector: bytes, chain_id: int,
-                   key_id: int, algo_id: int, sig: bytes) -> bytes:
-        payload = bytearray()
-        payload.append(type_)
-        payload.append(version)
-        payload.append(len(plugin_name))
-        payload += plugin_name.encode()
-        payload += contract_addr
-        payload += selector
-        payload += struct.pack(">Q", chain_id)
-        payload.append(key_id)
-        payload.append(algo_id)
-        payload.append(len(sig))
-        payload += sig
-        return self._serialize(InsType.SET_PLUGIN, 0x00, 0x00, payload)
 
     def provide_nft_information(self, type_: int, version: int,
                                 collection_name: str, addr: bytes,

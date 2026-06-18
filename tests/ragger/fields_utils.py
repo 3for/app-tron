@@ -186,37 +186,6 @@ def get_nested_path(parent_abi: str,
     return parent_path_clean + nested_path
 
 
-def get_path_in_array(abi_filename: str,
-                      function_name: str,
-                      array_param: str,
-                      element_index: int = None) -> List:
-    """
-    Get the DataPath for an element inside an array parameter.
-
-    Args:
-        abi_filename: Path to ABI JSON file
-        function_name: Name of the function
-        array_param: Name of the array parameter
-        element_index: Specific index in array, or None for all elements
-
-    Returns:
-        List of DataPath components
-    """
-    path = get_path(abi_filename, function_name, array_param)
-
-    # The path should already have PathRef() and PathArray()
-    # We just need to specify the element if needed
-    if element_index is not None:
-        # Replace generic PathArray with indexed one
-        for component in path:
-            if isinstance(component, PathArray):
-                # For specific index, we might need different handling
-                # depending on your GCS implementation
-                pass
-
-    return path
-
-
 def get_path_in_tuple(abi_filename: str,
                       function_name: str,
                       tuple_param: str,
@@ -396,14 +365,6 @@ def print_path(path: List) -> None:
             components.append(f"PathLeaf(PathLeafType.{p.type.name})")
     result = "[\n            " + ",\n            ".join(components) + ",\n        ]"
     print(result)
-
-
-def print_all_paths(param_paths: dict[str, List]) -> None:
-    """Print all the paths in a readable format."""
-    for param_name, path in param_paths.items():
-        print(f"path for {param_name}:")
-        print_path(path)
-        print("---")
 
 
 # Example usage

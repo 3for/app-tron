@@ -106,10 +106,6 @@ uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool id
     return err;
 }
 
-void handle_return_code(uint16_t response_code) {
-    io_seproxyhal_send_status(response_code, 0, false, false);
-}
-
 static void nv_app_state_init(void) {
     // Mirrors app-ethereum's storage_init(): on first run, zero the whole struct and
     // mark it initialized in a single NVRAM write (all settings default to off).

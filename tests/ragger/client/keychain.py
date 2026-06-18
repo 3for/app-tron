@@ -10,7 +10,6 @@ from ecdsa.util import sigencode_der
 class Key(Enum):
     CAL = auto()
     TRUSTED_NAME = auto()
-    SET_PLUGIN = auto()
     NFT = auto()
     CALLDATA = auto()
     GATING = auto()

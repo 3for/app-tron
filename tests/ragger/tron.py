@@ -147,11 +147,6 @@ class TronClient:
     def exchange(self, *args):
         return self._backend.exchange(*args)
 
-    def exchange_async_raw_chunks(self, chunks):
-        for chunk in chunks[:-1]:
-            self.exchange_raw(chunk)
-        return self.exchange_async_raw(chunks[-1])
-
     def tip712_send_struct_def_struct_name(self, name: str):
         return self.exchange_async_raw(
             CommandBuilder().tip712_send_struct_def_struct_name(name))
@@ -419,9 +414,6 @@ class TronClient:
         return self.exchange(CLA, InsType.GET_APP_CONFIGURATION, 0x00,
                                      0x00)
 
-    def get_async_response(self) -> RAPDU:
-        return self.last_async_response
-
     def compute_address_from_public_key(self, public_key: bytes) -> str:
         return TrxAddrEncoder.EncodeKey(public_key)
 
@@ -454,25 +446,6 @@ class TronClient:
         assert self.compute_address_from_public_key(public_key) == address
 
         return public_key, address, chaincode
-
-    def send_get_public_key_non_confirm(self, derivation_path: str,
-                                        request_chaincode: bool) -> RAPDU:
-        p1 = P1.NON_CONFIRM
-        p2 = P2.CHAINCODE if request_chaincode else P2.NO_CHAINCODE
-        payload = pack_derivation_path(derivation_path)
-        return self.exchange_raw(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
-                                     payload)
-
-    @contextmanager
-    def send_async_get_public_key_confirm(
-            self, derivation_path: str,
-            request_chaincode: bool) -> Generator[None, None, None]:
-        p1 = P1.CONFIRM
-        p2 = P2.CHAINCODE if request_chaincode else P2.NO_CHAINCODE
-        payload = pack_derivation_path(derivation_path)
-        with self.exchange_async_raw(CLA, InsType.GET_PUBLIC_KEY, p1, p2,
-                                         payload):
-            yield
 
     def unpackGetVersionResponse(self,
                                  response: bytes) -> Tuple[int, int, int]:

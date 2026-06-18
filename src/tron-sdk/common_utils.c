@@ -270,14 +270,6 @@ void getEthAddressFromRawKey(const uint8_t raw_pubkey[static 65],
     memmove(out, hashAddress + 12, ADDRESS_LENGTH);
 }
 
-void getEthAddressStringFromRawKey(const uint8_t raw_pubkey[static 65],
-                                   char out[static(ADDRESS_LENGTH * 2) + 1],
-                                   uint64_t chainId) {
-    uint8_t hashAddress[CX_KECCAK_256_SIZE];
-    CX_ASSERT(cx_keccak_256_hash(raw_pubkey + 1, 64, hashAddress));
-    getEthAddressStringFromBinary(hashAddress + 12, out, chainId);
-}
-
 bool getEthAddressStringFromBinary(const uint8_t *address,
                                    char out[static(ADDRESS_LENGTH * 2) + 1],
                                    uint64_t chainId) {
