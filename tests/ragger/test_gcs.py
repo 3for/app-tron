@@ -282,13 +282,13 @@ def gcs_store_calldata(client: TronClient, backend: BackendInterface, path: str,
 
     for i, msg in enumerate(messages[:-1]):
         p1 = P1_FIRST if i == 0 else P1_MORE
-        backend.exchange(CLA, InsType.SIGN_EXTERNAL_PLUGIN, p1, P2_GCS_STORE, msg)
+        backend.exchange(CLA, InsType.SIGN_GCS, p1, P2_GCS_STORE, msg)
     # The last chunk must trigger the GCS finalize so the firmware registers the
     # parked calldata as the root tx context and enters APP_STATE_SIGNING_TX.
     # P1_LAST finalizes a multi-chunk stream; a single chunk must use P1_SIGN,
-    # which both initializes *and* finalizes in one APDU (sign_external_plugin.c).
+    # which both initializes *and* finalizes in one APDU (sign_gcs.c).
     p1 = P1_SIGN if len(messages) == 1 else P1_LAST
-    return backend.exchange(CLA, InsType.SIGN_EXTERNAL_PLUGIN, p1, P2_GCS_STORE,
+    return backend.exchange(CLA, InsType.SIGN_GCS, p1, P2_GCS_STORE,
                             messages[-1]).status
 
 
@@ -432,7 +432,7 @@ def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
                                test_name: str | None = None,
                                nb_warnings: int = 0) -> None:
     backend = scenario_navigator.backend
-    with backend.exchange_async(CLA, InsType.SIGN_EXTERNAL_PLUGIN, P1_FIRST,
+    with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
         if nb_warnings:
             scenario_navigator.review_approve_with_warning(

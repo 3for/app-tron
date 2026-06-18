@@ -51,7 +51,11 @@
 #define INS_TIP712_STRUCT_IMPL                 0x1C
 #define INS_TIP712_FILTERING                   0x1E
 #define INS_SET_EXTERNAL_PLUGIN                0x12
-#define INS_SIGN_EXTERNAL_PLUGIN               0xC4  // plugin(TriggerSmartContract)
+#define INS_SIGN_EXTERNAL_PLUGIN               0xC4  // legacy external plugin (to be removed)
+// Generic Clear Signing signing instruction. GCS used to ride on
+// INS_SIGN_EXTERNAL_PLUGIN via P2_GCS_STORE/START_FLOW; it now has its own opcode so
+// the external-plugin path can be removed wholesale.
+#define INS_SIGN_GCS                           0xD4
 
 #define INS_PROVIDE_TRC20_TOKEN_INFORMATION 0xCA  // 0x0A in eth
 #define INS_PROVIDE_NFT_INFORMATION         0x14  // same opcode as app-ethereum
@@ -82,13 +86,12 @@
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01
 
-// INS_SIGN_EXTERNAL_PLUGIN (0xC4): store the TriggerSmartContract calldata into
-// the generic_tx_parser context (Generic Clear Signing) instead of running the
-// external-plugin UI flow. No approval is shown; the 0x26/0x28 descriptors and
-// the start-of-flow command follow.
+// INS_SIGN_GCS (0xD4): store the TriggerSmartContract calldata into the
+// generic_tx_parser context (Generic Clear Signing). No approval is shown; the
+// 0x26/0x28 descriptors and the start-of-flow command follow.
 #define P2_GCS_STORE 0x10
 // Generic Clear Signing "start flow": sent after the 0x26/0x28 descriptors to run
-// the GCS review UI and sign. Sibling of P2_GCS_STORE on INS_SIGN_EXTERNAL_PLUGIN.
+// the GCS review UI and sign. Sibling of P2_GCS_STORE on INS_SIGN_GCS.
 #define P2_GCS_START_FLOW 0x11
 
 #define P2_TIP712_LEGACY_IMPLEM 0x00
@@ -123,6 +126,10 @@ int handleProvideNFTInformation(uint8_t p1,
 int handleSetExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 void cleanupSignExternalPlugin(void);
+
+// Generic Clear Signing signing (INS_SIGN_GCS): P2_GCS_STORE streams the
+// TriggerSmartContract, P2_GCS_START_FLOW runs the review + signs.
+int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 
 bool external_plugin_get_cached_ui_items_count(uint8_t *count);
 bool external_plugin_get_cached_title_msg(char *title_msg, size_t title_msg_len);

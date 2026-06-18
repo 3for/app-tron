@@ -170,6 +170,10 @@ int apdu_dispatcher(const command_t *cmd) {
             // Plugin Request Signature
             return handleSignExternalPlugin(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
+        case INS_SIGN_GCS:
+            // Generic Clear Signing: store calldata (P2=STORE) or review + sign (P2=START_FLOW)
+            return handleSignGcs(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
         default:
             return io_send_sw(E_INS_NOT_SUPPORTED);
     }

@@ -31,12 +31,9 @@
 #include "parse.h"
 #include "settings.h"
 #include "transaction_trigger_decode.h"
-#include "gcs_calldata_bridge.h"  // Generic Clear Signing calldata store
-#include "cmd_sign_flow.h"        // handle_gcs_start_flow (GCS review + sign)
+#include "tron_tx_stream.h"  // shared TriggerSmartContract decoder (GCS moved to sign_gcs.c)
 
 extern void reset_app_context();
-
-static tron_stream_decoder_t *tron_stream_decoder = NULL;
 
 typedef struct {
     extraInfo_t *item1;
@@ -659,12 +656,13 @@ static bool external_plugin_feed_data_chunk(void *ctx,
                 if (external_plugin_stream.expect_external_plugin) {
                     bool contract_match = true;
 
-                    if (tron_stream_decoder == NULL) {
+                    const tron_decode_result_t *res = tron_tx_stream_result();
+                    if (res == NULL) {
                         return false;
                     }
-                    if (tron_stream_decoder->result.has_contract_address &&
-                        tron_stream_decoder->result.contract_address_len == ADDRESS_SIZE) {
-                        contract_match = (memcmp(tron_stream_decoder->result.contract_address,
+                    if (res->has_contract_address &&
+                        res->contract_address_len == ADDRESS_SIZE) {
+                        contract_match = (memcmp(res->contract_address,
                                                  external_plugin_stream.expected_contract,
                                                  ADDRESS_SIZE) == 0);
                     }
@@ -674,7 +672,7 @@ static bool external_plugin_feed_data_chunk(void *ctx,
                                                   SELECTOR_LENGTH) != 0) {
                         external_plugin_stream.expect_external_plugin = false;
                     } else {
-                        sync_partial_txcontent(&tron_stream_decoder->result, &txContent);
+                        sync_partial_txcontent(res, &txContent);
                         if (!external_plugin_init(total_len)) {
                             record_plugin_failure();
                             return false;
@@ -737,12 +735,8 @@ static void external_plugin_stream_reset(void) {
     }
 }
 
-static bool tron_stream_decoder_complete(const tron_stream_decoder_t *dec) {
-    return tron_stream_decoder_is_done(dec);
-}
-
 void cleanupSignExternalPlugin(void) {
-    APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
+    tron_tx_stream_free();
     external_plugin_ui_cache_cleanup();
 }
 
@@ -822,25 +816,11 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     tronPluginFinalize_t plugin_finalize;
     tronPluginProvideInfo_t plugin_provide_info;
 
-    // Generic Clear Signing "start flow": runs the GCS review UI and signs once
-    // all 0x26/0x28 descriptors have been provided. It carries no streamed data,
-    // so handle it before the external-plugin streaming logic below.
-    if (p2 == P2_GCS_START_FLOW) {
-        (void) p1;
-        (void) workBuffer;
-        if (dataLength != 0) {
-            return io_send_sw(E_INCORRECT_LENGTH);
-        }
-        return handle_gcs_start_flow();
-    }
-
-    if ((p2 != 0x00) && (p2 != P2_GCS_STORE)) {
+    // Generic Clear Signing moved to INS_SIGN_GCS (sign_gcs.c). This handler now only
+    // serves the legacy external-plugin path (P2 == 0x00).
+    if (p2 != 0x00) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
-    // Generic Clear Signing "store" mode: parse the TriggerSmartContract and park
-    // its calldata into the generic_tx_parser context instead of running the
-    // external-plugin UI flow.
-    const bool gcs_store = (p2 == P2_GCS_STORE);
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
@@ -865,21 +845,10 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         initTx(&txContext, &txContent);
         customContractField = 0;
         cleanupSignExternalPlugin();
-        if (APP_MEM_CALLOC((void **) &tron_stream_decoder, sizeof(*tron_stream_decoder)) == false) {
+        external_plugin_stream_reset();
+        if (!tron_tx_stream_begin(total_len, external_plugin_feed_data_chunk, NULL)) {
             reset_app_context();
             return io_send_sw(SWO_INSUFFICIENT_MEMORY);
-        }
-        tron_stream_decoder_init_raw(tron_stream_decoder, total_len);
-        external_plugin_stream_reset();
-        if (gcs_store) {
-            gcs_bridge_reset();
-            tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
-                                                          gcs_bridge_feed_data_chunk,
-                                                          NULL);
-        } else {
-            tron_stream_decoder_set_trigger_data_observer(tron_stream_decoder,
-                                                          external_plugin_feed_data_chunk,
-                                                          NULL);
         }
 
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
@@ -901,7 +870,7 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
     // process buffer
-    if (!tron_stream_decoder_feed(tron_stream_decoder, workBuffer, dataLength)) {
+    if (!tron_tx_stream_feed(workBuffer, dataLength)) {
         uint16_t sw = (external_plugin_stream_failure_sw != E_OK)
                           ? external_plugin_stream_failure_sw
                           : E_INCORRECT_DATA;
@@ -913,45 +882,16 @@ int handleSignExternalPlugin(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16
         return io_send_sw(E_OK);
     }
 
-    if (!tron_stream_decoder_complete(tron_stream_decoder)) {
+    if (!tron_tx_stream_is_done()) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (gcs_store) {
-        // The observer rebuilt the full EVM calldata into g_parked_calldata while
-        // streaming. Register it as the root tx context, then wait for the
-        // generic_tx_parser descriptors (0x26 / 0x28). No UI is shown here.
-        const tron_decode_result_t *res = &tron_stream_decoder->result;
-        bool ok = gcs_bridge_finalize(res->has_owner_address ? res->owner_address : NULL,
-                                      res->has_contract_address ? res->contract_address : NULL,
-                                      res->has_call_value ? (uint64_t) res->call_value : 0,
-                                      TRON_MAINNET_CHAINID);
-        APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
-        if (!ok) {
-            gcs_bridge_abort();
-            reset_app_context();
-            return io_send_sw(E_INCORRECT_DATA);
-        }
-        // Finalize the transaction hash now (all tx bytes were fed into
-        // txContext.sha2 above). The GCS START_FLOW signs tmpCtx.transactionContext.hash,
-        // so it must be populated here -- the non-GCS path does the same finalize.
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2,
-                                   CX_LAST,
-                                   workBuffer,
-                                   0,
-                                   tmpCtx.transactionContext.hash,
-                                   32));
-        // Accept the incoming generic_tx_parser descriptors.
-        appState = APP_STATE_SIGNING_TX;
-        return io_send_sw(E_OK);
-    }
-
-    if (!tron_stream_fill_txcontent(&tron_stream_decoder->result, &txContent)) {
+    if (!tron_stream_fill_txcontent(tron_tx_stream_result(), &txContent)) {
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
     }
-    APP_MEM_FREE_AND_NULL((void **) &tron_stream_decoder);
+    tron_tx_stream_free();
 
     if (!external_plugin_finalize(&plugin_finalize)) {
         reset_app_context();
