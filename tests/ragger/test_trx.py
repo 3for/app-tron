@@ -50,20 +50,21 @@ class TestTRX():
     def review_approve(self,
                        test_name: str,
                        warning: bool = False,
-                       custom_screen_text=None):
+                       custom_screen_text=None,
+                       warning_instruction=None):
         if not warning:
             self.scenario_navigator.review_approve(
                 test_name=test_name,
                 custom_screen_text=custom_screen_text)
             return
 
-        if self.scenario_navigator.device.touchable:
+        if warning_instruction is not None:
             scenario = NavigationScenarioData(self.scenario_navigator.device,
                                               self.scenario_navigator.backend,
                                               UseCase.TX_REVIEW,
                                               True,
                                               nb_warnings=1)
-            scenario.dismiss_warning = [NavInsID.USE_CASE_CHOICE_CONFIRM]
+            scenario.dismiss_warning = [warning_instruction]
             self.scenario_navigator._navigate_warning(scenario, test_name,
                                                       True, "warning")
             self.scenario_navigator._navigate_with_scenario(
@@ -81,6 +82,7 @@ class TestTRX():
                           tx,
                           signatures=None,
                           warning_approve=False,
+                          warning_instruction=None,
                           ins: InsType = InsType.SIGN,
                           include_tx_len: bool = False):
         path = Path(currentframe().f_back.f_code.co_name)
@@ -95,7 +97,8 @@ class TestTRX():
                                include_tx_len=include_tx_len):
             self.review_approve(str(path),
                                 warning=warning_approve,
-                                custom_screen_text=custom_screen_text)
+                                custom_screen_text=custom_screen_text,
+                                warning_instruction=warning_instruction)
 
         resp = client.response()
         assert check_tx_signature(tx, resp.data[0:65],
@@ -135,7 +138,14 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 amount=100000000),
             b'CryptoChain-TronSR Ledger Transactions Tests')
-        self.sign_and_validate(client, device, 0, tx, warning_approve=True)
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None)
 
     def test_trx_send_display_hash(self, backend, device, navigator):
         # With the "Transaction hash" setting (app-ethereum's displayHash) enabled,

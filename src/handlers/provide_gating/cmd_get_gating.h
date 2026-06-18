@@ -25,11 +25,17 @@
 
 // Mirrors app-ethereum's src/features/provide_gating/cmd_get_gating.h.
 // TRON divergences: handle_gating() uses the (p1, p2, lc, data) argument order of
-// the other TRON TLV handlers, and the TX path reads the generic_tx_parser context
-// instead of app-ethereum's RLP tx structures.
+// the other TRON TLV handlers, and the TX path reads the shared txContent struct
+// (legacy protobuf signing) instead of app-ethereum's RLP tx structures.
 uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *data);
 
 void clear_gating(void);
 bool set_gating_warning(void);
+
+// Legacy blind-signing (custom contract) entry point: resets the NBGL warning set,
+// flags blind+gated signing, and runs the gating descriptor match. Returns false
+// when a provided descriptor does not match the transaction (caller must abort).
+// Mirrors the gating block of app-ethereum's ux_approve_tx().
+bool set_blind_sign_gating_warning(void);
 
 #endif  // HAVE_GATING_SUPPORT

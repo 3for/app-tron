@@ -153,6 +153,28 @@ static void displayTransaction(void) {
         operationType = TYPE_MESSAGE;
     }
 
+    if (txInfos.state == APPROVAL_CUSTOM_CONTRACT) {
+        // Custom contract is a blind-signing path: render through the NBGL advanced
+        // review so it shows the blind-signing warning and, when a matching gating
+        // descriptor was provided, the "safer signing" prelude. The warning set is
+        // populated before this point by set_blind_sign_gating_warning() (sign.c).
+        // Mirrors app-ethereum's ux_approve_tx().
+#ifndef HAVE_GATING_SUPPORT
+        explicit_bzero(&warning, sizeof(nbgl_warning_t));
+        warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
+#endif  // HAVE_GATING_SUPPORT
+        nbgl_useCaseAdvancedReview(operationType,
+                                   &pairList,
+                                   txInfos.flowIcon,
+                                   txInfos.flowTitle,
+                                   txInfos.flowSubtitle,
+                                   infoLongPress.text,
+                                   NULL,
+                                   &warning,
+                                   reviewChoice);
+        return;
+    }
+
     // Start review
     nbgl_useCaseReview(operationType,
                        &pairList,
@@ -205,6 +227,14 @@ static bool prepareClearSignCustomContractPluginUi(void) {
 }
 
 static void reviewStart() {
+    // Custom contract goes straight to the advanced review, which renders the
+    // blind-signing (and optional gating) warning itself, so skip the bespoke
+    // data/custom-contract warning pages. Mirrors app-ethereum, where dataPresent
+    // surfaces the blind-signing warning rather than a separate extra-data page.
+    if (txInfos.state == APPROVAL_CUSTOM_CONTRACT) {
+        displayTransaction();
+        return;
+    }
     if (txInfos.warnings[DATA_WARNING] == true) {
         displayDataWarning();
     } else if (txInfos.warnings[CUSTOM_CONTRACT_WARNING] == true) {
@@ -516,13 +546,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Selector";
             txInfos.fields[1].value = strings.common.TRC20Action;
-            txInfos.fields[2].item = "Pay Token";
-            txInfos.fields[2].value = strings.common.toAddress;
-            txInfos.fields[3].item = "Call Amount";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-            txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = strings.common.fromAddress;
-            pairList.nbPairs = 5;
+            // Custom contracts only ever pay native TRX, so the token + amount are
+            // merged into a single "Amount" field ("<value> TRX", built in sign.c).
+            txInfos.fields[2].item = "Amount";
+            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[3].item = stringLabelSenderAddress;
+            txInfos.fields[3].value = strings.common.fromAddress;
+            pairList.nbPairs = 4;
             txInfos.flowSubtitle = "Custom Contract";
             break;
         case APPROVAL_SIGN_EXTERNAL_PLUGIN_CUSTOM_CONTRACT:
@@ -636,9 +666,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             break;
     }
 
-    // Optionally append the transaction hash (app-ethereum's displayHash setting). Only
-    // for clear-signed transactions and only if there is room left in the fields array.
-    if (N_storage.displayHash && state_shows_tx_hash(state) &&
+    // Append the transaction hash when the displayHash setting is on, or always for the
+    // custom-contract blind-signing path. Mirrors app-ethereum's ux_init_strings
+    // (`if (N_storage.displayHash || tmpContent.txContent.dataPresent)`): a custom
+    // contract only exposes a few raw protobuf fields (the calldata arguments are
+    // discarded at parse), so the hash is the only complete commitment to what is
+    // actually signed. Only when there is room left in the fields array.
+    bool blind_sign = (state == APPROVAL_CUSTOM_CONTRACT);
+    if ((N_storage.displayHash || blind_sign) && state_shows_tx_hash(state) &&
         (pairList.nbPairs < MAX_TX_FIELDS)) {
         strlcpy(strings.common.fullHash, "0x", 3);
         bytes_to_lowercase_hex(strings.common.fullHash + 2,

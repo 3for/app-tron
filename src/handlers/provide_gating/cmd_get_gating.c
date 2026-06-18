@@ -34,16 +34,16 @@
 #include "proxy_info.h"
 #include "context_712.h"  // tip712_context
 #include "schema_hash.h"  // compute_schema_hash
-#include "tx_ctx.h"        // get_current_tx_to / get_current_calldata
-#include "calldata.h"      // CALLDATA_SELECTOR_SIZE
+#include "calldata.h"     // CALLDATA_SELECTOR_SIZE
 #include "lcx_sha256.h"
 
 // This module mirrors app-ethereum's src/features/provide_gating/cmd_get_gating.c
 // (gated/"dated" signing). The TLV parsing/verification is a faithful port; the
-// TRON divergences are: the TX path reads the generic_tx_parser context (TRON has
-// no RLP tx structures), and the prelude icon reuses the app review icon (no
-// Ledger-logo glyph in the TRON build). The NVM counter lives in N_storage.gating_counter,
-// exactly like app-ethereum.
+// TRON divergences are: the TX path reads the shared txContent struct (populated by
+// the legacy protobuf signing path; TRON has no RLP tx structures, and app-ethereum
+// likewise reads its legacy tmpContent.txContent here), and the prelude icon reuses
+// the app review icon (no Ledger-logo glyph in the TRON build). The NVM counter lives
+// in N_storage.gating_counter, exactly like app-ethereum.
 
 // Display the Dated Signing screen 1/X times
 #define GATED_SIGNING_MAX_COUNT 10
@@ -433,7 +433,9 @@ void clear_gating(void) {
 static bool check_gating_type(void) {
     switch (GATING->type) {
         case TX_TYPE_TRANSACTION:
-            if (appState != APP_STATE_SIGNING_TX) {
+            // Legacy protobuf signing path (INS_SIGN -> sign.c) sets APP_STATE_SIGNING.
+            // The GCS path is structured clear-signing and is intentionally not gated.
+            if (appState != APP_STATE_SIGNING) {
                 PRINTF("[GATING] Type mismatch: %u != %u\n", GATING->type, TX_TYPE_TRANSACTION);
                 return false;
             }
@@ -467,8 +469,10 @@ static bool check_gating_address(void) {
     }
     switch (GATING->type) {
         case TX_TYPE_TRANSACTION:
-            // Get the (generic_tx_parser) current transaction TO address
-            contract = get_current_tx_to();
+            // Legacy protobuf path: txContent.contractAddress is a 21-byte TRON address
+            // (0x41 prefix + 20-byte EVM). Gating descriptors carry the 20-byte EVM
+            // address, so skip the prefix byte.
+            contract = txContent.contractAddress + 1;
             selector = GATING->hash_selector;
             break;
         case TX_TYPE_TYPED_DATA:
@@ -555,24 +559,26 @@ static bool check_gating_chain_id(void) {
  * @return whether it was successful
  */
 static bool check_gating_selector(void) {
-    const s_calldata *calldata = NULL;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE];
     switch (GATING->type) {
         case TX_TYPE_TRANSACTION:
             // Check if the descriptor is set
             if (allzeroes((const void *) GATING->hash_selector, CALLDATA_SELECTOR_SIZE)) {
                 break;
             }
-            calldata = get_current_calldata();
-            if (calldata == NULL) {
-                PRINTF("[GATING] No calldata for the current transaction\n");
-                return false;
-            }
-            if (memcmp(GATING->hash_selector, calldata->selector, CALLDATA_SELECTOR_SIZE) != 0) {
+            // Legacy protobuf path: txContent.customSelector holds the 4-byte method
+            // selector decoded big-endian (parse.c U4BE). Re-encode it big-endian to
+            // compare against the descriptor selector.
+            selector[0] = (uint8_t) (txContent.customSelector >> 24);
+            selector[1] = (uint8_t) (txContent.customSelector >> 16);
+            selector[2] = (uint8_t) (txContent.customSelector >> 8);
+            selector[3] = (uint8_t) (txContent.customSelector);
+            if (memcmp(GATING->hash_selector, selector, CALLDATA_SELECTOR_SIZE) != 0) {
                 PRINTF("[GATING] SELECTOR mismatch: %.*h != %.*h\n",
                        CALLDATA_SELECTOR_SIZE,
                        GATING->hash_selector,
                        CALLDATA_SELECTOR_SIZE,
-                       calldata->selector);
+                       selector);
                 return false;
             }
             break;
@@ -681,6 +687,16 @@ bool set_gating_warning(void) {
     // Gated signing valid => Adapt the UI screens
     set_gating_ui_screen();
     return true;
+}
+
+bool set_blind_sign_gating_warning(void) {
+    // Mirrors app-ethereum's ux_approve_tx() gating block: a custom contract is a
+    // blind-signing path, so reset the warning set, flag blind+gated signing, then
+    // run the descriptor match (which may add the "safer signing" prelude).
+    explicit_bzero(&warning, sizeof(nbgl_warning_t));
+    warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
+    warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
+    return set_gating_warning();
 }
 
 #endif  // HAVE_GATING_SUPPORT

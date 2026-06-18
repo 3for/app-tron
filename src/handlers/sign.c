@@ -29,6 +29,9 @@
 #include "app_errors.h"
 #include "parse.h"
 #include "settings.h"
+#ifdef HAVE_GATING_SUPPORT
+#include "cmd_get_gating.h"  // set_blind_sign_gating_warning
+#endif  // HAVE_GATING_SUPPORT
 #ifdef HAVE_SWAP
 #include "swap.h"
 #include "handle_swap_sign_transaction.h"
@@ -264,29 +267,30 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                              sizeof(strings.common.TRC20Action),
                              "%08x",
                              txContent.customSelector);
+                    // A custom contract can only attach native TRX as its call value
+                    // (txContent.amount[0]); amount[1]/token-name is never set on this
+                    // path. Show a single "Amount" field: "<value> TRX", or "-"
+                    // when no value is attached.
                     G_io_apdu_buffer[0] = '\0';
                     G_io_apdu_buffer[100] = '\0';
-                    strings.common.toAddress[0] = '\0';
-                    if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
-                        return io_send_sw(E_INCORRECT_DATA);
-                    }
-                    // call has value
                     if (txContent.amount[0] > 0) {
-                        strcpy(strings.common.toAddress, "TRX");
                         print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
-                        customContractField |= (1 << 0x05);
-                        customContractField |= (1 << 0x06);
-                    } else if (txContent.amount[1] > 0) {
-                        memcpy(strings.common.toAddress,
-                               txContent.tokenNames[0],
-                               txContent.tokenNamesLength[0] + 1);
-                        print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
+                        strlcat((char *) G_io_apdu_buffer, " TRX", sizeof(G_io_apdu_buffer));
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
                     } else {
-                        strcpy(strings.common.toAddress, "-");
-                        strlcpy((char *) G_io_apdu_buffer, "0", sizeof(G_io_apdu_buffer));
+                        strlcpy((char *) G_io_apdu_buffer, "-", sizeof(G_io_apdu_buffer));
                     }
+
+#ifdef HAVE_GATING_SUPPORT
+                    // Custom contract = blind signing. A gating descriptor
+                    // (INS_PROVIDE_GATING) may require this transaction to match
+                    // before signing, and augments the review with a "safer signing"
+                    // prelude. Mirrors app-ethereum's ux_approve_tx() gating block.
+                    if (set_blind_sign_gating_warning() == false) {
+                        return io_send_sw(E_INCORRECT_DATA);
+                    }
+#endif  // HAVE_GATING_SUPPORT
 
                     // approve custom contract
                     ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
