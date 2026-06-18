@@ -111,6 +111,7 @@ class TypeFamily(IntEnum):
     BOOL = 0x06
     BYTES = 0x07
     STRING = 0x08
+    TRC_TOKEN = 0x09  # TVM trcToken: a uint256 token id
 
 
 class PathTuple(TlvSerializable):

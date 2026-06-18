@@ -15,6 +15,8 @@ typedef enum {
     TF_BOOL,
     TF_BYTES,
     TF_STRING,
+    // TVM trcToken: a token id, encoded exactly like uint256.
+    TF_TRC_TOKEN,
 } e_type_family;
 
 typedef enum {

@@ -507,6 +507,46 @@ def gcs_handler(client: TronClient, json_data: dict) -> None:
         client.provide_transaction_field_desc(field.serialize())
 
 
+def gcs_handler_trctoken(client: TronClient, json_data: dict) -> None:
+    # For transferToken(address,uint256,trcToken), render the 3rd word (the trcToken
+    # tokenId) via TypeFamily.TRC_TOKEN, exercising the TF_TRC_TOKEN family through the
+    # TIP-712 nested-calldata field formatting.
+    fields = [
+        Field(
+            1,
+            "Token id",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.TRC_TOKEN,
+                    type_size=32,
+                    data_path=DataPath(
+                        1,
+                        [
+                            PathTuple(2),  # transferToken word 2: the trcToken tokenId
+                            PathLeaf(PathLeafType.STATIC),
+                        ]
+                    ),
+                ),
+            )
+        ),
+    ]
+    inst_hash = compute_inst_hash(fields)
+    tx_info = TxInfo(
+        1,
+        json_data["domain"]["chainId"],
+        bytes.fromhex(json_data["message"]["to"][2:]),
+        get_selector_from_data(json_data["message"]["data"]),
+        inst_hash,
+        "Token transfer",
+        contract_name="USDC",
+    )
+    client.provide_transaction_info(tx_info.serialize())
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+
 def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
     # Load TIP-712 JSON data
     with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
@@ -1087,6 +1127,54 @@ class TestTRX():
             self, scenario_navigator: NavigateWithScenario, test_name: str):
         self._tip712_calldata_common(scenario_navigator, test_name, "safe",
                                      gcs_handler)
+
+    def test_trx_tip712_calldata_trctoken(
+            self, scenario_navigator: NavigateWithScenario, test_name: str):
+        # Nested-calldata TIP-712 whose embedded calldata is a real
+        # transferToken(address,uint256,trcToken); the trcToken word is rendered via
+        # TypeFamily.TRC_TOKEN, exercising the same TF_TRC_TOKEN path as test_gcs_trctoken.
+        backend = scenario_navigator.backend
+        device = scenario_navigator.backend.device
+        navigator = scenario_navigator.navigator
+        client = TronClient(backend, device, navigator)
+
+        with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+            data = json.load(file)
+
+        # Swap the embedded transfer() calldata for transferToken(address,uint256,trcToken).
+        to20 = bytes.fromhex(data["message"]["to"][2:])
+        selector = web3.Web3.keccak(text="transferToken(address,uint256,trcToken)")[:4]
+        data["message"]["data"] = "0x" + (
+            selector + bytes(12) + to20
+            + (1000000).to_bytes(32, "big")   # word 1: uint256 tokenValue
+            + (1002000).to_bytes(32, "big")   # word 2: trcToken tokenId
+        ).hex()
+
+        filters = {
+            "name": "Calldata test",
+            "calldatas": [
+                {
+                    "index": 0,
+                    "handler": gcs_handler_trctoken,
+                    "value_flag": True,
+                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                    "chain_id_flag": False,
+                    "selector_flag": False,
+                    "amount_flag": True,
+                    "spender_flag": EIP712CalldataParamPresence.NONE,
+                },
+            ],
+            "fields": {
+                "to": {"type": "calldata_callee", "index": 0},
+                "value": {"type": "calldata_amount", "index": 0},
+                "data": {"type": "calldata_value", "index": 0},
+            }
+        }
+
+        vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                                snapshots_dirname=test_name)
+        addr = recover_message(data, vrs)
+        assert addr == get_wallet_addr(client)
 
     def test_trx_tip712_calldata_empty_send(
             self, scenario_navigator: NavigateWithScenario, test_name: str):

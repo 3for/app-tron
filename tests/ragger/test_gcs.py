@@ -338,6 +338,13 @@ def build_field_amount(name: str, type_size: int, data_path: DataPath) -> Field:
     return Field(1, name, ParamAmount(1, _uint_value(type_size, data_path)))
 
 
+def build_field_trctoken(name: str, data_path: DataPath) -> Field:
+    """Render a static 32-byte calldata word as a TVM trcToken (uint256 token id)."""
+    return Field(1, name,
+                 ParamRaw(1, Value(1, TypeFamily.TRC_TOKEN, type_size=32,
+                                   data_path=data_path)))
+
+
 def build_field_datetime(name: str, type_size: int, data_path: DataPath) -> Field:
     return Field(1,
                  name,
@@ -506,6 +513,46 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                                tx,
                                nb_warnings=_gating_warnings(scenario_navigator,
                                                             gating_params))
+
+
+# keccak256("transferToken(address,uint256,trcToken)")[:4] -- the TVM native token
+# transfer, whose 3rd argument is a real trcToken.
+TRANSFER_TOKEN_SELECTOR = Web3.keccak(text="transferToken(address,uint256,trcToken)")[:4]
+
+
+def build_transfer_token_calldata(to_addr20: bytes, token_value: int, token_id: int) -> bytes:
+    """ABI-encode transferToken(address to, uint256 tokenValue, trcToken tokenId)."""
+    return (TRANSFER_TOKEN_SELECTOR
+            + bytes(12) + to_addr20            # word 0: address (left-padded to 32 bytes)
+            + token_value.to_bytes(32, "big")  # word 1: uint256 tokenValue
+            + token_id.to_bytes(32, "big"))    # word 2: trcToken tokenId
+
+
+def test_gcs_trctoken(scenario_navigator: NavigateWithScenario):
+    """Clear-sign transferToken(address,uint256,trcToken): its 3rd argument is a genuine
+    TVM trcToken, rendered via TypeFamily.TRC_TOKEN (TF_TRC_TOKEN == uint256)."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    to_addr20 = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+    calldata = build_transfer_token_calldata(to_addr20, 1000000, 1002000)
+    tx = build_trigger_smart_contract_tx(client, contract_addr20, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    fields = [
+        build_field_address("To", build_data_path_static(0)),
+        build_field_raw("Token value", 32, build_data_path_static(1)),
+        build_field_trctoken("Token id", build_data_path_static(2)),
+    ]
+    tx_info = build_tx_info(contract_addr20, TRANSFER_TOKEN_SELECTOR, fields, "transferToken")
+
+    client.provide_transaction_info(tx_info)
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
 def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):

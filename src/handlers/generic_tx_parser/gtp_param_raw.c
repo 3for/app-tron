@@ -287,6 +287,8 @@ bool format_param_raw(const s_field *field) {
         for (int i = 0; i < collec.size && ret == true; ++i) {
             switch (field->param_raw.value.type_family) {
                 case TF_UINT:
+                // TVM trcToken is a uint256 token id; format it like a uint.
+                case TF_TRC_TOKEN:
                     ret = format_uint(field, &to_be_displayed, &collec.value[i], buf, buf_size);
                     break;
                 case TF_INT:
