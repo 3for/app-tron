@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from tron import TronClient
@@ -26,8 +28,8 @@ TINY_URL = "ledger.com/ledger-multisig"
 PROXY_IMPL_ADDR20 = bytes.fromhex("dad77910dbdfde764fc21fcd4e74d71bbaca6d8d")
 
 
-def test_gating_blind_signing(scenario_navigator: NavigateWithScenario,
-                              configuration) -> None:
+@pytest.mark.usefixtures("configuration")
+def test_gating_blind_signing(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU with a blind signing transaction.
 
     Mirrors app-ethereum's test_gating_blind_signing: the descriptor targets the
@@ -47,8 +49,8 @@ def test_gating_blind_signing(scenario_navigator: NavigateWithScenario,
                gating_params=descriptor)
 
 
-def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenario,
-                                         configuration) -> None:
+@pytest.mark.usefixtures("configuration")
+def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU with a blind signing transaction behind a proxy.
 
     Mirrors app-ethereum's test_gating_blind_signing_with_proxy: the tx calls the
@@ -70,8 +72,8 @@ def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenari
                with_proxy=True)
 
 
-def test_gating_tip712(scenario_navigator: NavigateWithScenario,
-                       configuration) -> None:
+@pytest.mark.usefixtures("configuration")
+def test_gating_tip712(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU on a TIP-712 typed-data signature.
 
     Mirrors app-ethereum's test_gating_eip712: the descriptor's selector is the schema

@@ -142,8 +142,8 @@ def test_blind_sign(scenario_navigator: NavigateWithScenario,
                       nb_warnings)
 
 
-def test_blind_sign_reject_in_risk_review(scenario_navigator: NavigateWithScenario,
-                                          configuration) -> None:
+@pytest.mark.usefixtures("configuration")
+def test_blind_sign_reject_in_risk_review(scenario_navigator: NavigateWithScenario) -> None:
     """Reject a blind-signing transaction at the initial risk (warning) review.
 
     Mirrors app-ethereum's test_blind_sign_reject_in_risk_review: reject on the

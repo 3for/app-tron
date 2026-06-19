@@ -478,6 +478,8 @@ def _get_challenge(client: TronClient) -> int:
 # calldata's value field has been sent, streaming the GTP descriptor (TX_INFO +
 # fields) that clear-signs the embedded transaction. Mirrors app-ethereum's
 # gcs_handler* in test_eip712.py.
+
+
 def gcs_handler(client: TronClient, json_data: dict) -> None:
     fields = [
         Field(
@@ -778,636 +780,648 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
     client.provide_transaction_info(tx_info.serialize())
 
 
-class TestTRX():
+def test_sign_tip712(
+                         scenario_navigator: NavigateWithScenario):
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    # Legacy hash-based TIP-712 signing requires blind signing to be enabled.
+    toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
+    domainHash = bytes.fromhex(
+        '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
+    messageHash = bytes.fromhex(
+        'eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8')
 
-    def test_trx_sign_tip712(self,
-                             scenario_navigator: NavigateWithScenario):
-        backend = scenario_navigator.backend
-        device = backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-        # Legacy hash-based TIP-712 signing requires blind signing to be enabled.
-        toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
-        domainHash = bytes.fromhex(
-            '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
-        messageHash = bytes.fromhex(
-            'eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8')
+    with client.tip712_sign_legacy(client.getAccount(0)['path'],
+                                   domainHash,
+                                   messageHash):
+        scenario_navigator.review_approve(do_comparison=False)
 
-        with client.tip712_sign_legacy(client.getAccount(0)['path'],
-                                       domainHash,
-                                       messageHash):
-            scenario_navigator.review_approve(do_comparison=False)
+    resp = scenario_navigator.backend.last_async_response
 
-        resp = scenario_navigator.backend.last_async_response
+    sign_magic = b'\x19\x01'
+    msg_to_sign = sign_magic + domainHash + messageHash
+    digest = keccak.new(digest_bits=256, data=msg_to_sign).digest()
 
-        sign_magic = b'\x19\x01'
-        msg_to_sign = sign_magic + domainHash + messageHash
-        digest = keccak.new(digest_bits=256, data=msg_to_sign).digest()
+    assert check_hash_signature(digest, resp.data[0:65],
+                                client.getAccount(0)['publicKey'][2:])
 
-        assert check_hash_signature(digest, resp.data[0:65],
-                                    client.getAccount(0)['publicKey'][2:])
 
-    def test_trx_tip712_new(self,
-                            scenario_navigator: NavigateWithScenario,
-                            tip712_case: tuple[Path, bool], verbose_raw: bool,
-                            test_name: str):
-        settings_to_toggle: list[SettingID] = []
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-        input_file, filtering = tip712_case
+def test_tip712_new(
+                        scenario_navigator: NavigateWithScenario,
+                        tip712_case: tuple[Path, bool], verbose_raw: bool,
+                        test_name: str):
+    settings_to_toggle: list[SettingID] = []
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    input_file, filtering = tip712_case
 
-        test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
+    test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
 
-        test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
+    test_name += '-' + input_file.stem + '-' + f"{verbose_raw}" + '-' + f"{filtering}"
 
-        filters = None
-        if filtering:
-            try:
-                filterfile = Path(f"{test_path}-filter.json")
-                with open(filterfile, encoding="utf-8") as f:
-                    filters = json.load(f)
-            except (IOError, json.decoder.JSONDecodeError) as e:
-                pytest.skip(f"{filterfile.name}: {e.strerror}")
-        else:
-            # Unfiltered (blind) signing needs SIGN_BY_HASH enabled.
-            settings_to_toggle.append(SettingID.SIGN_BY_HASH)
+    filters = None
+    if filtering:
+        try:
+            filterfile = Path(f"{test_path}-filter.json")
+            with open(filterfile, encoding="utf-8") as f:
+                filters = json.load(f)
+        except (IOError, json.decoder.JSONDecodeError) as e:
+            pytest.skip(f"{filterfile.name}: {e.strerror}")
+    else:
+        # Unfiltered (blind) signing needs SIGN_BY_HASH enabled.
+        settings_to_toggle.append(SettingID.SIGN_BY_HASH)
 
-        if verbose_raw:
-            settings_to_toggle.append(SettingID.VERBOSE_TIP712)
+    if verbose_raw:
+        settings_to_toggle.append(SettingID.VERBOSE_TIP712)
 
-        nb_warnings = 1 if not filters or verbose_raw else 0
-        toggle_settings(backend, device, navigator, settings_to_toggle)
+    nb_warnings = 1 if not filters or verbose_raw else 0
+    toggle_settings(backend, device, navigator, settings_to_toggle)
 
-        with open(input_file, encoding="utf-8") as file:
-            data = json.load(file)
-            vrs = tip712_new_common(scenario_navigator,
-                                    client,
-                                    data,
-                                    filters,
-                                    snapshots_dirname=test_name,
-                                    nb_warnings=nb_warnings)
-            recovered_addr = recover_message(data, vrs)
-
-        assert recovered_addr == get_wallet_addr(client)
-
-    def test_trx_tip712_advanced_filtering(
-            self, scenario_navigator: NavigateWithScenario,
-            test_name: str, data_set: DataSet, verbose_raw: bool):
-        if verbose_raw and data_set.suffix:
-            pytest.skip("Skipping Verbose mode for this data sets")
-
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        snapshots_dirname = test_name + data_set.suffix
-        if verbose_raw:
-            # Verbose mode additionally renders the message hash.
-            toggle_settings(backend, device, navigator, [SettingID.DISPLAY_HASH])
-            snapshots_dirname += "-verbose"
-
-        vrs = tip712_new_common(scenario_navigator, client, data_set.data,
-                                data_set.filters,
-                                snapshots_dirname=snapshots_dirname)
-        recovered_addr = recover_message(data_set.data, vrs)
-        assert client.getAccount(
-            0)['addressHex'][2:] == recovered_addr.hex().upper()
-
-        assert recovered_addr == get_wallet_addr(client)
-
-    def test_trx_tip712_filtering_empty_array(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Person": [
-                    {"name": "name", "type": "string"},
-                    {"name": "addr", "type": "address"},
-                ],
-                "Message": [
-                    {"name": "title", "type": "string"},
-                    {"name": "to", "type": "Person[]"},
-                ],
-                "Root": [
-                    {"name": "text", "type": "string"},
-                    {"name": "subtext", "type": "string[]"},
-                    {"name": "msg_list1", "type": "Message[]"},
-                    {"name": "msg_list2", "type": "Message[]"},
-                ],
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 728126428,
-            },
-            "message": {
-                "text": "This is a test",
-                "subtext": [],
-                "msg_list1": [
-                    {
-                        "title": "This is a test",
-                        "to": [],
-                    }
-                ],
-                "msg_list2": [],
-            }
-        }
-        filters = {
-            "name": "Empty array filtering",
-            "fields": {
-                "text": {
-                    "type": "raw",
-                    "name": "Text",
-                },
-                "subtext.[]": {
-                    "type": "raw",
-                    "name": "Sub-Text",
-                },
-                "msg_list1.[].to.[].addr": {
-                    "type": "raw",
-                    "name": "(1) Recipient addr",
-                },
-                "msg_list2.[].to.[].addr": {
-                    "type": "raw",
-                    "name": "(2) Recipient addr",
-                },
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_advanced_missing_token(
-            self, scenario_navigator: NavigateWithScenario,
-            test_name: str, tokens: list[dict]):
-        test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
-
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Root": [
-                    {"name": "token_from", "type": "address"},
-                    {"name": "value_from", "type": "uint256"},
-                    {"name": "token_to", "type": "address"},
-                    {"name": "value_to", "type": "uint256"},
-                ]
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 728126428,
-            },
-            "message": {
-                "token_from": "0x1111111111111111111111111111111111111111",
-                "value_from": web3.Web3.to_wei(3.65, "ether"),
-                "token_to": "0x2222222222222222222222222222222222222222",
-                "value_to": web3.Web3.to_wei(15.47, "ether"),
-            }
-        }
-        filters = {
-            "name": "Token not in CAL test",
-            "tokens": tokens,
-            "fields": {
-                "token_from": {
-                    "type": "amount_join_token",
-                    "token": 0,
-                },
-                "value_from": {
-                    "type": "amount_join_value",
-                    "name": "From",
-                    "token": 0,
-                },
-                "token_to": {
-                    "type": "amount_join_token",
-                    "token": 1,
-                },
-                "value_to": {
-                    "type": "amount_join_value",
-                    "name": "To",
-                    "token": 1,
-                },
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_advanced_trusted_name(
-            self, scenario_navigator: NavigateWithScenario,
-            test_name: str, trusted_name: tuple,
-            filt_tn_types: list[TrustedNameType]):
-        test_name += f"_{trusted_name[0].name.lower()}_with"
-        for trusted_name_type in filt_tn_types:
-            test_name += f"_{trusted_name_type.name.lower()}"
-
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Root": [
-                    {"name": "validator", "type": "address"},
-                    {"name": "enable", "type": "bool"},
-                ]
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "test",
-                "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
-                "chainId": 728126428,
-            },
-            "message": {
-                "validator": "0x1111111111111111111111111111111111111111",
-                "enable": True,
-            }
-        }
-        filters = {
-            "name": "Trusted name test",
-            "fields": {
-                "validator": {
-                    "type": "trusted_name",
-                    "name": "Validator",
-                    "tn_type": filt_tn_types,
-                    "tn_source": [TrustedNameSource.CAL, TrustedNameSource.ENS],
-                },
-                "enable": {
-                    "type": "raw",
-                    "name": "State",
-                },
-            }
-        }
-
-        cmd_builder = CommandBuilder()
-        if trusted_name[0] is TrustedNameType.ACCOUNT:
-            challenge = ResponseParser.challenge(
-                client.exchange_raw(cmd_builder.get_challenge()).data)
-        else:
-            challenge = None
-
-        client.provide_trusted_name(
-            TrustedName(
-                2,
-                bytes.fromhex(data["message"]["validator"][2:]),
-                trusted_name[2],
-                tn_type=trusted_name[0],
-                tn_source=trusted_name[1],
-                chain_id=data["domain"]["chainId"],
-                challenge=challenge))
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def _tip712_calldata_common(self,
-                                scenario_navigator: NavigateWithScenario,
-                                test_name: str,
-                                filename: str,
-                                handler: Optional[Callable] = None):
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
-            data = json.load(file)
-
-        filters = {
-            "name": "Calldata test",
-            "calldatas": [
-                {
-                    "index": 0,
-                    "handler": handler,
-                    "value_flag": True,
-                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
-                    "chain_id_flag": False,
-                    "selector_flag": False,
-                    "amount_flag": True,
-                    "spender_flag": EIP712CalldataParamPresence.NONE,
-                },
-            ],
-            "fields": {
-                "to": {
-                    "type": "calldata_callee",
-                    "index": 0,
-                },
-                "value": {
-                    "type": "calldata_amount",
-                    "index": 0,
-                },
-                "data": {
-                    "type": "calldata_value",
-                    "index": 0,
-                },
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_calldata(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        self._tip712_calldata_common(scenario_navigator, test_name, "safe",
-                                     gcs_handler)
-
-    def test_trx_tip712_calldata_trctoken(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        # Nested-calldata TIP-712 whose embedded calldata is a real
-        # transferToken(address,uint256,trcToken); the trcToken word is rendered via
-        # TypeFamily.TRC_TOKEN, exercising the same TF_TRC_TOKEN path as test_gcs_trctoken.
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
-            data = json.load(file)
-
-        # Swap the embedded transfer() calldata for transferToken(address,uint256,trcToken).
-        to20 = bytes.fromhex(data["message"]["to"][2:])
-        selector = web3.Web3.keccak(text="transferToken(address,uint256,trcToken)")[:4]
-        data["message"]["data"] = "0x" + (
-            selector + bytes(12) + to20
-            + (1000000).to_bytes(32, "big")   # word 1: uint256 tokenValue
-            + (1002000).to_bytes(32, "big")   # word 2: trcToken tokenId
-        ).hex()
-
-        filters = {
-            "name": "Calldata test",
-            "calldatas": [
-                {
-                    "index": 0,
-                    "handler": gcs_handler_trctoken,
-                    "value_flag": True,
-                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
-                    "chain_id_flag": False,
-                    "selector_flag": False,
-                    "amount_flag": True,
-                    "spender_flag": EIP712CalldataParamPresence.NONE,
-                },
-            ],
-            "fields": {
-                "to": {"type": "calldata_callee", "index": 0},
-                "value": {"type": "calldata_amount", "index": 0},
-                "data": {"type": "calldata_value", "index": 0},
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_calldata_empty_send(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-        filename = "safe_empty"
-
-        with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
-            json_data = json.load(file)
-
-        client.provide_trusted_name(
-            TrustedName(2,
-                        bytes.fromhex(json_data["message"]["to"][2:]),
-                        "MAB_addr",
-                        tn_type=TrustedNameType.ACCOUNT,
-                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
-                        chain_id=json_data["domain"]["chainId"],
-                        challenge=_get_challenge(client),
-                        owner=bytes.fromhex(client.getAccount(0)["addressHex"])[1:],
-                        owner_deriv_path=client.getAccount(0)["path"]))
-        self._tip712_calldata_common(scenario_navigator, test_name, filename)
-
-    def test_trx_tip712_calldata_no_param(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        self._tip712_calldata_common(scenario_navigator, test_name,
-                                     "safe_calldata_no_param",
-                                     gcs_handler_no_param)
-
-    def test_trx_tip712_batch(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
-            data = json.load(file)
-
-        filters = {
-            "name": "Calldata test",
-            "calldatas": [
-                {
-                    "index": 0,
-                    "handler": gcs_handler_batch,
-                    "value_flag": True,
-                    "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
-                    "chain_id_flag": False,
-                    "selector_flag": False,
-                    "amount_flag": True,
-                    "spender_flag": EIP712CalldataParamPresence.NONE,
-                },
-            ],
-            "fields": {
-                "to": {
-                    "type": "calldata_callee",
-                    "index": 0,
-                },
-                "value": {
-                    "type": "calldata_amount",
-                    "index": 0,
-                },
-                "data": {
-                    "type": "calldata_value",
-                    "index": 0,
-                },
-                "operation": {
-                    "type": "raw",
-                    "name": "Operation type",
-                },
-                "baseGas": {
-                    "type": "raw",
-                    "name": "Gas amount",
-                },
-                "gasPrice": {
-                    "type": "raw",
-                    "name": "Gas price",
-                },
-                "gasToken": {
-                    "type": "raw",
-                    "name": "Gas token",
-                },
-                "refundReceiver": {
-                    "type": "trusted_name",
-                    "name": "Gas receiver",
-                    "tn_type": [TrustedNameType.ACCOUNT, TrustedNameType.CONTRACT,
-                                TrustedNameType.TOKEN],
-                    "tn_source": [TrustedNameSource.CAL, TrustedNameSource.ENS,
-                                  TrustedNameSource.UD, TrustedNameSource.FN],
-                },
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_proxy(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        # Filtered TIP-712 where the descriptor targets a different address than the
-        # domain's verifyingContract, resolved via provide_proxy_info. Mirrors
-        # app-ethereum's test_eip712_proxy.
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        input_file = Path(input_files()[0])
-        test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
-        with open(input_file, encoding="utf-8") as file:
-            data = json.load(file)
-        with open(f"{test_path}-filter.json", encoding="utf-8") as file:
-            filters = json.load(file)
-        # Change its name & set a different address than the one in verifyingContract.
-        filters["name"] = "Proxy test"
-        filters["address"] = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-
-        cmd_builder = CommandBuilder()
-        proxy_info = ProxyInfo(
-            _get_challenge(client),
-            bytes.fromhex(data["domain"]["verifyingContract"][2:]),
-            int(data["domain"]["chainId"]),
-            bytes.fromhex(filters["address"][2:]),
-        )
-        client.provide_proxy_info(proxy_info.serialize())
-
-        vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                                snapshots_dirname=test_name)
-
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
-
-    def test_trx_tip712_gondi(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        """Basic blind (unfiltered) TIP-712 signature over a nested struct/array
-        payload. Mirrors app-ethereum's test_eip712_gondi."""
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
-
-        # Blind signing for the unfiltered payload.
-        toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
-
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Root": [
-                    {"name": "child", "type": "Inner[]"},
-                ],
-                "Inner": [
-                    {"name": "child", "type": "Leaf"},
-                ],
-                "Leaf": [
-                    {"name": "value", "type": "uint256"},
-                ],
-            },
-            "primaryType": "Root",
-            "domain": {
-                "name": "DOMAIN",
-                "version": "3.1",
-                "chainId": 31337,
-                "verifyingContract": "0x95401dc811bb5740090279ba06cfa8fcf6113778",
-            },
-            "message": {
-                "child": [
-                    {
-                        "child": {
-                            "value": 2,
-                        },
-                    }
-                ],
-            }
-        }
-
-        vrs = tip712_new_common(scenario_navigator, client, data, None,
+    with open(input_file, encoding="utf-8") as file:
+        data = json.load(file)
+        vrs = tip712_new_common(scenario_navigator,
+                                client,
+                                data,
+                                filters,
                                 snapshots_dirname=test_name,
-                                nb_warnings=1)
+                                nb_warnings=nb_warnings)
+        recovered_addr = recover_message(data, vrs)
 
-        addr = recover_message(data, vrs)
-        assert addr == get_wallet_addr(client)
+    assert recovered_addr == get_wallet_addr(client)
 
-    def test_trx_tip712_bs_not_activated_error(
-            self, scenario_navigator: NavigateWithScenario):
-        # Blind signing is disabled by default, so an unfiltered payload must be
-        # rejected. Mirrors app-ethereum's test_eip712_bs_not_activated_error.
-        backend = scenario_navigator.backend
-        device = scenario_navigator.backend.device
-        navigator = scenario_navigator.navigator
-        client = TronClient(backend, device, navigator)
 
-        with pytest.raises(ExceptionRAPDU) as exc_info:
-            tip712_new_common(scenario_navigator, client,
-                              ADVANCED_DATA_SETS[0].data, None,
-                              nb_warnings=1)
-        assert exc_info.value.status == InputData.StatusWord.INVALID_DATA
+def test_tip712_advanced_filtering(
+        scenario_navigator: NavigateWithScenario,
+        test_name: str, data_set: DataSet, verbose_raw: bool):
+    if verbose_raw and data_set.suffix:
+        pytest.skip("Skipping Verbose mode for this data sets")
 
-    def test_trx_tip712_skip(
-            self, scenario_navigator: NavigateWithScenario, test_name: str):
-        pytest.skip("Skip action is not exposed by scenario_navigator")
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    snapshots_dirname = test_name + data_set.suffix
+    if verbose_raw:
+        # Verbose mode additionally renders the message hash.
+        toggle_settings(backend, device, navigator, [SettingID.DISPLAY_HASH])
+        snapshots_dirname += "-verbose"
+
+    vrs = tip712_new_common(scenario_navigator, client, data_set.data,
+                            data_set.filters,
+                            snapshots_dirname=snapshots_dirname)
+    recovered_addr = recover_message(data_set.data, vrs)
+    assert client.getAccount(
+        0)['addressHex'][2:] == recovered_addr.hex().upper()
+
+    assert recovered_addr == get_wallet_addr(client)
+
+
+def test_tip712_filtering_empty_array(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Person": [
+                {"name": "name", "type": "string"},
+                {"name": "addr", "type": "address"},
+            ],
+            "Message": [
+                {"name": "title", "type": "string"},
+                {"name": "to", "type": "Person[]"},
+            ],
+            "Root": [
+                {"name": "text", "type": "string"},
+                {"name": "subtext", "type": "string[]"},
+                {"name": "msg_list1", "type": "Message[]"},
+                {"name": "msg_list2", "type": "Message[]"},
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 728126428,
+        },
+        "message": {
+            "text": "This is a test",
+            "subtext": [],
+            "msg_list1": [
+                {
+                    "title": "This is a test",
+                    "to": [],
+                }
+            ],
+            "msg_list2": [],
+        }
+    }
+    filters = {
+        "name": "Empty array filtering",
+        "fields": {
+            "text": {
+                "type": "raw",
+                "name": "Text",
+            },
+            "subtext.[]": {
+                "type": "raw",
+                "name": "Sub-Text",
+            },
+            "msg_list1.[].to.[].addr": {
+                "type": "raw",
+                "name": "(1) Recipient addr",
+            },
+            "msg_list2.[].to.[].addr": {
+                "type": "raw",
+                "name": "(2) Recipient addr",
+            },
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_advanced_missing_token(
+        scenario_navigator: NavigateWithScenario,
+        test_name: str, tokens: list[dict]):
+    test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
+
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "token_from", "type": "address"},
+                {"name": "value_from", "type": "uint256"},
+                {"name": "token_to", "type": "address"},
+                {"name": "value_to", "type": "uint256"},
+            ]
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 728126428,
+        },
+        "message": {
+            "token_from": "0x1111111111111111111111111111111111111111",
+            "value_from": web3.Web3.to_wei(3.65, "ether"),
+            "token_to": "0x2222222222222222222222222222222222222222",
+            "value_to": web3.Web3.to_wei(15.47, "ether"),
+        }
+    }
+    filters = {
+        "name": "Token not in CAL test",
+        "tokens": tokens,
+        "fields": {
+            "token_from": {
+                "type": "amount_join_token",
+                "token": 0,
+            },
+            "value_from": {
+                "type": "amount_join_value",
+                "name": "From",
+                "token": 0,
+            },
+            "token_to": {
+                "type": "amount_join_token",
+                "token": 1,
+            },
+            "value_to": {
+                "type": "amount_join_value",
+                "name": "To",
+                "token": 1,
+            },
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_advanced_trusted_name(
+        scenario_navigator: NavigateWithScenario,
+        test_name: str, trusted_name: tuple,
+        filt_tn_types: list[TrustedNameType]):
+    test_name += f"_{trusted_name[0].name.lower()}_with"
+    for trusted_name_type in filt_tn_types:
+        test_name += f"_{trusted_name_type.name.lower()}"
+
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "validator", "type": "address"},
+                {"name": "enable", "type": "bool"},
+            ]
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "test",
+            "version": "1",
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "chainId": 728126428,
+        },
+        "message": {
+            "validator": "0x1111111111111111111111111111111111111111",
+            "enable": True,
+        }
+    }
+    filters = {
+        "name": "Trusted name test",
+        "fields": {
+            "validator": {
+                "type": "trusted_name",
+                "name": "Validator",
+                "tn_type": filt_tn_types,
+                "tn_source": [TrustedNameSource.CAL, TrustedNameSource.ENS],
+            },
+            "enable": {
+                "type": "raw",
+                "name": "State",
+            },
+        }
+    }
+
+    cmd_builder = CommandBuilder()
+    if trusted_name[0] is TrustedNameType.ACCOUNT:
+        challenge = ResponseParser.challenge(
+            client.exchange_raw(cmd_builder.get_challenge()).data)
+    else:
+        challenge = None
+
+    client.provide_trusted_name(
+        TrustedName(
+            2,
+            bytes.fromhex(data["message"]["validator"][2:]),
+            trusted_name[2],
+            tn_type=trusted_name[0],
+            tn_source=trusted_name[1],
+            chain_id=data["domain"]["chainId"],
+            challenge=challenge))
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def _tip712_calldata_common(
+                            scenario_navigator: NavigateWithScenario,
+                            test_name: str,
+                            filename: str,
+                            handler: Optional[Callable] = None):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = {
+        "name": "Calldata test",
+        "calldatas": [
+            {
+                "index": 0,
+                "handler": handler,
+                "value_flag": True,
+                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                "chain_id_flag": False,
+                "selector_flag": False,
+                "amount_flag": True,
+                "spender_flag": EIP712CalldataParamPresence.NONE,
+            },
+        ],
+        "fields": {
+            "to": {
+                "type": "calldata_callee",
+                "index": 0,
+            },
+            "value": {
+                "type": "calldata_amount",
+                "index": 0,
+            },
+            "data": {
+                "type": "calldata_value",
+                "index": 0,
+            },
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_calldata(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    _tip712_calldata_common(scenario_navigator, test_name, "safe",
+                                 gcs_handler)
+
+
+def test_tip712_calldata_trctoken(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    # Nested-calldata TIP-712 whose embedded calldata is a real
+    # transferToken(address,uint256,trcToken); the trcToken word is rendered via
+    # TypeFamily.TRC_TOKEN, exercising the same TF_TRC_TOKEN path as test_gcs_trctoken.
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    # Swap the embedded transfer() calldata for transferToken(address,uint256,trcToken).
+    to20 = bytes.fromhex(data["message"]["to"][2:])
+    selector = web3.Web3.keccak(text="transferToken(address,uint256,trcToken)")[:4]
+    data["message"]["data"] = "0x" + (
+        selector + bytes(12) + to20
+        + (1000000).to_bytes(32, "big")   # word 1: uint256 tokenValue
+        + (1002000).to_bytes(32, "big")   # word 2: trcToken tokenId
+    ).hex()
+
+    filters = {
+        "name": "Calldata test",
+        "calldatas": [
+            {
+                "index": 0,
+                "handler": gcs_handler_trctoken,
+                "value_flag": True,
+                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                "chain_id_flag": False,
+                "selector_flag": False,
+                "amount_flag": True,
+                "spender_flag": EIP712CalldataParamPresence.NONE,
+            },
+        ],
+        "fields": {
+            "to": {"type": "calldata_callee", "index": 0},
+            "value": {"type": "calldata_amount", "index": 0},
+            "data": {"type": "calldata_value", "index": 0},
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_calldata_empty_send(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    filename = "safe_empty"
+
+    with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+        json_data = json.load(file)
+
+    client.provide_trusted_name(
+        TrustedName(2,
+                    bytes.fromhex(json_data["message"]["to"][2:]),
+                    "MAB_addr",
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                    chain_id=json_data["domain"]["chainId"],
+                    challenge=_get_challenge(client),
+                    owner=bytes.fromhex(client.getAccount(0)["addressHex"])[1:],
+                    owner_deriv_path=client.getAccount(0)["path"]))
+    _tip712_calldata_common(scenario_navigator, test_name, filename)
+
+
+def test_tip712_calldata_no_param(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    _tip712_calldata_common(scenario_navigator, test_name,
+                                 "safe_calldata_no_param",
+                                 gcs_handler_no_param)
+
+
+def test_tip712_batch(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = {
+        "name": "Calldata test",
+        "calldatas": [
+            {
+                "index": 0,
+                "handler": gcs_handler_batch,
+                "value_flag": True,
+                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                "chain_id_flag": False,
+                "selector_flag": False,
+                "amount_flag": True,
+                "spender_flag": EIP712CalldataParamPresence.NONE,
+            },
+        ],
+        "fields": {
+            "to": {
+                "type": "calldata_callee",
+                "index": 0,
+            },
+            "value": {
+                "type": "calldata_amount",
+                "index": 0,
+            },
+            "data": {
+                "type": "calldata_value",
+                "index": 0,
+            },
+            "operation": {
+                "type": "raw",
+                "name": "Operation type",
+            },
+            "baseGas": {
+                "type": "raw",
+                "name": "Gas amount",
+            },
+            "gasPrice": {
+                "type": "raw",
+                "name": "Gas price",
+            },
+            "gasToken": {
+                "type": "raw",
+                "name": "Gas token",
+            },
+            "refundReceiver": {
+                "type": "trusted_name",
+                "name": "Gas receiver",
+                "tn_type": [TrustedNameType.ACCOUNT, TrustedNameType.CONTRACT,
+                            TrustedNameType.TOKEN],
+                "tn_source": [TrustedNameSource.CAL, TrustedNameSource.ENS,
+                              TrustedNameSource.UD, TrustedNameSource.FN],
+            },
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_proxy(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    # Filtered TIP-712 where the descriptor targets a different address than the
+    # domain's verifyingContract, resolved via provide_proxy_info. Mirrors
+    # app-ethereum's test_eip712_proxy.
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    input_file = Path(input_files()[0])
+    test_path = f"{input_file.parent}/{'-'.join(input_file.stem.split('-')[:-1])}"
+    with open(input_file, encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{test_path}-filter.json", encoding="utf-8") as file:
+        filters = json.load(file)
+    # Change its name & set a different address than the one in verifyingContract.
+    filters["name"] = "Proxy test"
+    filters["address"] = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+    cmd_builder = CommandBuilder()
+    proxy_info = ProxyInfo(
+        _get_challenge(client),
+        bytes.fromhex(data["domain"]["verifyingContract"][2:]),
+        int(data["domain"]["chainId"]),
+        bytes.fromhex(filters["address"][2:]),
+    )
+    client.provide_proxy_info(proxy_info.serialize())
+
+    vrs = tip712_new_common(scenario_navigator, client, data, filters,
+                            snapshots_dirname=test_name)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_gondi(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    """Basic blind (unfiltered) TIP-712 signature over a nested struct/array
+    payload. Mirrors app-ethereum's test_eip712_gondi."""
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    # Blind signing for the unfiltered payload.
+    toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
+
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "child", "type": "Inner[]"},
+            ],
+            "Inner": [
+                {"name": "child", "type": "Leaf"},
+            ],
+            "Leaf": [
+                {"name": "value", "type": "uint256"},
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "name": "DOMAIN",
+            "version": "3.1",
+            "chainId": 31337,
+            "verifyingContract": "0x95401dc811bb5740090279ba06cfa8fcf6113778",
+        },
+        "message": {
+            "child": [
+                {
+                    "child": {
+                        "value": 2,
+                    },
+                }
+            ],
+        }
+    }
+
+    vrs = tip712_new_common(scenario_navigator, client, data, None,
+                            snapshots_dirname=test_name,
+                            nb_warnings=1)
+
+    addr = recover_message(data, vrs)
+    assert addr == get_wallet_addr(client)
+
+
+def test_tip712_bs_not_activated_error(
+        scenario_navigator: NavigateWithScenario):
+    # Blind signing is disabled by default, so an unfiltered payload must be
+    # rejected. Mirrors app-ethereum's test_eip712_bs_not_activated_error.
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        tip712_new_common(scenario_navigator, client,
+                          ADVANCED_DATA_SETS[0].data, None,
+                          nb_warnings=1)
+    assert exc_info.value.status == InputData.StatusWord.INVALID_DATA
+
+
+def test_tip712_skip():
+    pytest.skip("Skip action is not exposed by scenario_navigator")

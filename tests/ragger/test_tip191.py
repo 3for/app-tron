@@ -75,8 +75,7 @@ def test_personal_sign_opensea(scenario_navigator: NavigateWithScenario,
     common(scenario_navigator, test_name, msg)
 
 
-def test_personal_sign_reject(scenario_navigator: NavigateWithScenario,
-                              test_name: str):
+def test_personal_sign_reject(scenario_navigator: NavigateWithScenario):
 
     backend = scenario_navigator.backend
     navigator = scenario_navigator.navigator

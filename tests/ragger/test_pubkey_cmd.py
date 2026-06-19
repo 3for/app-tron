@@ -21,7 +21,7 @@ def check_get_public_key_resp(backend, path, public_key, chaincode):
 
 class Test_GET_PUBLIC_KEY():
 
-    def test_get_public_key_non_confirm(self, backend, device, navigator):
+    def test_get_public_key_non_confirm(self, backend):
         client = TronClient(backend)
 
         with client.get_public_addr(display=False,
@@ -73,8 +73,7 @@ class Test_GET_PUBLIC_KEY():
         assert chaincode_2 is None
 
     # In this test we check that the GET_PUBLIC_KEY in confirmation mode replies an error if the user refuses
-    def test_get_public_key_confirm_refused(self, scenario_navigator,
-                                            test_name):
+    def test_get_public_key_confirm_refused(self, scenario_navigator):
         backend = scenario_navigator.backend
         client = TronClient(backend)
 
