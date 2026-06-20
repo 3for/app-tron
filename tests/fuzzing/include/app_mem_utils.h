@@ -29,7 +29,7 @@ static inline void *mem_utils_alloc(size_t size, bool permanent, const char *fil
 }
 
 static inline bool mem_utils_calloc(void **buffer,
-                                    uint16_t size,
+                                    size_t size,
                                     bool permanent,
                                     const char *file,
                                     int line) {
