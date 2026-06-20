@@ -41,16 +41,10 @@ S_SIGN_BY_HASH = 3
 S_VERBOSE_TIP712 = 4
 
 DEFAULT_BIP32_PATH = "44'/195'/0'/0/0"
-APP_STATE_IDLE = 0
-SIMPLE_MAIL_DOMAIN_HASH = bytes.fromhex(
-    "6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59")
-SIMPLE_MAIL_MESSAGE_HASH = bytes.fromhex(
-    "eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8")
 
 ROOT = Path(__file__).resolve().parent
 TIP712_INPUTS = ROOT.parent / "ragger" / "tip712_input_files"
 OUT_DIR = ROOT / "corpus" / "fuzz_tip712"
-OUT_LEGACY_DIR = ROOT / "corpus" / "fuzz_tip712_legacy"
 
 
 def emit_command(op: int, p1: int, p2: int, payload: bytes = b"") -> bytes:
@@ -856,27 +850,6 @@ def write_seed(name: str, payload: bytes) -> None:
     (OUT_DIR / name).write_bytes(payload)
 
 
-def write_legacy_seed(name: str, payload: bytes) -> None:
-    OUT_LEGACY_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_LEGACY_DIR / name).write_bytes(payload)
-
-
-def build_legacy_stream(settings: int,
-                        initial_app_state: int,
-                        bip32_path: str,
-                        domain_hash: bytes,
-                        message_hash: bytes,
-                        p1: int = 0x00,
-                        p2: int = 0x00) -> bytes:
-    payload = bytearray()
-    payload += pack_derivation_path(bip32_path)
-    payload += domain_hash
-    payload += message_hash
-    return bytes([
-        settings & 0xFF, initial_app_state & 0xFF, p1 & 0xFF, p2 & 0xFF
-    ]) + payload
-
-
 def main() -> None:
     write_seed(
         "00-simple-mail-sign-by-hash.bin",
@@ -920,14 +893,6 @@ def main() -> None:
         "12-trusted-name-fallback.bin",
         build_stream(TRUSTED_NAME_FALLBACK["data"],
                      TRUSTED_NAME_FALLBACK["filters"]))
-
-    write_legacy_seed(
-        "00-simple-mail-sign-by-hash.bin",
-        build_legacy_stream(settings=(1 << S_SIGN_BY_HASH),
-                            initial_app_state=APP_STATE_IDLE,
-                            bip32_path=DEFAULT_BIP32_PATH,
-                            domain_hash=SIMPLE_MAIL_DOMAIN_HASH,
-                            message_hash=SIMPLE_MAIL_MESSAGE_HASH))
 
 
 if __name__ == "__main__":

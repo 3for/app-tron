@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include "buffer.h"
 
 typedef uint32_t TLV_tag_t;
@@ -19,6 +20,83 @@ typedef struct {
     buffer_t value;
     buffer_t raw;
 } tlv_data_t;
+
+// TLV value accessors. In the firmware these live in the SDK TLV library; the
+// standalone fuzz build implements them over the value buffer. Integers are
+// big-endian with a variable length up to the type width (matching the SDK).
+static inline bool fuzz_tlv_get_uint(const tlv_data_t *data, uint64_t *out, size_t maxbytes) {
+    if ((data == NULL) || (out == NULL) || (data->value.ptr == NULL)) {
+        return false;
+    }
+    if ((data->value.size == 0U) || (data->value.size > maxbytes)) {
+        return false;
+    }
+    uint64_t value = 0U;
+    for (size_t i = 0U; i < data->value.size; i++) {
+        value = (value << 8U) | data->value.ptr[i];
+    }
+    *out = value;
+    return true;
+}
+
+static inline bool get_uint8_t_from_tlv_data(const tlv_data_t *data, uint8_t *out) {
+    uint64_t v;
+    if (!fuzz_tlv_get_uint(data, &v, sizeof(uint8_t))) return false;
+    *out = (uint8_t) v;
+    return true;
+}
+
+static inline bool get_uint16_t_from_tlv_data(const tlv_data_t *data, uint16_t *out) {
+    uint64_t v;
+    if (!fuzz_tlv_get_uint(data, &v, sizeof(uint16_t))) return false;
+    *out = (uint16_t) v;
+    return true;
+}
+
+static inline bool get_uint32_t_from_tlv_data(const tlv_data_t *data, uint32_t *out) {
+    uint64_t v;
+    if (!fuzz_tlv_get_uint(data, &v, sizeof(uint32_t))) return false;
+    *out = (uint32_t) v;
+    return true;
+}
+
+static inline bool get_uint64_t_from_tlv_data(const tlv_data_t *data, uint64_t *out) {
+    return fuzz_tlv_get_uint(data, out, sizeof(uint64_t));
+}
+
+// Returns a view (ptr+size) onto the TLV value, after bounds-checking its length.
+static inline bool get_buffer_from_tlv_data(const tlv_data_t *data,
+                                            buffer_t *out,
+                                            uint16_t min_size,
+                                            uint16_t max_size) {
+    if ((data == NULL) || (out == NULL) || (data->value.ptr == NULL)) {
+        return false;
+    }
+    if ((data->value.size < min_size) || (data->value.size > max_size)) {
+        return false;
+    }
+    out->ptr = data->value.ptr;
+    out->size = data->value.size;
+    out->offset = 0U;
+    return true;
+}
+
+// Copies the TLV value as a NUL-terminated string. max_size is the output
+// capacity including the terminator (matching the SDK contract).
+static inline bool get_string_from_tlv_data(const tlv_data_t *data,
+                                            char *out,
+                                            uint16_t min_size,
+                                            uint16_t max_size) {
+    if ((data == NULL) || (out == NULL) || (data->value.ptr == NULL) || (max_size == 0U)) {
+        return false;
+    }
+    if ((data->value.size < min_size) || (data->value.size >= max_size)) {
+        return false;
+    }
+    memcpy(out, data->value.ptr, data->value.size);
+    out[data->value.size] = '\0';
+    return true;
+}
 
 typedef bool(tlv_handler_cb_t)(const tlv_data_t *data, void *tlv_extracted);
 

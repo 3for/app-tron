@@ -3,8 +3,32 @@
 #include <stddef.h>
 #include <string.h>
 
+// Several GCS headers (e.g. gtp_field.h) reference TLV_reception_t without
+// including the TLV header directly; in the firmware build it arrives
+// transitively. Force-include the lightweight TLV mock so it is always visible.
+#include "tlv_library.h"
+
 #ifndef PRINTF
 #define PRINTF(...) ((void) 0)
+#endif
+
+// SDK helpers normally provided by os_helpers.h / ledger_assert.h. A failed
+// LEDGER_ASSERT is a fatal invariant violation in firmware, so trap on it here
+// to let the fuzzer surface inputs that break those invariants.
+#ifndef ARRAYLEN
+#define ARRAYLEN(array) (sizeof(array) / sizeof((array)[0]))
+#endif
+// IO flag set by signing handlers to defer the APDU reply (value matches the SDK).
+#ifndef IO_ASYNCH_REPLY
+#define IO_ASYNCH_REPLY (1 << 8)
+#endif
+#ifndef LEDGER_ASSERT
+#define LEDGER_ASSERT(test, ...) \
+    do {                         \
+        if (!(test)) {           \
+            __builtin_trap();    \
+        }                        \
+    } while (0)
 #endif
 
 static inline void fuzz_explicit_bzero(void *buf, size_t len) {

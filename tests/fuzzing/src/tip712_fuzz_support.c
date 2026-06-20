@@ -16,6 +16,7 @@
 #include "ui_idle_menu.h"
 #include "ui_globals.h"
 #include "ui_review_menu.h"
+#include "common_712.h"  // e_tip712_filtering_mode, ui_712_start prototype
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -147,7 +148,10 @@ int io_send_sw(uint16_t sw) {
 
 void ui_idle(void) {}
 
-void ui_712_start(void) {}
+uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
+    (void) filtering;
+    return SWO_SUCCESS;
+}
 
 void ui_712_switch_to_message(void) {}
 
@@ -156,6 +160,46 @@ void ui_712_start_unfiltered(void) {}
 void ui_712_switch_to_sign(void) {}
 
 void ui_error_blind_signing(void) {}
+
+// NBGL review entry points are stubbed: the host fuzz build exercises parsing
+// and state-machine logic, not the device UI. Approvals report success so the
+// signing path proceeds.
+uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
+    (void) filtering;
+    return SWO_SUCCESS;
+}
+
+bool ui_712_approve_cb(bool display_menu) {
+    (void) display_menu;
+    return true;
+}
+
+bool ui_712_reject_cb(bool display_menu) {
+    (void) display_menu;
+    return true;
+}
+
+bool ui_gcs(void) {
+    return true;
+}
+
+void ui_gcs_cleanup(void) {}
+
+// Challenge helpers (the real cmd_get_challenge.c pulls in device I/O, so the
+// host build stubs just the value logic the GCS/proxy paths use).
+static uint32_t g_fuzz_challenge = 0;
+
+void roll_challenge(void) {
+    g_fuzz_challenge += 1;
+}
+
+uint32_t get_challenge(void) {
+    return g_fuzz_challenge;
+}
+
+bool check_challenge(uint32_t received_challenge) {
+    return received_challenge == g_fuzz_challenge;
+}
 
 void ux_flow_display(ui_approval_state_t state, bool warning) {
     (void) state;
@@ -202,15 +246,13 @@ extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
 
 void validate_current_asset_info(void) {}
 
-int check_signature_with_pubkey(const char *tag,
-                                uint8_t *buffer,
-                                const uint8_t bufLen,
-                                const uint8_t *PubKey,
-                                const uint8_t keyLen,
-                                const uint8_t keyUsageExp,
-                                uint8_t *signature,
-                                const uint8_t sigLen) {
-    (void) tag;
+bool check_signature_with_pubkey(uint8_t *buffer,
+                                 const uint8_t bufLen,
+                                 const uint8_t *PubKey,
+                                 const uint8_t keyLen,
+                                 const uint8_t keyUsageExp,
+                                 const uint8_t *signature,
+                                 const uint8_t sigLen) {
     (void) buffer;
     (void) bufLen;
     (void) PubKey;
@@ -218,7 +260,7 @@ int check_signature_with_pubkey(const char *tag,
     (void) keyUsageExp;
     (void) signature;
     (void) sigLen;
-    return g_fuzz_signature_valid ? CX_OK : CX_INTERNAL_ERROR;
+    return g_fuzz_signature_valid;
 }
 
 const s_trusted_name *get_trusted_name(uint8_t type_count,
@@ -254,92 +296,6 @@ bool has_trusted_name(void) {
     return g_fuzz_trusted_name.name[0] != '\0';
 }
 
-int array_bytes_string(char *out, size_t outl, const void *value, size_t len) {
-    const uint8_t *bytes = (const uint8_t *) value;
-    static const char hex[] = "0123456789abcdef";
-
-    if (outl < (len * 2U + 3U)) {
-        if (outl > 0U) {
-            out[0] = '\0';
-        }
-        return -1;
-    }
-
-    out[0] = '0';
-    out[1] = 'x';
-    for (size_t i = 0; i < len; i++) {
-        out[2U + 2U * i] = hex[(bytes[i] >> 4) & 0x0FU];
-        out[2U + 2U * i + 1U] = hex[bytes[i] & 0x0FU];
-    }
-    out[2U + len * 2U] = '\0';
-    return 0;
-}
-
-bool amountToString(const uint8_t *amount,
-                    uint8_t amount_len,
-                    uint8_t decimals,
-                    const char *ticker,
-                    char *out_buffer,
-                    size_t out_buffer_size) {
-    (void) decimals;
-    if ((out_buffer == NULL) || (out_buffer_size == 0U)) {
-        return false;
-    }
-
-    if (array_bytes_string(out_buffer, out_buffer_size, amount, amount_len) < 0) {
-        return false;
-    }
-
-    if ((ticker != NULL) && (ticker[0] != '\0')) {
-        const size_t used = strnlen(out_buffer, out_buffer_size);
-        const size_t left = (used < out_buffer_size) ? (out_buffer_size - used) : 0U;
-        if ((left < 2U) ||
-            !fuzz_support_append_string(out_buffer, out_buffer_size, " ", sizeof(" ") - 1U) ||
-            !fuzz_support_append_string(out_buffer, out_buffer_size, ticker, MAX_TICKER_LEN)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool getEthDisplayableAddress(const uint8_t *in, char *out, size_t out_len, uint64_t chainId) {
-    (void) chainId;
-    return array_bytes_string(out, out_len, in, ADDRESS_LENGTH) == 0;
-}
-
-bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
-    if ((ethAddress == NULL) || (out58 == NULL) || (out58_len < 2U)) {
-        return false;
-    }
-    out58[0] = '\0';
-    return fuzz_support_append_string(out58, out58_len, "T", sizeof("T") - 1U) &&
-           fuzz_support_append_string(out58, out58_len, ethAddress, 42U);
-}
-
-uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
-    uint64_t value = 0;
-    for (uint8_t i = 0; (i < size) && (i < sizeof(value)); i++) {
-        value = (value << 8) | in[i];
-    }
-    return value;
-}
-
-int allzeroes(const void *buf, size_t n) {
-    const uint8_t *bytes = (const uint8_t *) buf;
-    for (size_t i = 0; i < n; i++) {
-        if (bytes[i] != 0U) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-int ismaxint(const uint8_t *buf, int n) {
-    for (int i = 0; i < n; i++) {
-        if (buf[i] != 0xFFU) {
-            return 0;
-        }
-    }
-    return 1;
-}
+// NOTE: array_bytes_string, amountToString, getEthDisplayableAddress,
+// ethToTronBase58, u64_from_BE, allzeroes and ismaxint are provided by the real
+// src/tron-sdk/common_utils.c, which is compiled into this fuzzer.

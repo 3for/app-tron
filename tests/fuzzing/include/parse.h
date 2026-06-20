@@ -6,61 +6,20 @@
 
 #include "asset_info.h"
 #include "bip32_utils.h"
+#include "chain_config.h"  // chain_config_t (real app header, lightweight)
 #include "common_utils.h"
 #include "tx_content.h"
+// The application contexts (tmpCtx_t, txContext_t, strings_t, app_state_t,
+// chainConfig, ...) are defined in the real shared_context.h, which is fully
+// standalone-includable against these mocks. Deferring to it keeps a single
+// definition source so the GCS sources (which pull the real apdu_constants.h ->
+// shared_context.h) never clash with this header.
+#include "shared_context.h"
 
-#define MAX_BIP32_PATH 10
-#define HASH_SIZE 32
 #define ADDRESS_SIZE TRON_ADDRESS_SIZE
-#define BASE58CHECK_ADDRESS_SIZE 34
-#define MAX_RAW_SIGNATURE 65
-#define SUN_DIG 6
-#define SHARED_CTX_FIELD_1_SIZE 256
-#define SHARED_CTX_FIELD_2_SIZE 40
-#define MAX_ASSETS 5
+#define SUN_DIG      6
 
-typedef struct {
-    uint8_t pathLength;
-    uint32_t bip32Path[MAX_BIP32_PATH];
-    uint8_t domainHash[HASH_SIZE];
-    uint8_t messageHash[HASH_SIZE];
-} messageSigningContext712_t;
-
-typedef struct {
-    bip32_path_t bip32_path;
-    uint8_t hash[HASH_SIZE];
-    uint8_t signature[MAX_RAW_SIGNATURE];
-    uint8_t signatureLength;
-    extraInfo_t extraInfo[MAX_ASSETS];
-    bool assetSet[MAX_ASSETS];
-    uint8_t currentAssetIndex;
-} transactionContext_t;
-
-typedef union {
-    transactionContext_t transactionContext;
-    messageSigningContext712_t messageSigningContext712;
-} tmpCtx_t;
-
-typedef struct {
-    cx_sha256_t sha2;
-    bool initialized;
-} txContext_t;
-
-typedef enum {
-    APP_STATE_IDLE,
-    APP_STATE_SIGNING_MESSAGE,
-    APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
-    APP_STATE_SIGNING,
-    APP_STATE_SIGNING_TIP712,
-} app_state_t;
-
-extern tmpCtx_t tmpCtx;
-extern txContent_t txContent;
-extern txContext_t txContext;
-extern uint8_t appState;
-extern uint16_t apdu_response_code;
-extern const chain_config_t *chainConfig;
-
+// App-side asset/token/amount helpers (declared in the firmware's parse.h).
 void forget_known_assets(void);
 extraInfo_t *get_current_asset_info(void);
 int get_asset_index_by_addr(const uint8_t *addr);

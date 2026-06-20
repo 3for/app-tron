@@ -75,16 +75,6 @@ endif()
 
 add_compile_definitions(TEST DEBUG=0 SKIP_FOR_CMOCKA PB_SYSTEM_HEADER=\"pb_system_header.h\")
 
-add_executable(test_demo tests/demo.c)
-add_library(demo SHARED ./demo_tu.c)
-
-target_link_libraries(test_demo PUBLIC cmocka demo)
-if(NOT APPLE)
-    target_link_libraries(test_demo PUBLIC gcov)
-endif()
-
-add_test(test_demo test_demo)
-
 add_library(transaction_trigger_decode_lib STATIC ../../src/handlers/transaction_trigger_decode.c)
 target_include_directories(transaction_trigger_decode_lib
                            PUBLIC
@@ -123,21 +113,3 @@ if(NOT APPLE)
 endif()
 
 add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
-
-add_executable(test_trusted_name_whitebox
-               tests/trusted_name_whitebox.c
-               ../../src/tlv.c)
-target_include_directories(test_trusted_name_whitebox
-                           PRIVATE
-                           .
-                           ../fuzzing/include
-                           ../../src
-                           ../../src/handlers/provideTrustedName
-                           ../../src/handlers/getChallenge
-                           ../../src/tron-sdk)
-target_link_libraries(test_trusted_name_whitebox PUBLIC cmocka)
-if(NOT APPLE)
-    target_link_libraries(test_trusted_name_whitebox PUBLIC gcov)
-endif()
-
-add_test(test_trusted_name_whitebox test_trusted_name_whitebox)

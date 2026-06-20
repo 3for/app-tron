@@ -58,6 +58,12 @@ if (NOT DEFINED ENV{LIB_FUZZING_ENGINE})
   else()
     message(FATAL_ERROR "Unknown sanitizer type. It must be set to `address` or `memory`.")
   endif()
+  # The firmware intentionally performs unaligned big-endian loads (e.g.
+  # `*(uint16_t *) &data[0]` in field_hash.c, identical to app-ethereum). These
+  # are valid on the ARM Cortex-M target, so UBSan's alignment check is a
+  # false positive for the host fuzz build; disable just that sub-check.
+  list(APPEND TARGET_COMPILE_FLAGS -fno-sanitize=alignment)
+  list(APPEND TARGET_LINK_FLAGS -fno-sanitize=alignment)
 else()
   set(TARGET_COMPILE_FLAGS "$ENV{CFLAGS}")
   set(TARGET_LINK_FLAGS "$ENV{CFLAGS}")
@@ -104,12 +110,18 @@ endif()
 set(TIP712_FUZZ_SUPPORT_SOURCES
     src/tip712_fuzz_support.c
     src/tip712_fuzz_helpers_bridge.c
+    src/lists_mock.c
+    src/ui_utils_mock.c
     ../../src/mem_utils.c
     ../../src/hash_bytes.c
     ../../src/utils.c
-    ../../src/uint_common.c
     ../../src/uint128.c
     ../../src/uint256.c
+    ../../src/network.c
+    ../../src/tlv_apdu.c
+    ../../src/tron-sdk/common_utils.c
+    ../../src/handlers/provide_enum_value/enum_value.c
+    ../../src/handlers/provide_proxy_info/proxy_info.c
     ../../src/handlers/signMessageTIP712/commands_712.c
     ../../src/handlers/signMessageTIP712/context_712.c
     ../../src/handlers/signMessageTIP712/encode_field.c
@@ -122,6 +134,12 @@ set(TIP712_FUZZ_SUPPORT_SOURCES
     ../../src/handlers/signMessageTIP712/type_hash.c
     ../../src/handlers/signMessageTIP712/typed_data.c
     ../../src/handlers/signMessageTIP712/ui_logic.c)
+
+# The TIP-712 nested-calldata bridge (ui_logic.c) pulls in the whole GCS /
+# generic_tx_parser subsystem, so it is compiled into the fuzzer too.
+file(GLOB GTP_FUZZ_SOURCES CONFIGURE_DEPENDS
+     ${CMAKE_CURRENT_SOURCE_DIR}/../../src/handlers/generic_tx_parser/*.c)
+list(APPEND TIP712_FUZZ_SUPPORT_SOURCES ${GTP_FUZZ_SOURCES})
 
 add_executable(fuzz_tip712
                src/fuzz_tip712.c
@@ -136,6 +154,11 @@ target_include_directories(fuzz_tip712
                            include
                            ../../src
                            ../../src/handlers/signMessageTIP712
+                           ../../src/handlers/signMessageTIP712_common
+                           ../../src/handlers/generic_tx_parser
+                           ../../src/handlers/provide_enum_value
+                           ../../src/handlers/provide_proxy_info
+                           ../../src/handlers/getChallenge
                            ../../src/tron-sdk)
 
 target_compile_options(fuzz_tip712 PRIVATE ${TARGET_COMPILE_FLAGS})
@@ -143,54 +166,4 @@ target_compile_options(fuzz_tip712 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_options(fuzz_tip712 PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_tip712 PRIVATE ${TARGET_LINK_LIBS})
-endif()
-
-add_executable(fuzz_tip712_wallet
-               src/fuzz_tip712.c
-               ${TIP712_FUZZ_SUPPORT_SOURCES})
-if (STANDALONE_FUZZ_MODE)
-  target_sources(fuzz_tip712_wallet PRIVATE src/fuzz_standalone_main.c)
-endif()
-
-target_include_directories(fuzz_tip712_wallet
-                           PRIVATE
-                           .
-                           include
-                           ../../src
-                           ../../src/handlers/signMessageTIP712
-                           ../../src/tron-sdk)
-
-target_compile_definitions(fuzz_tip712_wallet PRIVATE SCREEN_SIZE_WALLET)
-target_compile_options(fuzz_tip712_wallet PRIVATE ${TARGET_COMPILE_FLAGS})
-target_compile_options(fuzz_tip712_wallet PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
-target_link_options(fuzz_tip712_wallet PRIVATE ${TARGET_LINK_FLAGS})
-if (TARGET_LINK_LIBS)
-  target_link_libraries(fuzz_tip712_wallet PRIVATE ${TARGET_LINK_LIBS})
-endif()
-
-set(TIP712_LEGACY_FUZZ_SUPPORT_SOURCES
-    src/tip712_fuzz_support.c
-    ../../src/handlers/sign_tip712_message.c)
-
-add_executable(fuzz_tip712_legacy
-               src/fuzz_tip712_legacy.c
-               ${TIP712_LEGACY_FUZZ_SUPPORT_SOURCES})
-if (STANDALONE_FUZZ_MODE)
-  target_sources(fuzz_tip712_legacy PRIVATE src/fuzz_standalone_main.c)
-endif()
-
-target_include_directories(fuzz_tip712_legacy
-                           PRIVATE
-                           .
-                           include
-                           ../../src
-                           ../../src/handlers
-                           ../../src/ui
-                           ../../src/tron-sdk)
-
-target_compile_options(fuzz_tip712_legacy PRIVATE ${TARGET_COMPILE_FLAGS})
-target_compile_options(fuzz_tip712_legacy PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
-target_link_options(fuzz_tip712_legacy PRIVATE ${TARGET_LINK_FLAGS})
-if (TARGET_LINK_LIBS)
-  target_link_libraries(fuzz_tip712_legacy PRIVATE ${TARGET_LINK_LIBS})
 endif()

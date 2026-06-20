@@ -1,6 +1,6 @@
 #pragma once
 
-#include "parse.h"
+#include "shared_context.h"  // parse.h contexts + strings_t / strings
 #include "cx.h"
 
 extern cx_sha3_t global_sha3;
@@ -12,7 +12,7 @@ extern char fullContract[MAX_TOKEN_LENGTH];
 extern char TRC20Action[9];
 extern uint8_t G_io_apdu_buffer[260];
 
-void ui_712_start(void);
+// ui_712_start is declared by the real common_712.h (uint16_t / filtering arg).
 void ui_712_switch_to_message(void);
 void ui_712_start_unfiltered(void);
 void ui_712_switch_to_sign(void);

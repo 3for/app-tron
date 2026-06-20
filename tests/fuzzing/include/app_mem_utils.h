@@ -39,11 +39,11 @@ static inline bool mem_utils_calloc(void **buffer,
     if (buffer == NULL) {
         return false;
     }
-    if (*buffer != NULL) {
-        free(*buffer);
-        *buffer = NULL;
-    }
+    // The real allocator does not free the previous *buffer value (callers clean
+    // up explicitly before calloc), and *buffer is frequently uninitialised at
+    // the call site, so freeing it here would crash. Just allocate.
     if (size == 0) {
+        *buffer = NULL;
         return true;
     }
     *buffer = calloc(1, size);

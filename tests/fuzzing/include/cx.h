@@ -16,6 +16,8 @@
 #define CX_KECCAK_256_SIZE 32
 
 typedef int cx_err_t;
+typedef int cx_curve_t;
+typedef int cx_md_t;
 
 typedef struct {
     uint8_t W[65];
@@ -60,6 +62,11 @@ static inline void cx_hash_seed(cx_hash_t *ctx, uint32_t seed, uint8_t out_len) 
 
 static inline cx_err_t cx_keccak_init_no_throw(cx_sha3_t *ctx, size_t bits) {
     cx_hash_seed(ctx, 0xC0DEC0DEU ^ (uint32_t) bits, (uint8_t) (bits / 8U));
+    return CX_OK;
+}
+
+static inline cx_err_t cx_sha3_init_no_throw(cx_sha3_t *ctx, size_t bits) {
+    cx_hash_seed(ctx, 0x53484133U ^ (uint32_t) bits, (uint8_t) (bits / 8U));
     return CX_OK;
 }
 
