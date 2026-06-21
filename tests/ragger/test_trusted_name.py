@@ -196,6 +196,15 @@ def test_trusted_name_v1_wrong_addr(
 def test_trusted_name_v1_non_mainnet(
                                      scenario_navigator: NavigateWithScenario,
                                      test_name: str):
+    """v1 (chain-agnostic) trusted name on a non-mainnet chainId.
+
+    Mirrors app-ethereum's test_trusted_name_v1_non_mainnet, but TRON is a
+    single-chain app: a TransferContract carries no per-tx chainId, so the firmware
+    always resolves trusted names against TRON mainnet (network.c get_tx_chain_id).
+    The `chainId` below is therefore informational only -- the v1 name still applies
+    (review shows "ledger.eth"), and there is no per-network "Network" row like
+    app-ethereum's "Goerli" one (TRON has no per-transfer network/gas display).
+    """
     backend = scenario_navigator.backend
     app_client = TronClient(backend)
     cmd_builder = CommandBuilder()
@@ -218,6 +227,16 @@ def test_trusted_name_v1_non_mainnet(
 
 def test_trusted_name_v1_unknown_chain(
         scenario_navigator: NavigateWithScenario, test_name: str):
+    """v1 (chain-agnostic) trusted name with an unknown chainId.
+
+    Mirrors app-ethereum's test_trusted_name_v1_unknown_chain. There, the unknown
+    chainId is not Ethereum-compatible so the v1 name is rejected and the raw address
+    is shown. On TRON this cannot happen: the firmware always resolves trusted names
+    against TRON mainnet (a single, Ethereum-compatible chain; see network.c
+    get_tx_chain_id / chain_is_ethereum_compatible), so the `chainId` below is ignored
+    and the v1 name still applies (review shows "ledger.eth"). Kept for parity with
+    app-ethereum's test matrix.
+    """
     backend = scenario_navigator.backend
     app_client = TronClient(backend)
     cmd_builder = CommandBuilder()
@@ -313,6 +332,15 @@ def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
 
 def test_trusted_name_v2_wrong_chainid(
         scenario_navigator: NavigateWithScenario, test_name: str):
+    """v2 (chain-bound) trusted name whose chain does not match the signing chain.
+
+    Mirrors app-ethereum's test_trusted_name_v2_wrong_chainid: a v2 name is only
+    applied when its chain_id matches the transaction's chain, otherwise the raw
+    address is shown. TRON always signs on mainnet (CHAIN_ID), and the firmware
+    matches the name's chain_id against it (trusted_name.c matching_trusted_name),
+    so binding the name to a *different* chain (CHAIN_ID + 1) is the TRON-equivalent
+    mismatch: the name is rejected and the review shows the raw recipient address.
+    """
     backend = scenario_navigator.backend
     app_client = TronClient(backend)
     cmd_builder = CommandBuilder()
@@ -321,7 +349,7 @@ def test_trusted_name_v2_wrong_chainid(
         TrustedName(2, ADDR, NAME,
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
-                    chain_id=CHAIN_ID,
+                    chain_id=CHAIN_ID + 1,
                     challenge=challenge))
     sign_trusted_name(
         scenario_navigator, app_client, {
@@ -330,7 +358,7 @@ def test_trusted_name_v2_wrong_chainid(
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,
-            "chainId": CHAIN_ID + 1,
+            "chainId": CHAIN_ID,
         }, test_name)
 
 
