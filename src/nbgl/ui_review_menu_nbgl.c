@@ -470,10 +470,17 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
             for (uint8_t i = 0; i < votes_count; i++) {
+#ifdef SCREEN_SIZE_WALLET
+                txInfos.fields[i + 1].item =
+                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_ADDRESS));
+                txInfos.fields[i + 1].value =
+                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
+#else
                 txInfos.fields[i + 1].item =
                     ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
                 txInfos.fields[i + 1].value =
                     ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_ADDRESS));
+#endif
             }
             txInfos.fields[votes_count + 1].item = "Total Vote Count";
             txInfos.fields[votes_count + 1].value = strings.common.fullContract;
