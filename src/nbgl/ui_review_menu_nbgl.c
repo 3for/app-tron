@@ -73,6 +73,12 @@ static nbgl_tx_infos_t txInfos;
 // underlying address behind the resolved name). Mirrors app-ethereum's
 // ui_approve_tx() trusted-name display.
 static nbgl_contentValueExt_t toTrustedNameExt;
+// Composed review/sign titles derived from the contract type (e.g. "Review
+// transaction to\nApprove Proposal"). Used by states that share one APPROVAL_* value
+// across several contract types. They must outlive prepareTxInfos() since the async
+// NBGL review keeps the pointers.
+static char actionReviewTitle[40];
+static char actionSignTitle[40];
 
 // Static functions declarations
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -213,6 +219,53 @@ static void rejectStatusDismissed(void) {
     io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, false);
 }
 
+// Verb-first action phrase for a contract type, so a review reads e.g. "Review
+// transaction to Approve Proposal" / "Inject Exchange" instead of a generic or
+// ambiguous label. Mirrors the verb-first title style used elsewhere ("Create
+// Witness", "Claim Rewards"). Covers the blind-hash-signed types routed to the
+// APPROVAL_SIMPLE_TRANSACTION catch-all and the exchange types whose APPROVAL_* value
+// is shared across several contract types. Returns NULL for types without a dedicated
+// phrase, in which case the review falls back to a plain "Review transaction".
+static const char *tx_review_action(contractType_e type) {
+    switch (type) {
+        case PROPOSALCREATECONTRACT:
+            return "Create Proposal";
+        case PROPOSALAPPROVECONTRACT:
+            return "Approve Proposal";
+        case PROPOSALDELETECONTRACT:
+            return "Delete Proposal";
+        case ACCOUNTCREATECONTRACT:
+            return "Create Account";
+        case ACCOUNTUPDATECONTRACT:
+            return "Update Account";
+        case EXCHANGECREATECONTRACT:
+            return "Create Exchange";
+        case EXCHANGEINJECTCONTRACT:
+            return "Inject Exchange";
+        case EXCHANGEWITHDRAWCONTRACT:
+            return "Withdraw Exchange";
+        case EXCHANGETRANSACTIONCONTRACT:
+            return "Exchange Swap";
+        default:
+            return NULL;
+    }
+}
+
+// Set txInfos.flowTitle / infoLongPress.text from the contract type's verb-first
+// action phrase (composed into static buffers), falling back to a plain title.
+static void set_action_title(contractType_e type) {
+    const char *action = tx_review_action(type);
+    if (action != NULL) {
+        snprintf(actionReviewTitle, sizeof(actionReviewTitle), "Review transaction to\n%s", action);
+        snprintf(actionSignTitle, sizeof(actionSignTitle), "Sign transaction to\n%s", action);
+        txInfos.flowTitle = actionReviewTitle;
+        infoLongPress.text = actionSignTitle;
+    } else {
+        txInfos.flowTitle = "Review transaction";
+        infoLongPress.text = "Sign transaction";
+    }
+}
+
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
@@ -318,6 +371,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = stringLabelHash;
             txInfos.fields[1].value = strings.common.fullHash;
+            // This catch-all state is shared by several blind-hash-signed contract
+            // types, so derive the title from the actual contract type rather than
+            // hardcoding one action.
+            set_action_title(txContent.contractType);
             pairList.nbPairs = 2;
             break;
         case APPROVAL_WITNESSCREATE_TRANSACTION:
@@ -362,8 +419,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[4].item = "Amount 2";
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
             pairList.nbPairs = 5;
-            txInfos.flowTitle = "Review transaction to\nExchange";
-            infoLongPress.text = "Sign transaction to\nExchange";
+            set_action_title(txContent.contractType);
             break;
         case APPROVAL_EXCHANGE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
@@ -380,6 +436,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[4].item = "Expected";
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
+            set_action_title(txContent.contractType);
             pairList.nbPairs = 5;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
@@ -397,7 +454,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].value = strings.common.fullContract;
             txInfos.fields[4].item = stringLabelTxAmount;
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer;
-            
+            // Shared by EXCHANGEINJECT/EXCHANGEWITHDRAW; the title now reflects the
+            // actual one ("Inject Exchange" / "Withdraw Exchange") instead of both.
+            set_action_title(txContent.contractType);
             pairList.nbPairs = 5;
             break;
         case APPROVAL_WITNESSVOTE_TRANSACTION:
