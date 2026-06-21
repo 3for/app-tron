@@ -255,8 +255,17 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     strcpy(strings.common.TRC20ActionSendAllow, "Allow");
                     strcpy(strings.common.TRC20Action, "Approve");
                 } else {
+                    // Custom contract = blind signing, gated by the "Custom contracts"
+                    // setting (NOT the separate "Blind signing"/Sign-by-Hash setting).
+                    // Surface a page naming the correct setting, then return the precise
+                    // TRON status word.
                     if (!N_storage.customContract) {
+                        ui_error_custom_contract();
+#ifdef SCREEN_SIZE_WALLET
+                        return APDU_NO_RESPONSE;
+#else
                         return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
+#endif
                     }
                     customContractField = 1;
 
@@ -321,7 +330,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
 #ifdef HAVE_SWAP
             // If we are in swap context, do not redisplay the message data
-            // Instead, ensure they are identical with what was previously displayed
+            // Instead, ensure they are identical with what was previously displayed.
+            // Swap consumes the amount and token name as separate strings, so this
+            // must run before the two are merged for display below.
             if (G_called_from_swap) {
                 if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
                                         strings.common.fullContract,               // Token name
@@ -333,12 +344,23 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     PRINTF("Refused signing incorrect Swap transaction\n");
                     finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
                 }
-            } else {
-                ux_flow_display(APPROVAL_TRANSFER, data_warning);
+                break;
             }
-#else   // HAVE_SWAP
-            ux_flow_display(APPROVAL_TRANSFER, data_warning);
 #endif  // HAVE_SWAP
+
+            // Merge the token ticker into the amount so the review shows a single
+            // "Amount" field ("<value> <ticker>"), mirroring app-ethereum's fullAmount
+            // pair rather than separate Amount + Token fields. TRC10 asset transfers
+            // are excluded: their token is an asset id/name (often numeric), so the UI
+            // keeps Amount and Token split to avoid an ambiguous "<number> <number>".
+            if ((txContent.contractType != TRANSFERASSETCONTRACT) &&
+                (strlen(strings.common.fullContract) > 0)) {
+                strlcat((char *) G_io_apdu_buffer, " ", sizeof(G_io_apdu_buffer));
+                strlcat((char *) G_io_apdu_buffer,
+                        strings.common.fullContract,
+                        sizeof(G_io_apdu_buffer));
+            }
+            ux_flow_display(APPROVAL_TRANSFER, data_warning);
 
             break;
         case EXCHANGECREATECONTRACT:

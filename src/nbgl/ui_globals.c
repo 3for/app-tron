@@ -127,8 +127,7 @@ unsigned int io_seproxyhal_touch_tx_ok(void) {
 }
 
 unsigned int io_seproxyhal_touch_tx_cancel(void) {
-    ui_callback_tx_cancel(false);
-    return 0;
+    return io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, false);
 }
 
 bool ui_callback_ecdh_ok(bool display_menu) {

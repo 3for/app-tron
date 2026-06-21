@@ -1,8 +1,11 @@
 from typing import Optional
+from pathlib import Path
 import pytest
 from web3 import Web3
+from ledgered.devices import DeviceType
 from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
+from ragger.navigator import Navigator, NavInsID, NavIns
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 import response_parser as ResponseParser
@@ -84,6 +87,72 @@ def test_trusted_name_v1(scenario_navigator: NavigateWithScenario,
             "value": AMOUNT,
             "chainId": CHAIN_ID
         }, test_name)
+
+
+def test_trusted_name_v1_verbose(navigator: Navigator,
+                                 scenario_navigator: NavigateWithScenario,
+                                 default_screenshot_path: Path,
+                                 test_name: str):
+    """Reveal the address behind the recipient trusted name (ENS alias) during review.
+
+    Mirrors app-ethereum's test_trusted_name_v1_verbose: provide a v1 trusted name,
+    then on the transaction review open the "To" field's ENS alias to show the
+    underlying address (part1 snapshots), and finally approve (part2). Relies on the
+    ENS alias affordance added to the transfer review (ui_review_menu_nbgl.c).
+
+    The navigation moves below are device/layout specific (TRON shows Amount / To /
+    From); they mirror app-ethereum and are validated/refreshed by the golden run.
+    """
+    backend = scenario_navigator.backend
+    device = backend.device
+    app_client = TronClient(backend)
+    cmd_builder = CommandBuilder()
+    challenge = common(app_client, cmd_builder)
+
+    app_client.provide_trusted_name(
+        TrustedName(1, ADDR, NAME, challenge=challenge,
+                    coin_type=COIN_TYPE_ETH))
+
+    tx_params = {
+        "nonce": NONCE,
+        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+        "gas": GAS_LIMIT,
+        "to": ADDR,
+        "value": AMOUNT,
+        "chainId": CHAIN_ID,
+    }
+
+    moves = []
+    if device.is_nano:
+        # Walk to the "To" field (intro -> From -> Amount -> To), open its alias to
+        # view the address, then step back. Matches app-ethereum's From/Amount/To
+        # layout (RIGHT_CLICK * 3 to reach the aliased "To" field).
+        moves += [NavInsID.RIGHT_CLICK] * 3
+        moves += [NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+    else:
+        # Swipe to the fields page, tap the alias ">" on the "To" row, then close it.
+        moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+        ENS_POSITIONS = {
+            DeviceType.FLEX: (428, 350),
+            DeviceType.STAX: (360, 324),
+            DeviceType.APEX_P: (272, 230),
+        }
+        moves += [NavIns(NavInsID.TOUCH, ENS_POSITIONS[device.type])]
+        moves += [NavInsID.LEFT_HEADER_TAP]
+
+    with app_client.sign_async(app_client.getAccount(0)['path'],
+                               trusted_name_tx(app_client, tx_params)):
+        navigator.navigate_and_compare(default_screenshot_path,
+                                       f"{test_name}/part1",
+                                       moves,
+                                       screen_change_after_last_instruction=False)
+        custom_screen_text = (
+            NANO_TRANSACTION_SIGN_PATTERN
+            if scenario_navigator.device.is_nano
+            else None)
+        scenario_navigator.review_approve(
+            test_name=f"{test_name}/part2",
+            custom_screen_text=custom_screen_text)
 
 
 def test_trusted_name_v1_wrong_challenge(backend: BackendInterface):

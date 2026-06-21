@@ -544,31 +544,71 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
 }
 
 /**
- * Format given data as a string representation of bytes
+ * Format given data as a "0x"-prefixed hex string of bytes.
+ *
+ * Unlike a fixed scratch buffer, this streams the whole value into a
+ * per-field heap buffer (mirroring ui_712_append_str for strings) so the full
+ * byte string is shown across pages instead of being truncated with "...".
  *
  * @param[in] data the data that needs formatting
  * @param[in] length its length
- * @param[in] first if this is the first chunk
+ * @param[in] complete_length total byte length on the first chunk (else NULL)
  * @param[in] last if this is the last chunk
  * @return if the formatting was successful
  */
-static bool ui_712_format_bytes(const uint8_t *data, uint8_t length, bool first, bool last) {
-    size_t max_len = sizeof(strings.tmp.tmp) - 1;
-    size_t cur_len = strlen(strings.tmp.tmp);
+static bool ui_712_format_bytes(const uint8_t *data,
+                                uint8_t length,
+                                const uint16_t *complete_length,
+                                bool last) {
+    s_ui_712_pair *prev = NULL;
+    s_ui_712_pair *pair = NULL;
+    size_t cur_len;
 
-    if (first) {
-        memcpy(strings.tmp.tmp, "0x", MIN(max_len, 2));
-        cur_len += 2;
-    }
-    if (format_hex(data,
-                   MIN((max_len - cur_len) / 2, length),
-                   strings.tmp.tmp + cur_len,
-                   max_len + 1 - cur_len) < 0) {
+    if (!ui_712_current_pair(&prev, &pair)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    // truncated
-    if (last && (((max_len - cur_len) / 2) < length)) {
-        memcpy(strings.tmp.tmp + max_len - 3, "...", 3);
+
+    if (complete_length != NULL) {
+        // First chunk: allocate "0x" + 2 hex chars per byte + '\0'.
+        if (pair->value != NULL) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+        if (APP_MEM_CALLOC((void **) &pair->value,
+                           2U + ((size_t) *complete_length) * 2U + 1U) == false) {
+            apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            return false;
+        }
+        memcpy(pair->value, "0x", 2);
+        ui_ctx->dynamic_value_remaining = *complete_length;
+    } else if (pair->value == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
+    if (length > ui_ctx->dynamic_value_remaining) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
+    // From cur_len onward the buffer holds exactly (2 * remaining bytes + 1).
+    cur_len = strlen(pair->value);
+    if (format_hex(data,
+                   length,
+                   pair->value + cur_len,
+                   ((size_t) ui_ctx->dynamic_value_remaining) * 2U + 1U) < 0) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    ui_ctx->dynamic_value_remaining -= length;
+
+    if (last) {
+        if (ui_ctx->dynamic_value_remaining != 0) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+        ui_712_finalize_pair(prev, pair);
     }
     return true;
 }
@@ -1089,7 +1129,7 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
                 break;
             case TYPE_SOL_BYTES_FIX:
             case TYPE_SOL_BYTES_DYN:
-                if (ui_712_format_bytes(data, length, first, last) == false) {
+                if (ui_712_format_bytes(data, length, complete_length, last) == false) {
                     return false;
                 }
                 break;
@@ -1150,8 +1190,11 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
 
     // Check if this field is supposed to be displayed
     if (last && ui_712_field_shown()) {
-        // This is the last chunk, we can now set the value
-        if (field_ptr->type != TYPE_SOL_STRING) {
+        // This is the last chunk, we can now set the value. String and bytes
+        // stream straight into pair->value and finalize themselves, so only the
+        // fixed-buffer types need committing from strings.tmp.tmp here.
+        if ((field_ptr->type != TYPE_SOL_STRING) && (field_ptr->type != TYPE_SOL_BYTES_FIX) &&
+            (field_ptr->type != TYPE_SOL_BYTES_DYN)) {
             ui_712_set_value(NULL, 0);
         }
 
@@ -1475,6 +1518,11 @@ void ui_712_push_pairs(void) {
 
     // Initialize the pairs list
     nbPairs = flist_size((flist_node_t **) &ui_ctx->ui_pairs);
+    if (N_storage.displayHash) {
+        // Two extra pages for the domain hash + message hash (the "Transaction
+        // hash" / displayHash setting). Mirrors app-ethereum's ui_712_push_pairs.
+        nbPairs += 2;
+    }
 
     ui_pairs_init(nbPairs);
     // Initialize the tag/value pairs from the chain list
@@ -1499,6 +1547,19 @@ void ui_712_push_pairs(void) {
             g_pairs[pair].forcePageStart = true;
         }
         tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
+    }
+
+    if (N_storage.displayHash) {
+        // Append the Domain hash + Message hash pages, mirroring app-ethereum.
+        // tip712_format_hash() writes the two hex strings into non-overlapping
+        // offsets of strings.tmp.tmp, so both values stay valid simultaneously.
+        LEDGER_ASSERT((pair + 1) < g_pairsList->nbPairs,
+                      "TIP-712 pair overflow for Hash (%d / %d)",
+                      pair,
+                      g_pairsList->nbPairs);
+        tip712_format_hash(0, &g_pairs[pair].item, &g_pairs[pair].value);
+        g_pairs[pair].forcePageStart = true;
+        tip712_format_hash(1, &g_pairs[pair + 1].item, &g_pairs[pair + 1].value);
     }
 }
 

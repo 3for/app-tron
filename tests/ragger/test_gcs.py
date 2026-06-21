@@ -589,6 +589,7 @@ def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
     # `rawValue` (arg 0, static) shown as a token amount; the token is the TO address.
     # Plus the trigger tx's owner ("From") address, resolved from the parked tx.
     fields = [
+        build_field_from_address("From"),
         Field(1,
               "Value",
               ParamTokenAmount(1,
@@ -596,7 +597,6 @@ def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
                                token=Value(1,
                                            TypeFamily.ADDRESS,
                                            container_path=ContainerPath.TO))),
-        build_field_from_address("From"),
     ]
     tx_info = TxInfo(1, TRON_MAINNET_CHAINID, contract_addr20, MINT_SELECTOR,
                      compute_inst_hash(fields), "Shielded Mint", creator_name="ShieldedJST",
@@ -668,6 +668,7 @@ def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
     # `rawValue` (word 12) as a token amount, `payTo` (word 15) as an address, and the
     # trigger tx's owner ("From") address resolved from the parked tx.
     fields = [
+        build_field_from_address("From"),
         Field(1,
               "Value",
               ParamTokenAmount(1,
@@ -678,7 +679,6 @@ def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
                                            container_path=ContainerPath.TO))),
         build_field_address("Pay To",
                             build_data_path_static(SHIELDED_BURN_PAY_TO_WORD)),
-        build_field_from_address("From"),
     ]
     tx_info = TxInfo(1, TRON_MAINNET_CHAINID, contract_addr20, SHIELDED_BURN_SELECTOR,
                      compute_inst_hash(fields), "Shielded Burn", creator_name="ShieldedJST",

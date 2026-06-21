@@ -23,6 +23,8 @@
 #include "ui_idle_menu.h"
 #include "ui_globals.h"
 #include "ui_nbgl.h"
+#include "ui_callbacks.h"
+#include "app_errors.h"
 #include "settings.h"
 #include "parse.h"
 
@@ -257,11 +259,20 @@ void ui_settings(void) {
 }
 
 #ifdef SCREEN_SIZE_WALLET
-static void ui_error_blind_signing_choice(bool confirm) {
+static void ui_error_setting_disabled_choice(bool confirm) {
     if (confirm) {
         ui_settings();
     } else {
         ui_idle();
+    }
+}
+
+static void ui_error_custom_contract_choice(bool confirm) {
+    if (confirm) {
+        ui_settings();
+    } else {
+        ui_idle();
+        io_seproxyhal_send_status(E_MISSING_SETTING_CUSTOM_CONTRACT, 0, true, false);
     }
 }
 #endif
@@ -273,10 +284,26 @@ void ui_error_blind_signing(void) {
                        "Enable blind signing in the settings to sign this transaction.",
                        "Go to settings",
                        "Reject transaction",
-                       ui_error_blind_signing_choice);
+                       ui_error_setting_disabled_choice);
 #else
     nbgl_useCaseAction(&C_Alert_circle_14px,
                        "Blind signing must\nbe enabled in\nsettings",
+                       NULL,
+                       ui_idle);
+#endif
+}
+
+void ui_error_custom_contract(void) {
+#ifdef SCREEN_SIZE_WALLET
+    nbgl_useCaseChoice(&ICON_APP_WARNING,
+                       "This transaction cannot be clear-signed",
+                       "Enable custom contracts in the settings to sign this transaction.",
+                       "Go to settings",
+                       "Reject transaction",
+                       ui_error_custom_contract_choice);
+#else
+    nbgl_useCaseAction(&C_Alert_circle_14px,
+                       "Custom contracts\nmust be enabled",
                        NULL,
                        ui_idle);
 #endif

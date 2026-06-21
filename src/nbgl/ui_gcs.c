@@ -441,7 +441,15 @@ bool ui_gcs(void) {
     if ((g_titleMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
         return false;
     }
+    // Finish (sign-confirmation) title: on wallet screens append the operation
+    // ("Sign transaction to swap?"); on Nano keep the plain "Sign transaction".
+    // Mirrors app-ethereum's ui_gcs() (which prefixes ui_tx_simulation_finish_str(),
+    // a Web3-Checks feature TRON doesn't have, so we use a literal "Sign").
+#ifdef SCREEN_SIZE_WALLET
+    snprintf(tmp_buf, tmp_buf_size, "Sign transaction to %s?", get_operation_type(info_tx));
+#else
     snprintf(tmp_buf, tmp_buf_size, "Sign transaction");
+#endif
     if ((g_finishMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
         return false;
     }

@@ -67,3 +67,4 @@ void ui_191_start(const char *message);
 // ui_typed_message_review_choice() is declared in ui_message_signing.h.
 
 void ui_error_blind_signing(void);
+void ui_error_custom_contract(void);

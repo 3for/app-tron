@@ -13,6 +13,7 @@ from tron import TronClient
 from client.gating import Gating
 from client.proxy_info import ProxyInfo
 from client.status_word import StatusWord
+from settings import SettingID, settings_toggle
 from utils import check_tx_signature
 # Shared with the GCS tests: the proxy_info challenge helper and the TRON mainnet
 # address prefix byte.
@@ -100,7 +101,6 @@ def common_blind_sign(scenario_navigator: NavigateWithScenario,
                                   client.getAccount(0)["publicKey"][2:])
 
 
-@pytest.mark.usefixtures("configuration")
 def test_blind_sign(scenario_navigator: NavigateWithScenario,
                     test_name: str,
                     reject: bool,
@@ -111,7 +111,6 @@ def test_blind_sign(scenario_navigator: NavigateWithScenario,
 
     Mirrors app-ethereum's test_blind_sign: parametrized by reject x amount, and
     reused by test_gating.py (which threads a gating descriptor + optional proxy).
-    The CUSTOM_CONTRACT setting is enabled by the `configuration` fixture.
     """
     # The rejection flow is independent of the call value, so skip the redundant
     # reject + non-zero combo (mirrors app-ethereum).
@@ -121,6 +120,10 @@ def test_blind_sign(scenario_navigator: NavigateWithScenario,
     device = scenario_navigator.device
     navigator = scenario_navigator.navigator
     client = TronClient(scenario_navigator.backend, device, navigator)
+
+    # Custom-contract blind signing requires the CUSTOM_CONTRACT setting, the TRON
+    # analog of app-ethereum's BLIND_SIGNING toggle.
+    settings_toggle(device, navigator, [SettingID.CUSTOM_CONTRACT])
 
     tx = build_blind_sign_tx(client, amount)
 
@@ -142,7 +145,6 @@ def test_blind_sign(scenario_navigator: NavigateWithScenario,
                       nb_warnings)
 
 
-@pytest.mark.usefixtures("configuration")
 def test_blind_sign_reject_in_risk_review(scenario_navigator: NavigateWithScenario) -> None:
     """Reject a blind-signing transaction at the initial risk (warning) review.
 
@@ -154,6 +156,8 @@ def test_blind_sign_reject_in_risk_review(scenario_navigator: NavigateWithScenar
     device = scenario_navigator.device
     navigator = scenario_navigator.navigator
     client = TronClient(scenario_navigator.backend, device, navigator)
+
+    settings_toggle(device, navigator, [SettingID.CUSTOM_CONTRACT])
 
     moves = []
     if device.is_nano:
@@ -169,17 +173,31 @@ def test_blind_sign_reject_in_risk_review(scenario_navigator: NavigateWithScenar
         assert False  # Should have thrown
 
 
-def test_blind_sign_not_enabled_error(scenario_navigator: NavigateWithScenario) -> None:
+def test_blind_sign_not_enabled_error(scenario_navigator: NavigateWithScenario,
+                                      test_name: str) -> None:
     """Signing a custom contract with the CUSTOM_CONTRACT setting disabled must error.
 
-    Mirrors app-ethereum's test_blind_sign_not_enabled_error (which leaves BLIND_SIGNING
-    off). TRON's analog is the CUSTOM_CONTRACT setting: with it off the firmware returns
-    MISSING_SETTING_CUSTOM_CONTRACT (0x6a8d) before any review. No `configuration`
-    fixture, so the setting stays at its disabled power-on default.
+    TRON's analog of app-ethereum's test_blind_sign_not_enabled_error. The gate is the
+    "Custom contracts" setting (distinct from the separate "Blind signing"/Sign-by-Hash
+    setting), so the device shows the "Custom contracts must be enabled in settings" page,
+    the user dismisses it, and the APDU returns the precise TRON-specific
+    MISSING_SETTING_CUSTOM_CONTRACT (0x6a8d). No `configuration` fixture, so the setting
+    stays at its disabled power-on default.
     """
-    client = TronClient(scenario_navigator.backend,
-                        scenario_navigator.device,
-                        scenario_navigator.navigator)
-    with pytest.raises(ExceptionRAPDU) as e:
-        client.sign_sync(client.getAccount(0)["path"], build_blind_sign_tx(client))
-    assert e.value.status == StatusWord.MISSING_SETTING_CUSTOM_CONTRACT
+    device = scenario_navigator.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(scenario_navigator.backend, device, navigator)
+
+    default_screenshot_path = Path(__file__).parent.resolve()
+    moves = []
+    if device.is_nano:
+        moves += [NavInsID.BOTH_CLICK]
+    else:
+        moves += [NavInsID.USE_CASE_CHOICE_REJECT]
+    try:
+        with client.sign_async(client.getAccount(0)["path"], build_blind_sign_tx(client)):
+            navigator.navigate_and_compare(default_screenshot_path, test_name, moves)
+    except ExceptionRAPDU as e:
+        assert e.status == StatusWord.MISSING_SETTING_CUSTOM_CONTRACT
+    else:
+        assert False  # Should have thrown

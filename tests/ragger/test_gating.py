@@ -1,12 +1,11 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from tron import TronClient
 from client.gating import Gating, TxType
+from settings import SettingID, settings_toggle
 
 # TRON wires its typed-data gating into the TIP-712 review and its transaction
 # gating into the legacy blind-signing (custom contract) review -- the latter
@@ -28,7 +27,6 @@ TINY_URL = "ledger.com/ledger-multisig"
 PROXY_IMPL_ADDR20 = bytes.fromhex("dad77910dbdfde764fc21fcd4e74d71bbaca6d8d")
 
 
-@pytest.mark.usefixtures("configuration")
 def test_gating_blind_signing(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU with a blind signing transaction.
 
@@ -49,7 +47,6 @@ def test_gating_blind_signing(scenario_navigator: NavigateWithScenario) -> None:
                gating_params=descriptor)
 
 
-@pytest.mark.usefixtures("configuration")
 def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU with a blind signing transaction behind a proxy.
 
@@ -72,7 +69,6 @@ def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenari
                with_proxy=True)
 
 
-@pytest.mark.usefixtures("configuration")
 def test_gating_tip712(scenario_navigator: NavigateWithScenario) -> None:
     """Test the Gating descriptor APDU on a TIP-712 typed-data signature.
 
@@ -82,6 +78,10 @@ def test_gating_tip712(scenario_navigator: NavigateWithScenario) -> None:
     device = scenario_navigator.device
     navigator = scenario_navigator.navigator
     client = TronClient(scenario_navigator.backend, device, navigator)
+
+    # Unfiltered (blind) typed-data signing needs SIGN_BY_HASH, mirroring
+    # app-ethereum's test_gating_eip712 which signs an unfiltered EIP-712 (BLIND_SIGNING).
+    settings_toggle(device, navigator, [SettingID.SIGN_BY_HASH])
 
     json_file = Path(tip712_json_path()) / "00-simple_mail-data.json"
     with open(json_file, encoding="utf-8") as file:
