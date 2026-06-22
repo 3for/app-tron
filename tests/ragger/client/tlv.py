@@ -1,6 +1,23 @@
 from typing import Union
 from enum import IntEnum
 
+import base58
+
+TRON_MAINNET_ADDRESS_PREFIX = 0x41
+
+
+def eth_to_tron_base58(addr: bytes) -> str:
+    """Convert a 20-byte EVM address (or 21-byte 0x41-prefixed) to a TRON Base58Check
+    string ("T..."). CAL descriptors carry addresses in this form so the firmware
+    verifies the signature over the Base58 bytes, then decodes back to 20 bytes."""
+    if len(addr) == 21 and addr[0] == TRON_MAINNET_ADDRESS_PREFIX:
+        body = addr
+    elif len(addr) == 20:
+        body = bytes([TRON_MAINNET_ADDRESS_PREFIX]) + addr
+    else:
+        raise ValueError("address must be 20 or 21 (0x41-prefixed) bytes")
+    return base58.b58encode_check(body).decode()
+
 
 class FieldTag(IntEnum):
     STRUCT_TYPE = 0x01
@@ -55,3 +72,8 @@ class TlvSerializable:
         tlv += TlvSerializable.der_encode(len(value))
         tlv += value
         return tlv
+
+    @staticmethod
+    def serialize_tron_address_field(tag: int, addr: bytes) -> bytes:
+        # CAL descriptors carry the address as a 34-char TRON Base58Check string.
+        return TlvSerializable.serialize_field(tag, eth_to_tron_base58(addr))

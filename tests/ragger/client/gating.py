@@ -53,7 +53,7 @@ class Gating(TlvSerializable):
         payload: bytes = self.serialize_field(FieldTag.STRUCT_TYPE, 0x0D)
         payload += self.serialize_field(FieldTag.STRUCT_VERSION, 1)
         payload += self.serialize_field(FieldTag.TX_TYPE, self.tx_type)
-        payload += self.serialize_field(FieldTag.ADDRESS, self.address)
+        payload += self.serialize_tron_address_field(FieldTag.ADDRESS, self.address)
         if self.chain_id is not None:
             payload += self.serialize_field(FieldTag.CHAIN_ID, self.chain_id.to_bytes(8, 'big'))
         payload += self.serialize_field(FieldTag.MESSAGE, self.intro_message.encode('utf-8'))

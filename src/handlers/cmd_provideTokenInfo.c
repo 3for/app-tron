@@ -30,25 +30,28 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     if ((tickerLength + 1) > sizeof(token->ticker)) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    if (dataLength < tickerLength + TRON_ADDRESS_SIZE + 4 + 4) {
+    if (dataLength < tickerLength + TRON_BASE58CHECK_ADDRESS_SIZE + 4 + 4) {
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    cx_hash_sha256(workBuffer + offset, tickerLength + TRON_ADDRESS_SIZE + 4 + 4, hash, 32);
+    cx_hash_sha256(workBuffer + offset,
+                   tickerLength + TRON_BASE58CHECK_ADDRESS_SIZE + 4 + 4,
+                   hash,
+                   32);
     memmove(token->ticker, workBuffer + offset, tickerLength);
     token->ticker[tickerLength] = '\0';
     offset += tickerLength;
     dataLength -= tickerLength;
-    if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
+    // The address is a 34-char TRON Base58Check string ("T..."); decode +
+    // checksum-validate it to the canonical 20-byte (EVM) form retained internally,
+    // so get_asset_info_by_addr() and the UI/token comparison logic are unchanged.
+    if (!tronBase58ToBinaryLen((const char *) (workBuffer + offset),
+                               TRON_BASE58CHECK_ADDRESS_SIZE,
+                               token->address)) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    // The input must include the 0x41 prefix,
-    // but internally only the last 20 bytes (the canonical EVM address) are retained.
-    // So the existing `get_asset_info_by_addr()` and the UI/token comparison logic
-    // do not need to be refactored.
-    memmove(token->address, workBuffer + offset + 1, ADDRESS_LENGTH);
-    offset += TRON_ADDRESS_SIZE;
-    dataLength -= TRON_ADDRESS_SIZE;
+    offset += TRON_BASE58CHECK_ADDRESS_SIZE;
+    dataLength -= TRON_BASE58CHECK_ADDRESS_SIZE;
     // TODO: 4 bytes for this is overkill
     token->decimals = U4BE(workBuffer, offset);
     offset += 4;

@@ -47,7 +47,7 @@ class EnumValue(TlvSerializable):
         payload = bytearray()
         payload += self.serialize_field(Tag.VERSION, self.version)
         payload += self.serialize_field(Tag.CHAIN_ID, self.chain_id)
-        payload += self.serialize_field(Tag.CONTRACT_ADDR, self.contract_addr)
+        payload += self.serialize_tron_address_field(Tag.CONTRACT_ADDR, self.contract_addr)
         payload += self.serialize_field(Tag.SELECTOR, self.selector)
         payload += self.serialize_field(Tag.ID, self.id)
         payload += self.serialize_field(Tag.VALUE, self.value)

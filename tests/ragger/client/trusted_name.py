@@ -106,7 +106,7 @@ class TrustedName(TlvSerializable):
         payload += self.serialize_field(Tag.NAME, self.name)
         if self.chain_id is not None:
             payload += self.serialize_field(Tag.CHAIN_ID, self.chain_id)
-        payload += self.serialize_field(Tag.ADDRESS, self.address)
+        payload += self.serialize_tron_address_field(Tag.ADDRESS, self.address)
         if self.challenge is not None:
             payload += self.serialize_field(Tag.CHALLENGE, self.challenge)
         if self.nft_id is not None:

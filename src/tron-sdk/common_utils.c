@@ -370,6 +370,50 @@ bool tronBase58FromBinary(const uint8_t *eth20, char *out58, size_t out58_len) {
     return true;
 }
 
+bool tronBase58ToBinaryLen(const char *in, size_t len, uint8_t *out20) {
+    // Decoded TRON address: 0x41 prefix + 20-byte address + 4-byte checksum.
+    uint8_t decoded[TRON_ADDRESS_SIZE + 4];
+    uint8_t sha256[CX_SHA256_SIZE];
+
+    if (in == NULL || out20 == NULL) {
+        return false;
+    }
+
+    // TRON Base58Check addresses are a fixed 34 characters ("T...").
+    if (len != TRON_BASE58CHECK_ADDRESS_SIZE) {
+        return false;
+    }
+
+    // base58_decode does raw Base58 (no checksum verification); it left-aligns the
+    // output and returns the byte count.
+    if (base58_decode(in, len, decoded, sizeof(decoded)) != (int) sizeof(decoded)) {
+        return false;
+    }
+
+    // Must be a mainnet address (0x41 prefix).
+    if (decoded[0] != 0x41) {
+        return false;
+    }
+
+    // Verify the Base58Check checksum: first 4 bytes of the double SHA-256 over the
+    // 21-byte (prefix + address) payload must match the trailing 4 bytes.
+    cx_hash_sha256(decoded, TRON_ADDRESS_SIZE, sha256, sizeof(sha256));
+    cx_hash_sha256(sha256, sizeof(sha256), sha256, sizeof(sha256));
+    if (memcmp(sha256, decoded + TRON_ADDRESS_SIZE, 4) != 0) {
+        return false;
+    }
+
+    memcpy(out20, decoded + 1, ADDRESS_LENGTH);
+    return true;
+}
+
+bool tronBase58ToBinary(const char *in, uint8_t *out20) {
+    if (in == NULL) {
+        return false;
+    }
+    return tronBase58ToBinaryLen(in, strnlen(in, TRON_BASE58CHECK_ADDRESS_SIZE + 1), out20);
+}
+
 bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
     uint8_t eth20[ADDRESS_LENGTH];
     const char *hex;

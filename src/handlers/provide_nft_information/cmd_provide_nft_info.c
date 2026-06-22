@@ -90,9 +90,9 @@ int handleProvideNFTInformation(uint8_t p1,
     offset += NAME_LENGTH_SIZE;
 
     // --- Payload size validation ---
-    // TRON adaptation: the contract address is a full 21-byte TRON address.
-    payloadSize = HEADER_SIZE + collectionNameLength + TRON_ADDRESS_SIZE + CHAIN_ID_SIZE +
-                  KEY_ID_SIZE + ALGORITHM_ID_SIZE;
+    // TRON adaptation: the contract address is a 34-char TRON Base58Check string.
+    payloadSize = HEADER_SIZE + collectionNameLength + TRON_BASE58CHECK_ADDRESS_SIZE +
+                  CHAIN_ID_SIZE + KEY_ID_SIZE + ALGORITHM_ID_SIZE;
     if (dataLength < payloadSize) {
         PRINTF("Data too small for payload: expected at least %d, got %d\n",
                payloadSize,
@@ -115,14 +115,16 @@ int handleProvideNFTInformation(uint8_t p1,
     offset += collectionNameLength;
 
     // --- Contract address parsing (TRON adaptation) ---
-    // The input must include the 0x41 prefix; internally only the last 20 bytes
-    // (the canonical EVM address) are retained, matching cmd_provideTokenInfo.c.
-    if (workBuffer[offset] != ADD_PRE_FIX_BYTE_MAINNET) {
+    // The address is a 34-char TRON Base58Check string ("T..."); decode +
+    // checksum-validate it to the canonical 20-byte (EVM) form retained internally,
+    // matching cmd_provideTokenInfo.c.
+    if (!tronBase58ToBinaryLen((const char *) (workBuffer + offset),
+                               TRON_BASE58CHECK_ADDRESS_SIZE,
+                               nft->contractAddress)) {
         return io_send_sw(E_INCORRECT_DATA);
     }
-    memcpy(nft->contractAddress, workBuffer + offset + 1, ADDRESS_LENGTH);
-    PRINTF("Address: %.*H\n", TRON_ADDRESS_SIZE, workBuffer + offset);
-    offset += TRON_ADDRESS_SIZE;
+    PRINTF("Address: %.*s\n", TRON_BASE58CHECK_ADDRESS_SIZE, workBuffer + offset);
+    offset += TRON_BASE58CHECK_ADDRESS_SIZE;
 
     // --- Chain ID parsing and compatibility check ---
     chain_id = u64_from_BE(workBuffer + offset, CHAIN_ID_SIZE);

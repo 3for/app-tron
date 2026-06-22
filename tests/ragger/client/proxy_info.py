@@ -53,11 +53,11 @@ class ProxyInfo(TlvSerializable):
         payload += self.serialize_field(Tag.STRUCT_TYPE, 0x26)
         payload += self.serialize_field(Tag.STRUCT_VERSION, 1)
         payload += self.serialize_field(Tag.CHALLENGE, self.challenge)
-        payload += self.serialize_field(Tag.ADDRESS, self.address)
+        payload += self.serialize_tron_address_field(Tag.ADDRESS, self.address)
         payload += self.serialize_field(Tag.CHAIN_ID, self.chain_id)
         if self.selector is not None:
             payload += self.serialize_field(Tag.SELECTOR, self.selector)
-        payload += self.serialize_field(Tag.IMPL_ADDRESS, self.impl_address)
+        payload += self.serialize_tron_address_field(Tag.IMPL_ADDRESS, self.impl_address)
         payload += self.serialize_field(Tag.DELEGATION_TYPE,
                                         self.delegation_type)
         sig = self.signature

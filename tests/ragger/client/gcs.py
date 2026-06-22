@@ -66,7 +66,7 @@ class TxInfo(TlvSerializable):
         payload = bytearray()
         payload += self.serialize_field(TxInfoTag.VERSION, self.version)
         payload += self.serialize_field(TxInfoTag.CHAIN_ID, self.chain_id)
-        payload += self.serialize_field(TxInfoTag.CONTRACT_ADDR, self.contract_addr)
+        payload += self.serialize_tron_address_field(TxInfoTag.CONTRACT_ADDR, self.contract_addr)
         payload += self.serialize_field(TxInfoTag.SELECTOR, self.selector)
         payload += self.serialize_field(TxInfoTag.FIELDS_HASH, self.fields_hash)
         payload += self.serialize_field(TxInfoTag.OPERATION_TYPE, self.operation_type)

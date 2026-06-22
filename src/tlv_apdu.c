@@ -195,11 +195,21 @@ bool tlv_get_address(const tlv_data_t *data, uint8_t *out) {
         PRINTF("ADDRESS: null pointer provided\n");
         return false;
     }
-    if (!get_buffer_from_tlv_data(data, &address, ADDRESS_LENGTH, ADDRESS_LENGTH)) {
+    // CAL descriptors carry the address as a 34-char TRON Base58Check string ("T...").
+    // The signature is verified over these raw bytes (the field is hashed as-is); here
+    // we decode + checksum-validate them down to the canonical 20-byte form kept
+    // internally, so all downstream comparison/display is unchanged.
+    if (!get_buffer_from_tlv_data(data,
+                                  &address,
+                                  TRON_BASE58CHECK_ADDRESS_SIZE,
+                                  TRON_BASE58CHECK_ADDRESS_SIZE)) {
         PRINTF("ADDRESS: failed to extract\n");
         return false;
     }
-    buf_shrink_expand(address.ptr, address.size, out, ADDRESS_LENGTH);
+    if (!tronBase58ToBinaryLen((const char *) address.ptr, address.size, out)) {
+        PRINTF("ADDRESS: invalid TRON Base58 address\n");
+        return false;
+    }
     return true;
 }
 

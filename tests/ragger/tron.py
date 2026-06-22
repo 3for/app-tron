@@ -26,6 +26,7 @@ from client.keychain import Key, sign_data
 from client.ledger_pki import PKIClient, PKIPubKeyUsage
 from client.status_word import StatusWord
 from client.trusted_name import TrustedName, TrustedNameSource
+from client.tlv import eth_to_tron_base58
 from ledgered.devices import Device
 '''
 Tron Protobuf
@@ -632,10 +633,8 @@ class TronClient:
                                chain_id: int,
                                sig: Optional[bytes] = None) -> RAPDU:
         cmd_builder = CommandBuilder()
-        if len(addr) == 20:
-            addr = bytes([TRON_MAINNET_ADDRESS_PREFIX]) + addr
-        elif len(addr) != 21:
-            raise ValueError("Token metadata address must be 20 or 21 bytes")
+        # The signed payload carries the address as a 34-char TRON Base58Check string.
+        addr = eth_to_tron_base58(addr).encode()
 
         if sig is None:
             # Send ledgerPKI certificate
@@ -670,10 +669,8 @@ class TronClient:
                              algo_id: int = 1,
                              sig: Optional[bytes] = None) -> RAPDU:
         cmd_builder = CommandBuilder()
-        if len(addr) == 20:
-            addr = bytes([TRON_MAINNET_ADDRESS_PREFIX]) + addr
-        elif len(addr) != 21:
-            raise ValueError("NFT metadata address must be 20 or 21 bytes")
+        # The signed payload carries the address as a 34-char TRON Base58Check string.
+        addr = eth_to_tron_base58(addr).encode()
 
         if sig is None:
             # Send ledgerPKI certificate

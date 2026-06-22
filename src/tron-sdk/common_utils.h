@@ -256,6 +256,33 @@ bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len);
 bool tronBase58FromBinary(const uint8_t *eth20, char *out58, size_t out58_len);
 
 /**
+ * @brief Decodes a TRON Base58Check address ("T...") into its 20-byte form.
+ *
+ * The inverse of \ref tronBase58FromBinary. Validates the fixed 34-character length,
+ * the Base58Check checksum, and the TRON mainnet prefix byte (0x41), then outputs the
+ * 20-byte (EVM-style) address. Note the underlying SDK base58_decode performs no
+ * checksum verification; this function does.
+ *
+ * @param in The NUL-terminated TRON Base58Check address string.
+ * @param out20 Output buffer for the 20-byte address.
+ * @return true on success, false on invalid length, charset, checksum or prefix.
+ */
+bool tronBase58ToBinary(const char *in, uint8_t *out20);
+
+/**
+ * @brief Length-explicit variant of \ref tronBase58ToBinary.
+ *
+ * For callers holding the address as a (non-NUL-terminated) buffer slice, e.g. a CAL
+ * descriptor field. Validates that \p len is exactly the TRON Base58Check length.
+ *
+ * @param in Pointer to the Base58Check characters (need not be NUL-terminated).
+ * @param len Number of characters at \p in.
+ * @param out20 Output buffer for the 20-byte address.
+ * @return true on success, false on invalid length, charset, checksum or prefix.
+ */
+bool tronBase58ToBinaryLen(const char *in, size_t len, uint8_t *out20);
+
+/**
  * @brief Checks if a buffer is entirely filled with zeroes.
  *
  * This function examines the first `n` bytes of the buffer pointed to by `buf`
