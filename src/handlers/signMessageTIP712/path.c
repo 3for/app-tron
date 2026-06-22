@@ -13,6 +13,9 @@
 static s_path *path_struct = NULL;
 static s_path *path_backup = NULL;
 static s_hash_ctx *g_hash_ctxs = NULL;
+static uint8_t g_hash_ctx_count = 0;
+
+#define MAX_HASH_CTX_DEPTH (MAX_PATH_DEPTH + MAX_ARRAY_DEPTH + 1)
 
 /**
  * Get the field pointer to by the first N depths of the given path
@@ -177,7 +180,13 @@ static void delete_hash_ctx(s_hash_ctx *ctx) {
 }
 
 static void remove_last_hash_ctx(void) {
+    if (g_hash_ctxs == NULL) {
+        return;
+    }
     list_pop_back((list_node_t **) &g_hash_ctxs, (f_list_node_del) &delete_hash_ctx);
+    if (g_hash_ctx_count > 0) {
+        g_hash_ctx_count -= 1;
+    }
 }
 
 /**
@@ -230,6 +239,11 @@ static bool feed_last_hash_depth(const uint8_t *hash) {
 static bool push_new_hash_depth(bool init) {
     s_hash_ctx *hash_ctx;
 
+    if (g_hash_ctx_count >= MAX_HASH_CTX_DEPTH) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
     // allocate new hash context
     if (APP_MEM_CALLOC((void **) &hash_ctx, sizeof(*hash_ctx)) == false) {
         return false;
@@ -242,6 +256,7 @@ static bool push_new_hash_depth(bool init) {
     }
 
     list_push_back((list_node_t **) &g_hash_ctxs, (list_node_t *) hash_ctx);
+    g_hash_ctx_count += 1;
     return true;
 }
 
@@ -412,9 +427,11 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
         if (do_typehash) {
             // get the struct typehash
             if (type_hash(typename, strlen(typename), hash) == false) {
+                remove_last_hash_ctx();
                 return false;
             }
             if (feed_last_hash_depth(hash) == false) {
+                remove_last_hash_ctx();
                 return false;
             }
         }
@@ -423,7 +440,11 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
         //       an empty array of structs in which case we don't want to show it but the
         //       size is only known later
         // ui_712_queue_struct_to_review();
-        path_depth_list_push();
+        if (path_depth_list_push() == false) {
+            remove_last_hash_ctx();
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
     }
     return true;
 }
@@ -466,26 +487,34 @@ bool path_set_root(const char *struct_name, uint8_t name_length) {
         return false;
     }
     if (type_hash(struct_name, name_length, hash) == false) {
+        remove_last_hash_ctx();
         return false;
     }
     if (feed_last_hash_depth(hash) == false) {
+        remove_last_hash_ctx();
         return false;
     }
 
     // init depth, at 0 : empty path
     path_struct->depth_count = 0;
-    path_depth_list_push();
+    if (path_depth_list_push() == false) {
+        remove_last_hash_ctx();
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
 
     // init array levels at 0
     path_struct->array_depth_count = 0;
     if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
         (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
         if (path_struct->root_type != ROOT_NONE) {
+            remove_last_hash_ctx();
             return false;
         }
         path_struct->root_type = ROOT_DOMAIN;
     } else {
         if (path_struct->root_type != ROOT_DOMAIN) {
+            remove_last_hash_ctx();
             return false;
         }
         path_struct->root_type = ROOT_MESSAGE;
@@ -494,7 +523,9 @@ bool path_set_root(const char *struct_name, uint8_t name_length) {
     struct_state = DEFINED;
 
     // because the first field could be a struct type
-    path_update(true, true, true);
+    if (!path_update(true, true, true)) {
+        return false;
+    }
     return true;
 }
 
@@ -614,21 +645,27 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
     }
     if (is_custom) {
         if (start_hash_ctx == NULL) {
+            remove_last_hash_ctx();
             return false;
         }
         s_hash_ctx *hash_ctx = get_last_hash_ctx();
         s_hash_ctx *prev_ctx = get_previous_hash_ctx(hash_ctx);
         while (prev_ctx != start_hash_ctx) {
-            if ((hash_ctx == NULL) || (prev_ctx == NULL)) return false;
+            if ((hash_ctx == NULL) || (prev_ctx == NULL)) {
+                remove_last_hash_ctx();
+                return false;
+            }
 
             if (array_size > 0) {
                 memcpy(&hash_ctx->hash, &prev_ctx->hash, sizeof(prev_ctx->hash));
             } else {
                 if (cx_keccak_init_no_throw((cx_sha3_t *) &hash_ctx->hash, 256) != CX_OK) {
+                    remove_last_hash_ctx();
                     return false;
                 }
             }
             if (cx_keccak_init_no_throw((cx_sha3_t *) &prev_ctx->hash, 256) != CX_OK) {
+                remove_last_hash_ctx();
                 return false;
             }
 
@@ -636,6 +673,7 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
             prev_ctx = get_previous_hash_ctx(hash_ctx);
         }
         if (cx_keccak_init_no_throw((cx_sha3_t *) &hash_ctx->hash, 256) != CX_OK) {
+            remove_last_hash_ctx();
             return false;
         }
     }
@@ -878,4 +916,5 @@ void path_deinit(void) {
     APP_MEM_FREE_AND_NULL((void **) &path_struct);
     APP_MEM_FREE_AND_NULL((void **) &path_backup);
     list_clear((list_node_t **) &g_hash_ctxs, (f_list_node_del) &delete_hash_ctx);
+    g_hash_ctx_count = 0;
 }

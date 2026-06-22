@@ -57,9 +57,12 @@ static bool handle_name(const tlv_data_t *data, s_field_ctx *context) {
 }
 
 static bool handle_param_type(const tlv_data_t *data, s_field_ctx *context) {
-    if (!tlv_get_uint8_range(data, &context->field->param_type, 0, UINT8_MAX)) {
+    uint8_t param_type;
+
+    if (!tlv_get_uint8_range(data, &param_type, 0, UINT8_MAX)) {
         return false;
     }
+    context->field->param_type = (e_param_type) param_type;
     switch (context->field->param_type) {
         case PARAM_TYPE_RAW:
         case PARAM_TYPE_AMOUNT:

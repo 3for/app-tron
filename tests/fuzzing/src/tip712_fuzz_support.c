@@ -34,6 +34,7 @@ void fuzz_set_settings(uint8_t bits) {
     g_fuzz_storage.truncateAddress = (bits >> S_TRUNCATE_ADDRESS) & 1U;
     g_fuzz_storage.signByHash = (bits >> S_SIGN_BY_HASH) & 1U;
     g_fuzz_storage.verbose_tip712 = (bits >> S_VERBOSE_TIP712) & 1U;
+    g_fuzz_storage.displayHash = (bits >> S_DISPLAY_HASH) & 1U;
 }
 const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
 bool g_fuzz_signature_valid = true;
@@ -167,6 +168,29 @@ void ui_error_blind_signing(void) {}
 uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     (void) filtering;
     return SWO_SUCCESS;
+}
+
+void tip712_format_hash(uint8_t index, const char **item, const char **value) {
+    static const char domain_hash[] = "00";
+    static const char message_hash[] = "00";
+
+    if ((item == NULL) || (value == NULL)) {
+        return;
+    }
+    switch (index) {
+        case 0:
+            *item = "Domain hash";
+            *value = domain_hash;
+            break;
+        case 1:
+            *item = "Message hash";
+            *value = message_hash;
+            break;
+        default:
+            *item = NULL;
+            *value = NULL;
+            break;
+    }
 }
 
 bool ui_712_approve_cb(bool display_menu) {

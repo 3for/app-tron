@@ -12,6 +12,10 @@ typedef struct internalStorage_t {
     bool truncateAddress;
     bool signByHash;
     bool verbose_tip712;
+    bool displayHash;
+#ifdef HAVE_GATING_SUPPORT
+    uint8_t gating_counter;
+#endif  // HAVE_GATING_SUPPORT
     bool initialized;
 } internalStorage_t;
 
@@ -27,5 +31,6 @@ extern const internalStorage_t N_storage_real;
 #define S_TRUNCATE_ADDRESS 2
 #define S_SIGN_BY_HASH     3
 #define S_VERBOSE_TIP712   4
+#define S_DISPLAY_HASH     5
 
 void fuzz_set_settings(uint8_t bits);
