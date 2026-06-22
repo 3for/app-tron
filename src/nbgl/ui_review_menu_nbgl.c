@@ -77,8 +77,8 @@ static nbgl_contentValueExt_t toTrustedNameExt;
 // transaction to\nApprove Proposal"). Used by states that share one APPROVAL_* value
 // across several contract types. They must outlive prepareTxInfos() since the async
 // NBGL review keeps the pointers.
-static char actionReviewTitle[40];
-static char actionSignTitle[40];
+static char actionReviewTitle[48];
+static char actionSignTitle[48];
 
 // Static functions declarations
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -357,8 +357,29 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             }
             idx++;
 
-            txInfos.flowTitle = "Review Transaction";
-            infoLongPress.text = "Sign Transaction";
+            // First-screen title describes the transfer type, mirroring app-ethereum's
+            // "Review transaction to send/approve ERC20 token" (test_transfer_erc20 /
+            // test_approve_erc20). TRC20 distinguishes approve (TRC20Method 2) from send;
+            // native TRX and TRC10 keep a "Send" wording.
+            const char *transfer_action;
+            if (txContent.contractType == TRIGGERSMARTCONTRACT) {
+                transfer_action =
+                    (txContent.TRC20Method == 2) ? "Approve TRC20 token" : "Send TRC20 token";
+            } else if (txContent.contractType == TRANSFERASSETCONTRACT) {
+                transfer_action = "Send TRC10 token";
+            } else {
+                transfer_action = "Send TRX";
+            }
+            snprintf(actionReviewTitle,
+                     sizeof(actionReviewTitle),
+                     "Review transaction to\n%s",
+                     transfer_action);
+            snprintf(actionSignTitle,
+                     sizeof(actionSignTitle),
+                     "Sign transaction to\n%s",
+                     transfer_action);
+            txInfos.flowTitle = actionReviewTitle;
+            infoLongPress.text = actionSignTitle;
             pairList.nbPairs = idx;
             break;
         }

@@ -242,6 +242,20 @@ bool getEthDisplayableAddress(const uint8_t *in, char *out, size_t out_len, uint
 bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len);
 
 /**
+ * @brief Encodes a 20-byte (EVM-style) address as a TRON Base58Check string.
+ *
+ * Prepends the TRON mainnet prefix byte (0x41) and Base58Check-encodes the result,
+ * producing a "T..." address. Used to display addresses that are held internally as
+ * raw 20-byte values (GCS fields, trusted-name fallbacks) in TRON format.
+ *
+ * @param eth20 The 20-byte address.
+ * @param out58 Output buffer for the TRON Base58Check string.
+ * @param out58_len Size of the output buffer.
+ * @return true on success, false on invalid input or insufficient output size.
+ */
+bool tronBase58FromBinary(const uint8_t *eth20, char *out58, size_t out58_len);
+
+/**
  * @brief Checks if a buffer is entirely filled with zeroes.
  *
  * This function examines the first `n` bytes of the buffer pointed to by `buf`

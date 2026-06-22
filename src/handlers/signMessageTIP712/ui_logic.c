@@ -481,15 +481,8 @@ static bool ui_712_append_str(const uint8_t *data,
  * @return whether it was successful or not
  */
 static bool ui_712_set_displayable_address(const uint8_t addr[ADDRESS_LENGTH]) {
-    char eth_addr[43];
-
-    if (!getEthDisplayableAddress((uint8_t *) addr,
-                                  eth_addr,
-                                  sizeof(eth_addr),
-                                  chainConfig->chainId)) {
-        return false;
-    }
-    return ethToTronBase58(eth_addr, strings.tmp.tmp, sizeof(strings.tmp.tmp));
+    // Display EIP-712 `address` values in TRON Base58 ("T...") rather than 0x-hex.
+    return tronBase58FromBinary(addr, strings.tmp.tmp, sizeof(strings.tmp.tmp));
 }
 
 /**

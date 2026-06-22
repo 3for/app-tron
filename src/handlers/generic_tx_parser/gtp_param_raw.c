@@ -190,7 +190,7 @@ static bool format_addr(const s_field *field,
         return false;
     }
 
-    return *to_be_displayed ? getEthDisplayableAddress(tmp, buf, buf_size, chainConfig->chainId)
+    return *to_be_displayed ? tronBase58FromBinary(tmp, buf, buf_size)
                             : true;
 }
 

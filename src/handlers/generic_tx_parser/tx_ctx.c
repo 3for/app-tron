@@ -154,7 +154,7 @@ static bool process_empty_tx(const s_tx_ctx *tx_ctx) {
         strlcpy(buf, trusted_name->name, buf_size);
     } else {
         param_type = PARAM_TYPE_RAW;
-        if (!getEthDisplayableAddress(tx_ctx->to, buf, buf_size, chainConfig->chainId)) {
+        if (!tronBase58FromBinary(tx_ctx->to, buf, buf_size)) {
             return false;
         }
     }

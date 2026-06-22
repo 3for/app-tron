@@ -343,30 +343,15 @@ bool getEthDisplayableAddress(const uint8_t *in, char *out, size_t out_len, uint
     return true;
 }
 
-bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
-    uint8_t eth20[ADDRESS_LENGTH];
+bool tronBase58FromBinary(const uint8_t *eth20, char *out58, size_t out58_len) {
     uint8_t tronAddr[TRON_ADDRESS_SIZE];
     uint8_t sha256[CX_SHA256_SIZE];
     uint8_t addchecksum[TRON_ADDRESS_SIZE + 4];
-    const char *hex;
 
-    if (ethAddress == NULL || out58 == NULL || out58_len < (TRON_BASE58CHECK_ADDRESS_SIZE + 1)) {
+    if (eth20 == NULL || out58 == NULL || out58_len < (TRON_BASE58CHECK_ADDRESS_SIZE + 1)) {
         return false;
     }
     out58[0] = '\0';
-
-    if (ethAddress[0] == '0' && (ethAddress[1] == 'x' || ethAddress[1] == 'X')) {
-        hex = ethAddress + 2;
-    } else {
-        hex = ethAddress;
-    }
-
-    if (strnlen(hex, (ADDRESS_LENGTH * 2) + 1) != (ADDRESS_LENGTH * 2)) {
-        return false;
-    }
-    if (!hex_string_to_bytes_20(hex, eth20)) {
-        return false;
-    }
 
     tronAddr[0] = 0x41;
     memcpy(tronAddr + 1, eth20, ADDRESS_LENGTH);
@@ -383,6 +368,30 @@ bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
     }
     out58[TRON_BASE58CHECK_ADDRESS_SIZE] = '\0';
     return true;
+}
+
+bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
+    uint8_t eth20[ADDRESS_LENGTH];
+    const char *hex;
+
+    if (ethAddress == NULL) {
+        return false;
+    }
+
+    if (ethAddress[0] == '0' && (ethAddress[1] == 'x' || ethAddress[1] == 'X')) {
+        hex = ethAddress + 2;
+    } else {
+        hex = ethAddress;
+    }
+
+    if (strnlen(hex, (ADDRESS_LENGTH * 2) + 1) != (ADDRESS_LENGTH * 2)) {
+        return false;
+    }
+    if (!hex_string_to_bytes_20(hex, eth20)) {
+        return false;
+    }
+
+    return tronBase58FromBinary(eth20, out58, out58_len);
 }
 
 int allzeroes(const void *buf, size_t n) {
