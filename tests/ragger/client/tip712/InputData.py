@@ -583,7 +583,7 @@ def handle_optional_domain_values(domain):
         domain["chainId"] = 0
     if "verifyingContract" not in domain.keys():
         domain[
-            "verifyingContract"] = "0x0000000000000000000000000000000000000000"
+            "verifyingContract"] = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
 
 
 def init_signature_context(types, domain, filters=None):
@@ -597,9 +597,9 @@ def init_signature_context(types, domain, filters=None):
         caddr = filters["address"]
     else:
         caddr = domain["verifyingContract"]
-    if caddr.startswith("0x"):
-        caddr = caddr[2:]
-    sig_ctx["caddr"] = bytearray.fromhex(caddr)
+    # caddr may be a TRON Base58 ("T...") or 0x-hex address; to_tvm_address handles
+    # both and yields the 20-byte form the filter signature context expects.
+    sig_ctx["caddr"] = bytearray(to_tvm_address(caddr))
     chainid = domain["chainId"]
     sig_ctx["chainid"] = bytearray()
     for i in range(8):

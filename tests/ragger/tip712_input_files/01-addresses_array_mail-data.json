@@ -2,15 +2,15 @@
     "domain": {
         "chainId": 728126428,
         "name": "Addresses Array Mail",
-        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+        "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
         "version": "1"
     },
     "message": {
         "contents": "Hello, Bob!",
-        "from": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+        "from": "TUg28KYvCXWW81EqMUeZvCZmZw2BChk1HQ",
         "to": [
-            "0xB0BdaBea57B0BDABeA57b0bdABEA57b0BDabEa57",
-            "0xb1a22cc48f6784f629a994917cd6474923630c48"
+            "TS5j9RxVDp2GhpLyC3bJipjGtbjwLYPbi4",
+            "TSASt7xbU3hyWevHNc3vtodTLwYqUA1seb"
         ],
         "id": 7
     },

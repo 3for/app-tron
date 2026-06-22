@@ -2,7 +2,7 @@
     "domain": {
         "chainId": 728126428,
         "name": "Long Bytes Mail",
-        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+        "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
         "version": "1"
     },
     "message": {
@@ -10,17 +10,17 @@
         "from": {
             "name": "Cow",
             "wallets": [
-                "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
-                "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF"
+                "TUg28KYvCXWW81EqMUeZvCZmZw2BChk1HQ",
+                "TWGd9idELBV3is6rrtC5PQUhudiJYeCr7E"
             ]
         },
         "to": [
             {
                 "name": "Bob",
                 "wallets": [
-                    "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
-                    "0xB0BdaBea57B0BDABeA57b0bdABEA57b0BDabEa57",
-                    "0xB0B0b0b0b0b0B000000000000000000000000000"
+                    "TT5rFsXYCrnzdE2q1WdR9F2SuVY59A4hoM",
+                    "TS5j9RxVDp2GhpLyC3bJipjGtbjwLYPbi4",
+                    "TS5TbUHNcZFk4TjeXj7KmRRygqAd6rQ2P9"
                 ]
             }
         ]

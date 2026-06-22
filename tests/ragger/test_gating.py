@@ -88,9 +88,15 @@ def test_gating_tip712(scenario_navigator: NavigateWithScenario) -> None:
     with open(json_file, encoding="utf-8") as file:
         data = json.load(file)
 
+    verifying_contract = data["domain"]["verifyingContract"]
+    if verifying_contract.startswith("0x"):
+        verifying_contract = eth_to_tron_base58(bytes.fromhex(verifying_contract[2:]))
+    else:
+        verifying_contract = eth_to_tron_base58(verifying_contract)
+
     descriptor = Gating(
         TxType.TYPED_DATA,
-        eth_to_tron_base58(bytes.fromhex(data["domain"]["verifyingContract"][2:])),
+        verifying_contract,
         INTRO_MSG,
         TINY_URL,
         chain_id=data["domain"].get("chainId", 0),

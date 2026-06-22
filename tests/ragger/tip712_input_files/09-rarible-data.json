@@ -2,7 +2,7 @@
    "domain" : {
       "chainId" : 728126428,
       "name" : "Exchange",
-      "verifyingContract" : "0x9757f2d2b135150bbeb65308d4a91804107cd8d6",
+      "verifyingContract" : "TPmSPo8h2Fm4wsqwUt2cUxUnDGatr176BB",
       "version" : "2"
    },
    "message" : {
@@ -16,7 +16,7 @@
          },
          "value" : "1"
       },
-      "maker" : "0x112f0732e59e7600768dfc35ba744b89f2356cd8",
+      "maker" : "TBY4pteGNhw7ha5uE58meBCwJChBDp4NYt",
       "salt" : "0xdbf0f98bc1746711579dcce549a4cc4e866fb71bf2e185bfefbb7d32f325972e",
       "start" : 0,
       "takeAsset" : {
@@ -26,7 +26,7 @@
          },
          "value" : "2000000000000000000"
       },
-      "taker" : "0x0000000000000000000000000000000000000000"
+      "taker" : "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
    },
    "primaryType" : "Order",
    "types" : {

@@ -38,6 +38,7 @@ from utils import recover_message, get_selector_from_data
 from test_gcs import compute_inst_hash, ABIS_FOLDER
 from fields_utils import get_all_paths, get_all_tuple_array_paths
 from ledgered.devices import Device
+from address import to_tvm_address
 
 WALLET_ADDR: Optional[bytes] = None
 
@@ -217,15 +218,15 @@ ADVANCED_DATA_SETS = [
             "domain": {
                 "chainId": 728126428,
                 "name": "Advanced test",
-                "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+                "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
                 "version": "1"
             },
             "message": {
-                "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                "with": "TVjpchRyV9wdpj6kmwqVsBDWY1J8PaFtnb",
                 "value_recv": 10000000000000000,
-                "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+                "token_send": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
                 "value_send": 24500000000000000000,
-                "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "token_recv": "TTVHrJWLPEMpsRJLs14bAZTpfXB5HBmNRa",
                 "expires": 1714559400,
             },
             "primaryType": "Transfer",
@@ -250,13 +251,13 @@ ADVANCED_DATA_SETS = [
             "name": "Advanced Filtering",
             "tokens": [
                 {
-                    "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    "addr": "TTVHrJWLPEMpsRJLs14bAZTpfXB5HBmNRa",
                     "ticker": "WETH",
                     "decimals": 18,
                     "chain_id": 728126428,
                 },
                 {
-                    "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
+                    "addr": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
                     "ticker": "DAI",
                     "decimals": 18,
                     "chain_id": 728126428,
@@ -313,12 +314,12 @@ ADVANCED_DATA_SETS = [
             "domain": {
                 "name": "ENS",
                 "version": "1",
-                "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+                "verifyingContract": "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh",
                 "chainId": 728126428,
             },
             "message": {
-                "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-                "spender": "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",
+                "owner": "TVjpchRyV9wdpj6kmwqVsBDWY1J8PaFtnb",
+                "spender": "TJHYbk7q2EuMJJZeEF6cxPBEDg9kG1sR1j",
                 "value": 4200000000000000000,
                 "nonce": 0,
                 "deadline": 1719756000,
@@ -328,7 +329,7 @@ ADVANCED_DATA_SETS = [
             "name": "Permit filtering",
             "tokens": [
                 {
-                    "addr": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+                    "addr": "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh",
                     "ticker": "ENS",
                     "decimals": 18,
                     "chain_id": 728126428,
@@ -367,13 +368,13 @@ ADVANCED_DATA_SETS = [
             "domain": {
                 "name": "test",
                 "version": "1",
-                "verifyingContract": "0x0000000000000000000000000000000000000000",
+                "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
                 "chainId": 728126428,
             },
             "message": {
-                "token_big": "0x6b175474e89094c44da98b954eedeac495271d0f",
+                "token_big": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
                 "value_big": c_uint64(-1).value,
-                "token_biggest": "0x6b175474e89094c44da98b954eedeac495271d0f",
+                "token_biggest": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
                 "value_biggest": int(web3.constants.MAX_INT, 0),
             }
         },
@@ -381,7 +382,7 @@ ADVANCED_DATA_SETS = [
             "name": "Unlimited test",
             "tokens": [
                 {
-                    "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
+                    "addr": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
                     "ticker": "DAI",
                     "decimals": 18,
                     "chain_id": 728126428,
@@ -421,7 +422,7 @@ def data_set_fixture(request) -> DataSet:
 TOKENS = [
     [
         {
-            "addr": "0x1111111111111111111111111111111111111111",
+            "addr": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
             "ticker": "SRC",
             "decimals": 18,
             "chain_id": 728126428,
@@ -431,7 +432,7 @@ TOKENS = [
     [
         {},
         {
-            "addr": "0x2222222222222222222222222222222222222222",
+            "addr": "TD5gsCwxykWsLN9aPrq2TAfNjByuZKYp4E",
             "ticker": "DST",
             "decimals": 18,
             "chain_id": 728126428,
@@ -512,7 +513,7 @@ def gcs_handler(client: TronClient, json_data: dict) -> None:
     tx_info = TxInfo(
         1,
         json_data["domain"]["chainId"],
-        bytes.fromhex(json_data["message"]["to"][2:]),
+        to_tvm_address(json_data["message"]["to"]),
         get_selector_from_data(json_data["message"]["data"]),
         inst_hash,
         "Token transfer",
@@ -555,7 +556,7 @@ def gcs_handler_trctoken(client: TronClient, json_data: dict) -> None:
     tx_info = TxInfo(
         1,
         json_data["domain"]["chainId"],
-        bytes.fromhex(json_data["message"]["to"][2:]),
+        to_tvm_address(json_data["message"]["to"]),
         get_selector_from_data(json_data["message"]["data"]),
         inst_hash,
         "Token transfer",
@@ -660,7 +661,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
     L0_tx_info = TxInfo(
         1,
         data["domain"]["chainId"],
-        bytes.fromhex(json_data["domain"]["verifyingContract"][2:]),
+        to_tvm_address(json_data["domain"]["verifyingContract"]),
         get_selector_from_data(batchData),
         L0_hash,
         "Batch transactions",
@@ -737,7 +738,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
 
     proxy_info = ProxyInfo(
         _get_challenge(client),
-        bytes.fromhex(json_data["message"]["to"][2:]),
+        to_tvm_address(json_data["message"]["to"]),
         L0_tx_info.chain_id,
         L0_tx_info.contract_addr,
     )
@@ -768,7 +769,7 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
     tx_info = TxInfo(
         1,
         json_data["domain"]["chainId"],
-        bytes.fromhex(json_data["message"]["to"][2:]),
+        to_tvm_address(json_data["message"]["to"]),
         get_selector_from_data(json_data["message"]["data"]),
         hashlib.sha3_256().digest(),
         "get total supply",
@@ -915,7 +916,7 @@ def test_tip712_filtering_empty_array(
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
@@ -988,13 +989,13 @@ def test_tip712_advanced_missing_token(
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
-            "token_from": "0x1111111111111111111111111111111111111111",
+            "token_from": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
             "value_from": web3.Web3.to_wei(3.65, "ether"),
-            "token_to": "0x2222222222222222222222222222222222222222",
+            "token_to": "TD5gsCwxykWsLN9aPrq2TAfNjByuZKYp4E",
             "value_to": web3.Web3.to_wei(15.47, "ether"),
         }
     }
@@ -1060,11 +1061,11 @@ def test_tip712_advanced_trusted_name(
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
-            "validator": "0x1111111111111111111111111111111111111111",
+            "validator": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
             "enable": True,
         }
     }
@@ -1094,7 +1095,7 @@ def test_tip712_advanced_trusted_name(
     client.provide_trusted_name(
         TrustedName(
             2,
-            bytes.fromhex(data["message"]["validator"][2:]),
+            to_tvm_address(data["message"]["validator"]),
             trusted_name[2],
             tn_type=trusted_name[0],
             tn_source=trusted_name[1],
@@ -1178,7 +1179,7 @@ def test_tip712_calldata_trctoken(
         data = json.load(file)
 
     # Swap the embedded transfer() calldata for transferToken(address,uint256,trcToken).
-    to20 = bytes.fromhex(data["message"]["to"][2:])
+    to20 = to_tvm_address(data["message"]["to"])
     selector = web3.Web3.keccak(text="transferToken(address,uint256,trcToken)")[:4]
     data["message"]["data"] = "0x" + (
         selector + bytes(12) + to20
@@ -1226,7 +1227,7 @@ def test_tip712_calldata_empty_send(
 
     client.provide_trusted_name(
         TrustedName(2,
-                    bytes.fromhex(json_data["message"]["to"][2:]),
+                    to_tvm_address(json_data["message"]["to"]),
                     "MAB_addr",
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
@@ -1333,14 +1334,14 @@ def test_tip712_proxy(
         filters = json.load(file)
     # Change its name & set a different address than the one in verifyingContract.
     filters["name"] = "Proxy test"
-    filters["address"] = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    filters["address"] = "TRXcKoEvHr6Y38VMcDYGBEYKznvH3XUX4g"
 
     cmd_builder = CommandBuilder()
     proxy_info = ProxyInfo(
         _get_challenge(client),
-        bytes.fromhex(data["domain"]["verifyingContract"][2:]),
+        to_tvm_address(data["domain"]["verifyingContract"]),
         int(data["domain"]["chainId"]),
-        bytes.fromhex(filters["address"][2:]),
+        to_tvm_address(filters["address"]),
     )
     client.provide_proxy_info(proxy_info.serialize())
 
@@ -1386,7 +1387,7 @@ def test_tip712_gondi(
             "name": "DOMAIN",
             "version": "3.1",
             "chainId": 31337,
-            "verifyingContract": "0x95401dc811bb5740090279ba06cfa8fcf6113778",
+            "verifyingContract": "TPaNVXGh1G5uybcdsWDUqRJ1ped9VuYZRX",
         },
         "message": {
             "child": [

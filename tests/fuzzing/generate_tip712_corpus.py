@@ -3,6 +3,8 @@ import copy
 import json
 from pathlib import Path
 
+import base58
+
 OP_STRUCT_DEF = 0
 OP_FILTERING = 1
 OP_STRUCT_IMPL = 2
@@ -164,6 +166,10 @@ def encode_integer(value, type_size: int) -> bytes:
 def encode_address(value: str) -> bytes:
     if value.startswith("0x"):
         return bytes.fromhex(value[2:])
+    # TRON Base58Check ("T..."): decode and drop the 0x41 mainnet prefix.
+    decoded = base58.b58decode_check(value)
+    if len(decoded) == 21 and decoded[0] == 0x41:
+        return decoded[1:]
     raise ValueError(f"unsupported address format: {value}")
 
 
@@ -431,7 +437,7 @@ FILTERING_EMPTY_ARRAY = {
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
@@ -511,13 +517,13 @@ AMOUNT_JOIN = {
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
-            "token_from": "0x1111111111111111111111111111111111111111",
+            "token_from": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
             "value_from": 3650000000000000000,
-            "token_to": "0x2222222222222222222222222222222222222222",
+            "token_to": "TD5gsCwxykWsLN9aPrq2TAfNjByuZKYp4E",
             "value_to": 15470000000000000000,
         },
     },
@@ -582,11 +588,11 @@ TRUSTED_NAME = {
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
-            "validator": "0x1111111111111111111111111111111111111111",
+            "validator": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
             "enable": True,
         },
     },
@@ -659,15 +665,15 @@ DATETIME_FILTER = {
         "domain": {
             "name": "Advanced test",
             "version": "1",
-            "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+            "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
             "chainId": 728126428,
         },
         "message": {
-            "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            "with": "TVjpchRyV9wdpj6kmwqVsBDWY1J8PaFtnb",
             "value_recv": 10000000000000000,
-            "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "token_send": "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW",
             "value_send": 24500000000000000000,
-            "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "token_recv": "TTVHrJWLPEMpsRJLs14bAZTpfXB5HBmNRa",
             "expires": 1714559400,
         },
     },
@@ -752,12 +758,12 @@ PERMIT_AMOUNT_JOIN = {
         "domain": {
             "name": "ENS",
             "version": "1",
-            "verifyingContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "verifyingContract": "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh",
             "chainId": 728126428,
         },
         "message": {
-            "owner": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-            "spender": "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",
+            "owner": "TVjpchRyV9wdpj6kmwqVsBDWY1J8PaFtnb",
+            "spender": "TJHYbk7q2EuMJJZeEF6cxPBEDg9kG1sR1j",
             "value": 4200000000000000000,
             "nonce": 0,
             "deadline": 1719756000,
@@ -814,11 +820,11 @@ TRUSTED_NAME_FALLBACK = {
         "domain": {
             "name": "test",
             "version": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000",
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "chainId": 728126428,
         },
         "message": {
-            "validator": "0x0000000000000000000000000000000000000000",
+            "validator": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
             "enable": True,
         },
     },

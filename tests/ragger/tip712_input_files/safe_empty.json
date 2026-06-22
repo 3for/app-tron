@@ -1,17 +1,17 @@
 {
   "domain": {
-    "verifyingContract": "0xc1897a9acbdd54028da5f7b76b5833a91553aaf6",
+    "verifyingContract": "TTcY7HWMs6jqQr2BPRnEKZZDF8FVLHJoYx",
     "chainId": 728126428
   },
   "message": {
-    "to": "0x23f8abfc2824c397ccb3da89ae772984107ddb99",
+    "to": "TDFQYnzVT9dvCoRxTu57EMTDekun8JbqTc",
     "value": "4200000000000000",
     "data": "0x",
     "operation": 0,
     "baseGas": "0",
     "gasPrice": "0",
-    "gasToken": "0x0000000000000000000000000000000000000000",
-    "refundReceiver": "0x0000000000000000000000000000000000000000",
+    "gasToken": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+    "refundReceiver": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
     "nonce": 2,
     "safeTxGas": "0"
   },
