@@ -6,10 +6,18 @@ import base58
 TRON_MAINNET_ADDRESS_PREFIX = 0x41
 
 
-def eth_to_tron_base58(addr: bytes) -> str:
-    """Convert a 20-byte EVM address (or 21-byte 0x41-prefixed) to a TRON Base58Check
-    string ("T..."). CAL descriptors carry addresses in this form so the firmware
-    verifies the signature over the Base58 bytes, then decodes back to 20 bytes."""
+def eth_to_tron_base58(addr: Union[str, bytes]) -> str:
+    """Return a TRON Base58Check address string ("T...") for use in CAL descriptors.
+
+    CAL descriptors carry addresses in this form so the firmware verifies the signature
+    over the Base58 bytes, then decodes back to 20 bytes. Accepts either an already
+    Base58Check string (passed through after validation) or a 20-byte EVM / 21-byte
+    0x41-prefixed binary address (encoded)."""
+    if isinstance(addr, str):
+        decoded = base58.b58decode_check(addr)
+        if len(decoded) != 21 or decoded[0] != TRON_MAINNET_ADDRESS_PREFIX:
+            raise ValueError(f"invalid TRON Base58 address: {addr}")
+        return addr
     if len(addr) == 21 and addr[0] == TRON_MAINNET_ADDRESS_PREFIX:
         body = addr
     elif len(addr) == 20:

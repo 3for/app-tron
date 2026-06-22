@@ -13,6 +13,7 @@ from tron import TronClient
 from client.status_word import StatusWord
 from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from client.command_builder import CommandBuilder
+from client.tlv import eth_to_tron_base58
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
 
@@ -20,6 +21,9 @@ from core import Tron_pb2 as tron
 CHAIN_ID = 728126428
 NAME = "ledger.eth"
 ADDR = bytes.fromhex("0011223344556677889900112233445566778899")
+# CAL descriptors sign the address as a TRON Base58Check string. The transaction side
+# keeps using the 20-byte ADDR; the firmware decodes ADDR_B58 back to ADDR to match.
+ADDR_B58 = eth_to_tron_base58(ADDR)
 KEY_ID = 1
 ALGO_ID = 1
 NONCE = 21
@@ -75,7 +79,7 @@ def test_trusted_name_v1(scenario_navigator: NavigateWithScenario,
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(1, ADDR, NAME, challenge=challenge,
+        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
                     coin_type=COIN_TYPE_ETH))
 
     sign_trusted_name(
@@ -110,7 +114,7 @@ def test_trusted_name_v1_verbose(navigator: Navigator,
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(1, ADDR, NAME, challenge=challenge,
+        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
                     coin_type=COIN_TYPE_ETH))
 
     tx_params = {
@@ -162,7 +166,7 @@ def test_trusted_name_v1_wrong_challenge(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR, NAME, challenge=~challenge & 0xffffffff,
+            TrustedName(1, ADDR_B58,NAME, challenge=~challenge & 0xffffffff,
                         coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
@@ -176,7 +180,7 @@ def test_trusted_name_v1_wrong_addr(
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(1, ADDR, NAME, challenge=challenge,
+        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
                     coin_type=COIN_TYPE_ETH))
 
     addr = bytearray(ADDR)
@@ -211,7 +215,7 @@ def test_trusted_name_v1_non_mainnet(
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(1, ADDR, NAME, challenge=challenge,
+        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
                     coin_type=COIN_TYPE_ETH))
 
     sign_trusted_name(
@@ -243,7 +247,7 @@ def test_trusted_name_v1_unknown_chain(
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(1, ADDR, NAME, challenge=challenge,
+        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
                     coin_type=COIN_TYPE_ETH))
 
     sign_trusted_name(
@@ -264,7 +268,7 @@ def test_trusted_name_v1_name_too_long(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR, "ledger" + "0" * 25 + ".eth",
+            TrustedName(1, ADDR_B58,"ledger" + "0" * 25 + ".eth",
                         challenge=challenge, coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
@@ -276,7 +280,7 @@ def test_trusted_name_v1_name_invalid_character(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR, "l\xe8dger.eth", challenge=challenge,
+            TrustedName(1, ADDR_B58,"l\xe8dger.eth", challenge=challenge,
                         coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
@@ -288,7 +292,7 @@ def test_trusted_name_v1_uppercase(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR, NAME.upper(), challenge=challenge,
+            TrustedName(1, ADDR_B58,NAME.upper(), challenge=challenge,
                         coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
@@ -300,7 +304,7 @@ def test_trusted_name_v1_name_non_ens(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR, "ledger.hte", challenge=challenge,
+            TrustedName(1, ADDR_B58,"ledger.hte", challenge=challenge,
                         coin_type=COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
@@ -313,7 +317,7 @@ def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
     challenge = common(app_client, cmd_builder)
 
     app_client.provide_trusted_name(
-        TrustedName(2, ADDR, NAME,
+        TrustedName(2, ADDR_B58,NAME,
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
                     chain_id=CHAIN_ID,
@@ -346,7 +350,7 @@ def test_trusted_name_v2_wrong_chainid(
     cmd_builder = CommandBuilder()
     challenge = common(app_client, cmd_builder)
     app_client.provide_trusted_name(
-        TrustedName(2, ADDR, NAME,
+        TrustedName(2, ADDR_B58,NAME,
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
                     chain_id=CHAIN_ID + 1,
@@ -369,7 +373,7 @@ def test_trusted_name_v2_missing_challenge(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(2, ADDR, NAME,
+            TrustedName(2, ADDR_B58,NAME,
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.ENS,
                         chain_id=CHAIN_ID))
@@ -383,7 +387,7 @@ def test_trusted_name_v2_expired(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(2, ADDR, NAME,
+            TrustedName(2, ADDR_B58,NAME,
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.ENS,
                         chain_id=CHAIN_ID,
@@ -400,7 +404,7 @@ def test_trusted_name_v2_mab_account_name(backend: BackendInterface):
     owner = bytes.fromhex(app_client.getAccount(0)["addressHex"][2:])
 
     rapdu = app_client.provide_trusted_name(
-        TrustedName(2, ADDR, "MyLedger",
+        TrustedName(2, ADDR_B58,"MyLedger",
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                     chain_id=CHAIN_ID,
@@ -418,7 +422,7 @@ def test_trusted_name_v2_mab_missing_owner_metadata(
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(2, ADDR, "MyLedger",
+            TrustedName(2, ADDR_B58,"MyLedger",
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                         chain_id=CHAIN_ID,
@@ -435,7 +439,7 @@ def test_trusted_name_v2_mab_wrong_owner(backend: BackendInterface):
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(2, ADDR, "MyLedger",
+            TrustedName(2, ADDR_B58,"MyLedger",
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                         chain_id=CHAIN_ID,
@@ -457,7 +461,7 @@ def test_trusted_name_v2_mab_missing_owner_deriv_path(
     # test_trusted_name_mab_missing_owner_deriv_path.
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(2, ADDR, "MyLedger",
+            TrustedName(2, ADDR_B58,"MyLedger",
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                         chain_id=CHAIN_ID,
@@ -471,7 +475,7 @@ def test_trusted_name_v2_token_cal(backend: BackendInterface):
     cmd_builder = CommandBuilder()
 
     rapdu = app_client.provide_trusted_name(
-        TrustedName(2, ADDR, "USDT",
+        TrustedName(2, ADDR_B58,"USDT",
                     tn_type=TrustedNameType.TOKEN,
                     tn_source=TrustedNameSource.CAL,
                     chain_id=CHAIN_ID))
@@ -485,7 +489,7 @@ def test_trusted_name_v2_multiple_names_same_session(
     challenge = common(app_client, cmd_builder)
 
     rapdu = app_client.provide_trusted_name(
-        TrustedName(2, ADDR, NAME,
+        TrustedName(2, ADDR_B58,NAME,
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
                     chain_id=CHAIN_ID,
@@ -493,7 +497,7 @@ def test_trusted_name_v2_multiple_names_same_session(
     assert rapdu.status == StatusWord.OK
 
     rapdu = app_client.provide_trusted_name(
-        TrustedName(2, ADDR, "USDT",
+        TrustedName(2, ADDR_B58,"USDT",
                     tn_type=TrustedNameType.TOKEN,
                     tn_source=TrustedNameSource.CAL,
                     chain_id=CHAIN_ID))

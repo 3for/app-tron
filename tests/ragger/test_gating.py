@@ -5,6 +5,7 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from tron import TronClient
 from client.gating import Gating, TxType
+from client.tlv import eth_to_tron_base58
 from settings import SettingID, settings_toggle
 
 # TRON wires its typed-data gating into the TIP-712 review and its transaction
@@ -35,7 +36,7 @@ def test_gating_blind_signing(scenario_navigator: NavigateWithScenario) -> None:
     """
     descriptor = Gating(
         TxType.TRANSACTION,
-        CUSTOM_CONTRACT_ADDR20,
+        eth_to_tron_base58(CUSTOM_CONTRACT_ADDR20),
         INTRO_MSG,
         TINY_URL,
         TRON_MAINNET_CHAINID,
@@ -56,7 +57,7 @@ def test_gating_blind_signing_with_proxy(scenario_navigator: NavigateWithScenari
     """
     descriptor = Gating(
         TxType.TRANSACTION,
-        PROXY_IMPL_ADDR20,
+        eth_to_tron_base58(PROXY_IMPL_ADDR20),
         INTRO_MSG,
         TINY_URL,
         TRON_MAINNET_CHAINID,
@@ -89,7 +90,7 @@ def test_gating_tip712(scenario_navigator: NavigateWithScenario) -> None:
 
     descriptor = Gating(
         TxType.TYPED_DATA,
-        bytes.fromhex(data["domain"]["verifyingContract"][2:]),
+        eth_to_tron_base58(bytes.fromhex(data["domain"]["verifyingContract"][2:])),
         INTRO_MSG,
         TINY_URL,
         chain_id=data["domain"].get("chainId", 0),
