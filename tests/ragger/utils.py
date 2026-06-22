@@ -4,16 +4,16 @@ from eth_keys.datatypes import PublicKey
 
 from eth_account import Account
 from eth_account.messages import encode_defunct, SignableMessage
-#from eth_account._utils.encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
-from tron_encode_typed_data.encoding_and_hashing import get_primary_type, encode_data, hash_struct
 
-from typing import Any, Dict, List
-from hexbytes import HexBytes
-from eth_utils import keccak
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from client.tip712 import InputData as InputData
+from address import to_tvm_address
 
+import copy
 import hashlib
+import re
 from decimal import Decimal
+from Crypto.Hash import keccak
 
 from eth_keys import KeyAPI
 from eth_keys.datatypes import PublicKey
@@ -62,6 +62,7 @@ def build_trc20_calldata(to_address_hex: str, amount: Decimal):
 
     return selector + address_bytes + amount_bytes
 
+
 def recover_message(msg, vrs: tuple) -> bytes:
     if isinstance(msg, dict):  # TIP-712
         smsg = encode_typed_data(full_message=msg)
@@ -71,6 +72,242 @@ def recover_message(msg, vrs: tuple) -> bytes:
     return bytes.fromhex(addr[2:])
 
 
+# EIP712Domain field -> ABI type, mirroring eth_account's hash_domain. Only
+# verifyingContract is an address that needs TRON normalization.
+_DOMAIN_FIELD_TYPES = {
+    "name": "string",
+    "version": "string",
+    "chainId": "uint256",
+    "verifyingContract": "address",
+    "salt": "bytes32",
+}
+
+
+def _norm_addr(value: Any) -> str:
+    # Accepts a TRON Base58 ("T...") or 0x-hex address and returns the 0x-hex,
+    # 20-byte form eth_account/eth_abi expect.
+    return "0x" + to_tvm_address(value).hex()
+
+
+def _keccak(data: bytes = b"", text: Optional[str] = None) -> bytes:
+    if text is not None:
+        data = text.encode()
+    return keccak.new(digest_bits=256, data=data).digest()
+
+
+def _is_array_type(type_: str) -> bool:
+    return type_.endswith("]")
+
+
+def _parse_core_array_type(type_: str) -> str:
+    if _is_array_type(type_):
+        return type_[:type_.index("[")]
+    return type_
+
+
+def _parse_parent_array_type(type_: str) -> str:
+    if _is_array_type(type_):
+        return type_[:type_.rindex("[")]
+    return type_
+
+
+def _parse_integer_type(type_: str) -> Tuple[str, int]:
+    if type_ == "trcToken":
+        return ("uint", 256)
+    match = re.fullmatch(r"(u?int)(\d*)", type_)
+    if match is None:
+        raise ValueError(f"not an integer type: {type_}")
+    bits = int(match.group(2) or "256")
+    return (match.group(1), bits)
+
+
+def _to_int(value: Any) -> int:
+    if isinstance(value, str):
+        return int(value, 0)
+    return int(value)
+
+
+def _is_0x_prefixed_hexstr(value: Any) -> bool:
+    if not isinstance(value, str) or not value.startswith("0x"):
+        return False
+    return all(char in "0123456789abcdefABCDEF" for char in value[2:])
+
+
+def _hexstr_to_bytes(value: str, size: Optional[int] = None) -> bytes:
+    value = value[2:]
+    if size is not None and len(value) < size * 2:
+        value = value.rjust(size * 2, "0")
+    elif len(value) % 2 != 0:
+        value = "0" + value
+    return bytes.fromhex(value)
+
+
+def _encode_abi_word(type_: str, value: Union[bytes, int, bool, str]) -> bytes:
+    if type_ == "bytes32":
+        if not isinstance(value, bytes) or len(value) != 32:
+            raise ValueError("bytes32 ABI value must be exactly 32 bytes")
+        return value
+    if type_ == "address":
+        return bytes(12) + to_tvm_address(value)
+    if type_ == "bool":
+        return int(bool(value)).to_bytes(32, "big")
+    if type_.startswith("bytes") and type_ != "bytes":
+        size = int(type_[5:])
+        if not isinstance(value, bytes):
+            if _is_0x_prefixed_hexstr(value):
+                value = _hexstr_to_bytes(value, size)
+            elif isinstance(value, str):
+                value = value.encode()
+            else:
+                value = int(value).to_bytes(max(1, (int(value).bit_length() + 7) // 8), "big")
+        if len(value) > size:
+            raise ValueError(f"{type_} ABI value must be at most {size} bytes")
+        return value.ljust(32, b"\x00")
+    if type_ == "trcToken" or type_.startswith(("int", "uint")):
+        sign, bits = _parse_integer_type(type_)
+        intval = _to_int(value)
+        if sign == "uint":
+            if intval < 0 or intval >= (1 << bits):
+                raise ValueError(f"{type_} value out of bounds")
+            return intval.to_bytes(32, "big")
+        if intval < -(1 << (bits - 1)) or intval >= (1 << (bits - 1)):
+            raise ValueError(f"{type_} value out of bounds")
+        if intval < 0:
+            intval = (1 << 256) + intval
+        return intval.to_bytes(32, "big", signed=False)
+    raise ValueError(f"unsupported ABI word type: {type_}")
+
+
+def _derive_primary_type(message_types: Dict[str, List[Dict[str, str]]]) -> str:
+    # The primary type is the only struct never referenced as a field of another
+    # struct (EIP712Domain already excluded by the caller). Mirrors eth_account.
+    custom = set(message_types.keys())
+    referenced = set()
+    for fields in message_types.values():
+        for field in fields:
+            base = _parse_core_array_type(field["type"])
+            if base in custom:
+                referenced.add(base)
+    roots = custom - referenced
+    if len(roots) != 1:
+        raise ValueError(f"Unable to derive primaryType, candidates: {sorted(roots)}")
+    return roots.pop()
+
+
+_SOLIDITY_TYPES = {
+    "bool",
+    "address",
+    "string",
+    "bytes",
+    "uint",
+    "int",
+    "trcToken",
+    *{f"uint{(idx + 1) * 8}" for idx in range(32)},
+    *{f"int{(idx + 1) * 8}" for idx in range(32)},
+    *{f"bytes{idx + 1}" for idx in range(32)},
+}
+
+
+def _find_type_dependencies(type_: str,
+                            types: Dict[str, List[Dict[str, str]]],
+                            results: Optional[Set[str]] = None) -> Set[str]:
+    if results is None:
+        results = set()
+    type_ = _parse_core_array_type(type_)
+    if type_ in _SOLIDITY_TYPES or type_ in results:
+        return results
+    if type_ not in types:
+        raise ValueError(f"No definition of type `{type_}`")
+    results.add(type_)
+    for field in types[type_]:
+        _find_type_dependencies(field["type"], types, results)
+    return results
+
+
+def _encode_type(type_: str, types: Dict[str, List[Dict[str, str]]]) -> str:
+    deps = _find_type_dependencies(type_, types)
+    deps.discard(type_)
+    ordered = [type_] + sorted(deps)
+    result = ""
+    for dep in ordered:
+        fields = ",".join(f"{field['type']} {field['name']}" for field in types[dep])
+        result += f"{dep}({fields})"
+    return result
+
+
+def _hash_type(type_: str, types: Dict[str, List[Dict[str, str]]]) -> bytes:
+    return _keccak(text=_encode_type(type_, types))
+
+
+def _encode_field(types: Dict[str, List[Dict[str, str]]],
+                  name: str,
+                  type_: str,
+                  value: Any) -> Tuple[str, Union[bytes, int, bool, str]]:
+    if type_ in types:
+        return ("bytes32", bytes(32) if value is None else _hash_struct(type_, types, value))
+    if type_ in ("string", "bytes") and value is None:
+        return ("bytes32", b"")
+    if value is None:
+        raise ValueError(f"Missing value for field `{name}` of type `{type_}`")
+    if _is_array_type(type_):
+        if not isinstance(value, list):
+            raise ValueError(f"Invalid value for field `{name}` of type `{type_}`")
+        item_type = _parse_parent_array_type(type_)
+        encoded_items = b"".join(
+            _encode_abi_word(abi_type, abi_value)
+            for abi_type, abi_value in (_encode_field(types, name, item_type, item)
+                                        for item in value)
+        )
+        return ("bytes32", _keccak(encoded_items))
+    if type_ == "bool":
+        falsy_values = {"False", "false", "0"}
+        return (type_, False if not value or value in falsy_values else True)
+    if type_.startswith("bytes"):
+        if not isinstance(value, bytes):
+            if _is_0x_prefixed_hexstr(value):
+                value = _hexstr_to_bytes(value, int(type_[5:]) if type_ != "bytes" else None)
+            elif isinstance(value, str):
+                value = value.encode()
+            else:
+                value = int(value).to_bytes(max(1, (int(value).bit_length() + 7) // 8), "big")
+        return ("bytes32", _keccak(value)) if type_ == "bytes" else (type_, value)
+    if type_ == "string":
+        return ("bytes32", _keccak(str(value).encode()))
+    if type_ == "address":
+        return (type_, value)
+    if type_ == "trcToken" or type_.startswith(("int", "uint")):
+        return (type_, _to_int(value))
+    return (type_, value)
+
+
+def _encode_data(type_: str,
+                 types: Dict[str, List[Dict[str, str]]],
+                 data: Dict[str, Any]) -> bytes:
+    encoded = [_hash_type(type_, types)]
+    for field in types[type_]:
+        abi_type, abi_value = _encode_field(types, field["name"], field["type"],
+                                            data.get(field["name"]))
+        encoded.append(_encode_abi_word(abi_type, abi_value))
+    return b"".join(encoded)
+
+
+def _hash_struct(type_: str,
+                 types: Dict[str, List[Dict[str, str]]],
+                 data: Dict[str, Any]) -> bytes:
+    return _keccak(_encode_data(type_, types, data))
+
+
+def _hash_domain(domain_data: Dict[str, Any]) -> bytes:
+    domain_types = {
+        "EIP712Domain": [
+            {"name": key, "type": _DOMAIN_FIELD_TYPES[key]}
+            for key in _DOMAIN_FIELD_TYPES
+            if key in domain_data
+        ]
+    }
+    return _hash_struct("EIP712Domain", domain_types, domain_data)
+
+
 def encode_typed_data(
     domain_data: Dict[str, Any] = None,
     message_types: Dict[str, Any] = None,
@@ -78,105 +315,18 @@ def encode_typed_data(
     full_message: Dict[str, Any] = None,
 ) -> SignableMessage:
     if full_message is not None:
-        if (domain_data is not None or message_types is not None
-                or message_data is not None):
-            raise ValueError(
-                "You may supply either `full_message` as a single argument or "
-                "`domain_data`, `message_types`, and `message_data` as three arguments,"
-                " but not both.")
-
-        full_message_types = full_message["types"].copy()
-        full_message_domain = full_message["domain"].copy()
-
-        # If EIP712Domain types were provided, check that they match the domain data
-        if "EIP712Domain" in full_message_types:
-            domain_data_keys = list(full_message_domain.keys())
-            domain_types_keys = [
-                field["name"] for field in full_message_types["EIP712Domain"]
-            ]
-
-            if set(domain_data_keys) != (set(domain_types_keys)):
-                raise ValidationError(
-                    "The fields provided in `domain` do not match the fields provided"
-                    " in `types.EIP712Domain`. The fields provided in `domain` were"
-                    f" `{domain_data_keys}`, but the fields provided in "
-                    f"`types.EIP712Domain` were `{domain_types_keys}`.")
-
-        full_message_types.pop("EIP712Domain", None)
-
-        # If primaryType was provided, check that it matches the derived primaryType
-        if "primaryType" in full_message:
-            derived_primary_type = get_primary_type(full_message_types)
-            provided_primary_type = full_message["primaryType"]
-            if derived_primary_type != provided_primary_type:
-                raise ValidationError(
-                    "The provided `primaryType` does not match the derived "
-                    "`primaryType`. The provided `primaryType` was "
-                    f"`{provided_primary_type}`, but the derived `primaryType` was "
-                    f"`{derived_primary_type}`.")
-
-        parsed_domain_data = full_message_domain
-        parsed_message_types = full_message_types
-        parsed_message_data = full_message["message"]
-
+        fm = copy.deepcopy(full_message)
+        domain_data = fm["domain"]
+        message_types = {k: v for k, v in fm["types"].items() if k != "EIP712Domain"}
+        message_data = fm["message"]
+        primary_type = fm.get("primaryType") or _derive_primary_type(message_types)
     else:
-        parsed_domain_data = domain_data
-        parsed_message_types = message_types
-        parsed_message_data = message_data
-
+        primary_type = _derive_primary_type(message_types)
     return SignableMessage(
-        HexBytes(b"\x01"),
-        hash_domain(parsed_domain_data),
-        hash_tip712_message(parsed_message_types, parsed_message_data),
+        b"\x01",
+        _hash_domain(domain_data),
+        _hash_struct(primary_type, message_types, message_data),
     )
-
-
-def hash_tip712_message(
-    # returns the same hash as `hash_struct`, but automatically determines primary type
-    message_types: Dict[str, List[Dict[str, str]]],
-    message_data: Dict[str, Any],
-) -> bytes:
-    primary_type = get_primary_type(message_types)
-    return bytes(keccak(encode_data(primary_type, message_types,
-                                    message_data)))
-
-
-def hash_domain(domain_data: Dict[str, Any]) -> bytes:
-    tip712_domain_map = {
-        "name": {
-            "name": "name",
-            "type": "string"
-        },
-        "version": {
-            "name": "version",
-            "type": "string"
-        },
-        "chainId": {
-            "name": "chainId",
-            "type": "uint256"
-        },
-        "verifyingContract": {
-            "name": "verifyingContract",
-            "type": "address"
-        },
-        "salt": {
-            "name": "salt",
-            "type": "bytes32"
-        },
-    }
-
-    for k in domain_data.keys():
-        if k not in tip712_domain_map.keys():
-            raise ValueError(f"Invalid domain key: `{k}`")
-
-    domain_types = {
-        "EIP712Domain": [
-            tip712_domain_map[k] for k in tip712_domain_map.keys()
-            if k in domain_data
-        ]
-    }
-
-    return hash_struct("EIP712Domain", domain_types, domain_data)
 
 
 def recover_transaction(tx_params, vrs: tuple) -> bytes:

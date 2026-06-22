@@ -39,7 +39,7 @@ if str(TESTS_RAGGER_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_RAGGER_DIR))
 
 from client import keychain  # noqa: E402
-from tron_encode_typed_data.encoding_and_hashing import hash_eip712_message, hash_struct  # noqa: E402
+from utils import encode_typed_data  # noqa: E402
 
 
 CLA = 0xE0
@@ -578,11 +578,8 @@ def send_struct_impl(dongle,
 
 def try_recover_address(data: dict, signature: bytes) -> Optional[str]:
     try:
-        domain_hash = hash_struct("EIP712Domain", data["types"], data["domain"])
-        message_types = dict(data["types"])
-        message_types.pop("EIP712Domain", None)
-        message_hash = hash_eip712_message(message_types, data["message"])
-        digest = keccak(b"\x19\x01" + domain_hash + message_hash)
+        smsg = encode_typed_data(full_message=data)
+        digest = keccak(b"\x19\x01" + bytes(smsg.header) + bytes(smsg.body))
         pubkey = KeyAPI.Signature(signature_bytes=signature).recover_public_key_from_msg_hash(digest)
         return to_base58check(b"\x41" + bytes.fromhex(pubkey.to_address()[2:]))
     except Exception as exc:

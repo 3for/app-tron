@@ -42,11 +42,8 @@ if str(TESTS_RAGGER_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_RAGGER_DIR))
 
 from address import to_base58check_address, to_tvm_address  # noqa: E402
-from tron_encode_typed_data.encoding_and_hashing import (  # noqa: E402
-    hash_eip712_message,
-    hash_struct,
-)
-from tron_encode_typed_data.tron_abi import tron_abi  # noqa: E402
+from utils import encode_typed_data  # noqa: E402
+from eth_abi import encode as _abi_encode, decode as _abi_decode  # noqa: E402
 
 
 CLA = 0xE0
@@ -365,17 +362,80 @@ def send_root_struct_impl(dongle,
 
 
 def compute_digest(data: dict) -> bytes:
-    domain_hash = hash_struct("EIP712Domain", data["types"], data["domain"])
-    message_types = dict(data["types"])
-    message_types.pop("EIP712Domain", None)
-    message_hash = hash_eip712_message(message_types, data["message"])
-    return keccak.new(digest_bits=256, data=b"\x19\x01" + domain_hash + message_hash).digest()
+    smsg = encode_typed_data(full_message=data)
+    return keccak.new(digest_bits=256,
+                      data=b"\x19\x01" + bytes(smsg.header) + bytes(smsg.body)).digest()
 
 
 def recover_signer_address(data: dict, signature: bytes) -> str:
     digest = compute_digest(data)
     pubkey = KeyAPI.Signature(signature_bytes=signature).recover_public_key_from_msg_hash(digest)
     return to_base58check_address(bytes.fromhex(pubkey.to_address()[2:]))
+
+
+# --- TRON ABI codec on top of stock eth_abi -----------------------------------
+# eth_abi has no TRON `address` (Base58) or `trcToken` support, so we adapt the
+# inputs/outputs around it: Base58 "T..." <-> 0x-hex addresses, and trcToken treated
+# as uint256. Recurses through arrays and tuples.
+def _abi_split_components(tuple_type: str) -> list:
+    inner = tuple_type[1:-1]  # strip the outer ( )
+    out, depth, cur = [], 0, ""
+    for ch in inner:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _abi_normalize_arg(type_str: str, value):
+    type_str = type_str.strip()
+    if type_str.endswith("]"):
+        inner = type_str[:type_str.rfind("[")]
+        return [_abi_normalize_arg(inner, elem) for elem in value]
+    if type_str.startswith("("):
+        comps = _abi_split_components(type_str)
+        return tuple(_abi_normalize_arg(ct, cv) for ct, cv in zip(comps, value))
+    if type_str == "address":
+        return "0x" + to_tvm_address(value).hex()
+    if type_str == "trcToken":
+        return int(value, 0) if isinstance(value, str) else int(value)
+    return value
+
+
+def _abi_outputs_to_base58(type_str: str, value):
+    type_str = type_str.strip()
+    if type_str.endswith("]"):
+        inner = type_str[:type_str.rfind("[")]
+        return [_abi_outputs_to_base58(inner, elem) for elem in value]
+    if type_str.startswith("("):
+        comps = _abi_split_components(type_str)
+        return tuple(_abi_outputs_to_base58(ct, cv) for ct, cv in zip(comps, value))
+    if type_str == "address":
+        return to_base58check_address(value)
+    return value
+
+
+def _rewrite_trctoken(type_str: str) -> str:
+    return type_str.replace("trcToken", "uint256")
+
+
+def encode_tron_abi(types: list, args) -> bytes:
+    norm_types = [_rewrite_trctoken(t) for t in types]
+    norm_args = [_abi_normalize_arg(t, a) for t, a in zip(types, args)]
+    return _abi_encode(norm_types, norm_args)
+
+
+def decode_tron_abi(types: list, data: bytes) -> tuple:
+    decoded = _abi_decode([_rewrite_trctoken(t) for t in types], data)
+    return tuple(_abi_outputs_to_base58(t, v) for t, v in zip(types, decoded))
 
 
 def encode_verify_mail_call(sender: str, data: dict, signature: bytes, v: int) -> bytes:
@@ -387,7 +447,7 @@ def encode_verify_mail_call(sender: str, data: dict, signature: bytes, v: int) -
         signature[:32],
         signature[32:64],
     )
-    return VERIFY_MAIL_SELECTOR + tron_abi.encode_abi(VERIFY_MAIL_ARG_TYPES, args)
+    return VERIFY_MAIL_SELECTOR + encode_tron_abi(VERIFY_MAIL_ARG_TYPES, args)
 
 
 def build_verify_mail_mail_arg(data: dict) -> tuple:
@@ -456,7 +516,7 @@ def query_contract_domain_verifier(fullnode_url: str, owner_address: str) -> str
     if not response.get("result", {}).get("result") or not constant_results:
         print("[WARN] Failed to query _CACHED_THIS(); falling back to deployed contract address")
         return VERIFY_MAIL_CONTRACT
-    return tron_abi.decode_abi(["address"], bytes.fromhex(constant_results[0]))[0]
+    return decode_tron_abi(["address"], bytes.fromhex(constant_results[0]))[0]
 
 
 def align_domain_for_onchain_verification(data: dict, fullnode_url: str, owner_address: str) -> dict:
@@ -504,9 +564,9 @@ def call_verify_mail(fullnode_url: str,
         raise RuntimeError(f"verifyMail returned no constant_result: {response}")
     raw_result = bytes.fromhex(constant_results[0])
     if raw_result.startswith(ERROR_STRING_SELECTOR):
-        revert_reason = tron_abi.decode_abi(["string"], raw_result[4:])[0]
+        revert_reason = decode_tron_abi(["string"], raw_result[4:])[0]
         raise RuntimeError(f"verifyMail reverted: {revert_reason}")
-    return tron_abi.decode_abi(["bool"], raw_result)[0]
+    return decode_tron_abi(["bool"], raw_result)[0]
 
 
 def main() -> int:
