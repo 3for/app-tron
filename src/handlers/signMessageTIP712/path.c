@@ -593,6 +593,7 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
     bool is_custom;
     uint8_t array_size;
     uint8_t array_depth_count_bak;
+    uint8_t advance_guard = 0;
     s_hash_ctx *start_hash_ctx = get_last_hash_ctx();
 
     if (path_struct == NULL) {
@@ -679,7 +680,19 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
     }
     if (array_size == 0) {
         do {
+            s_path previous_path;
+
+            if (advance_guard++ > (MAX_PATH_DEPTH + MAX_ARRAY_DEPTH)) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                return false;
+            }
+            memcpy(&previous_path, path_struct, sizeof(previous_path));
             (void) path_advance(false);
+            if ((path_struct->array_depth_count > array_depth_count_bak) &&
+                (memcmp(&previous_path, path_struct, sizeof(previous_path)) == 0)) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                return false;
+            }
         } while (path_struct->array_depth_count > array_depth_count_bak);
     }
 
