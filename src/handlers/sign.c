@@ -554,6 +554,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION, data_warning);
 
             break;
+        case UPDATEBROKERAGECONTRACT:  // Update witness brokerage (reward commission %)
+            // brokerage is a percentage in [0, 100], stashed in amount[0] at parse
+            snprintf((char *) G_io_apdu_buffer, 100, "%d%%", (int) txContent.amount[0]);
+
+            ux_flow_display(APPROVAL_UPDATEBROKERAGE_TRANSACTION, data_warning);
+
+            break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 

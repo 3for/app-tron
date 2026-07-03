@@ -795,6 +795,28 @@ class TestTRX():
                     client.getAccount(0)['addressHex'])))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_update_brokerage(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateBrokerageContract,
+            contract.UpdateBrokerageContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                brokerage=20))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_update_brokerage_out_of_range(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateBrokerageContract,
+            contract.UpdateBrokerageContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                brokerage=101))
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_sign_personal_message(self, backend, device):
         client = TronClient(backend)
         # Magic define

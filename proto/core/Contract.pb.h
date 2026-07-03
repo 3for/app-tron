@@ -210,6 +210,11 @@ typedef struct _protocol_UpdateAssetContract {
     int64_t new_public_limit; 
 } protocol_UpdateAssetContract;
 
+typedef struct _protocol_UpdateBrokerageContract { 
+    pb_byte_t owner_address[21]; 
+    int32_t brokerage; 
+} protocol_UpdateBrokerageContract;
+
 typedef struct _protocol_VoteAssetContract { 
     pb_callback_t owner_address; 
     pb_callback_t vote_address; 
@@ -277,6 +282,7 @@ extern "C" {
 #define protocol_UnDelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_default {{{NULL}, NULL}}
 #define protocol_WithdrawBalanceContract_init_default {{0}}
+#define protocol_UpdateBrokerageContract_init_default {{0}, 0}
 #define protocol_UpdateAssetContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
 #define protocol_ProposalCreateContract_init_default {{0}, 0, {protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default}}
 #define protocol_ProposalCreateContract_ParametersEntry_init_default {0, 0}
@@ -311,6 +317,7 @@ extern "C" {
 #define protocol_UnDelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_zero {{{NULL}, NULL}}
 #define protocol_WithdrawBalanceContract_init_zero {{0}}
+#define protocol_UpdateBrokerageContract_init_zero {{0}, 0}
 #define protocol_UpdateAssetContract_init_zero   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
 #define protocol_ProposalCreateContract_init_zero {{0}, 0, {protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero}}
 #define protocol_ProposalCreateContract_ParametersEntry_init_zero {0, 0}
@@ -426,6 +433,8 @@ extern "C" {
 #define protocol_UpdateAssetContract_url_tag     3
 #define protocol_UpdateAssetContract_new_limit_tag 4
 #define protocol_UpdateAssetContract_new_public_limit_tag 5
+#define protocol_UpdateBrokerageContract_owner_address_tag 1
+#define protocol_UpdateBrokerageContract_brokerage_tag 2
 #define protocol_VoteAssetContract_owner_address_tag 1
 #define protocol_VoteAssetContract_vote_address_tag 2
 #define protocol_VoteAssetContract_support_tag   3
@@ -609,6 +618,12 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1)
 #define protocol_WithdrawBalanceContract_CALLBACK NULL
 #define protocol_WithdrawBalanceContract_DEFAULT NULL
 
+#define protocol_UpdateBrokerageContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, INT32,    brokerage,         2)
+#define protocol_UpdateBrokerageContract_CALLBACK NULL
+#define protocol_UpdateBrokerageContract_DEFAULT NULL
+
 #define protocol_UpdateAssetContract_FIELDLIST(X, a) \
 X(a, CALLBACK, SINGULAR, BYTES,    owner_address,     1) \
 X(a, CALLBACK, SINGULAR, BYTES,    description,       2) \
@@ -716,6 +731,7 @@ extern const pb_msgdesc_t protocol_DelegateResourceContract_msg;
 extern const pb_msgdesc_t protocol_UnDelegateResourceContract_msg;
 extern const pb_msgdesc_t protocol_UnfreezeAssetContract_msg;
 extern const pb_msgdesc_t protocol_WithdrawBalanceContract_msg;
+extern const pb_msgdesc_t protocol_UpdateBrokerageContract_msg;
 extern const pb_msgdesc_t protocol_UpdateAssetContract_msg;
 extern const pb_msgdesc_t protocol_ProposalCreateContract_msg;
 extern const pb_msgdesc_t protocol_ProposalCreateContract_ParametersEntry_msg;
@@ -752,6 +768,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_UnDelegateResourceContract_fields &protocol_UnDelegateResourceContract_msg
 #define protocol_UnfreezeAssetContract_fields &protocol_UnfreezeAssetContract_msg
 #define protocol_WithdrawBalanceContract_fields &protocol_WithdrawBalanceContract_msg
+#define protocol_UpdateBrokerageContract_fields &protocol_UpdateBrokerageContract_msg
 #define protocol_UpdateAssetContract_fields &protocol_UpdateAssetContract_msg
 #define protocol_ProposalCreateContract_fields &protocol_ProposalCreateContract_msg
 #define protocol_ProposalCreateContract_ParametersEntry_fields &protocol_ProposalCreateContract_ParametersEntry_msg
@@ -795,6 +812,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_UnDelegateResourceContract_size 59
 #define protocol_UnfreezeBalanceContract_size    48
 #define protocol_UnfreezeBalanceV2Contract_size  36
+#define protocol_UpdateBrokerageContract_size    34
 #define protocol_VoteWitnessContract_Vote_size   34
 #define protocol_VoteWitnessContract_size        203
 #define protocol_WithdrawBalanceContract_size    23

@@ -108,6 +108,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case CANCELALLUNFREEZEV2CONTRACT:
             strlcpy(out, "Cancel All Unfreeze V2", outlen);
             break;
+        case UPDATEBROKERAGECONTRACT:
+            strlcpy(out, "Update Brokerage", outlen);
+            break;
         case UPDATEASSETCONTRACT:
             strlcpy(out, "Update Asset", outlen);
             break;
@@ -540,6 +543,28 @@ static bool cancel_all_unfreeze_v2_contract(txContent_t *content, pb_istream_t *
     return true;
 }
 
+static bool update_brokerage_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_UpdateBrokerageContract_fields,
+                   &msg.update_brokerage_contract)) {
+        return false;
+    }
+    // owner_address is a fixed_length 21-byte field; additionally require the 0x41
+    // mainnet prefix to match java-tron DecodeUtil.addressValid.
+    if (msg.update_brokerage_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    // brokerage is a percentage in [0, 100] (java-tron UpdateBrokerageActuator.validate,
+    // ActuatorConstant.ONE_HUNDRED).
+    if (msg.update_brokerage_contract.brokerage < 0 ||
+        msg.update_brokerage_contract.brokerage > 100) {
+        return false;
+    }
+    COPY_ADDRESS(content->account, &msg.update_brokerage_contract.owner_address);
+    content->amount[0] = (uint64_t) msg.update_brokerage_contract.brokerage;
+    return true;
+}
+
 static bool delegate_resource_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream,
                    protocol_DelegateResourceContract_fields,
@@ -941,6 +966,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
                 ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+                ret = update_brokerage_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;

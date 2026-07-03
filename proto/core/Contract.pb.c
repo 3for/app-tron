@@ -75,6 +75,9 @@ PB_BIND(protocol_UnfreezeAssetContract, protocol_UnfreezeAssetContract, AUTO)
 PB_BIND(protocol_WithdrawBalanceContract, protocol_WithdrawBalanceContract, AUTO)
 
 
+PB_BIND(protocol_UpdateBrokerageContract, protocol_UpdateBrokerageContract, AUTO)
+
+
 PB_BIND(protocol_UpdateAssetContract, protocol_UpdateAssetContract, AUTO)
 
 

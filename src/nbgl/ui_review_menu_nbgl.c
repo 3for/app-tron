@@ -712,6 +712,19 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nCancel All Unfreeze V2";
             infoLongPress.text = "Sign transaction to\nCancel All Unfreeze V2";
             break;
+        case APPROVAL_UPDATEBROKERAGE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Brokerage";
+            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Brokerage";
+            infoLongPress.text = "Sign transaction to\nUpdate Brokerage";
+            break;
         default:
             PRINTF("This should not happen !\n");
             break;
