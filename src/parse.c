@@ -105,6 +105,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case WITHDRAWEXPIREUNFREEZECONTRACT:
             strlcpy(out, "Withdraw Unfreeze", outlen);
             break;
+        case CANCELALLUNFREEZEV2CONTRACT:
+            strlcpy(out, "Cancel All Unfreeze V2", outlen);
+            break;
         case UPDATEASSETCONTRACT:
             strlcpy(out, "Update Asset", outlen);
             break;
@@ -521,6 +524,22 @@ static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t
     return true;
 }
 
+static bool cancel_all_unfreeze_v2_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_CancelAllUnfreezeV2Contract_fields,
+                   &msg.cancel_all_unfreeze_v2_contract)) {
+        return false;
+    }
+    // owner_address is a fixed_length 21-byte field, so nanopb already guarantees
+    // the length; additionally require the 0x41 mainnet prefix to match java-tron
+    // DecodeUtil.addressValid (CancelAllUnfreezeV2Actuator.validate).
+    if (msg.cancel_all_unfreeze_v2_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    COPY_ADDRESS(content->account, &msg.cancel_all_unfreeze_v2_contract.owner_address);
+    return true;
+}
+
 static bool delegate_resource_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream,
                    protocol_DelegateResourceContract_fields,
@@ -919,6 +938,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
                 ret = witness_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+                ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;

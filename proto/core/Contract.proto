@@ -148,6 +148,10 @@ message WithdrawExpireUnfreezeContract {
   bytes owner_address = 1;
 }
 
+message CancelAllUnfreezeV2Contract {
+  bytes owner_address = 1;
+}
+
 message DelegateResourceContract {
   bytes owner_address = 1;
   ResourceCode resource = 2;

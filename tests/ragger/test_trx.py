@@ -786,6 +786,15 @@ class TestTRX():
                     client.getAccount(0)['addressHex'])))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_cancel_all_unfreeze_v2(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.CancelAllUnfreezeV2Contract,
+            contract.CancelAllUnfreezeV2Contract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex'])))
+        self.sign_and_validate(client, device, 0, tx)
+
     def test_trx_sign_personal_message(self, backend, device):
         client = TronClient(backend)
         # Magic define

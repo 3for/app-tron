@@ -60,6 +60,9 @@ PB_BIND(protocol_UnfreezeBalanceV2Contract, protocol_UnfreezeBalanceV2Contract, 
 PB_BIND(protocol_WithdrawExpireUnfreezeContract, protocol_WithdrawExpireUnfreezeContract, AUTO)
 
 
+PB_BIND(protocol_CancelAllUnfreezeV2Contract, protocol_CancelAllUnfreezeV2Contract, AUTO)
+
+
 PB_BIND(protocol_DelegateResourceContract, protocol_DelegateResourceContract, AUTO)
 
 

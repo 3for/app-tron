@@ -76,6 +76,10 @@ typedef struct _protocol_AssetIssueContract_FrozenSupply {
     int64_t frozen_days; 
 } protocol_AssetIssueContract_FrozenSupply;
 
+typedef struct _protocol_CancelAllUnfreezeV2Contract { 
+    pb_byte_t owner_address[21]; 
+} protocol_CancelAllUnfreezeV2Contract;
+
 typedef struct _protocol_DelegateResourceContract { 
     pb_byte_t owner_address[21]; 
     protocol_ResourceCode resource; 
@@ -268,6 +272,7 @@ extern "C" {
 #define protocol_FreezeBalanceV2Contract_init_default {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_UnfreezeBalanceV2Contract_init_default {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_WithdrawExpireUnfreezeContract_init_default {{0}}
+#define protocol_CancelAllUnfreezeV2Contract_init_default {{0}}
 #define protocol_DelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0}
 #define protocol_UnDelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_default {{{NULL}, NULL}}
@@ -301,6 +306,7 @@ extern "C" {
 #define protocol_FreezeBalanceV2Contract_init_zero {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_UnfreezeBalanceV2Contract_init_zero {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_WithdrawExpireUnfreezeContract_init_zero {{0}}
+#define protocol_CancelAllUnfreezeV2Contract_init_zero {{0}}
 #define protocol_DelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0}
 #define protocol_UnDelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_zero {{{NULL}, NULL}}
@@ -349,6 +355,7 @@ extern "C" {
 #define protocol_AssetIssueContract_public_latest_free_net_time_tag 25
 #define protocol_AssetIssueContract_FrozenSupply_frozen_amount_tag 1
 #define protocol_AssetIssueContract_FrozenSupply_frozen_days_tag 2
+#define protocol_CancelAllUnfreezeV2Contract_owner_address_tag 1
 #define protocol_DelegateResourceContract_owner_address_tag 1
 #define protocol_DelegateResourceContract_resource_tag 2
 #define protocol_DelegateResourceContract_balance_tag 3
@@ -570,6 +577,11 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1)
 #define protocol_WithdrawExpireUnfreezeContract_CALLBACK NULL
 #define protocol_WithdrawExpireUnfreezeContract_DEFAULT NULL
 
+#define protocol_CancelAllUnfreezeV2Contract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1)
+#define protocol_CancelAllUnfreezeV2Contract_CALLBACK NULL
+#define protocol_CancelAllUnfreezeV2Contract_DEFAULT NULL
+
 #define protocol_DelegateResourceContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, UENUM,    resource,          2) \
@@ -699,6 +711,7 @@ extern const pb_msgdesc_t protocol_UnfreezeBalanceContract_msg;
 extern const pb_msgdesc_t protocol_FreezeBalanceV2Contract_msg;
 extern const pb_msgdesc_t protocol_UnfreezeBalanceV2Contract_msg;
 extern const pb_msgdesc_t protocol_WithdrawExpireUnfreezeContract_msg;
+extern const pb_msgdesc_t protocol_CancelAllUnfreezeV2Contract_msg;
 extern const pb_msgdesc_t protocol_DelegateResourceContract_msg;
 extern const pb_msgdesc_t protocol_UnDelegateResourceContract_msg;
 extern const pb_msgdesc_t protocol_UnfreezeAssetContract_msg;
@@ -734,6 +747,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_FreezeBalanceV2Contract_fields &protocol_FreezeBalanceV2Contract_msg
 #define protocol_UnfreezeBalanceV2Contract_fields &protocol_UnfreezeBalanceV2Contract_msg
 #define protocol_WithdrawExpireUnfreezeContract_fields &protocol_WithdrawExpireUnfreezeContract_msg
+#define protocol_CancelAllUnfreezeV2Contract_fields &protocol_CancelAllUnfreezeV2Contract_msg
 #define protocol_DelegateResourceContract_fields &protocol_DelegateResourceContract_msg
 #define protocol_UnDelegateResourceContract_fields &protocol_UnDelegateResourceContract_msg
 #define protocol_UnfreezeAssetContract_fields &protocol_UnfreezeAssetContract_msg
@@ -764,6 +778,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_TriggerSmartContract_size depends on runtime parameters */
 #define protocol_AccountPermissionUpdateContract_size 23
 #define protocol_AssetIssueContract_FrozenSupply_size 22
+#define protocol_CancelAllUnfreezeV2Contract_size 23
 #define protocol_DelegateResourceContract_size   61
 #define protocol_ExchangeCreateContract_size     65
 #define protocol_ExchangeInjectContract_size     55

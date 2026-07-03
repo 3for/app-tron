@@ -48,6 +48,7 @@ typedef union {
     protocol_WithdrawExpireUnfreezeContract withdraw_expire_unfreeze_contract;
     protocol_DelegateResourceContract delegate_resource_contract;
     protocol_UnDelegateResourceContract undelegate_resource_contract;
+    protocol_CancelAllUnfreezeV2Contract cancel_all_unfreeze_v2_contract;
 } contract_t;
 
 extern contract_t msg;
