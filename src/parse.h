@@ -30,6 +30,7 @@ typedef union {
     protocol_TriggerSmartContract trigger_smart_contract;
     protocol_VoteWitnessContract vote_witness_contract;
     protocol_WitnessCreateContract witness_create_contract;
+    protocol_WitnessUpdateContract witness_update_contract;
     protocol_ProposalCreateContract proposal_create_contract;
     protocol_ExchangeCreateContract exchange_create_contract;
     protocol_ExchangeInjectContract exchange_inject_contract;

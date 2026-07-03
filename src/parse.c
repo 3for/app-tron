@@ -355,9 +355,11 @@ static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
-bool pb_decode_witness_create_contract_owner_address(pb_istream_t *stream,
-                                                     const pb_field_t *field,
-                                                     void **arg) {
+// Shared by WitnessCreateContract and WitnessUpdateContract: both require a
+// 21-byte owner_address prefixed with 0x41 (java-tron DecodeUtil.addressValid).
+bool pb_decode_witness_owner_address(pb_istream_t *stream,
+                                     const pb_field_t *field,
+                                     void **arg) {
     UNUSED(field);
 
     size_t left_addr_size = stream->bytes_left;
@@ -381,9 +383,11 @@ bool pb_decode_witness_create_contract_owner_address(pb_istream_t *stream,
     return true;
 }
 
-bool pb_decode_witness_create_contract_url(pb_istream_t *stream,
-                                           const pb_field_t *field,
-                                           void **arg) {
+// Shared by WitnessCreateContract (`url`) and WitnessUpdateContract (`update_url`):
+// both require 1..MAX_URL_SIZE bytes (java-tron TransactionUtil.validUrl).
+bool pb_decode_witness_url(pb_istream_t *stream,
+                           const pb_field_t *field,
+                           void **arg) {
     UNUSED(field);
 
     size_t left_url_size = stream->bytes_left;
@@ -409,9 +413,9 @@ bool pb_decode_witness_create_contract_url(pb_istream_t *stream,
 }
 static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) {
     msg.witness_create_contract.owner_address.funcs.decode =
-        pb_decode_witness_create_contract_owner_address;
+        pb_decode_witness_owner_address;
     msg.witness_create_contract.owner_address.arg = content;
-    msg.witness_create_contract.url.funcs.decode = pb_decode_witness_create_contract_url;
+    msg.witness_create_contract.url.funcs.decode = pb_decode_witness_url;
     msg.witness_create_contract.url.arg = content;
 
     if (!pb_decode(stream, protocol_WitnessCreateContract_fields, &msg.witness_create_contract)) {
@@ -422,6 +426,28 @@ static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) 
     // Proto3 omits an empty bytes field from the wire, so the url decode callback is
     // never invoked in that case; content->url stays zeroed. Catch both the absent-field
     // and the wire-present zero-length cases here.
+    if (content->url[0] == '\0') {
+        return false;
+    }
+
+    return true;
+}
+
+static bool witness_update_contract(txContent_t *content, pb_istream_t *stream) {
+    // Same owner_address (21 bytes + 0x41) and url (1..256 bytes) boundaries as
+    // WitnessCreateContract; only the field name differs (`update_url`, tag 12).
+    msg.witness_update_contract.owner_address.funcs.decode = pb_decode_witness_owner_address;
+    msg.witness_update_contract.owner_address.arg = content;
+    msg.witness_update_contract.update_url.funcs.decode = pb_decode_witness_url;
+    msg.witness_update_contract.update_url.arg = content;
+
+    if (!pb_decode(stream, protocol_WitnessUpdateContract_fields, &msg.witness_update_contract)) {
+        return false;
+    }
+
+    // Reject empty update_url (java-tron TransactionUtil.validUrl, allowEmpty=false).
+    // Proto3 omits an empty bytes field, so the url callback may never run; content->url
+    // stays zeroed. Catch both the absent-field and wire-present zero-length cases here.
     if (content->url[0] == '\0') {
         return false;
     }
@@ -890,6 +916,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
                 ret = witness_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+                ret = witness_update_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;

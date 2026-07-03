@@ -312,6 +312,25 @@ class TestTRX():
                                            url="http://sr-1t.com".encode()))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_update_witness(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessUpdateContract,
+            contract.WitnessUpdateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                           update_url="http://sr-1t-updated.com".encode()))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_update_witness_empty_url(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessUpdateContract,
+            contract.WitnessUpdateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex'])))
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_vote_witness(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

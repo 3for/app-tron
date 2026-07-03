@@ -411,6 +411,19 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nCreate Witness";
             infoLongPress.text = "Sign transaction to\nCreate Witness";
             break;
+        case APPROVAL_WITNESSUPDATE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = stringLabelUrl;
+            txInfos.fields[1].value = strings.common.url;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Witness";
+            infoLongPress.text = "Sign transaction to\nUpdate Witness";
+            break;
         case APPROVAL_PERMISSION_UPDATE:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

@@ -582,6 +582,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITNESSCREATE_TRANSACTION, data_warning);
 
             break;
+        case WITNESSUPDATECONTRACT:
+            memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
+            // write contract type
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_WITNESSUPDATE_TRANSACTION, data_warning);
+
+            break;
         case INVALID_CONTRACT:
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;
