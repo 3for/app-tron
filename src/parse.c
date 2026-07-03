@@ -360,16 +360,20 @@ bool pb_decode_witness_create_contract_owner_address(pb_istream_t *stream,
                                                      void **arg) {
     UNUSED(field);
 
-    size_t left_url_size = stream->bytes_left;
-    if (left_url_size != ADDRESS_SIZE) {
+    size_t left_addr_size = stream->bytes_left;
+    if (left_addr_size != ADDRESS_SIZE) {
         return false;
     }
 
     txContent_t *content = *arg;
-    uint8_t buf[21];  // 21 bytes `owner_addres` + max 256 bytes `url`
+    uint8_t buf[ADDRESS_SIZE];  // 21 bytes `owner_address`
 
     // owner_address
     if (!pb_read(stream, buf, ADDRESS_SIZE)) {
+        return false;
+    }
+    // TRON mainnet addresses must be prefixed with 0x41
+    if (buf[0] != ADD_PRE_FIX_BYTE_MAINNET) {
         return false;
     }
     memmove(content->account, buf, ADDRESS_SIZE);
@@ -383,18 +387,23 @@ bool pb_decode_witness_create_contract_url(pb_istream_t *stream,
     UNUSED(field);
 
     size_t left_url_size = stream->bytes_left;
-    if (left_url_size > 256) {
+    // url must be non-empty and at most MAX_URL_SIZE bytes (matches java-tron
+    // TransactionUtil.validUrl: validBytes(url, 256, allowEmpty=false))
+    if (left_url_size == 0 || left_url_size > MAX_URL_SIZE) {
         return false;
     }
 
     txContent_t *content = *arg;
-    uint8_t buf[256];  // 21 bytes `owner_addres` + max 256 bytes `url`
+    uint8_t buf[MAX_URL_SIZE];  // max 256 bytes `url`
 
     // consume all left as url
     if (!pb_read(stream, buf, left_url_size)) {
         return false;
     }
     memmove(content->url, buf, left_url_size);
+    // NUL-terminate: content->url is MAX_URL_SIZE + 1 bytes, so index
+    // left_url_size (<= MAX_URL_SIZE) is always in bounds even at max length
+    content->url[left_url_size] = '\0';
 
     return true;
 }
@@ -406,6 +415,14 @@ static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) 
     msg.witness_create_contract.url.arg = content;
 
     if (!pb_decode(stream, protocol_WitnessCreateContract_fields, &msg.witness_create_contract)) {
+        return false;
+    }
+
+    // Reject empty url (matches java-tron TransactionUtil.validUrl, allowEmpty=false).
+    // Proto3 omits an empty bytes field from the wire, so the url decode callback is
+    // never invoked in that case; content->url stays zeroed. Catch both the absent-field
+    // and the wire-present zero-length cases here.
+    if (content->url[0] == '\0') {
         return false;
     }
 

@@ -110,7 +110,7 @@ typedef struct txStringProperties_s {
     char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
     char addressSummary[40];
     char fullContract[MAX_TOKEN_LENGTH];
-    char url[MAX_URL_SIZE];
+    char url[MAX_URL_SIZE + 1];  // +1 for NUL terminator at max length (256)
     char TRC20Action[9];
     char TRC20ActionSendAllow[8];
     char fullHash[2 + HASH_SIZE * 2 + 1];  // "0x" + lowercase hex + '\0'

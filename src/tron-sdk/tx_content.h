@@ -81,7 +81,7 @@ typedef struct txContent_t {
     uint8_t contractAddress[TRON_ADDRESS_SIZE];
     uint8_t TRC20Amount[32];
     uint8_t decimals[2];
-    uint8_t url[MAX_URL_SIZE];
+    uint8_t url[MAX_URL_SIZE + 1];  // +1 for NUL terminator at max length (256)
     char tokenNames[2][MAX_TOKEN_LENGTH];
     uint8_t tokenNamesLength[2];
     uint8_t resource;
