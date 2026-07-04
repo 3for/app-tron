@@ -521,6 +521,22 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nApprove Proposal";
             infoLongPress.text = "Sign transaction to\nApprove Proposal";
             break;
+        case APPROVAL_PROPOSALDELETE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if (!u64_to_string(txContent.exchangeID, proposalIdValue, sizeof(proposalIdValue))) {
+                return false;
+            }
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Proposal ID";
+            txInfos.fields[1].value = proposalIdValue;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nDelete Proposal";
+            infoLongPress.text = "Sign transaction to\nDelete Proposal";
+            break;
         case APPROVAL_PERMISSION_UPDATE:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

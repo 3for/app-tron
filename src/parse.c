@@ -690,7 +690,14 @@ static bool proposal_delete_contract(txContent_t *content, pb_istream_t *stream)
         return false;
     }
 
-    content->exchangeID = msg.proposal_delete_contract.proposal_id;
+    if (msg.proposal_delete_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (msg.proposal_delete_contract.proposal_id <= 0) {
+        return false;
+    }
+
+    content->exchangeID = (uint64_t) msg.proposal_delete_contract.proposal_id;
     COPY_ADDRESS(content->account, &msg.proposal_delete_contract.owner_address);
     return true;
 }

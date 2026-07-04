@@ -938,6 +938,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_PROPOSALAPPROVE_TRANSACTION, data_warning);
 
             break;
+        case PROPOSALDELETECONTRACT:
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_PROPOSALDELETE_TRANSACTION, data_warning);
+
+            break;
         case WITNESSCREATECONTRACT:
             memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type

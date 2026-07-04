@@ -637,6 +637,55 @@ class TestTRX():
 
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_proposal_delete_multi_apdu(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalDeleteContract,
+            contract.ProposalDeleteContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                proposal_id=10,
+            ),
+            data=b"A" * 320)
+        assert len(tx) > MAX_APDU_LEN
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None)
+
+    def test_trx_proposal_delete_invalid_proposal_id(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalDeleteContract,
+            contract.ProposalDeleteContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                proposal_id=0,
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_proposal_delete_invalid_owner_address(self, backend):
+        client = TronClient(backend)
+        owner_address = bytearray.fromhex(client.getAccount(0)['addressHex'])
+        owner_address[0] = 0x42
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalDeleteContract,
+            contract.ProposalDeleteContract(
+                owner_address=bytes(owner_address),
+                proposal_id=10,
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
