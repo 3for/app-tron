@@ -468,16 +468,17 @@ class TronClient:
         data = pack_derivation_path(path)
         if include_tx_len:
             data += pack(">I", tx_len)
+        # Fill each APDU up to MAX_APDU_LEN with raw tx bytes, splitting at arbitrary
+        # byte boundaries. The firmware accumulates raw-tx chunks before decoding, so a
+        # single protobuf field (e.g. a 256-byte witness url) may span multiple APDUs.
         while len(tx) > 0:
-            newpos = self.get_next_length(tx)
-            assert (newpos < MAX_APDU_LEN)
-            if (len(data) + newpos) < MAX_APDU_LEN:
-                data += tx[:newpos]
-                tx = tx[newpos:]
-            else:
+            take = min(MAX_APDU_LEN - len(data), len(tx))
+            data += tx[:take]
+            tx = tx[take:]
+            if len(tx) > 0:
+                # current APDU is full; flush it and start a fresh (path-less) chunk
                 messages.append(data)
                 data = bytearray()
-                continue
         messages.append(data)
         token_pos = len(messages)
 

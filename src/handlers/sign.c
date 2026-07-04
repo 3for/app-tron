@@ -56,6 +56,15 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
+// Raw transaction accumulation buffer. A single top-level protobuf field (the
+// `contract`) can exceed one APDU (MAX_APDU_LEN = 255) — e.g. a WitnessCreate/Update
+// with a 256-byte url yields a ~373-byte raw tx. processTx() needs the full contract
+// in one contiguous buffer (pb_decode_contract_parameter captures a pointer into it),
+// so we accumulate every raw-tx chunk here and decode the growing buffer.
+#define MAX_RAW_TX_SIZE 512  // worst realistic case ~373 B (256-byte url) + margin
+static uint8_t raw_tx[MAX_RAW_TX_SIZE];
+static uint16_t raw_tx_len;
+
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -79,6 +88,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
         initTx(&txContext, &txContent);
         customContractField = 0;
+        raw_tx_len = 0;
 
     } else if ((p1 & 0xF0) == P1_TRC10_NAME) {
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
@@ -158,8 +168,28 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     }
 #endif
 
+    // Accumulate raw-tx chunks so a contract that spans multiple APDUs is decoded
+    // as one contiguous buffer. Token-name chunks (handled above, with dataLength
+    // forced to 0) are NOT part of the raw tx and must not re-decode it — re-running
+    // the contract decoder would clobber the resolved token names in txContent.
+    uint8_t *parse_buf;
+    uint32_t parse_len;
+    if ((p1 & 0xF0) == P1_TRC10_NAME) {
+        parse_buf = workBuffer;
+        parse_len = 0;  // token-name completion → processTx returns USTREAM_FINISHED
+    } else {
+        if ((uint32_t) raw_tx_len + dataLength > MAX_RAW_TX_SIZE) {
+            PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
+            return io_send_sw(E_INCORRECT_DATA);
+        }
+        memcpy(raw_tx + raw_tx_len, workBuffer, dataLength);
+        raw_tx_len += dataLength;
+        parse_buf = raw_tx;
+        parse_len = raw_tx_len;
+    }
+
     // process buffer
-    uint16_t txResult = processTx(workBuffer, dataLength, &txContent);
+    uint16_t txResult = processTx(parse_buf, parse_len, &txContent);
     PRINTF("txResult: %04x\n", txResult);
     switch (txResult) {
         case USTREAM_PROCESSING:
@@ -171,6 +201,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
+            // A contract spanning multiple APDUs is not fully decodable until its
+            // last chunk arrives (pb_decode fails mid-field). On a non-final chunk,
+            // treat this as "need more data" and keep accumulating.
+            if (p1 != P1_LAST && p1 != P1_SIGN) {
+                return io_send_sw(E_OK);
+            }
             return io_send_sw(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
 #ifdef HAVE_SWAP

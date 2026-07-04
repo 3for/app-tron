@@ -312,6 +312,21 @@ class TestTRX():
                                            url="http://sr-1t.com".encode()))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_create_witness_max_url(self, backend, device):
+        # 256-byte url: the contract field exceeds one APDU, so the raw tx must be
+        # split across multiple APDUs and reassembled by the firmware before signing.
+        client = TronClient(backend)
+        MAX_URL_LEN = 256
+        prefix = "http://example.com/"
+        url = (prefix + "a" * (MAX_URL_LEN - len(prefix))).encode()
+        assert len(url) == MAX_URL_LEN
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                           url=url))
+        self.sign_and_validate(client, device, 0, tx)
+
     def test_trx_update_witness(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
