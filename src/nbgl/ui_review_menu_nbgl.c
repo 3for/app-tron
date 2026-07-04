@@ -36,7 +36,7 @@
 
 // Macros
 #define WARNING_TYPES_NUMBER 1
-#define MAX_TX_FIELDS        20
+#define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1)
 
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
@@ -269,7 +269,7 @@ static void set_action_title(contractType_e type) {
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
-// (SIMPLE_TRANSACTION), Permission Update (kept to three compact pairs for NBGL),
+// (SIMPLE_TRANSACTION), Permission Update (already renders the permission details),
 // the message/ECDH flows (which show their own message hash), and address verification.
 static bool state_shows_tx_hash(ui_approval_state_t state) {
     switch (state) {

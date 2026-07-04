@@ -58,16 +58,289 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
-static const char *const permLabelOwner = "Owner";
-static const char *const permLabelPermissions = "Permissions";
+typedef struct {
+    uint8_t id;
+    const char *name;
+} permission_operation_t;
 
-static uint16_t count_active_keys(const protocol_AccountPermissionUpdateContract *perm) {
-    uint16_t total = 0;
+static const permission_operation_t permission_operations[] = {
+    {0, "Activate Account"},
+    {1, "Transfer TRX"},
+    {2, "Transfer TRC10"},
+    {3, "Vote Asset"},
+    {4, "Vote"},
+    {5, "Apply to Become a SR Candidate"},
+    {6, "Issue TRC10"},
+    {8, "Update SR Info"},
+    {9, "Participate in TRC10 Issuance"},
+    {10, "Update Account Name"},
+    {11, "TRX Stake (1.0)"},
+    {12, "TRX Unstake (1.0)"},
+    {13, "Claim Voter/SR Rewards"},
+    {14, "Unstake TRC10"},
+    {15, "Update TRC10 Parameters"},
+    {16, "Create Proposal"},
+    {17, "Approve Proposal"},
+    {18, "Cancel Proposal"},
+    {19, "Set Account ID"},
+    {20, "Custom Contract"},
+    {30, "Create Smart Contract"},
+    {31, "Trigger Smart Contract"},
+    {32, "Get Contract"},
+    {33, "Update Contract Parameters"},
+    {41, "Create Bancor Transaction"},
+    {42, "Inject Assets into Bancor Transaction"},
+    {43, "Withdraw Assets from Bancor Transaction"},
+    {44, "Execute Bancor Transaction"},
+    {45, "Update Contract Energy Limit"},
+    {46, "Update Account Permission"},
+    {48, "Clear Contract ABI"},
+    {49, "Update SR Commission Ratio"},
+    {54, "TRX Stake (2.0)"},
+    {55, "TRX Unstake (2.0)"},
+    {56, "Withdraw Expired Unfreeze"},
+    {57, "Delegate Resource"},
+    {58, "Undelegate Resource"},
+    {59, "Cancel All Unfreeze V2"},
+};
 
-    for (pb_size_t i = 0; i < perm->actives_count; i++) {
-        total += perm->actives[i].keys_count;
+static size_t append_text(char *out, size_t outlen, const char *text) {
+    size_t len = strlen(out);
+    size_t text_len = strlen(text);
+
+    if (len >= outlen) {
+        return len;
     }
-    return total;
+    if (text_len >= outlen - len) {
+        text_len = outlen - len - 1;
+    }
+    memcpy(out + len, text, text_len);
+    out[len + text_len] = '\0';
+    return len + text_len;
+}
+
+static bool append_text_checked(char *out, size_t outlen, const char *text) {
+    if (strlen(out) + strlen(text) >= outlen) {
+        return false;
+    }
+    append_text(out, outlen, text);
+    return true;
+}
+
+static void append_uint64(char *out, size_t outlen, uint64_t value) {
+    char amount[21];
+
+    print_amount(value, amount, sizeof(amount), 0);
+    append_text(out, outlen, amount);
+}
+
+static bool operation_id_known(uint8_t id) {
+    for (size_t i = 0; i < sizeof(permission_operations) / sizeof(permission_operations[0]); i++) {
+        if (permission_operations[i].id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool operation_enabled(const protocol_Permission_operations_t *operations, uint8_t id) {
+    return (operations->bytes[id / 8] & (1U << (id % 8))) != 0;
+}
+
+static bool operations_all_bytes(const protocol_Permission_operations_t *operations, uint8_t byte) {
+    for (uint8_t i = 0; i < 32; i++) {
+        if (operations->bytes[i] != byte) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool operations_have_unknown_bits(const protocol_Permission_operations_t *operations) {
+    for (uint16_t id = 0; id < 256; id++) {
+        if ((operations->bytes[id / 8] & (1U << (id % 8))) && !operation_id_known((uint8_t) id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static uint8_t count_known_operations(const protocol_Permission_operations_t *operations) {
+    uint8_t count = 0;
+
+    for (size_t i = 0; i < sizeof(permission_operations) / sizeof(permission_operations[0]); i++) {
+        if (operation_enabled(operations, permission_operations[i].id)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static bool operations_match_common_default(const protocol_Permission_operations_t *operations) {
+    static const uint8_t default_operations[32] = {
+        0x7f, 0xff, 0x1f, 0xc0, 0x03, 0x7e, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    return memcmp(operations->bytes, default_operations, sizeof(default_operations)) == 0;
+}
+
+static void format_operations(const protocol_Permission_operations_t *operations,
+                              char *out,
+                              size_t outlen) {
+    bool first = true;
+
+    out[0] = '\0';
+    if (operations_all_bytes(operations, 0x00)) {
+        strlcpy(out, "None", outlen);
+        return;
+    }
+    if (operations_all_bytes(operations, 0xff)) {
+        strlcpy(out, "All operations", outlen);
+        return;
+    }
+    if (operations_match_common_default(operations) ||
+        (!operations_have_unknown_bits(operations) && (count_known_operations(operations) > 20))) {
+        strlcpy(out, "All supported operations", outlen);
+        return;
+    }
+
+    for (size_t i = 0; i < sizeof(permission_operations) / sizeof(permission_operations[0]); i++) {
+        if (!operation_enabled(operations, permission_operations[i].id)) {
+            continue;
+        }
+        if (!first && !append_text_checked(out, outlen, "\n")) {
+            goto raw_hex;
+        }
+        if (!append_text_checked(out, outlen, permission_operations[i].name)) {
+            goto raw_hex;
+        }
+        first = false;
+    }
+
+    if (first || operations_have_unknown_bits(operations)) {
+        goto raw_hex;
+    }
+    return;
+
+raw_hex:
+    bytes_to_string(out, outlen, operations->bytes, 32);
+}
+
+static bool add_permission_field(uint8_t *field_index, const char *label, const char *value) {
+    if (*field_index >= PERM_MAX_FIELDS) {
+        return false;
+    }
+
+    strlcpy(perm_field_labels[*field_index], label, PERM_ITEM_LEN);
+    perm_field_items[*field_index] = perm_field_labels[*field_index];
+    strlcpy(perm_field_values[*field_index], value, PERM_VAL_LEN);
+    (*field_index)++;
+    return true;
+}
+
+static bool add_permission_uint_field(uint8_t *field_index, const char *label, uint64_t value) {
+    char amount[21];
+
+    print_amount(value, amount, sizeof(amount), 0);
+    return add_permission_field(field_index, label, amount);
+}
+
+static bool format_permission_fields(uint8_t *field_index,
+                                     const char *prefix,
+                                     const protocol_Permission *perm,
+                                     bool include_operations) {
+    char label[PERM_ITEM_LEN];
+    char value[PERM_VAL_LEN];
+    char address[BASE58CHECK_ADDRESS_SIZE + 1];
+
+#ifdef SCREEN_SIZE_WALLET
+    snprintf(label, sizeof(label), "%s Name", prefix);
+#else
+    strlcpy(label, prefix, sizeof(label));
+#endif
+    if (!add_permission_field(field_index,
+                              label,
+                              (perm->permission_name[0] == '\0') ? "(empty)" : perm->permission_name)) {
+        return false;
+    }
+
+    if (include_operations) {
+#ifdef SCREEN_SIZE_WALLET
+        snprintf(label, sizeof(label), "%s Operations", prefix);
+#else
+        strlcpy(label, "Operations", sizeof(label));
+#endif
+        format_operations(&perm->operations, value, sizeof(value));
+        if (!add_permission_field(field_index, label, value)) {
+            return false;
+        }
+    }
+
+#ifdef SCREEN_SIZE_WALLET
+    snprintf(label, sizeof(label), "%s Threshold", prefix);
+#else
+    strlcpy(label, "Threshold", sizeof(label));
+#endif
+    if (!add_permission_uint_field(field_index, label, (uint64_t) perm->threshold)) {
+        return false;
+    }
+
+    for (pb_size_t i = 0; i < perm->keys_count; i++) {
+        getBase58FromAddress(perm->keys[i].address, address, false);
+#ifdef SCREEN_SIZE_WALLET
+        snprintf(label, sizeof(label), "%s Authorized To %u", prefix, (unsigned) i + 1);
+#else
+        strlcpy(label, "Authorized To", sizeof(label));
+#endif
+        snprintf(value, sizeof(value), "%s\nWeight: ", address);
+        append_uint64(value, sizeof(value), (uint64_t) perm->keys[i].weight);
+        if (!add_permission_field(field_index, label, value)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool format_permission_update_fields(const protocol_AccountPermissionUpdateContract *perm) {
+    uint8_t field = 0;
+
+    perm_field_labels = APP_MEM_ALLOC(PERM_MAX_FIELDS * sizeof(*perm_field_labels));
+    perm_field_values = APP_MEM_ALLOC(PERM_MAX_FIELDS * sizeof(*perm_field_values));
+    if ((perm_field_labels == NULL) || (perm_field_values == NULL)) {
+        APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
+        APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
+        return false;
+    }
+
+    if (!format_permission_fields(&field, "Owner", &perm->owner, false)) {
+        return false;
+    }
+    if (perm->has_witness &&
+        !format_permission_fields(&field,
+                                  "Witness",
+                                  &perm->witness,
+                                  false)) {
+        return false;
+    }
+    for (pb_size_t i = 0; i < perm->actives_count; i++) {
+        char prefix[PERM_ITEM_LEN];
+
+        if (perm->actives_count == 1) {
+            strlcpy(prefix, "Active", sizeof(prefix));
+        } else {
+            snprintf(prefix, sizeof(prefix), "Active %u", (unsigned) i + 1);
+        }
+        if (!format_permission_fields(&field, prefix, &perm->actives[i], true)) {
+            return false;
+        }
+    }
+
+    perm_field_count = field;
+    return true;
 }
 
 // Raw transaction accumulation buffer. A single top-level protobuf field (the
@@ -81,7 +354,10 @@ static uint16_t raw_tx_len;
 
 void sign_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &raw_tx);
+    APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
+    APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
     raw_tx_len = 0;
+    perm_field_count = 0;
 }
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
@@ -632,33 +908,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case ACCOUNTPERMISSIONUPDATECONTRACT: {
             protocol_AccountPermissionUpdateContract *perm =
                 &msg.account_permission_update_contract;
-            char threshold[21];
-            uint16_t active_keys = count_active_keys(perm);
 
-            perm_field_items[0] = permLabelOwner;
-            print_amount((uint64_t) perm->owner.threshold, threshold, sizeof(threshold), 0);
-            snprintf(perm_field_values[0],
-                     PERM_VAL_LEN,
-                     "threshold %s, %u key(s)",
-                     threshold,
-                     (unsigned) perm->owner.keys_count);
-
-            perm_field_items[1] = permLabelPermissions;
-            if (perm->has_witness) {
-                snprintf(perm_field_values[1],
-                         PERM_VAL_LEN,
-                         "witness %u key; active %u, %u key(s)",
-                         (unsigned) perm->witness.keys_count,
-                         (unsigned) perm->actives_count,
-                         (unsigned) active_keys);
-            } else {
-                snprintf(perm_field_values[1],
-                         PERM_VAL_LEN,
-                         "active %u, %u key(s)",
-                         (unsigned) perm->actives_count,
-                         (unsigned) active_keys);
+            if (!format_permission_update_fields(perm)) {
+                return io_send_sw(E_INCORRECT_DATA);
             }
-            perm_field_count = 2;
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);

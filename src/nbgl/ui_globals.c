@@ -42,7 +42,8 @@ strings_t strings;
 
 uint8_t perm_field_count;
 const char *perm_field_items[PERM_MAX_FIELDS];
-char perm_field_values[PERM_MAX_FIELDS][PERM_VAL_LEN];
+char (*perm_field_labels)[PERM_ITEM_LEN];
+char (*perm_field_values)[PERM_VAL_LEN];
 
 extern void reset_app_context();
 

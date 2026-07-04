@@ -557,6 +557,18 @@ class TestTRX():
                         ),
                     ],
                 ),
+                witness=tron.Permission(
+                    type=tron.Permission.Witness,
+                    permission_name="witnessA",
+                    threshold=1,
+                    keys=[
+                        tron.Key(
+                            address=bytes.fromhex(
+                                client.getAccount(0)['addressHex']),
+                            weight=1,
+                        ),
+                    ],
+                ),
                 actives=[
                     tron.Permission(
                         type=tron.Permission.Active,
