@@ -672,6 +672,15 @@ static bool proposal_approve_contract(txContent_t *content, pb_istream_t *stream
         return false;
     }
 
+    if (msg.proposal_approve_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (msg.proposal_approve_contract.proposal_id <= 0) {
+        return false;
+    }
+
+    content->exchangeID = (uint64_t) msg.proposal_approve_contract.proposal_id;
+    content->amount[0] = msg.proposal_approve_contract.is_add_approval ? 1 : 0;
     COPY_ADDRESS(content->account, &msg.proposal_approve_contract.owner_address);
     return true;
 }

@@ -73,6 +73,7 @@ static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
 static char proposalFieldLabels[MAX_PROPOSAL_PARAMETERS][PROPOSAL_ITEM_LEN];
 static char proposalFieldValues[MAX_PROPOSAL_PARAMETERS][PROPOSAL_VALUE_LEN];
+static char proposalIdValue[22];
 // Alias extension for the recipient trusted name (lets the user reveal the
 // underlying address behind the resolved name). Mirrors app-ethereum's
 // ui_approve_tx() trusted-name display.
@@ -501,6 +502,25 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nCreate Proposal";
             break;
         }
+        case APPROVAL_PROPOSALAPPROVE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if (!u64_to_string(txContent.exchangeID, proposalIdValue, sizeof(proposalIdValue))) {
+                return false;
+            }
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Proposal ID";
+            txInfos.fields[1].value = proposalIdValue;
+            txInfos.fields[2].item = "Action";
+            txInfos.fields[2].value =
+                (txContent.amount[0] == 0) ? "Remove Approval" : "Approve";
+            pairList.nbPairs = 3;
+            txInfos.flowTitle = "Review transaction to\nApprove Proposal";
+            infoLongPress.text = "Sign transaction to\nApprove Proposal";
+            break;
         case APPROVAL_PERMISSION_UPDATE:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
