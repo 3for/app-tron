@@ -15,6 +15,7 @@
  *  limitations under the License.
  ********************************************************************************/
 
+#include <stdint.h>
 #include <string.h>
 
 #include "pb.h"
@@ -815,15 +816,98 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
     return true;
 }
 
-static bool account_permission_update_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_AccountPermissionUpdateContract_fields,
-                   &msg.account_permission_update_contract)) {
+// Validate a single Permission against java-tron's AccountPermissionUpdateActuator
+// checkPermission() (static, chain-state-independent subset). `expected_type` is the
+// PermissionType this slot must carry (Owner/Witness/Active).
+static bool check_permission(const protocol_Permission *perm,
+                             protocol_Permission_PermissionType expected_type) {
+    if (perm->type != expected_type) {
+        return false;
+    }
+    // keys_count: >0, and a Witness permission must have exactly 1 key.
+    // (nanopb max_count already caps keys at 5 = default totalSignNum.)
+    if (perm->keys_count == 0) {
+        return false;
+    }
+    if (expected_type == protocol_Permission_PermissionType_Witness && perm->keys_count != 1) {
+        return false;
+    }
+    if (perm->threshold <= 0) {
+        return false;
+    }
+    // permission_name is a static char[33]; a name longer than 32 chars cannot be
+    // represented, so nanopb rejects it before we get here.
+    if (perm->parent_id != 0) {
+        return false;
+    }
+    if (expected_type == protocol_Permission_PermissionType_Active) {
+        if (perm->operations.size != 32) {
+            return false;
+        }
+    } else if (perm->operations.size != 0) {
         return false;
     }
 
-    COPY_ADDRESS(content->account, &msg.account_permission_update_contract.owner_address);
-    // TODO: Update tx content
+    int64_t weight_sum = 0;
+    for (pb_size_t i = 0; i < perm->keys_count; i++) {
+        const protocol_Key *key = &perm->keys[i];
+        // key address: 21 bytes (fixed_length) + 0x41 mainnet prefix
+        if (key->address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+            return false;
+        }
+        if (key->weight <= 0) {
+            return false;
+        }
+        // key addresses must be distinct within the permission
+        for (pb_size_t j = 0; j < i; j++) {
+            if (memcmp(key->address, perm->keys[j].address, ADDRESS_SIZE) == 0) {
+                return false;
+            }
+        }
+        if (key->weight > (INT64_MAX - weight_sum)) {
+            return false;
+        }
+        weight_sum += key->weight;
+    }
+    // sum of all key weights must be able to reach the threshold
+    if (weight_sum < perm->threshold) {
+        return false;
+    }
+    return true;
+}
+
+static bool account_permission_update_contract(txContent_t *content, pb_istream_t *stream) {
+    protocol_AccountPermissionUpdateContract *c = &msg.account_permission_update_contract;
+
+    memset(c, 0, sizeof(*c));
+    if (!pb_decode(stream, protocol_AccountPermissionUpdateContract_fields, c)) {
+        return false;
+    }
+
+    // owner_address: 21 bytes (fixed_length) + 0x41 mainnet prefix
+    if (c->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    // owner permission is required
+    if (!c->has_owner || !check_permission(&c->owner, protocol_Permission_PermissionType_Owner)) {
+        return false;
+    }
+    // witness permission is optional (present only for witness accounts); validate if given
+    if (c->has_witness &&
+        !check_permission(&c->witness, protocol_Permission_PermissionType_Witness)) {
+        return false;
+    }
+    // actives: 1..8 (MAX_ACTIVE_PERMISSION_CNT); each must be an Active permission
+    if (c->actives_count == 0) {
+        return false;
+    }
+    for (pb_size_t i = 0; i < c->actives_count; i++) {
+        if (!check_permission(&c->actives[i], protocol_Permission_PermissionType_Active)) {
+            return false;
+        }
+    }
+
+    COPY_ADDRESS(content->account, &c->owner_address);
     return true;
 }
 

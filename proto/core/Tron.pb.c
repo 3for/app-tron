@@ -30,7 +30,7 @@ PB_BIND(protocol_Transaction_raw, protocol_Transaction_raw, AUTO)
 PB_BIND(protocol_Key, protocol_Key, AUTO)
 
 
-PB_BIND(protocol_Permission, protocol_Permission, AUTO)
+PB_BIND(protocol_Permission, protocol_Permission, 2)
 
 
 

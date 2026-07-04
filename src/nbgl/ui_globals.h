@@ -28,6 +28,14 @@
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 
+// AccountPermissionUpdate clear-sign display. Keep the review compact for NBGL:
+// From + owner summary + permission summary.
+#define PERM_MAX_FIELDS 2
+#define PERM_VAL_LEN    72
+extern uint8_t perm_field_count;
+extern const char *perm_field_items[PERM_MAX_FIELDS];
+extern char perm_field_values[PERM_MAX_FIELDS][PERM_VAL_LEN];
+
 #if defined(LARGE_ICON_SIZE) && (LARGE_ICON_SIZE == 64)
 #define APP_TRON_ICON C_app_tron_64px
 #elif defined(LARGE_ICON_SIZE) && (LARGE_ICON_SIZE == 48)

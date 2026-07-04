@@ -269,8 +269,8 @@ static void set_action_title(contractType_e type) {
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
-// (SIMPLE_TRANSACTION / PERMISSION_UPDATE -> blind hash signing), the message/ECDH
-// flows (which show their own message hash), and address verification.
+// (SIMPLE_TRANSACTION), Permission Update (kept to three compact pairs for NBGL),
+// the message/ECDH flows (which show their own message hash), and address verification.
 static bool state_shows_tx_hash(ui_approval_state_t state) {
     switch (state) {
         case APPROVAL_SIMPLE_TRANSACTION:
@@ -299,6 +299,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     infoLongPress.icon = &APP_TRON_ICON;
 
     pairList.pairs = (nbgl_layoutTagValue_t *) txInfos.fields;
+    pairList.nbMaxLinesForValue = 0;
+    pairList.hideEndOfLastLine = false;
+    pairList.wrapping = true;
 
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
@@ -431,9 +434,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
-            txInfos.fields[1].item = stringLabelHash;
-            txInfos.fields[1].value = strings.common.fullHash;
-            pairList.nbPairs = 2;
+            if ((perm_field_count == 0) || (perm_field_count > PERM_MAX_FIELDS)) {
+                return false;
+            }
+            for (uint8_t i = 0; i < perm_field_count; i++) {
+                txInfos.fields[i + 1].item = perm_field_items[i];
+                txInfos.fields[i + 1].value = perm_field_values[i];
+            }
+            pairList.nbPairs = perm_field_count + 1;
             txInfos.flowTitle = "Review transaction to\nUpdate Permission";
             infoLongPress.text = "Sign transaction to\nUpdate Permission";
             break;

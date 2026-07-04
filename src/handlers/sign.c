@@ -16,7 +16,9 @@
  ********************************************************************************/
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
 
+#include "app_mem_utils.h"
 #include "io.h"
 
 #include "format.h"
@@ -56,14 +58,31 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
+static const char *const permLabelOwner = "Owner";
+static const char *const permLabelPermissions = "Permissions";
+
+static uint16_t count_active_keys(const protocol_AccountPermissionUpdateContract *perm) {
+    uint16_t total = 0;
+
+    for (pb_size_t i = 0; i < perm->actives_count; i++) {
+        total += perm->actives[i].keys_count;
+    }
+    return total;
+}
+
 // Raw transaction accumulation buffer. A single top-level protobuf field (the
-// `contract`) can exceed one APDU (MAX_APDU_LEN = 255) — e.g. a WitnessCreate/Update
-// with a 256-byte url yields a ~373-byte raw tx. processTx() needs the full contract
-// in one contiguous buffer (pb_decode_contract_parameter captures a pointer into it),
-// so we accumulate every raw-tx chunk here and decode the growing buffer.
-#define MAX_RAW_TX_SIZE 512  // worst realistic case ~373 B (256-byte url) + margin
-static uint8_t raw_tx[MAX_RAW_TX_SIZE];
+// `contract`) can exceed one APDU (MAX_APDU_LEN = 255) — e.g. AccountPermissionUpdate
+// with multiple permissions. processTx() needs the full contract in one contiguous
+// buffer (pb_decode_contract_parameter captures a pointer into it), so we accumulate
+// every raw-tx chunk here and decode the growing buffer.
+#define MAX_RAW_TX_SIZE 4096  // AccountPermissionUpdate max encoded contract is ~3 KiB.
+static uint8_t *raw_tx;
 static uint16_t raw_tx_len;
+
+void sign_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &raw_tx);
+    raw_tx_len = 0;
+}
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
@@ -88,6 +107,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
         initTx(&txContext, &txContent);
         customContractField = 0;
+        sign_cleanup();
+        raw_tx = APP_MEM_ALLOC(MAX_RAW_TX_SIZE);
+        if (raw_tx == NULL) {
+            return io_send_sw(E_INCORRECT_DATA);
+        }
         raw_tx_len = 0;
 
     } else if ((p1 & 0xF0) == P1_TRC10_NAME) {
@@ -182,6 +206,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
             return io_send_sw(E_INCORRECT_DATA);
         }
+        if (raw_tx == NULL) {
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
         memcpy(raw_tx + raw_tx_len, workBuffer, dataLength);
         raw_tx_len += dataLength;
         parse_buf = raw_tx;
@@ -249,7 +276,6 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                              strings.common.fromAddress + prefix_len,
                              N_storage.truncateAddress);
     } else {
-        PRINTF("Regular transaction...\n");
         getBase58FromAddress(txContent.account, strings.common.fromAddress, N_storage.truncateAddress);
     }
 
@@ -603,16 +629,36 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITHDRAWBALANCE_TRANSACTION, data_warning);
 
             break;
-        case ACCOUNTPERMISSIONUPDATECONTRACT:
-            if (!N_storage.signByHash) {
-                return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
+        case ACCOUNTPERMISSIONUPDATECONTRACT: {
+            protocol_AccountPermissionUpdateContract *perm =
+                &msg.account_permission_update_contract;
+            char threshold[21];
+            uint16_t active_keys = count_active_keys(perm);
+
+            perm_field_items[0] = permLabelOwner;
+            print_amount((uint64_t) perm->owner.threshold, threshold, sizeof(threshold), 0);
+            snprintf(perm_field_values[0],
+                     PERM_VAL_LEN,
+                     "threshold %s, %u key(s)",
+                     threshold,
+                     (unsigned) perm->owner.keys_count);
+
+            perm_field_items[1] = permLabelPermissions;
+            if (perm->has_witness) {
+                snprintf(perm_field_values[1],
+                         PERM_VAL_LEN,
+                         "witness %u key; active %u, %u key(s)",
+                         (unsigned) perm->witness.keys_count,
+                         (unsigned) perm->actives_count,
+                         (unsigned) active_keys);
+            } else {
+                snprintf(perm_field_values[1],
+                         PERM_VAL_LEN,
+                         "active %u, %u key(s)",
+                         (unsigned) perm->actives_count,
+                         (unsigned) active_keys);
             }
-            // Write strings.common.fullHash ("0x" + lowercase hex)
-            strlcpy(strings.common.fullHash, "0x", 3);
-            bytes_to_lowercase_hex(strings.common.fullHash + 2,
-                                   sizeof(strings.common.fullHash) - 2,
-                                   tmpCtx.transactionContext.hash,
-                                   HASH_SIZE);
+            perm_field_count = 2;
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return io_send_sw(E_INCORRECT_DATA);
@@ -620,7 +666,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
 
-            break;
+        } break;
         case WITNESSCREATECONTRACT:
             memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type

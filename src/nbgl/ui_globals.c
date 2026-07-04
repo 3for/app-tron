@@ -40,6 +40,10 @@ int8_t votes_count;
 cx_sha3_t global_sha3;
 strings_t strings;
 
+uint8_t perm_field_count;
+const char *perm_field_items[PERM_MAX_FIELDS];
+char perm_field_values[PERM_MAX_FIELDS][PERM_VAL_LEN];
+
 extern void reset_app_context();
 
 bool ui_callback_address_ok(bool display_menu) {

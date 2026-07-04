@@ -582,6 +582,67 @@ class TestTRX():
             ))
         self.sign_and_validate(client, device, 0, tx)
 
+    @pytest.mark.parametrize("case", [
+        "active_missing_operations",
+        "owner_has_operations",
+        "duplicate_active_key",
+        "threshold_too_high",
+    ])
+    def test_trx_account_permission_update_rejects_invalid_permissions(
+            self, backend, case):
+        client = TronClient(backend)
+        owner = tron.Permission(
+            type=tron.Permission.Owner,
+            permission_name="ownerA",
+            threshold=1,
+            keys=[
+                tron.Key(
+                    address=bytes.fromhex(client.getAccount(0)['addressHex']),
+                    weight=1,
+                ),
+            ],
+        )
+        active_keys = [
+            tron.Key(
+                address=bytes.fromhex(client.getAccount(0)['addressHex']),
+                weight=1,
+            ),
+            tron.Key(
+                address=bytes.fromhex(client.getAccount(1)['addressHex']),
+                weight=1,
+            ),
+        ]
+        active = tron.Permission(
+            type=tron.Permission.Active,
+            permission_name="activeA",
+            threshold=2,
+            operations=bytes.fromhex(
+                "7fff1fc0037e0000000000000000000000000000000000000000000000000000"
+            ),
+            keys=active_keys,
+        )
+
+        if case == "active_missing_operations":
+            active.operations = b""
+        elif case == "owner_has_operations":
+            owner.operations = b"\x00" * 32
+        elif case == "duplicate_active_key":
+            active.keys[1].address = active.keys[0].address
+        elif case == "threshold_too_high":
+            active.threshold = 3
+
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountPermissionUpdateContract,
+            contract.AccountPermissionUpdateContract(
+                owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+                owner=owner,
+                actives=[active],
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_trc20_send(self, backend, device):
         client = TronClient(backend)
         tx_calldata = build_trc20_calldata(

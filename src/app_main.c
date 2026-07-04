@@ -68,6 +68,7 @@ extern void roll_challenge(void);
 
 void reset_app_context() {
     message_cleanup();
+    sign_cleanup();
     // Free the shared TriggerSmartContract stream decoder (GCS / legacy signing).
     tron_tx_stream_free();
     // Free any Generic Clear Signing state (tx contexts, field table, parked
