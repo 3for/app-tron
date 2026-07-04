@@ -40,8 +40,10 @@
 // The standard length of a TRON Base58Check address string (without '\0')
 #define TRON_BASE58CHECK_ADDRESS_SIZE 34
 
-#define MAX_URL_SIZE     256
-#define MAX_TOKEN_LENGTH 67
+#define MAX_URL_SIZE                  256
+#define MAX_TOKEN_LENGTH              67
+#define MAX_ACCOUNT_NAME_SIZE         200
+#define MAX_ACCOUNT_NAME_DISPLAY_SIZE (2 + MAX_ACCOUNT_NAME_SIZE * 2 + 1)
 
 // The length of a 128-bit integer in bytes
 #define INT128_LENGTH 16

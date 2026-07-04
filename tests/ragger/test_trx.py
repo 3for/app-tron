@@ -538,6 +538,41 @@ class TestTRX():
             ))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_account_update_max_name(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountUpdateContract,
+            contract.AccountUpdateContract(
+                account_name=b'a' * 200,
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_account_update_empty_name(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountUpdateContract,
+            contract.AccountUpdateContract(
+                account_name=b'',
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_account_update_name_too_long(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountUpdateContract,
+            contract.AccountUpdateContract(
+                account_name=b'a' * 201,
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_permission_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

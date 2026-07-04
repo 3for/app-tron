@@ -236,8 +236,6 @@ static const char *tx_review_action(contractType_e type) {
             return "Delete Proposal";
         case ACCOUNTCREATECONTRACT:
             return "Create Account";
-        case ACCOUNTUPDATECONTRACT:
-            return "Update Account";
         case EXCHANGECREATECONTRACT:
             return "Create Exchange";
         case EXCHANGEINJECTCONTRACT:
@@ -426,6 +424,19 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Witness";
             infoLongPress.text = "Sign transaction to\nUpdate Witness";
+            break;
+        case APPROVAL_ACCOUNTUPDATE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Name";
+            txInfos.fields[1].value = txContent.accountName;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Account";
+            infoLongPress.text = "Sign transaction to\nUpdate Account";
             break;
         case APPROVAL_PERMISSION_UPDATE:
 #if !defined(SCREEN_SIZE_WALLET)

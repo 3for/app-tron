@@ -636,8 +636,62 @@ static bool proposal_delete_contract(txContent_t *content, pb_istream_t *stream)
     return true;
 }
 
+static bool account_name_is_printable(const uint8_t *name, size_t name_len) {
+    for (size_t i = 0; i < name_len; i++) {
+        if ((name[i] < 0x20) || (name[i] > 0x7e)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool set_account_name_display(txContent_t *content, const uint8_t *name, size_t name_len) {
+    content->accountNameLength = name_len;
+    if (name_len == 0) {
+        strlcpy(content->accountName, "(empty)", sizeof(content->accountName));
+        return true;
+    }
+
+    if (account_name_is_printable(name, name_len)) {
+        memcpy(content->accountName, name, name_len);
+        content->accountName[name_len] = '\0';
+        return true;
+    }
+
+    return bytes_to_string(content->accountName, sizeof(content->accountName), name, name_len) == 0;
+}
+
+static bool pb_decode_account_name(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+    UNUSED(field);
+
+    size_t name_len = stream->bytes_left;
+    if (name_len > MAX_ACCOUNT_NAME_SIZE) {
+        return false;
+    }
+
+    txContent_t *content = *arg;
+    uint8_t name[MAX_ACCOUNT_NAME_SIZE];
+
+    if (!pb_read(stream, name, name_len)) {
+        return false;
+    }
+
+    return set_account_name_display(content, name, name_len);
+}
+
 static bool account_update_contract(txContent_t *content, pb_istream_t *stream) {
+    content->accountName[0] = '\0';
+    content->accountNameLength = 0;
+    msg.account_update_contract.account_name.funcs.decode = pb_decode_account_name;
+    msg.account_update_contract.account_name.arg = content;
+
     if (!pb_decode(stream, protocol_AccountUpdateContract_fields, &msg.account_update_contract)) {
+        return false;
+    }
+    if (msg.account_update_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (content->accountName[0] == '\0' && !set_account_name_display(content, NULL, 0)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.account_update_contract.owner_address);
