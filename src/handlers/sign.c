@@ -344,8 +344,9 @@ static bool format_permission_update_fields(const protocol_AccountPermissionUpda
 }
 
 // Raw transaction accumulation buffer. A single top-level protobuf field (the
-// `contract`) can exceed one APDU (MAX_APDU_LEN = 255) — e.g. AccountPermissionUpdate
-// with multiple permissions. processTx() needs the full contract in one contiguous
+// `contract`) can exceed one APDU (MAX_APDU_LEN = 255) — e.g. ProposalCreate with
+// many parameters or AccountPermissionUpdate with multiple permissions.
+// processTx() needs the full contract in one contiguous
 // buffer (pb_decode_contract_parameter captures a pointer into it), so we accumulate
 // every raw-tx chunk here and decode the growing buffer.
 #define MAX_RAW_TX_SIZE 4096  // AccountPermissionUpdate max encoded contract is ~3 KiB.
@@ -920,6 +921,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
 
         } break;
+        case PROPOSALCREATECONTRACT:
+            if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_PROPOSALCREATE_TRANSACTION, data_warning);
+
+            break;
         case WITNESSCREATECONTRACT:
             memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type

@@ -37,6 +37,8 @@
 // Macros
 #define WARNING_TYPES_NUMBER 1
 #define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1)
+#define PROPOSAL_ITEM_LEN    10
+#define PROPOSAL_VALUE_LEN   80
 
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
@@ -69,6 +71,8 @@ typedef struct {
 static nbgl_layoutTagValueList_t pairList;
 static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
+static char proposalFieldLabels[MAX_PROPOSAL_PARAMETERS][PROPOSAL_ITEM_LEN];
+static char proposalFieldValues[MAX_PROPOSAL_PARAMETERS][PROPOSAL_VALUE_LEN];
 // Alias extension for the recipient trusted name (lets the user reveal the
 // underlying address behind the resolved name). Mirrors app-ethereum's
 // ui_approve_tx() trusted-name display.
@@ -264,6 +268,22 @@ static void set_action_title(contractType_e type) {
     }
 }
 
+static bool format_int64_value(int64_t value, char *out, size_t outlen) {
+    if (outlen == 0) {
+        return false;
+    }
+    if (value < 0) {
+        uint64_t magnitude = (uint64_t) (-(value + 1)) + 1;
+
+        if (outlen < 3) {
+            return false;
+        }
+        out[0] = '-';
+        return u64_to_string(magnitude, out + 1, outlen - 1);
+    }
+    return u64_to_string((uint64_t) value, out, outlen);
+}
+
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
@@ -438,6 +458,49 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUpdate Account";
             infoLongPress.text = "Sign transaction to\nUpdate Account";
             break;
+        case APPROVAL_PROPOSALCREATE_TRANSACTION: {
+            pb_size_t count = proposal_parameter_count();
+
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if ((count == 0) || (count > MAX_PROPOSAL_PARAMETERS) ||
+                (count > MAX_TX_FIELDS - 1)) {
+                return false;
+            }
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            for (pb_size_t i = 0; i < count; i++) {
+                int64_t key;
+                int64_t value;
+                char key_str[22];
+                char value_str[22];
+
+                if (!proposal_parameter_at(i, &key, &value)) {
+                    return false;
+                }
+                if (!format_int64_value(key, key_str, sizeof(key_str)) ||
+                    !format_int64_value(value, value_str, sizeof(value_str))) {
+                    return false;
+                }
+                snprintf(proposalFieldLabels[i],
+                         sizeof(proposalFieldLabels[i]),
+                         "Param %u",
+                         (unsigned) i + 1);
+                snprintf(proposalFieldValues[i],
+                         sizeof(proposalFieldValues[i]),
+                         "Key: %s\nValue: %s",
+                         key_str,
+                         value_str);
+                txInfos.fields[i + 1].item = proposalFieldLabels[i];
+                txInfos.fields[i + 1].value = proposalFieldValues[i];
+            }
+            pairList.nbPairs = count + 1;
+            txInfos.flowTitle = "Review transaction to\nCreate Proposal";
+            infoLongPress.text = "Sign transaction to\nCreate Proposal";
+            break;
+        }
         case APPROVAL_PERMISSION_UPDATE:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

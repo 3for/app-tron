@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "pb.h"
+#include "pb_decode.h"
 #include "misc/TronApp.pb.h"
 #include "format.h"
 #include "parse.h"
@@ -26,6 +27,42 @@
 #include "trc_tokens.h"
 #include "app_errors.h"
 #include "ui_globals.h"
+
+static pb_size_t decoded_proposal_parameters_count;
+static protocol_ProposalCreateContract_ParametersEntry
+    decoded_proposal_parameters[MAX_PROPOSAL_PARAMETERS];
+
+pb_size_t proposal_parameter_count(void) {
+    return decoded_proposal_parameters_count;
+}
+
+bool proposal_parameter_at(pb_size_t index, int64_t *key, int64_t *value) {
+    if ((index >= decoded_proposal_parameters_count) || (key == NULL) || (value == NULL)) {
+        return false;
+    }
+
+    *key = decoded_proposal_parameters[index].key;
+    *value = decoded_proposal_parameters[index].value;
+    return true;
+}
+
+static bool pb_decode_proposal_parameter(pb_istream_t *stream,
+                                         const pb_field_t *field,
+                                         void **arg) {
+    protocol_ProposalCreateContract_ParametersEntry entry =
+        protocol_ProposalCreateContract_ParametersEntry_init_zero;
+
+    UNUSED(arg);
+    if (decoded_proposal_parameters_count >= MAX_PROPOSAL_PARAMETERS) {
+        return false;
+    }
+    if (!pb_decode(stream, field->submsg_desc, &entry)) {
+        return false;
+    }
+    decoded_proposal_parameters[decoded_proposal_parameters_count] = entry;
+    decoded_proposal_parameters_count++;
+    return true;
+}
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
@@ -606,11 +643,24 @@ static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream
 }
 
 static bool proposal_create_contract(txContent_t *content, pb_istream_t *stream) {
+    decoded_proposal_parameters_count = 0;
+    msg.proposal_create_contract.parameters.funcs.decode = pb_decode_proposal_parameter;
+    msg.proposal_create_contract.parameters.arg = NULL;
+
     if (!pb_decode(stream, protocol_ProposalCreateContract_fields, &msg.proposal_create_contract)) {
         return false;
     }
 
-    content->amount[0] = msg.proposal_create_contract.parameters_count;
+    if (msg.proposal_create_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (decoded_proposal_parameters_count == 0) {
+        return false;
+    }
+    if (decoded_proposal_parameters_count > MAX_PROPOSAL_PARAMETERS) {
+        return false;
+    }
+    content->amount[0] = decoded_proposal_parameters_count;
     COPY_ADDRESS(content->account, &msg.proposal_create_contract.owner_address);
     return true;
 }

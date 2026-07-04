@@ -505,6 +505,60 @@ class TestTRX():
                                             }))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_proposal_create_multi_apdu(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalCreateContract,
+            contract.ProposalCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            parameters={
+                                                0: 81000,
+                                                1: 100000,
+                                                2: 400000,
+                                                3: 10,
+                                                4: 1024,
+                                                5: 16000000,
+                                                6: 115200000000,
+                                                7: 0,
+                                                8: 1,
+                                                9: 1,
+                                                13: 400,
+                                                22: 1000000,
+                                                24: 0,
+                                                29: 10000,
+                                                33: 1000,
+                                                45: 0,
+                                                61: 100000,
+                                                70: 365,
+                                                82: 10000,
+                                                92: 31536002999,
+                                            }))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_proposal_create_empty_parameters(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalCreateContract,
+            contract.ProposalCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            parameters={}))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_proposal_create_dynamic_parameter(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalCreateContract,
+            contract.ProposalCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            parameters={
+                                                27: 1,
+                                                9: 2
+                                            }))
+        self.sign_and_validate(client, device, 0, tx)
+
     def test_trx_proposal_approve(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

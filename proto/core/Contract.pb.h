@@ -243,8 +243,7 @@ typedef struct _protocol_WithdrawExpireUnfreezeContract {
 
 typedef struct _protocol_ProposalCreateContract { 
     pb_byte_t owner_address[21]; 
-    pb_size_t parameters_count;
-    protocol_ProposalCreateContract_ParametersEntry parameters[10]; 
+    pb_callback_t parameters;
 } protocol_ProposalCreateContract;
 
 typedef struct _protocol_VoteWitnessContract { 
@@ -290,7 +289,7 @@ extern "C" {
 #define protocol_WithdrawBalanceContract_init_default {{0}}
 #define protocol_UpdateBrokerageContract_init_default {{0}, 0}
 #define protocol_UpdateAssetContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
-#define protocol_ProposalCreateContract_init_default {{0}, 0, {protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default, protocol_ProposalCreateContract_ParametersEntry_init_default}}
+#define protocol_ProposalCreateContract_init_default {{0}, {{NULL}, NULL}}
 #define protocol_ProposalCreateContract_ParametersEntry_init_default {0, 0}
 #define protocol_ProposalApproveContract_init_default {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_default {{0}, 0}
@@ -325,7 +324,7 @@ extern "C" {
 #define protocol_WithdrawBalanceContract_init_zero {{0}}
 #define protocol_UpdateBrokerageContract_init_zero {{0}, 0}
 #define protocol_UpdateAssetContract_init_zero   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
-#define protocol_ProposalCreateContract_init_zero {{0}, 0, {protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero, protocol_ProposalCreateContract_ParametersEntry_init_zero}}
+#define protocol_ProposalCreateContract_init_zero {{0}, {{NULL}, NULL}}
 #define protocol_ProposalCreateContract_ParametersEntry_init_zero {0, 0}
 #define protocol_ProposalApproveContract_init_zero {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_zero {{0}, 0}
@@ -644,8 +643,8 @@ X(a, STATIC,   SINGULAR, INT64,    new_public_limit,   5)
 
 #define protocol_ProposalCreateContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
-X(a, STATIC,   REPEATED, MESSAGE,  parameters,        2)
-#define protocol_ProposalCreateContract_CALLBACK NULL
+X(a, CALLBACK, REPEATED, MESSAGE,  parameters,        2)
+#define protocol_ProposalCreateContract_CALLBACK pb_default_field_callback
 #define protocol_ProposalCreateContract_DEFAULT NULL
 #define protocol_ProposalCreateContract_parameters_MSGTYPE protocol_ProposalCreateContract_ParametersEntry
 
@@ -820,7 +819,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_FreezeBalanceV2Contract_size    36
 #define protocol_ProposalApproveContract_size    36
 #define protocol_ProposalCreateContract_ParametersEntry_size 22
-#define protocol_ProposalCreateContract_size     263
+/* protocol_ProposalCreateContract_size depends on runtime parameters */
 #define protocol_ProposalDeleteContract_size     34
 #define protocol_TransferAssetContract_size      75
 #define protocol_TransferContract_size           57

@@ -38,7 +38,7 @@ protocol.WithdrawBalanceContract.owner_address      max_size: 21, fixed_length: 
 protocol.UpdateBrokerageContract.owner_address      max_size: 21, fixed_length: true
 
 protocol.ProposalCreateContract.owner_address       max_size: 21, fixed_length: true
-protocol.ProposalCreateContract.parameters          max_count: 10
+protocol.ProposalCreateContract.parameters          type: FT_CALLBACK
 
 protocol.ProposalApproveContract.owner_address      max_size: 21, fixed_length: true
 
