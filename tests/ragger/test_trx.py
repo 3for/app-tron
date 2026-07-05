@@ -1022,6 +1022,65 @@ class TestTRX():
                                              resource=contract.ENERGY))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_freezeV2_balance_multi_apdu(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            contract.FreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                             frozen_balance=100000000,
+                                             resource=contract.BANDWIDTH),
+            data=b"A" * 320)
+        assert len(tx) > MAX_APDU_LEN
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None)
+
+    def test_trx_freezeV2_balance_invalid_owner_address(self, backend):
+        client = TronClient(backend)
+        owner_address = bytearray.fromhex(client.getAccount(0)['addressHex'])
+        owner_address[0] = 0x42
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            contract.FreezeBalanceV2Contract(owner_address=bytes(owner_address),
+                                             frozen_balance=100000000,
+                                             resource=contract.ENERGY))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_freezeV2_balance_invalid_amount(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            contract.FreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                             frozen_balance=999999,
+                                             resource=contract.ENERGY))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_freezeV2_balance_invalid_resource(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            contract.FreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                             frozen_balance=100000000,
+                                             resource=3))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_unfreezeV2_balance(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -1031,6 +1090,65 @@ class TestTRX():
                                                unfreeze_balance=100000000,
                                                resource=contract.ENERGY))
         self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_unfreezeV2_balance_multi_apdu(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+            contract.UnfreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                               unfreeze_balance=100000000,
+                                               resource=contract.BANDWIDTH),
+            data=b"A" * 320)
+        assert len(tx) > MAX_APDU_LEN
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None)
+
+    def test_trx_unfreezeV2_balance_invalid_owner_address(self, backend):
+        client = TronClient(backend)
+        owner_address = bytearray.fromhex(client.getAccount(0)['addressHex'])
+        owner_address[0] = 0x42
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+            contract.UnfreezeBalanceV2Contract(owner_address=bytes(owner_address),
+                                               unfreeze_balance=100000000,
+                                               resource=contract.ENERGY))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_unfreezeV2_balance_invalid_amount(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+            contract.UnfreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                               unfreeze_balance=0,
+                                               resource=contract.ENERGY))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_unfreezeV2_balance_invalid_resource(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+            contract.UnfreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                               unfreeze_balance=100000000,
+                                               resource=3))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert e.value.status == StatusWord.INVALID_DATA
 
     def test_trx_delegate_resource(self, backend, device):
         client = TronClient(backend)

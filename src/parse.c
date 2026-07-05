@@ -64,6 +64,12 @@ static bool pb_decode_proposal_parameter(pb_istream_t *stream,
     return true;
 }
 
+static bool is_supported_v2_resource(protocol_ResourceCode resource) {
+    return (resource == protocol_ResourceCode_BANDWIDTH) ||
+           (resource == protocol_ResourceCode_ENERGY) ||
+           (resource == protocol_ResourceCode_TRON_POWER);
+}
+
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
 
@@ -534,9 +540,19 @@ static bool freeze_balance_v2_contract(txContent_t *content, pb_istream_t *strea
         return false;
     }
 
+    if (msg.freeze_balance_v2_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (msg.freeze_balance_v2_contract.frozen_balance < 1000000) {
+        return false;
+    }
+    if (!is_supported_v2_resource(msg.freeze_balance_v2_contract.resource)) {
+        return false;
+    }
+
     COPY_ADDRESS(content->account, &msg.freeze_balance_v2_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.freeze_balance_v2_contract.owner_address);
-    content->amount[0] = msg.freeze_balance_v2_contract.frozen_balance;
+    content->amount[0] = (uint64_t) msg.freeze_balance_v2_contract.frozen_balance;
     content->resource = msg.freeze_balance_v2_contract.resource;
     return true;
 }
@@ -547,8 +563,18 @@ static bool unfreeze_balance_v2_contract(txContent_t *content, pb_istream_t *str
                    &msg.unfreeze_balance_v2_contract)) {
         return false;
     }
+    if (msg.unfreeze_balance_v2_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (msg.unfreeze_balance_v2_contract.unfreeze_balance <= 0) {
+        return false;
+    }
+    if (!is_supported_v2_resource(msg.unfreeze_balance_v2_contract.resource)) {
+        return false;
+    }
+
     content->resource = msg.unfreeze_balance_v2_contract.resource;
-    content->amount[0] = msg.unfreeze_balance_v2_contract.unfreeze_balance;
+    content->amount[0] = (uint64_t) msg.unfreeze_balance_v2_contract.unfreeze_balance;
 
     COPY_ADDRESS(content->account, &msg.unfreeze_balance_v2_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.unfreeze_balance_v2_contract.owner_address);

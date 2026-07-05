@@ -58,6 +58,23 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
+static void setV2ResourceName(protocol_ResourceCode resource) {
+    switch (resource) {
+        case protocol_ResourceCode_BANDWIDTH:
+            strcpy(strings.common.fullContract, "Bandwidth");
+            break;
+        case protocol_ResourceCode_ENERGY:
+            strcpy(strings.common.fullContract, "Energy");
+            break;
+        case protocol_ResourceCode_TRON_POWER:
+            strcpy(strings.common.fullContract, "Tron Power");
+            break;
+        default:
+            strcpy(strings.common.fullContract, "Unknown");
+            break;
+    }
+}
+
 typedef struct {
     uint8_t id;
     const char *name;
@@ -830,10 +847,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            setV2ResourceName(txContent.resource);
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
@@ -841,10 +855,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            setV2ResourceName(txContent.resource);
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);

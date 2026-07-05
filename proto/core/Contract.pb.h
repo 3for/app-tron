@@ -12,8 +12,9 @@
 
 /* Enum definitions */
 typedef enum _protocol_ResourceCode { 
-    protocol_ResourceCode_BANDWIDTH = 0, 
-    protocol_ResourceCode_ENERGY = 1 
+    protocol_ResourceCode_BANDWIDTH = 0,
+    protocol_ResourceCode_ENERGY = 1,
+    protocol_ResourceCode_TRON_POWER = 2
 } protocol_ResourceCode;
 
 /* Struct definitions */
@@ -255,8 +256,8 @@ typedef struct _protocol_VoteWitnessContract {
 
 /* Helper constants for enums */
 #define _protocol_ResourceCode_MIN protocol_ResourceCode_BANDWIDTH
-#define _protocol_ResourceCode_MAX protocol_ResourceCode_ENERGY
-#define _protocol_ResourceCode_ARRAYSIZE ((protocol_ResourceCode)(protocol_ResourceCode_ENERGY+1))
+#define _protocol_ResourceCode_MAX protocol_ResourceCode_TRON_POWER
+#define _protocol_ResourceCode_ARRAYSIZE ((protocol_ResourceCode)(protocol_ResourceCode_TRON_POWER+1))
 
 
 #ifdef __cplusplus
