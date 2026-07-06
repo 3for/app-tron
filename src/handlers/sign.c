@@ -376,6 +376,7 @@ void sign_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
     ui_review_menu_cleanup();
+    proposal_parameters_cleanup();
     raw_tx_len = 0;
     perm_field_count = 0;
 }

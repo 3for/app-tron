@@ -27,17 +27,30 @@
 #include "trc_tokens.h"
 #include "app_errors.h"
 #include "ui_globals.h"
+#include "app_mem_utils.h"
 
 static pb_size_t decoded_proposal_parameters_count;
-static protocol_ProposalCreateContract_ParametersEntry
-    decoded_proposal_parameters[MAX_PROPOSAL_PARAMETERS];
+static protocol_ProposalCreateContract_ParametersEntry *decoded_proposal_parameters;
+
+void proposal_parameters_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &decoded_proposal_parameters);
+    decoded_proposal_parameters_count = 0;
+}
+
+static bool proposal_parameters_init(void) {
+    proposal_parameters_cleanup();
+    decoded_proposal_parameters =
+        APP_MEM_ALLOC(MAX_PROPOSAL_PARAMETERS * sizeof(*decoded_proposal_parameters));
+    return decoded_proposal_parameters != NULL;
+}
 
 pb_size_t proposal_parameter_count(void) {
     return decoded_proposal_parameters_count;
 }
 
 bool proposal_parameter_at(pb_size_t index, int64_t *key, int64_t *value) {
-    if ((index >= decoded_proposal_parameters_count) || (key == NULL) || (value == NULL)) {
+    if ((decoded_proposal_parameters == NULL) || (index >= decoded_proposal_parameters_count) ||
+        (key == NULL) || (value == NULL)) {
         return false;
     }
 
@@ -53,6 +66,9 @@ static bool pb_decode_proposal_parameter(pb_istream_t *stream,
         protocol_ProposalCreateContract_ParametersEntry_init_zero;
 
     UNUSED(arg);
+    if (decoded_proposal_parameters == NULL) {
+        return false;
+    }
     if (decoded_proposal_parameters_count >= MAX_PROPOSAL_PARAMETERS) {
         return false;
     }
@@ -669,21 +685,23 @@ static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream
 }
 
 static bool proposal_create_contract(txContent_t *content, pb_istream_t *stream) {
-    decoded_proposal_parameters_count = 0;
+    if (!proposal_parameters_init()) {
+        return false;
+    }
     msg.proposal_create_contract.parameters.funcs.decode = pb_decode_proposal_parameter;
     msg.proposal_create_contract.parameters.arg = NULL;
 
     if (!pb_decode(stream, protocol_ProposalCreateContract_fields, &msg.proposal_create_contract)) {
+        proposal_parameters_cleanup();
         return false;
     }
 
     if (msg.proposal_create_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        proposal_parameters_cleanup();
         return false;
     }
     if (decoded_proposal_parameters_count == 0) {
-        return false;
-    }
-    if (decoded_proposal_parameters_count > MAX_PROPOSAL_PARAMETERS) {
+        proposal_parameters_cleanup();
         return false;
     }
     content->amount[0] = decoded_proposal_parameters_count;

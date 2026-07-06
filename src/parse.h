@@ -72,6 +72,7 @@ bool setContractType(contractType_e type, char *out, size_t outlen);
 bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen);
 pb_size_t proposal_parameter_count(void);
 bool proposal_parameter_at(pb_size_t index, int64_t *key, int64_t *value);
+void proposal_parameters_cleanup(void);
 
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *context);
 bool parseExchange(const uint8_t *data, size_t dataLength, txContent_t *context);

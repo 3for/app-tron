@@ -474,6 +474,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             if ((count == 0) || (count > MAX_PROPOSAL_PARAMETERS) ||
                 (count > MAX_TX_FIELDS - 1)) {
+                proposal_parameters_cleanup();
                 return false;
             }
             ui_review_menu_cleanup();
@@ -481,6 +482,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             proposalFieldValues = APP_MEM_ALLOC(count * sizeof(*proposalFieldValues));
             if ((proposalFieldLabels == NULL) || (proposalFieldValues == NULL)) {
                 ui_review_menu_cleanup();
+                proposal_parameters_cleanup();
                 return false;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
@@ -492,10 +494,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 char value_str[22];
 
                 if (!proposal_parameter_at(i, &key, &value)) {
+                    ui_review_menu_cleanup();
+                    proposal_parameters_cleanup();
                     return false;
                 }
                 if (!format_int64_value(key, key_str, sizeof(key_str)) ||
                     !format_int64_value(value, value_str, sizeof(value_str))) {
+                    ui_review_menu_cleanup();
+                    proposal_parameters_cleanup();
                     return false;
                 }
                 snprintf(proposalFieldLabels[i],
@@ -510,6 +516,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 txInfos.fields[i + 1].item = proposalFieldLabels[i];
                 txInfos.fields[i + 1].value = proposalFieldValues[i];
             }
+            proposal_parameters_cleanup();
             pairList.nbPairs = count + 1;
             txInfos.flowTitle = "Review transaction to\nCreate Proposal";
             infoLongPress.text = "Sign transaction to\nCreate Proposal";
