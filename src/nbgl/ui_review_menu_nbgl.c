@@ -21,6 +21,7 @@
 
 #include "app_errors.h"
 #include "apdu_constants.h"
+#include "app_mem_utils.h"
 #include "ux.h"
 #include "format.h"
 #include "nbgl_use_case.h"
@@ -71,8 +72,8 @@ typedef struct {
 static nbgl_layoutTagValueList_t pairList;
 static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
-static char proposalFieldLabels[MAX_PROPOSAL_PARAMETERS][PROPOSAL_ITEM_LEN];
-static char proposalFieldValues[MAX_PROPOSAL_PARAMETERS][PROPOSAL_VALUE_LEN];
+static char (*proposalFieldLabels)[PROPOSAL_ITEM_LEN];
+static char (*proposalFieldValues)[PROPOSAL_VALUE_LEN];
 static char proposalIdValue[22];
 // Alias extension for the recipient trusted name (lets the user reveal the
 // underlying address behind the resolved name). Mirrors app-ethereum's
@@ -93,6 +94,11 @@ static void displayDataWarning(void);
 static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static void rejectStatusDismissed(void);
+
+void ui_review_menu_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &proposalFieldLabels);
+    APP_MEM_FREE_AND_NULL((void **) &proposalFieldValues);
+}
 
 #ifdef SCREEN_SIZE_WALLET
 static void dataWarningChoice(bool accept) {
@@ -468,6 +474,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             if ((count == 0) || (count > MAX_PROPOSAL_PARAMETERS) ||
                 (count > MAX_TX_FIELDS - 1)) {
+                return false;
+            }
+            ui_review_menu_cleanup();
+            proposalFieldLabels = APP_MEM_ALLOC(count * sizeof(*proposalFieldLabels));
+            proposalFieldValues = APP_MEM_ALLOC(count * sizeof(*proposalFieldValues));
+            if ((proposalFieldLabels == NULL) || (proposalFieldValues == NULL)) {
+                ui_review_menu_cleanup();
                 return false;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
