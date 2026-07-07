@@ -34,6 +34,7 @@
 #include "trusted_name.h"
 #include "settings.h"
 #include "utils.h"  // SET_BIT
+#include "ui_utils.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER 1
@@ -60,7 +61,7 @@ enum {
 };
 
 typedef struct {
-    nbgl_layoutTagValue_t fields[MAX_TX_FIELDS];
+    nbgl_contentTagValue_t *fields;
     bool warnings[WARNING_TYPES_NUMBER];
     ui_approval_state_t state;
     const char *flowTitle;
@@ -69,7 +70,6 @@ typedef struct {
 } nbgl_tx_infos_t;
 
 // Static variables
-static nbgl_layoutTagValueList_t pairList;
 static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
 static char (*proposalFieldLabels)[PROPOSAL_ITEM_LEN];
@@ -95,9 +95,14 @@ static void reviewChoice(bool confirm);
 static void rejectChoice(void);
 static void rejectStatusDismissed(void);
 
-void ui_review_menu_cleanup(void) {
+static void proposal_fields_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &proposalFieldLabels);
     APP_MEM_FREE_AND_NULL((void **) &proposalFieldValues);
+}
+
+void ui_review_menu_cleanup(void) {
+    proposal_fields_cleanup();
+    ui_pairs_cleanup();
 }
 
 #ifdef SCREEN_SIZE_WALLET
@@ -145,7 +150,7 @@ static void displayTransaction(void) {
                 ? "Accept risk and sign transaction"
                 : infoLongPress.text;
         nbgl_useCaseAdvancedReview(operationType,
-                                   &pairList,
+                                   g_pairsList,
                                    txInfos.flowIcon,
                                    txInfos.flowTitle,
                                    txInfos.flowSubtitle,
@@ -158,7 +163,7 @@ static void displayTransaction(void) {
 
     // Start review
     nbgl_useCaseReview(operationType,
-                       &pairList,
+                       g_pairsList,
                        txInfos.flowIcon,
                        txInfos.flowTitle,
                        txInfos.flowSubtitle,
@@ -323,10 +328,10 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     infoLongPress.longPressText = "Hold to sign";
     infoLongPress.icon = &APP_TRON_ICON;
 
-    pairList.pairs = (nbgl_layoutTagValue_t *) txInfos.fields;
-    pairList.nbMaxLinesForValue = 0;
-    pairList.hideEndOfLastLine = false;
-    pairList.wrapping = true;
+    if (!ui_pairs_init(MAX_TX_FIELDS)) {
+        return false;
+    }
+    txInfos.fields = g_pairs;
 
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
@@ -408,7 +413,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                      transfer_action);
             txInfos.flowTitle = actionReviewTitle;
             infoLongPress.text = actionSignTitle;
-            pairList.nbPairs = idx;
+            g_pairsList->nbPairs = idx;
             break;
         }
         case APPROVAL_SIMPLE_TRANSACTION:
@@ -424,7 +429,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             // types, so derive the title from the actual contract type rather than
             // hardcoding one action.
             set_action_title(txContent.contractType);
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             break;
         case APPROVAL_WITNESSCREATE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
@@ -435,7 +440,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = stringLabelUrl;
             txInfos.fields[1].value = strings.common.url;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nCreate Witness";
             infoLongPress.text = "Sign transaction to\nCreate Witness";
             break;
@@ -448,7 +453,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = stringLabelUrl;
             txInfos.fields[1].value = strings.common.url;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Witness";
             infoLongPress.text = "Sign transaction to\nUpdate Witness";
             break;
@@ -461,7 +466,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Name";
             txInfos.fields[1].value = txContent.accountName;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Account";
             infoLongPress.text = "Sign transaction to\nUpdate Account";
             break;
@@ -477,11 +482,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 proposal_parameters_cleanup();
                 return false;
             }
-            ui_review_menu_cleanup();
+            proposal_fields_cleanup();
             proposalFieldLabels = APP_MEM_ALLOC(count * sizeof(*proposalFieldLabels));
             proposalFieldValues = APP_MEM_ALLOC(count * sizeof(*proposalFieldValues));
             if ((proposalFieldLabels == NULL) || (proposalFieldValues == NULL)) {
-                ui_review_menu_cleanup();
+                proposal_fields_cleanup();
                 proposal_parameters_cleanup();
                 return false;
             }
@@ -494,13 +499,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 char value_str[22];
 
                 if (!proposal_parameter_at(i, &key, &value)) {
-                    ui_review_menu_cleanup();
+                    proposal_fields_cleanup();
                     proposal_parameters_cleanup();
                     return false;
                 }
                 if (!format_int64_value(key, key_str, sizeof(key_str)) ||
                     !format_int64_value(value, value_str, sizeof(value_str))) {
-                    ui_review_menu_cleanup();
+                    proposal_fields_cleanup();
                     proposal_parameters_cleanup();
                     return false;
                 }
@@ -517,7 +522,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 txInfos.fields[i + 1].value = proposalFieldValues[i];
             }
             proposal_parameters_cleanup();
-            pairList.nbPairs = count + 1;
+            g_pairsList->nbPairs = count + 1;
             txInfos.flowTitle = "Review transaction to\nCreate Proposal";
             infoLongPress.text = "Sign transaction to\nCreate Proposal";
             break;
@@ -537,7 +542,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].item = "Action";
             txInfos.fields[2].value =
                 (txContent.amount[0] == 0) ? "Remove Approval" : "Approve";
-            pairList.nbPairs = 3;
+            g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nApprove Proposal";
             infoLongPress.text = "Sign transaction to\nApprove Proposal";
             break;
@@ -553,7 +558,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Proposal ID";
             txInfos.fields[1].value = proposalIdValue;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nDelete Proposal";
             infoLongPress.text = "Sign transaction to\nDelete Proposal";
             break;
@@ -571,7 +576,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 txInfos.fields[i + 1].item = perm_field_items[i];
                 txInfos.fields[i + 1].value = perm_field_values[i];
             }
-            pairList.nbPairs = perm_field_count + 1;
+            g_pairsList->nbPairs = perm_field_count + 1;
             txInfos.flowTitle = "Review transaction to\nUpdate Permission";
             infoLongPress.text = "Sign transaction to\nUpdate Permission";
             break;
@@ -590,7 +595,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].value = strings.common.toAddress;
             txInfos.fields[4].item = "Amount 2";
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
-            pairList.nbPairs = 5;
+            g_pairsList->nbPairs = 5;
             set_action_title(txContent.contractType);
             break;
         case APPROVAL_EXCHANGE_TRANSACTION:
@@ -609,7 +614,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[4].item = "Expected";
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
             set_action_title(txContent.contractType);
-            pairList.nbPairs = 5;
+            g_pairsList->nbPairs = 5;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
 #if !defined(SCREEN_SIZE_WALLET)
@@ -629,7 +634,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             // Shared by EXCHANGEINJECT/EXCHANGEWITHDRAW; the title now reflects the
             // actual one ("Inject Exchange" / "Withdraw Exchange") instead of both.
             set_action_title(txContent.contractType);
-            pairList.nbPairs = 5;
+            g_pairsList->nbPairs = 5;
             break;
         case APPROVAL_WITNESSVOTE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
@@ -656,7 +661,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             }
             txInfos.fields[votes_count + 1].item = "Total Vote Count";
             txInfos.fields[votes_count + 1].value = strings.common.fullContract;
-            pairList.nbPairs = votes_count + 2;
+            g_pairsList->nbPairs = votes_count + 2;
             txInfos.flowTitle = "Review transaction to\nVote";
             infoLongPress.text = "Sign transaction to\nVote";
             break;
@@ -673,7 +678,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = "Freeze To";
             txInfos.fields[3].value = strings.common.toAddress;
-            pairList.nbPairs = 4;
+            g_pairsList->nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nFreeze";
             infoLongPress.text = "Sign transaction to\nFreeze";
             break;
@@ -688,7 +693,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = "Delegated To";
             txInfos.fields[2].value = strings.common.toAddress;
-            pairList.nbPairs = 3;
+            g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nUnfreeze";
             infoLongPress.text = "Sign transaction to\nUnfreeze";
             break;
@@ -699,7 +704,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
-            pairList.nbPairs = 1;
+            g_pairsList->nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nClaim Rewards";
             infoLongPress.text = "Sign transaction to\nClaim Rewards";
             break;
@@ -712,7 +717,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fullContract;
             txInfos.fields[1].item = "Sign with";
             txInfos.fields[1].value = strings.common.fromAddress;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
             break;
@@ -723,7 +728,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             tip712_format_hash(0, &txInfos.fields[0].item, &txInfos.fields[0].value);
             tip712_format_hash(1, &txInfos.fields[1].item, &txInfos.fields[1].value);
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
             break;
@@ -742,7 +747,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             // merged into a single "Amount" field ("<value> TRX", built in sign.c).
             txInfos.fields[3].item = "Amount";
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-            pairList.nbPairs = 4;
+            g_pairsList->nbPairs = 4;
             txInfos.flowSubtitle = "Custom Contract";
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
@@ -754,7 +759,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Shared With";
             txInfos.fields[1].value = strings.common.toAddress;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nShare ECDH Secret";
             infoLongPress.text = "Sign transaction to\nShare ECDH Secret";
             break;
@@ -771,7 +776,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
-            pairList.nbPairs = 4;
+            g_pairsList->nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nFreezeV2";
             infoLongPress.text = "Sign transaction to\nFreezeV2";
             break;
@@ -788,7 +793,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
-            pairList.nbPairs = 4;
+            g_pairsList->nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nUnfreezeV2";
             infoLongPress.text = "Sign transaction to\nUnfreezeV2";
             break;
@@ -807,7 +812,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
             txInfos.fields[4].item = stringLabelRecipientAddress;
             txInfos.fields[4].value = strings.common.toAddress;
-            pairList.nbPairs = 5;
+            g_pairsList->nbPairs = 5;
             txInfos.flowTitle = "Review transaction to\nDelegate Resource";
             infoLongPress.text = "Sign transaction to\nDelegate";
             break;
@@ -824,7 +829,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
-            pairList.nbPairs = 4;
+            g_pairsList->nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nUndelegate Resource";
             infoLongPress.text = "Sign transaction to\nUndelegate";
             break;
@@ -835,7 +840,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
-            pairList.nbPairs = 1;
+            g_pairsList->nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nWithdraw Unfreeze";
             infoLongPress.text = "Sign transaction to\nWithdraw";
             break;
@@ -846,7 +851,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 #endif
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
-            pairList.nbPairs = 1;
+            g_pairsList->nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nCancel All Unfreeze V2";
             infoLongPress.text = "Sign transaction to\nCancel All Unfreeze V2";
             break;
@@ -859,7 +864,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Brokerage";
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
-            pairList.nbPairs = 2;
+            g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Brokerage";
             infoLongPress.text = "Sign transaction to\nUpdate Brokerage";
             break;
@@ -876,15 +881,15 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     // actually signed. Only when there is room left in the fields array.
     bool blind_sign = (state == APPROVAL_CUSTOM_CONTRACT);
     if ((N_storage.displayHash || blind_sign) && state_shows_tx_hash(state) &&
-        (pairList.nbPairs < MAX_TX_FIELDS)) {
+        (g_pairsList->nbPairs < MAX_TX_FIELDS)) {
         strlcpy(strings.common.fullHash, "0x", 3);
         bytes_to_lowercase_hex(strings.common.fullHash + 2,
                                sizeof(strings.common.fullHash) - 2,
                                tmpCtx.transactionContext.hash,
                                HASH_SIZE);
-        txInfos.fields[pairList.nbPairs].item = stringLabelTxHash;
-        txInfos.fields[pairList.nbPairs].value = strings.common.fullHash;
-        pairList.nbPairs++;
+        txInfos.fields[g_pairsList->nbPairs].item = stringLabelTxHash;
+        txInfos.fields[g_pairsList->nbPairs].value = strings.common.fullHash;
+        g_pairsList->nbPairs++;
     }
 
     return true;

@@ -49,7 +49,7 @@ bool ui_pairs_init(uint8_t nbPairs) {
     }
 
     // Allocate the pairs memory
-    if (!APP_MEM_CALLOC((void **) &g_pairs, nbPairs * sizeof(nbgl_contentTagValueList_t))) {
+    if (!APP_MEM_CALLOC((void **) &g_pairs, nbPairs * sizeof(nbgl_contentTagValue_t))) {
         goto error;
     }
     g_pairsList->nbPairs = nbPairs;
