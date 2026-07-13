@@ -273,6 +273,10 @@ bool tostring256_signed(const uint256_t *const number,
     uint256_t two_val;
     uint256_t tmp;
 
+    if (out == NULL || out_length == 0) {
+        return false;
+    }
+
     // showing negative numbers only really makes sense in base 10
     if (base == 10) {
         explicit_bzero(&one_val, sizeof(one_val));

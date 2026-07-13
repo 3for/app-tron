@@ -113,14 +113,16 @@ bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size) {
 }
 
 bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_t out_len) {
-    if (value_len > INT256_LENGTH) {
-        // value len is bigger than INT256_LENGTH ?!
+    if (value_len > INT256_LENGTH || out == NULL || (value == NULL && value_len != 0)) {
+        // Reject oversized values and invalid buffers before touching memory.
         return false;
     }
 
     uint16_t n[16] = {0};
     // Copy and right-align the number
-    memcpy((uint8_t *) n + INT256_LENGTH - value_len, value, value_len);
+    if (value_len != 0) {
+        memcpy((uint8_t *) n + INT256_LENGTH - value_len, value, value_len);
+    }
 
     // Special case when value is 0
     if (allzeroes(n, INT256_LENGTH)) {
@@ -136,7 +138,13 @@ bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_
     for (int i = 0; i < 16; i++) {
         n[i] = __builtin_bswap16(*p++);
     }
-    int pos = out_len;
+    if (out_len == 0) {
+        return false;
+    }
+
+    // Reserve the last byte for the terminator while producing digits backwards.
+    size_t pos = out_len - 1U;
+    out[pos] = '\0';
     while (!allzeroes(n, sizeof(n))) {
         if (pos == 0) {
             return false;
@@ -150,8 +158,9 @@ bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_
         }
         out[pos] = '0' + carry;
     }
-    memmove(out, out + pos, out_len - pos);
-    out[out_len - pos] = 0;
+    const size_t digits = (out_len - 1U) - pos;
+    memmove(out, out + pos, digits);
+    out[digits] = '\0';
     return true;
 }
 
@@ -160,10 +169,21 @@ bool adjustDecimals(const char *src,
                     char *target,
                     size_t targetLength,
                     uint8_t decimals) {
-    uint32_t startOffset;
-    uint32_t lastZeroOffset = 0;
-    uint32_t offset = 0;
-    if ((srcLength == 1) && (*src == '0')) {
+    size_t trailing_zeros = 0;
+    size_t offset = 0;
+    bool value_is_zero = true;
+
+    if (src == NULL || target == NULL || srcLength == 0) {
+        return false;
+    }
+
+    for (size_t i = 0; i < srcLength; i++) {
+        if (src[i] != '0') {
+            value_is_zero = false;
+            break;
+        }
+    }
+    if (value_is_zero) {
         if (targetLength < 2) {
             return false;
         }
@@ -171,53 +191,51 @@ bool adjustDecimals(const char *src,
         target[1] = '\0';
         return true;
     }
+
+    // Only fractional zeroes are trimmed. Determine the final length before
+    // writing so a buffer sized exactly for the normalized result succeeds.
+    const size_t source_fractional_digits =
+        decimals < srcLength ? decimals : srcLength;
+    while (trailing_zeros < source_fractional_digits &&
+           src[srcLength - 1U - trailing_zeros] == '0') {
+        trailing_zeros++;
+    }
+
     if (srcLength <= decimals) {
-        uint32_t delta = decimals - srcLength;
-        if (targetLength < srcLength + 1 + 2 + delta) {
+        const size_t leading_fractional_zeros = decimals - srcLength;
+        const size_t source_digits = srcLength - trailing_zeros;
+        const size_t output_length = 2U + leading_fractional_zeros + source_digits;
+
+        if (targetLength <= output_length) {
             return false;
         }
         target[offset++] = '0';
         target[offset++] = '.';
-        for (uint32_t i = 0; i < delta; i++) {
+        for (size_t i = 0; i < leading_fractional_zeros; i++) {
             target[offset++] = '0';
         }
-        startOffset = offset;
-        for (uint32_t i = 0; i < srcLength; i++) {
-            target[offset++] = src[i];
+        if (source_digits != 0) {
+            memcpy(target + offset, src, source_digits);
+            offset += source_digits;
         }
         target[offset] = '\0';
     } else {
-        uint32_t sourceOffset = 0;
-        uint32_t delta = srcLength - decimals;
-        if (targetLength < srcLength + 1 + 1) {
+        const size_t integer_digits = srcLength - decimals;
+        const size_t fractional_digits = decimals - trailing_zeros;
+        const size_t output_length =
+            integer_digits + (fractional_digits == 0 ? 0U : 1U + fractional_digits);
+
+        if (targetLength <= output_length) {
             return false;
         }
-        while (offset < delta) {
-            target[offset++] = src[sourceOffset++];
-        }
-        if (decimals != 0) {
+        memcpy(target, src, integer_digits);
+        offset = integer_digits;
+        if (fractional_digits != 0) {
             target[offset++] = '.';
-        }
-        startOffset = offset;
-        while (sourceOffset < srcLength) {
-            target[offset++] = src[sourceOffset++];
+            memcpy(target + offset, src + integer_digits, fractional_digits);
+            offset += fractional_digits;
         }
         target[offset] = '\0';
-    }
-    for (uint32_t i = startOffset; i < offset; i++) {
-        if (target[i] == '0') {
-            if (lastZeroOffset == 0) {
-                lastZeroOffset = i;
-            }
-        } else {
-            lastZeroOffset = 0;
-        }
-    }
-    if (lastZeroOffset != 0) {
-        target[lastZeroOffset] = '\0';
-        if (target[lastZeroOffset - 1] == '.') {
-            target[lastZeroOffset - 1] = '\0';
-        }
     }
     return true;
 }

@@ -66,6 +66,26 @@ python3 generate_personal_message_corpus.py
 FUZZ_TARGET=fuzz_personal_message ./local_run.sh
 ```
 
+To run the common utility fuzzers, use separate corpus directories so their
+generated inputs do not mix with the protocol fuzzers:
+
+```sh
+cd tests/fuzzing
+FUZZ_TARGET=fuzz_common_utils_address \
+  CORPUS_DIR=./corpus/fuzz_common_utils_address ./local_run.sh
+```
+
+```sh
+cd tests/fuzzing
+FUZZ_TARGET=fuzz_common_utils_numbers \
+  CORPUS_DIR=./corpus/fuzz_common_utils_numbers ./local_run.sh
+```
+
+`local_run.sh` creates the corpus directory when needed and builds all targets
+with AddressSanitizer. It starts an open-ended mutation loop when libFuzzer is
+available; on AppleClang installations without the libFuzzer runtime, it replays
+the corpus once in standalone mode. Stop an open-ended run with `Ctrl-C`.
+
 To use a custom corpus directory:
 
 ```sh
@@ -83,6 +103,8 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | `fuzz_personal_message` | TIP-191 legacy and full-display personal-message signing flows | `./corpus/fuzz_personal_message` |
 | `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
 | `fuzz_external_metadata` | External metadata APDU flows for trusted names, proxy info, and enum values | `./corpus/fuzz_external_metadata` |
+| `fuzz_common_utils_address` | TRON Base58Check address conversion, checksum/prefix rejection, and output boundaries | `./corpus` |
+| `fuzz_common_utils_numbers` | uint128/uint256 decimal formatting, token decimals/tickers, and output boundaries | `./corpus` |
 
 ## Manual Local Runs
 
@@ -162,6 +184,22 @@ python3 generate_personal_message_corpus.py
 
 Remove `-runs=10000` for an open-ended run.
 
+Build and run the common utility targets with bounded smoke tests:
+
+```sh
+cd tests/fuzzing
+cmake --build build --target fuzz_common_utils_address fuzz_common_utils_numbers
+mkdir -p corpus/fuzz_common_utils_address corpus/fuzz_common_utils_numbers
+./build/fuzz_common_utils_address \
+  -runs=10000 -max_len=64 ./corpus/fuzz_common_utils_address
+./build/fuzz_common_utils_numbers \
+  -runs=10000 -max_len=64 ./corpus/fuzz_common_utils_numbers
+```
+
+Both harnesses derive valid cases and boundary values from arbitrary input, so
+they can start with empty corpus directories. Remove `-runs=10000` for an
+open-ended run.
+
 Replay a corpus without starting a mutation loop:
 
 ```sh
@@ -179,6 +217,8 @@ cd tests/fuzzing
 ./build/fuzz_personal_message ./corpus/fuzz_personal_message
 ./build/fuzz_gcs ./corpus/fuzz_gcs
 ./build/fuzz_external_metadata ./corpus/fuzz_external_metadata
+./build/fuzz_common_utils_address ./corpus/fuzz_common_utils_address
+./build/fuzz_common_utils_numbers ./corpus/fuzz_common_utils_numbers
 ```
 
 To check which mode a binary is in:
@@ -268,6 +308,8 @@ The default `.clusterfuzzlite/build.sh` exports only:
 - `fuzz_personal_message`
 - `fuzz_gcs`
 - `fuzz_external_metadata`
+- `fuzz_common_utils_address`
+- `fuzz_common_utils_numbers`
 
 Run that default build and write artifacts to `tests/fuzzing/out`:
 
@@ -281,7 +323,7 @@ docker run --platform linux/amd64 --rm --privileged \
   /src/build.sh
 ```
 
-All six targets are exported by the default build, so no separate "export everything" command is needed.
+All eight targets are exported by the default build, so no separate "export everything" command is needed.
 
 Run an exported target with the OSS-Fuzz runner. Each target needs the matching seed corpus:
 
@@ -293,6 +335,8 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | `fuzz_personal_message` | `$(pwd)/tests/fuzzing/corpus/fuzz_personal_message` |
 | `fuzz_gcs` | `$(pwd)/tests/fuzzing/corpus/fuzz_gcs` |
 | `fuzz_external_metadata` | `$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata` |
+| `fuzz_common_utils_address` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_address` |
+| `fuzz_common_utils_numbers` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_numbers` |
 
 The command shape is the same for every target:
 
@@ -391,6 +435,38 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_metadata -runs=10000 -max_len=8192'
 ```
 
+`fuzz_common_utils_address`:
+
+```sh
+mkdir -p tests/fuzzing/corpus/fuzz_common_utils_address
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_common_utils_address_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_address:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_common_utils_address -runs=10000 -max_len=64'
+```
+
+`fuzz_common_utils_numbers`:
+
+```sh
+mkdir -p tests/fuzzing/corpus/fuzz_common_utils_numbers
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_common_utils_numbers_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_numbers:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_common_utils_numbers -runs=10000 -max_len=64'
+```
+
+These two targets can start from empty host corpus directories because each
+input is expanded into valid round-trip cases and boundary variants by the
+harness itself. Their inputs are small, so `-max_len=64` is sufficient.
+
 For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
 command. For example:
 
@@ -458,6 +534,17 @@ include the production two-byte total TLV length prefix. The control byte modulo
 curve, wrong signature, or an unknown PKI error. The harness covers complete
 and fragmented descriptors, instruction interleaving, restarts, oversized or
 truncated streams, and challenge checks.
+
+`fuzz_common_utils_address` derives valid 20-byte addresses from every input and
+checks the complete 20-byte -> 21-byte payload -> 25-byte checksummed payload ->
+34-character Base58 path in both directions. It also verifies rejection of bad
+checksums, non-TRON prefixes, invalid lengths and arbitrary Base58 input, with
+guard bytes around all output buffers.
+
+`fuzz_common_utils_numbers` compares uint128 and uint256 decimal formatting with
+an independent base-256 long-division implementation. It checks exact and short
+buffers, amount decimal placement and zero trimming for all uint8 decimal values,
+and ticker concatenation up to `MAX_TICKER_LEN`.
 
 The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
 

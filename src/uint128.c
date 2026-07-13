@@ -230,7 +230,7 @@ bool tostring128(const uint128_t *const number,
     clear128(&base);
     LOWER(base) = baseParam;
     uint32_t offset = 0;
-    if ((baseParam < 2) || (baseParam > 16)) {
+    if ((out == NULL) || (outLength == 0) || (baseParam < 2) || (baseParam > 16)) {
         return false;
     }
     do {
@@ -268,6 +268,10 @@ bool tostring128_signed(const uint128_t *const number,
     uint128_t one_val;
     uint128_t two_val;
     uint128_t tmp;
+
+    if (out == NULL || out_length == 0) {
+        return false;
+    }
 
     // showing negative numbers only really makes sense in base 10
     if (base == 10) {

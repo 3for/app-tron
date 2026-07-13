@@ -338,3 +338,35 @@ target_link_options(fuzz_external_metadata PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_external_metadata PRIVATE ${TARGET_LINK_LIBS})
 endif()
+
+function(configure_common_utils_fuzzer target)
+  if (STANDALONE_FUZZ_MODE)
+    target_sources(${target} PRIVATE src/fuzz_standalone_main.c)
+  endif()
+  target_include_directories(${target}
+                             PRIVATE
+                             .
+                             include
+                             ../../src
+                             ../../src/tron-sdk)
+  target_compile_options(${target} PRIVATE ${TARGET_COMPILE_FLAGS})
+  target_compile_options(${target}
+                         PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+  target_link_options(${target} PRIVATE ${TARGET_LINK_FLAGS})
+  if (TARGET_LINK_LIBS)
+    target_link_libraries(${target} PRIVATE ${TARGET_LINK_LIBS})
+  endif()
+endfunction()
+
+add_executable(fuzz_common_utils_address
+               src/fuzz_common_utils_address.c
+               ../../src/tron-sdk/common_utils.c)
+configure_common_utils_fuzzer(fuzz_common_utils_address)
+
+add_executable(fuzz_common_utils_numbers
+               src/fuzz_common_utils_numbers.c
+               ../../src/tron-sdk/common_utils.c
+               ../../src/uint128.c
+               ../../src/uint256.c
+               ../../src/utils.c)
+configure_common_utils_fuzzer(fuzz_common_utils_numbers)
