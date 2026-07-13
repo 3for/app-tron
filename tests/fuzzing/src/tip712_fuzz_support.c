@@ -50,6 +50,8 @@ static extraInfo_t fuzz_assets[MAX_ASSETS];
 static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
 static s_trusted_name g_fuzz_trusted_name;
 
+__attribute__((weak)) void fuzz_reset_extra_context(void) {}
+
 static void seed_default_assets(void) {
     static const uint8_t token_addrs[][ADDRESS_LENGTH] = {
         {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
@@ -123,6 +125,7 @@ static bool fuzz_support_append_string(char *dst,
 }
 
 void reset_app_context(void) {
+    fuzz_reset_extra_context();
     memset(&tmpCtx, 0, sizeof(tmpCtx));
     memset(&txContent, 0, sizeof(txContent));
     memset(&txContext, 0, sizeof(txContext));

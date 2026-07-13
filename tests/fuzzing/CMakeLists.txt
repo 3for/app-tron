@@ -215,3 +215,47 @@ target_link_options(fuzz_handle_sign PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_handle_sign PRIVATE ${TARGET_LINK_LIBS})
 endif()
+
+set(GCS_FUZZ_SOURCES
+    src/fuzz_gcs.c
+    src/handle_sign_helpers_mock.c
+    ../../src/handlers/sign_gcs.c
+    ../../src/handlers/gcs_calldata_bridge.c
+    ../../src/handlers/tron_tx_stream.c
+    ../../src/handlers/transaction_trigger_decode.c
+    ../../src/parse.c
+    ../../src/trc_tokens.c
+    ../../proto/misc/TronApp.pb.c
+    ../../proto/core/Tron.pb.c
+    ../../proto/core/Contract.pb.c
+    ../../proto/google/protobuf/any.pb.c
+    ../../nanopb/pb_decode.c
+    ../../nanopb/pb_common.c
+    ${TIP712_FUZZ_SUPPORT_SOURCES})
+
+add_executable(fuzz_gcs ${GCS_FUZZ_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_gcs PRIVATE src/fuzz_standalone_main.c)
+endif()
+target_include_directories(fuzz_gcs
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/handlers/signMessageTIP712
+                           ../../src/handlers/signMessageTIP712_common
+                           ../../src/handlers/generic_tx_parser
+                           ../../src/handlers/provide_enum_value
+                           ../../src/handlers/provide_proxy_info
+                           ../../src/handlers/getChallenge
+                           ../../src/nbgl
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
+target_compile_options(fuzz_gcs PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_gcs PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_link_options(fuzz_gcs PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_gcs PRIVATE ${TARGET_LINK_LIBS})
+endif()

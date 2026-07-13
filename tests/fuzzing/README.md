@@ -43,6 +43,13 @@ cd tests/fuzzing
 FUZZ_TARGET=fuzz_handle_sign CORPUS_DIR=./corpus/fuzz_handle_sign ./local_run.sh
 ```
 
+To run the Generic Clear Signing (GCS) fuzzer:
+
+```sh
+cd tests/fuzzing
+FUZZ_TARGET=fuzz_gcs CORPUS_DIR=./corpus/fuzz_gcs ./local_run.sh
+```
+
 To use a custom corpus directory:
 
 ```sh
@@ -57,6 +64,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus` |
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
+| `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
 
 ## Manual Local Runs
 
@@ -103,6 +111,17 @@ mkdir -p corpus/fuzz_handle_sign
 
 Remove `-runs=10000` for an open-ended run.
 
+The equivalent commands for GCS are:
+
+```sh
+cd tests/fuzzing
+cmake --build build --target fuzz_gcs
+mkdir -p corpus/fuzz_gcs
+./build/fuzz_gcs -runs=10000 -max_len=8192 ./corpus/fuzz_gcs
+```
+
+Remove `-runs=10000` for an open-ended run.
+
 Replay a corpus without starting a mutation loop:
 
 ```sh
@@ -117,6 +136,7 @@ cd tests/fuzzing
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
 ./build/transaction_trigger_decode_fuzzer ./corpus
 ./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
+./build/fuzz_gcs ./corpus/fuzz_gcs
 ```
 
 To check which mode a binary is in:
@@ -181,6 +201,7 @@ The default `.clusterfuzzlite/build.sh` exports only:
 - `transaction_trigger_decode_fuzzer`
 - `fuzz_tip712`
 - `fuzz_handle_sign`
+- `fuzz_gcs`
 
 Run that default build and write artifacts to `tests/fuzzing/out`:
 
@@ -194,7 +215,7 @@ docker run --platform linux/amd64 --rm --privileged \
   /src/build.sh
 ```
 
-Both targets are also what the default build exports, so no separate "export everything" command is needed.
+All four targets are exported by the default build, so no separate "export everything" command is needed.
 
 Run an exported target with the OSS-Fuzz runner. Each target needs the matching seed corpus:
 
@@ -203,6 +224,7 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus` |
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
+| `fuzz_gcs` | `$(pwd)/tests/fuzzing/corpus/fuzz_gcs` |
 
 The command shape is the same for every target:
 
@@ -259,6 +281,20 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_handle_sign -runs=10000 -max_len=8192'
 ```
 
+`fuzz_gcs`:
+
+```sh
+mkdir -p tests/fuzzing/corpus/fuzz_gcs
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_gcs_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_gcs:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_gcs -runs=10000 -max_len=8192'
+```
+
 For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
 command. For example:
 
@@ -298,6 +334,13 @@ little-endian payload length (2 bytes), and the payload. This exercises valid
 multi-frame transaction signing along with restarts, out-of-order continuation
 frames, TRC10 metadata frames, truncated payloads, and invalid parameter
 combinations through the production `handleSign()` entry point.
+
+`fuzz_gcs` treats each input as one settings byte followed by zero or more APDU
+records. Each record contains `ins` (1 byte), `p1` (1 byte), `p2` (1 byte), a
+payload length (1 byte), and the payload. It dispatches `INS_SIGN_GCS`,
+`INS_GTP_TRANSACTION_INFO`, and `INS_GTP_FIELD` records through the production
+handlers to exercise transaction storage, signed descriptors, field-hash
+validation, review startup, restarts, invalid ordering, and truncated streams.
 
 The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
 

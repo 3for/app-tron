@@ -7,4 +7,5 @@ cmake --build build
 mv ./build/transaction_trigger_decode_fuzzer "${OUT}"
 mv ./build/fuzz_tip712 "${OUT}"
 mv ./build/fuzz_handle_sign "${OUT}"
+mv ./build/fuzz_gcs "${OUT}"
 popd
