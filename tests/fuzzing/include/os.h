@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifndef PIC
 #define PIC(x) (x)
+#endif
 #define UNUSED(x) ((void) (x))
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))

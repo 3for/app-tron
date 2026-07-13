@@ -7,9 +7,24 @@
 // including the TLV header directly; in the firmware build it arrives
 // transitively. Force-include the lightweight TLV mock so it is always visible.
 #include "tlv_library.h"
+#include "read.h"
 
 #ifndef PRINTF
 #define PRINTF(...) ((void) 0)
+#endif
+#ifndef PIC
+#define PIC(value) (value)
+#endif
+
+// print_amount() is the only production function in these host targets that
+// still uses the legacy SDK exception macro. Its caller treats zero as a
+// formatting failure, matching the caught-exception path on device.
+#ifndef THROW
+#define THROW(error)       \
+    do {                   \
+        (void) (error);    \
+        return 0;          \
+    } while (0)
 #endif
 
 // SDK helpers normally provided by os_helpers.h / ledger_assert.h. A failed

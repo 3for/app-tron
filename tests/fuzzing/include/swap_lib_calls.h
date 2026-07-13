@@ -1,0 +1,5 @@
+#pragma once
+
+typedef struct check_address_parameters_s check_address_parameters_t;
+typedef struct create_transaction_parameters_s create_transaction_parameters_t;
+typedef struct get_printable_amount_parameters_s get_printable_amount_parameters_t;

@@ -28,6 +28,21 @@ cd tests/fuzzing
 FUZZ_TARGET=transaction_trigger_decode_fuzzer ./local_run.sh
 ```
 
+To run the `handleSign` fuzzer:
+
+```sh
+cd tests/fuzzing
+FUZZ_TARGET=fuzz_handle_sign ./local_run.sh
+```
+
+By default it uses `./corpus` as its seed corpus. To keep its generated corpus
+separate from the transaction decoder corpus, pass a dedicated directory:
+
+```sh
+cd tests/fuzzing
+FUZZ_TARGET=fuzz_handle_sign CORPUS_DIR=./corpus/fuzz_handle_sign ./local_run.sh
+```
+
 To use a custom corpus directory:
 
 ```sh
@@ -41,6 +56,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | --- | --- | --- |
 | `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus` |
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
+| `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
 
 ## Manual Local Runs
 
@@ -76,6 +92,17 @@ cd tests/fuzzing
 ./build/fuzz_tip712 -max_len=8192 ./corpus/fuzz_tip712
 ```
 
+The equivalent commands for `handleSign` are:
+
+```sh
+cd tests/fuzzing
+cmake --build build --target fuzz_handle_sign
+mkdir -p corpus/fuzz_handle_sign
+./build/fuzz_handle_sign -runs=10000 -max_len=8192 ./corpus/fuzz_handle_sign
+```
+
+Remove `-runs=10000` for an open-ended run.
+
 Replay a corpus without starting a mutation loop:
 
 ```sh
@@ -89,6 +116,7 @@ Some AppleClang/Xcode installations do not ship the libFuzzer runtime `libclang_
 cd tests/fuzzing
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
 ./build/transaction_trigger_decode_fuzzer ./corpus
+./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
 ```
 
 To check which mode a binary is in:
@@ -152,6 +180,7 @@ The default `.clusterfuzzlite/build.sh` exports only:
 
 - `transaction_trigger_decode_fuzzer`
 - `fuzz_tip712`
+- `fuzz_handle_sign`
 
 Run that default build and write artifacts to `tests/fuzzing/out`:
 
@@ -173,6 +202,7 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | --- | --- |
 | `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus` |
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
+| `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
 
 The command shape is the same for every target:
 
@@ -215,6 +245,20 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712 -runs=10000 -max_len=8192'
 ```
 
+`fuzz_handle_sign`:
+
+```sh
+mkdir -p tests/fuzzing/corpus/fuzz_handle_sign
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_handle_sign_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_handle_sign -runs=10000 -max_len=8192'
+```
+
 For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
 command. For example:
 
@@ -247,6 +291,13 @@ Each input is replayed through top-level and raw transaction modes, exact and ma
 - `SET_SETTINGS`
 
 It runs the production TIP712 core logic on host-side shims for SDK, UI, settings, and signature-verification dependencies. Coverage includes BIP32 path parsing, BASIC and FULL modes, filtering, trusted-name and amount formatting, partial payloads, permit-style token resolution, signed integers, and reset/replay flows.
+
+`fuzz_handle_sign` treats each input as one settings byte followed by zero or
+more APDU records. Each record contains `p1` (1 byte), `p2` (1 byte), a
+little-endian payload length (2 bytes), and the payload. This exercises valid
+multi-frame transaction signing along with restarts, out-of-order continuation
+frames, TRC10 metadata frames, truncated payloads, and invalid parameter
+combinations through the production `handleSign()` entry point.
 
 The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
 

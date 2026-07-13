@@ -18,3 +18,10 @@ static inline int format_hex(const void *value, size_t len, char *out, size_t ou
     out[len * 2U] = '\0';
     return (int) (len * 2U);
 }
+
+static inline int bytes_to_lowercase_hex(char *out,
+                                         size_t out_len,
+                                         const uint8_t *value,
+                                         size_t len) {
+    return format_hex(value, len, out, out_len);
+}

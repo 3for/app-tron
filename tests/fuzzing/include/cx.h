@@ -34,6 +34,29 @@ typedef struct {
 typedef cx_hash_t cx_sha3_t;
 typedef cx_hash_t cx_sha256_t;
 
+static inline cx_err_t cx_ecfp_init_public_key_no_throw(cx_curve_t curve,
+                                                         const uint8_t *raw_key,
+                                                         size_t raw_key_len,
+                                                         cx_ecfp_public_key_t *key) {
+    (void) curve;
+    key->W_len = raw_key_len < sizeof(key->W) ? raw_key_len : sizeof(key->W);
+    memcpy(key->W, raw_key, key->W_len);
+    return CX_OK;
+}
+
+static inline int cx_ecdsa_verify_no_throw(const cx_ecfp_public_key_t *key,
+                                           const uint8_t *hash,
+                                           size_t hash_len,
+                                           const uint8_t *signature,
+                                           size_t signature_len) {
+    (void) key;
+    (void) hash;
+    (void) hash_len;
+    (void) signature;
+    (void) signature_len;
+    return 1;
+}
+
 #define CX_CHECK(call)            \
     do {                          \
         error = (call);           \

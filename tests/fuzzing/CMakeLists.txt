@@ -159,11 +159,59 @@ target_include_directories(fuzz_tip712
                            ../../src/handlers/provide_enum_value
                            ../../src/handlers/provide_proxy_info
                            ../../src/handlers/getChallenge
-                           ../../src/tron-sdk)
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
 
 target_compile_options(fuzz_tip712 PRIVATE ${TARGET_COMPILE_FLAGS})
 target_compile_options(fuzz_tip712 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
 target_link_options(fuzz_tip712 PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_tip712 PRIVATE ${TARGET_LINK_LIBS})
+endif()
+
+set(HANDLE_SIGN_FUZZ_SOURCES
+    src/fuzz_handle_sign.c
+    src/handle_sign_helpers_mock.c
+    src/tip712_fuzz_support.c
+    src/ui_utils_mock.c
+    ../../src/handlers/sign.c
+    ../../src/parse.c
+    ../../src/tron-sdk/common_utils.c
+    ../../src/uint128.c
+    ../../src/uint256.c
+    ../../src/utils.c
+    ../../src/trc_tokens.c
+    ../../proto/misc/TronApp.pb.c
+    ../../proto/core/Tron.pb.c
+    ../../proto/core/Contract.pb.c
+    ../../proto/google/protobuf/any.pb.c
+    ../../nanopb/pb_decode.c
+    ../../nanopb/pb_common.c)
+
+add_executable(fuzz_handle_sign ${HANDLE_SIGN_FUZZ_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_handle_sign PRIVATE src/fuzz_standalone_main.c)
+endif()
+target_include_directories(fuzz_handle_sign
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/handlers/signMessageTIP712
+                           ../../src/handlers/signMessageTIP712_common
+                           ../../src/handlers/generic_tx_parser
+                           ../../src/handlers/provide_enum_value
+                           ../../src/handlers/provide_proxy_info
+                           ../../src/handlers/getChallenge
+                           ../../src/nbgl
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
+target_compile_options(fuzz_handle_sign PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_handle_sign PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_link_options(fuzz_handle_sign PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_handle_sign PRIVATE ${TARGET_LINK_LIBS})
 endif()

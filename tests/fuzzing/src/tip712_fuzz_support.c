@@ -27,6 +27,13 @@ cx_sha3_t global_sha3;
 strings_t strings;
 internalStorage_t g_fuzz_storage;
 const internalStorage_t N_storage_real = {0};
+uint8_t perm_field_count;
+const char *perm_field_items[PERM_MAX_FIELDS];
+char (*perm_field_labels)[PERM_ITEM_LEN];
+char (*perm_field_values)[PERM_VAL_LEN];
+int8_t votes_count;
+volatile uint8_t customContractField;
+uint8_t G_io_apdu_buffer[260];
 
 void fuzz_set_settings(uint8_t bits) {
     g_fuzz_storage.dataAllowed = (bits >> S_DATA_ALLOWED) & 1U;
@@ -230,6 +237,15 @@ void ux_flow_display(ui_approval_state_t state, bool warning) {
     (void) warning;
 }
 
+void ui_review_menu_cleanup(void) {}
+
+bool ui_callback_tx_ok(bool display_menu) {
+    (void) display_menu;
+    return true;
+}
+
+void ui_error_custom_contract(void) {}
+
 bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     (void) display_menu;
     return true;
@@ -240,11 +256,11 @@ bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
     return true;
 }
 
-void forget_known_assets(void) {
+__attribute__((weak)) void forget_known_assets(void) {
     seed_default_assets();
 }
 
-extraInfo_t *get_current_asset_info(void) {
+__attribute__((weak)) extraInfo_t *get_current_asset_info(void) {
     uint8_t idx = tmpCtx.transactionContext.currentAssetIndex;
 
     if (idx >= MAX_ASSETS) {
@@ -253,7 +269,7 @@ extraInfo_t *get_current_asset_info(void) {
     return &fuzz_assets[idx];
 }
 
-int get_asset_index_by_addr(const uint8_t *addr) {
+__attribute__((weak)) int get_asset_index_by_addr(const uint8_t *addr) {
     for (size_t i = 0; i < MAX_ASSETS; i++) {
         if (memcmp(fuzz_assets[i].token.address, addr, ADDRESS_LENGTH) == 0) {
             return (int) i;
@@ -262,13 +278,13 @@ int get_asset_index_by_addr(const uint8_t *addr) {
     return -1;
 }
 
-extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
+__attribute__((weak)) extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
     int idx = get_asset_index_by_addr(addr);
 
     return (idx >= 0) ? &fuzz_assets[idx] : NULL;
 }
 
-void validate_current_asset_info(void) {}
+__attribute__((weak)) void validate_current_asset_info(void) {}
 
 bool check_signature_with_pubkey(uint8_t *buffer,
                                  const uint8_t bufLen,
