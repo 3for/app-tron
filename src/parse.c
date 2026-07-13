@@ -1113,7 +1113,7 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
      * and deserializing the nested contract inside the message requires too much
      * stack for Nano S
      */
-    pb_buffer_t contract_buffer;
+    pb_buffer_t contract_buffer = {0};
     transaction.contract->parameter.value.funcs.decode = pb_decode_contract_parameter;
     transaction.contract->parameter.value.arg = &contract_buffer;
 
@@ -1135,6 +1135,12 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
        so test if chunk has the contract
      */
     if (transaction.contract->has_parameter) {
+        /* `parameter.value` is optional in protobuf. If it was omitted, the
+         * decode callback above was never called and there is no contract
+         * payload to parse. Do not construct a stream from an unset pointer. */
+        if (contract_buffer.buf == NULL) {
+            return USTREAM_FAULT;
+        }
         content->permission_id = transaction.contract->Permission_id;
         content->contractType = (contractType_e) transaction.contract->type;
 
