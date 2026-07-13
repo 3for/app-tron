@@ -259,3 +259,53 @@ target_link_options(fuzz_gcs PRIVATE ${TARGET_LINK_FLAGS})
 if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_gcs PRIVATE ${TARGET_LINK_LIBS})
 endif()
+
+set(EXTERNAL_METADATA_FUZZ_SOURCES
+    src/fuzz_external_metadata.c
+    src/external_metadata_fuzz_support.c
+    src/lists_mock.c
+    ../../src/handlers/provideTrustedName/cmd_trusted_name.c
+    ../../src/handlers/provideTrustedName/trusted_name.c
+    ../../src/handlers/provide_proxy_info/cmd_proxy_info.c
+    ../../src/handlers/provide_proxy_info/proxy_info.c
+    ../../src/handlers/provide_enum_value/cmd_enum_value.c
+    ../../src/handlers/provide_enum_value/enum_value.c
+    ../../src/tlv_apdu.c
+    ../../src/ledger_pki.c
+    ../../src/mem_utils.c
+    ../../src/hash_bytes.c
+    ../../src/utils.c
+    ../../src/uint128.c
+    ../../src/uint256.c
+    ../../src/tron-sdk/common_utils.c)
+
+add_executable(fuzz_external_metadata ${EXTERNAL_METADATA_FUZZ_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_external_metadata PRIVATE src/fuzz_standalone_main.c)
+endif()
+target_include_directories(fuzz_external_metadata
+                           PRIVATE
+                           .
+                           ../../src/handlers/provideTrustedName
+                           include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/handlers/provide_proxy_info
+                           ../../src/handlers/provide_enum_value
+                           ../../src/handlers/getChallenge
+                           ../../src/handlers/generic_tx_parser
+                           ../../src/handlers/signMessageTIP712
+                           ../../src/handlers/signMessageTIP712_common
+                           ../../src/nbgl
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
+target_compile_options(fuzz_external_metadata PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_external_metadata
+                       PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_compile_definitions(fuzz_external_metadata
+                           PRIVATE MAJOR_VERSION=0 MINOR_VERSION=0 PATCH_VERSION=0)
+target_link_options(fuzz_external_metadata PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_external_metadata PRIVATE ${TARGET_LINK_LIBS})
+endif()

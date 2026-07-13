@@ -50,6 +50,14 @@ cd tests/fuzzing
 FUZZ_TARGET=fuzz_gcs CORPUS_DIR=./corpus/fuzz_gcs ./local_run.sh
 ```
 
+To run the external metadata fuzzer:
+
+```sh
+cd tests/fuzzing
+python3 generate_external_metadata_corpus.py
+FUZZ_TARGET=fuzz_external_metadata ./local_run.sh
+```
+
 To use a custom corpus directory:
 
 ```sh
@@ -65,6 +73,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
 | `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
+| `fuzz_external_metadata` | External metadata APDU flows for trusted names, proxy info, and enum values | `./corpus/fuzz_external_metadata` |
 
 ## Manual Local Runs
 
@@ -122,6 +131,17 @@ mkdir -p corpus/fuzz_gcs
 
 Remove `-runs=10000` for an open-ended run.
 
+The equivalent commands for external metadata are:
+
+```sh
+cd tests/fuzzing
+cmake --build build --target fuzz_external_metadata
+python3 generate_external_metadata_corpus.py
+./build/fuzz_external_metadata -runs=10000 -max_len=8192 ./corpus/fuzz_external_metadata
+```
+
+Remove `-runs=10000` for an open-ended run.
+
 Replay a corpus without starting a mutation loop:
 
 ```sh
@@ -137,6 +157,7 @@ cd tests/fuzzing
 ./build/transaction_trigger_decode_fuzzer ./corpus
 ./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
 ./build/fuzz_gcs ./corpus/fuzz_gcs
+./build/fuzz_external_metadata ./corpus/fuzz_external_metadata
 ```
 
 To check which mode a binary is in:
@@ -172,6 +193,17 @@ This refreshes:
 
 - `./corpus/fuzz_tip712`
 
+External metadata seeds:
+
+```sh
+cd tests/fuzzing
+python3 generate_external_metadata_corpus.py
+```
+
+This refreshes:
+
+- `./corpus/fuzz_external_metadata`
+
 ## Coverage
 
 `local_run.sh` asks whether to compute coverage after the fuzzing run. Coverage requires `llvm-profdata` and `llvm-cov` in `PATH`, plus a Clang setup that emits `*.profraw` data for the built binary.
@@ -202,6 +234,7 @@ The default `.clusterfuzzlite/build.sh` exports only:
 - `fuzz_tip712`
 - `fuzz_handle_sign`
 - `fuzz_gcs`
+- `fuzz_external_metadata`
 
 Run that default build and write artifacts to `tests/fuzzing/out`:
 
@@ -215,7 +248,7 @@ docker run --platform linux/amd64 --rm --privileged \
   /src/build.sh
 ```
 
-All four targets are exported by the default build, so no separate "export everything" command is needed.
+All five targets are exported by the default build, so no separate "export everything" command is needed.
 
 Run an exported target with the OSS-Fuzz runner. Each target needs the matching seed corpus:
 
@@ -225,6 +258,7 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
 | `fuzz_gcs` | `$(pwd)/tests/fuzzing/corpus/fuzz_gcs` |
+| `fuzz_external_metadata` | `$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata` |
 
 The command shape is the same for every target:
 
@@ -295,6 +329,20 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_gcs -runs=10000 -max_len=8192'
 ```
 
+`fuzz_external_metadata`:
+
+```sh
+python3 tests/fuzzing/generate_external_metadata_corpus.py
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_external_metadata_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_metadata -runs=10000 -max_len=8192'
+```
+
 For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
 command. For example:
 
@@ -341,6 +389,17 @@ payload length (1 byte), and the payload. It dispatches `INS_SIGN_GCS`,
 `INS_GTP_TRANSACTION_INFO`, and `INS_GTP_FIELD` records through the production
 handlers to exercise transaction storage, signed descriptors, field-hash
 validation, review startup, restarts, invalid ordering, and truncated streams.
+
+`fuzz_external_metadata` treats each input as one certificate-status control
+byte followed by zero or more APDU records. Each record contains `ins` (1 byte),
+`p1` (1 byte), `p2` (1 byte), a payload length (1 byte), and the payload. It
+dispatches `INS_PROVIDE_TRUSTED_NAME`, `INS_PROVIDE_PROXY_INFO`, and
+`INS_PROVIDE_ENUM_VALUE` records through the production handlers. First chunks
+include the production two-byte total TLV length prefix. The control byte modulo
+6 selects PKI success, missing certificate, wrong certificate usage, wrong
+curve, wrong signature, or an unknown PKI error. The harness covers complete
+and fragmented descriptors, instruction interleaving, restarts, oversized or
+truncated streams, and challenge checks.
 
 The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
 

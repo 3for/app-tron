@@ -8,4 +8,5 @@ mv ./build/transaction_trigger_decode_fuzzer "${OUT}"
 mv ./build/fuzz_tip712 "${OUT}"
 mv ./build/fuzz_handle_sign "${OUT}"
 mv ./build/fuzz_gcs "${OUT}"
+mv ./build/fuzz_external_metadata "${OUT}"
 popd
