@@ -28,6 +28,10 @@ extern char (*perm_field_labels)[PERM_ITEM_LEN];
 extern char (*perm_field_values)[PERM_VAL_LEN];
 extern int8_t votes_count;
 
+static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
+
+void ui_191_start(const char *message);
+
 // ui_712_start is declared by the real common_712.h (uint16_t / filtering arg).
 void ui_712_switch_to_message(void);
 void ui_712_start_unfiltered(void);

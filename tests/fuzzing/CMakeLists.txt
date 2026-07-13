@@ -216,6 +216,35 @@ if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_handle_sign PRIVATE ${TARGET_LINK_LIBS})
 endif()
 
+set(PERSONAL_MESSAGE_FUZZ_SOURCES
+    src/fuzz_personal_message.c
+    src/personal_message_fuzz_support.c
+    src/handle_sign_helpers_mock.c
+    ../../src/handlers/sign_personal_message.c
+    ../../src/handlers/sign_personal_message_full_display.c)
+
+add_executable(fuzz_personal_message ${PERSONAL_MESSAGE_FUZZ_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_personal_message PRIVATE src/fuzz_standalone_main.c)
+endif()
+target_include_directories(fuzz_personal_message
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/nbgl
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
+target_compile_options(fuzz_personal_message PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_personal_message
+                       PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_link_options(fuzz_personal_message PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_personal_message PRIVATE ${TARGET_LINK_LIBS})
+endif()
+
 set(GCS_FUZZ_SOURCES
     src/fuzz_gcs.c
     src/handle_sign_helpers_mock.c

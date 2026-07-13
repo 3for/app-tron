@@ -58,6 +58,14 @@ python3 generate_external_metadata_corpus.py
 FUZZ_TARGET=fuzz_external_metadata ./local_run.sh
 ```
 
+To run the personal-message fuzzer:
+
+```sh
+cd tests/fuzzing
+python3 generate_personal_message_corpus.py
+FUZZ_TARGET=fuzz_personal_message ./local_run.sh
+```
+
 To use a custom corpus directory:
 
 ```sh
@@ -72,6 +80,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus` |
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
+| `fuzz_personal_message` | TIP-191 legacy and full-display personal-message signing flows | `./corpus/fuzz_personal_message` |
 | `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
 | `fuzz_external_metadata` | External metadata APDU flows for trusted names, proxy info, and enum values | `./corpus/fuzz_external_metadata` |
 
@@ -142,6 +151,17 @@ python3 generate_external_metadata_corpus.py
 
 Remove `-runs=10000` for an open-ended run.
 
+The equivalent commands for personal messages are:
+
+```sh
+cd tests/fuzzing
+cmake --build build --target fuzz_personal_message
+python3 generate_personal_message_corpus.py
+./build/fuzz_personal_message -runs=10000 -max_len=8192 ./corpus/fuzz_personal_message
+```
+
+Remove `-runs=10000` for an open-ended run.
+
 Replay a corpus without starting a mutation loop:
 
 ```sh
@@ -156,6 +176,7 @@ cd tests/fuzzing
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
 ./build/transaction_trigger_decode_fuzzer ./corpus
 ./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
+./build/fuzz_personal_message ./corpus/fuzz_personal_message
 ./build/fuzz_gcs ./corpus/fuzz_gcs
 ./build/fuzz_external_metadata ./corpus/fuzz_external_metadata
 ```
@@ -204,6 +225,17 @@ This refreshes:
 
 - `./corpus/fuzz_external_metadata`
 
+Personal-message seeds:
+
+```sh
+cd tests/fuzzing
+python3 generate_personal_message_corpus.py
+```
+
+This refreshes:
+
+- `./corpus/fuzz_personal_message`
+
 ## Coverage
 
 `local_run.sh` asks whether to compute coverage after the fuzzing run. Coverage requires `llvm-profdata` and `llvm-cov` in `PATH`, plus a Clang setup that emits `*.profraw` data for the built binary.
@@ -233,6 +265,7 @@ The default `.clusterfuzzlite/build.sh` exports only:
 - `transaction_trigger_decode_fuzzer`
 - `fuzz_tip712`
 - `fuzz_handle_sign`
+- `fuzz_personal_message`
 - `fuzz_gcs`
 - `fuzz_external_metadata`
 
@@ -248,7 +281,7 @@ docker run --platform linux/amd64 --rm --privileged \
   /src/build.sh
 ```
 
-All five targets are exported by the default build, so no separate "export everything" command is needed.
+All six targets are exported by the default build, so no separate "export everything" command is needed.
 
 Run an exported target with the OSS-Fuzz runner. Each target needs the matching seed corpus:
 
@@ -257,6 +290,7 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus` |
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
+| `fuzz_personal_message` | `$(pwd)/tests/fuzzing/corpus/fuzz_personal_message` |
 | `fuzz_gcs` | `$(pwd)/tests/fuzzing/corpus/fuzz_gcs` |
 | `fuzz_external_metadata` | `$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata` |
 
@@ -329,6 +363,20 @@ docker run --platform linux/amd64 --rm --privileged \
   /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_gcs -runs=10000 -max_len=8192'
 ```
 
+`fuzz_personal_message`:
+
+```sh
+python3 tests/fuzzing/generate_personal_message_corpus.py
+docker run --platform linux/amd64 --rm --privileged \
+  -e FUZZING_ENGINE=libfuzzer \
+  -e RUN_FUZZER_MODE=interactive \
+  -e CORPUS_DIR=/tmp/seed_fuzz_personal_message_corpus \
+  -v "$(pwd)/tests/fuzzing/corpus/fuzz_personal_message:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/out:/out" \
+  gcr.io/oss-fuzz-base/base-runner \
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_personal_message -runs=10000 -max_len=8192'
+```
+
 `fuzz_external_metadata`:
 
 ```sh
@@ -382,6 +430,16 @@ little-endian payload length (2 bytes), and the payload. This exercises valid
 multi-frame transaction signing along with restarts, out-of-order continuation
 frames, TRC10 metadata frames, truncated payloads, and invalid parameter
 combinations through the production `handleSign()` entry point.
+
+`fuzz_personal_message` treats each input as one public-key status control byte
+followed by zero or more APDU records. Each record contains `ins` (1 byte),
+`p1` (1 byte), `p2` (1 byte), a payload length (1 byte), and the payload. It
+dispatches `INS_SIGN_PERSONAL_MESSAGE` and
+`INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY` records through the production
+handlers. Bit 0 of the control byte selects whether public-key initialization
+succeeds or fails. The harness covers legacy hash display, full-message display,
+valid and invalid multi-frame messages, instruction interleaving, restarts,
+invalid continuations, truncated APDUs, and binary message data.
 
 `fuzz_gcs` treats each input as one settings byte followed by zero or more APDU
 records. Each record contains `ins` (1 byte), `p1` (1 byte), `p2` (1 byte), a
