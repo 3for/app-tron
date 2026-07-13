@@ -94,6 +94,11 @@ def main() -> None:
         message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"key failure"),
         public_key_status=1,
     )
+    write_seed(
+        "09-continuation-after-complete.bin",
+        message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"complete")
+        + record(INS_PERSONAL_MESSAGE_FULL_DISPLAY, P1_MORE, b""),
+    )
 
 
 if __name__ == "__main__":

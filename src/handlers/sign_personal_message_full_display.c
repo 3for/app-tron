@@ -290,7 +290,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
     }
 
     // Check if the context is valid
-    if (signMsgCtx == NULL) {
+    if ((signMsgCtx == NULL) || (g_msg_hash_ctx == NULL)) {
         PRINTF("Error: Invalid data received!\n");
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
