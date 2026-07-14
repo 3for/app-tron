@@ -17,6 +17,7 @@
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 #include "common_712.h"  // e_tip712_filtering_mode, ui_712_start prototype
+#include "tip712_fuzz_support.h"
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -45,6 +46,18 @@ void fuzz_set_settings(uint8_t bits) {
 }
 const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
 bool g_fuzz_signature_valid = true;
+
+enum {
+    FUZZ_ENV_BAD_SIGNATURE = 1U << 0,
+    FUZZ_ENV_FAIL_UI_START = 1U << 1,
+    FUZZ_ENV_FAIL_UI_SIGN = 1U << 2,
+    FUZZ_ENV_FAIL_UI_APPROVE = 1U << 3,
+    FUZZ_ENV_FAIL_UI_REJECT = 1U << 4,
+    FUZZ_ENV_DISABLE_TRUSTED_NAME = 1U << 5,
+};
+
+static uint8_t g_fuzz_environment;
+static tip712_fuzz_ui_stats_t g_fuzz_ui_stats;
 
 static extraInfo_t fuzz_assets[MAX_ASSETS];
 static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
@@ -139,7 +152,18 @@ void reset_app_context(void) {
 void init_tip712_fuzz_environment(void) {
     reset_app_context();
     fuzz_set_settings(0);
+    fuzz_set_tip712_environment(0);
+    memset(&g_fuzz_ui_stats, 0, sizeof(g_fuzz_ui_stats));
     memset(&global_sha3, 0, sizeof(global_sha3));
+}
+
+void fuzz_set_tip712_environment(uint8_t bits) {
+    g_fuzz_environment = bits;
+    g_fuzz_signature_valid = (bits & FUZZ_ENV_BAD_SIGNATURE) == 0U;
+}
+
+tip712_fuzz_ui_stats_t fuzz_get_tip712_ui_stats(void) {
+    return g_fuzz_ui_stats;
 }
 
 uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle) {
@@ -157,11 +181,15 @@ int io_send_sw(uint16_t sw) {
     return sw;
 }
 
-void ui_idle(void) {}
+void ui_idle(void) {
+    g_fuzz_ui_stats.idles++;
+}
 
 uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
     (void) filtering;
-    return SWO_SUCCESS;
+    g_fuzz_ui_stats.starts++;
+    return (g_fuzz_environment & FUZZ_ENV_FAIL_UI_START) != 0U ? SWO_INCORRECT_DATA
+                                                               : SWO_SUCCESS;
 }
 
 void ui_712_switch_to_message(void) {}
@@ -170,14 +198,18 @@ void ui_712_start_unfiltered(void) {}
 
 void ui_712_switch_to_sign(void) {}
 
-void ui_error_blind_signing(void) {}
+void ui_error_blind_signing(void) {
+    g_fuzz_ui_stats.blind_signing_errors++;
+}
 
 // NBGL review entry points are stubbed: the host fuzz build exercises parsing
 // and state-machine logic, not the device UI. Approvals report success so the
 // signing path proceeds.
 uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     (void) filtering;
-    return SWO_SUCCESS;
+    g_fuzz_ui_stats.signs++;
+    return (g_fuzz_environment & FUZZ_ENV_FAIL_UI_SIGN) != 0U ? SWO_INCORRECT_DATA
+                                                              : SWO_SUCCESS;
 }
 
 void tip712_format_hash(uint8_t index, const char **item, const char **value) {
@@ -205,12 +237,14 @@ void tip712_format_hash(uint8_t index, const char **item, const char **value) {
 
 bool ui_712_approve_cb(bool display_menu) {
     (void) display_menu;
-    return true;
+    g_fuzz_ui_stats.approves++;
+    return (g_fuzz_environment & FUZZ_ENV_FAIL_UI_APPROVE) == 0U;
 }
 
 bool ui_712_reject_cb(bool display_menu) {
     (void) display_menu;
-    return true;
+    g_fuzz_ui_stats.rejects++;
+    return (g_fuzz_environment & FUZZ_ENV_FAIL_UI_REJECT) == 0U;
 }
 
 bool ui_gcs(void) {
@@ -312,7 +346,8 @@ const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const e_name_source *sources,
                                        const uint64_t *chain_id,
                                        const uint8_t *addr) {
-    if ((type_count == 0U) || (types == NULL) || (source_count == 0U) || (sources == NULL) ||
+    if ((g_fuzz_environment & FUZZ_ENV_DISABLE_TRUSTED_NAME) != 0U ||
+        (type_count == 0U) || (types == NULL) || (source_count == 0U) || (sources == NULL) ||
         (chain_id == NULL) || (addr == NULL) || allzeroes(addr, ADDRESS_LENGTH)) {
         return NULL;
     }

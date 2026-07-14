@@ -25,8 +25,14 @@ To run a different target:
 
 ```sh
 cd tests/fuzzing
+python3 generate_transaction_trigger_corpus.py
 FUZZ_TARGET=transaction_trigger_decode_fuzzer ./local_run.sh
 ```
+
+The generated seeds are raw `protocol.Transaction.raw` protobuf messages in
+`./corpus/transaction_trigger_decode_fuzzer`. The harness constructs the
+equivalent top-level `Transaction` wrapper internally and checks that both
+decoder entry modes produce the same result.
 
 To run the `handleSign` fuzzer:
 
@@ -35,8 +41,9 @@ cd tests/fuzzing
 FUZZ_TARGET=fuzz_handle_sign ./local_run.sh
 ```
 
-By default it uses `./corpus` as its seed corpus. To keep its generated corpus
-separate from the transaction decoder corpus, pass a dedicated directory:
+By default it uses `./corpus` as its seed corpus. To keep its generated inputs
+separate from other targets that use the shared corpus, pass a dedicated
+directory:
 
 ```sh
 cd tests/fuzzing
@@ -97,7 +104,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 
 | Target | What it covers | Default corpus |
 | --- | --- | --- |
-| `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus` |
+| `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus/transaction_trigger_decode_fuzzer` |
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
 | `fuzz_personal_message` | TIP-191 legacy and full-display personal-message signing flows | `./corpus/fuzz_personal_message` |
@@ -139,6 +146,23 @@ Run open-ended libFuzzer:
 cd tests/fuzzing
 ./build/fuzz_tip712 -max_len=8192 ./corpus/fuzz_tip712
 ```
+
+Build and run the transaction decoder target with its generated seeds and
+protobuf dictionary:
+
+```sh
+cd tests/fuzzing
+python3 generate_transaction_trigger_corpus.py
+cmake --build build --target transaction_trigger_decode_fuzzer
+./build/transaction_trigger_decode_fuzzer \
+  -runs=10000 -max_len=8192 \
+  -dict=./dictionaries/transaction_trigger_decode_fuzzer.dict \
+  ./corpus/transaction_trigger_decode_fuzzer
+```
+
+`local_run.sh` automatically selects the target-specific corpus after it has
+been generated, but it does not add the dictionary option. Use the manual
+command above when dictionary-guided mutations are required.
 
 The equivalent commands for `handleSign` are:
 
@@ -212,7 +236,7 @@ Some AppleClang/Xcode installations do not ship the libFuzzer runtime `libclang_
 ```sh
 cd tests/fuzzing
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
-./build/transaction_trigger_decode_fuzzer ./corpus
+./build/transaction_trigger_decode_fuzzer ./corpus/transaction_trigger_decode_fuzzer
 ./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
 ./build/fuzz_personal_message ./corpus/fuzz_personal_message
 ./build/fuzz_gcs ./corpus/fuzz_gcs
@@ -242,6 +266,20 @@ cd tests/fuzzing
 The same replay command also works for standalone binaries.
 
 ## Regenerate Seed Corpora
+
+Transaction decoder seeds:
+
+```sh
+cd tests/fuzzing
+python3 generate_transaction_trigger_corpus.py
+```
+
+This refreshes:
+
+- `./corpus/transaction_trigger_decode_fuzzer`
+
+Each seed is a raw `protocol.Transaction.raw` protobuf message. The generated
+corpus directory is ignored by Git and can be recreated from the script.
 
 TIP712 seeds:
 
@@ -329,7 +367,7 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 
 | Target | Host corpus mount |
 | --- | --- |
-| `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus` |
+| `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus/transaction_trigger_decode_fuzzer` |
 | `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
 | `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
 | `fuzz_personal_message` | `$(pwd)/tests/fuzzing/corpus/fuzz_personal_message` |
@@ -356,15 +394,20 @@ Examples for all current targets:
 `transaction_trigger_decode_fuzzer`:
 
 ```sh
+python3 tests/fuzzing/generate_transaction_trigger_corpus.py
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
   -e CORPUS_DIR=/tmp/seed_transaction_trigger_decode_fuzzer_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/corpus/transaction_trigger_decode_fuzzer:/mnt/host_corpus:ro" \
+  -v "$(pwd)/tests/fuzzing/dictionaries/transaction_trigger_decode_fuzzer.dict:/mnt/transaction_trigger_decode_fuzzer.dict:ro" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -runs=10000 -max_len=8192'
+  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -runs=10000 -max_len=8192 -dict=/mnt/transaction_trigger_decode_fuzzer.dict'
 ```
+
+The default ClusterFuzzLite build exports the target binary but does not copy
+its dictionary into `/out`, so the example mounts the dictionary separately.
 
 `fuzz_tip712`:
 
@@ -487,7 +530,14 @@ When using `run_fuzzer`, mount the host corpus somewhere other than `/tmp/<targe
 - `tron_stream_decoder_is_done()`
 - `tron_stream_decoder_get_result()`
 
-Each input is replayed through top-level and raw transaction modes, exact and malformed declared lengths, whole-buffer and chunked feeds, observer success and observer failure paths, and intermediate status queries.
+Each input is interpreted as a raw `protocol.Transaction.raw` protobuf message.
+The harness constructs an equivalent top-level `Transaction` wrapper, then
+checks that raw and wrapped decoding expose identical fields and trigger-data
+observer streams. It also compares whole-buffer, byte-at-a-time, and
+deterministic pseudo-random chunking, including reuse of the same decoder
+object. Additional runs cover truncated and oversized declared lengths,
+zero-length feeds, observer failure, terminal-state rejection of trailing data,
+and result stability after completion.
 
 `fuzz_tip712` replays a compact command stream with these operations:
 
