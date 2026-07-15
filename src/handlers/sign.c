@@ -144,6 +144,15 @@ static bool append_text_checked(char *out, size_t outlen, const char *text) {
     return true;
 }
 
+static bool format_trx_amount(uint64_t amount, char *out, size_t outlen) {
+    if (amount == 0) {
+        strlcpy(out, "0", outlen);
+    } else if (print_amount(amount, out, outlen, SUN_DIG) == 0) {
+        return false;
+    }
+    return append_text_checked(out, outlen, " TRX");
+}
+
 static void append_uint64(char *out, size_t outlen, uint64_t value) {
     char amount[21];
 
@@ -819,7 +828,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             else
                 strcpy(strings.common.fullContract, "Energy");
 
-            print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
                                      strings.common.toAddress,
@@ -851,7 +862,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
             setV2ResourceName(txContent.resource);
 
-            print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
@@ -859,7 +872,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
             setV2ResourceName(txContent.resource);
 
-            print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNFREEZEASSETV2_TRANSACTION, data_warning);
@@ -877,7 +892,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strlcpy((char *) G_io_apdu_buffer + 100, "True", sizeof(G_io_apdu_buffer) - 100);
             }
 
-            print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
             getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_DELEGATE_RESOURCE_TRANSACTION, data_warning);
@@ -889,7 +906,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             else
                 strcpy(strings.common.fullContract, "Energy");
 
-            print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
             getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
             ux_flow_display(APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION, data_warning);
