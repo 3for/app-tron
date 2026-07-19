@@ -653,7 +653,8 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
     }
     content->resource = msg.delegate_resource_contract.resource;
     content->amount[0] = msg.delegate_resource_contract.balance;
-    content->customData = msg.delegate_resource_contract.lock;
+    content->lock = msg.delegate_resource_contract.lock;
+    content->lockPeriod = msg.delegate_resource_contract.lock_period;
 
     COPY_ADDRESS(content->account, &msg.delegate_resource_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.delegate_resource_contract.receiver_address);

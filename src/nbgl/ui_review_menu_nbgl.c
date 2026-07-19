@@ -797,7 +797,8 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUnfreezeV2";
             infoLongPress.text = "Sign transaction to\nUnfreezeV2";
             break;
-        case APPROVAL_DELEGATE_RESOURCE_TRANSACTION:
+        case APPROVAL_DELEGATE_RESOURCE_TRANSACTION: {
+            uint8_t idx = 4;
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
@@ -810,12 +811,23 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = "Lock";
             txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
-            txInfos.fields[4].item = stringLabelRecipientAddress;
-            txInfos.fields[4].value = strings.common.toAddress;
-            g_pairsList->nbPairs = 5;
+            if (txContent.lock) {
+                if (!format_int64_value(txContent.lockPeriod,
+                                        (char *) G_io_apdu_buffer + 106,
+                                        sizeof(G_io_apdu_buffer) - 106)) {
+                    return false;
+                }
+                txInfos.fields[idx].item = "Lock period (blocks)";
+                txInfos.fields[idx].value = (const char *) G_io_apdu_buffer + 106;
+                idx++;
+            }
+            txInfos.fields[idx].item = stringLabelRecipientAddress;
+            txInfos.fields[idx].value = strings.common.toAddress;
+            g_pairsList->nbPairs = idx + 1;
             txInfos.flowTitle = "Review transaction to\nDelegate Resource";
             infoLongPress.text = "Sign transaction to\nDelegate";
             break;
+        }
         case APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

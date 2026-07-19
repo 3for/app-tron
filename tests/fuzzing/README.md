@@ -38,6 +38,7 @@ To run the `handleSign` fuzzer:
 
 ```sh
 cd tests/fuzzing
+python3 generate_handle_sign_corpus.py
 FUZZ_TARGET=fuzz_handle_sign ./local_run.sh
 ```
 
@@ -106,7 +107,7 @@ FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
 | --- | --- | --- |
 | `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus/transaction_trigger_decode_fuzzer` |
 | `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
-| `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus` |
+| `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus/fuzz_handle_sign` |
 | `fuzz_personal_message` | TIP-191 legacy and full-display personal-message signing flows | `./corpus/fuzz_personal_message` |
 | `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
 | `fuzz_external_metadata` | External metadata APDU flows for trusted names, proxy info, and enum values | `./corpus/fuzz_external_metadata` |
@@ -168,8 +169,8 @@ The equivalent commands for `handleSign` are:
 
 ```sh
 cd tests/fuzzing
+python3 generate_handle_sign_corpus.py
 cmake --build build --target fuzz_handle_sign
-mkdir -p corpus/fuzz_handle_sign
 ./build/fuzz_handle_sign -runs=10000 -max_len=8192 ./corpus/fuzz_handle_sign
 ```
 
@@ -314,6 +315,18 @@ This refreshes:
 
 - `./corpus/fuzz_personal_message`
 
+Transaction-signing seeds, including locked resource delegation with and
+without `lock_period`:
+
+```sh
+cd tests/fuzzing
+python3 generate_handle_sign_corpus.py
+```
+
+This refreshes:
+
+- `./corpus/fuzz_handle_sign`
+
 ## Coverage
 
 `local_run.sh` asks whether to compute coverage after the fuzzing run. Coverage requires `llvm-profdata` and `llvm-cov` in `PATH`, plus a Clang setup that emits `*.profraw` data for the built binary.
@@ -376,6 +389,11 @@ Run an exported target with the OSS-Fuzz runner. Each target needs the matching 
 | `fuzz_common_utils_address` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_address` |
 | `fuzz_common_utils_numbers` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_numbers` |
 
+The runner does not generate seed corpora. Before starting Docker, run the
+generator shown in the corresponding example when one exists. `fuzz_gcs` and
+the two common-utility targets have no generator and may start from empty
+directories.
+
 The command shape is the same for every target:
 
 ```sh
@@ -412,6 +430,7 @@ its dictionary into `/out`, so the example mounts the dictionary separately.
 `fuzz_tip712`:
 
 ```sh
+python3 tests/fuzzing/generate_tip712_corpus.py
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
@@ -425,7 +444,7 @@ docker run --platform linux/amd64 --rm --privileged \
 `fuzz_handle_sign`:
 
 ```sh
-mkdir -p tests/fuzzing/corpus/fuzz_handle_sign
+python3 tests/fuzzing/generate_handle_sign_corpus.py
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \

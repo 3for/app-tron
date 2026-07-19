@@ -886,7 +886,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             else
                 strcpy(strings.common.fullContract, "Energy");
 
-            if (txContent.customData == 0) {
+            if (!txContent.lock) {
                 strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
             } else {
                 strlcpy((char *) G_io_apdu_buffer + 100, "True", sizeof(G_io_apdu_buffer) - 100);

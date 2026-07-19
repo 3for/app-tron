@@ -1164,6 +1164,35 @@ class TestTRX():
                 lock=0))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_delegate_resource_lock_without_period(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.DelegateResourceContract,
+            contract.DelegateResourceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                resource=contract.ENERGY,
+                balance=100000000,
+                receiver_address=bytes.fromhex(
+                    client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
+                lock=True))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_delegate_resource_lock_with_period(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.DelegateResourceContract,
+            contract.DelegateResourceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                resource=contract.ENERGY,
+                balance=100000000,
+                receiver_address=bytes.fromhex(
+                    client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
+                lock=True,
+                lock_period=86400))
+        self.sign_and_validate(client, device, 0, tx)
+
     def test_trx_undelegate_resource(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

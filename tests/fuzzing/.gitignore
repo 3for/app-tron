@@ -4,6 +4,9 @@ corpus/*
 !corpus/fuzz_tip712/
 corpus/fuzz_tip712/*
 !corpus/fuzz_tip712/*.bin
+!corpus/fuzz_handle_sign/
+corpus/fuzz_handle_sign/*
+!corpus/fuzz_handle_sign/*.bin
 out/
 default.profdata
 default.profraw

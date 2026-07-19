@@ -76,8 +76,11 @@ typedef enum contractType_e {
 } contractType_e;
 
 typedef struct txContent_t {
+    // Keep 64-bit fields together to avoid alignment holes on ARM.
     uint64_t amount[2];
     uint64_t exchangeID;
+    int64_t lockPeriod;
+    uint64_t dataBytes;
     uint8_t account[TRON_ADDRESS_SIZE];
     uint8_t destination[TRON_ADDRESS_SIZE];
     uint8_t contractAddress[TRON_ADDRESS_SIZE];
@@ -92,8 +95,7 @@ typedef struct txContent_t {
     uint8_t TRC20Method;
     uint32_t customSelector;
     contractType_e contractType;
-    uint64_t dataBytes;
     uint8_t permission_id;
-    uint32_t customData;
+    bool lock;
 } txContent_t;
 // --8<-- [end:tx_content_structures]
