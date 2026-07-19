@@ -17,7 +17,7 @@
 
 #define ADD_PRE_FIX_STRING "T"
 #define ADDRESS_SIZE       21
-#define TOKENID_SIZE       7
+#define MAX_TRC10_TOKEN_ID_LENGTH 19
 
 #define TRC20_DATA_FIELD_SIZE 68
 

@@ -96,8 +96,8 @@ typedef struct _protocol_DelegateResourceContract {
     int64_t lock_period; 
 } protocol_DelegateResourceContract;
 
-typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeCreateContract_first_token_id_t;
-typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeCreateContract_second_token_id_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeCreateContract_first_token_id_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeCreateContract_second_token_id_t;
 typedef struct _protocol_ExchangeCreateContract { 
     pb_byte_t owner_address[21]; 
     protocol_ExchangeCreateContract_first_token_id_t first_token_id; 
@@ -106,7 +106,7 @@ typedef struct _protocol_ExchangeCreateContract {
     int64_t second_token_balance; 
 } protocol_ExchangeCreateContract;
 
-typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeInjectContract_token_id_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeInjectContract_token_id_t;
 typedef struct _protocol_ExchangeInjectContract { 
     pb_byte_t owner_address[21]; 
     int64_t exchange_id; /* Empty is invalidate */
@@ -114,7 +114,7 @@ typedef struct _protocol_ExchangeInjectContract {
     int64_t quant; /* Empty is invalidate */
 } protocol_ExchangeInjectContract;
 
-typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeTransactionContract_token_id_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeTransactionContract_token_id_t;
 typedef struct _protocol_ExchangeTransactionContract { 
     pb_byte_t owner_address[21]; 
     int64_t exchange_id; 
@@ -123,7 +123,7 @@ typedef struct _protocol_ExchangeTransactionContract {
     int64_t expected; 
 } protocol_ExchangeTransactionContract;
 
-typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeWithdrawContract_token_id_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeWithdrawContract_token_id_t;
 typedef struct _protocol_ExchangeWithdrawContract { 
     pb_byte_t owner_address[21]; 
     int64_t exchange_id; 
@@ -173,7 +173,7 @@ typedef struct _protocol_ProposalDeleteContract {
     int64_t proposal_id; 
 } protocol_ProposalDeleteContract;
 
-typedef PB_BYTES_ARRAY_T(16) protocol_TransferAssetContract_asset_name_t;
+typedef PB_BYTES_ARRAY_T(19) protocol_TransferAssetContract_asset_name_t;
 typedef struct _protocol_TransferAssetContract { 
     protocol_TransferAssetContract_asset_name_t asset_name; 
     pb_byte_t owner_address[21]; 
@@ -816,16 +816,16 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_AssetIssueContract_FrozenSupply_size 22
 #define protocol_CancelAllUnfreezeV2Contract_size 23
 #define protocol_DelegateResourceContract_size   72
-#define protocol_ExchangeCreateContract_size     65
-#define protocol_ExchangeInjectContract_size     55
-#define protocol_ExchangeTransactionContract_size 66
-#define protocol_ExchangeWithdrawContract_size   55
+#define protocol_ExchangeCreateContract_size     87
+#define protocol_ExchangeInjectContract_size     66
+#define protocol_ExchangeTransactionContract_size 77
+#define protocol_ExchangeWithdrawContract_size   66
 #define protocol_FreezeBalanceContract_size      70
 #define protocol_FreezeBalanceV2Contract_size    36
 #define protocol_ProposalApproveContract_size    36
 #define protocol_ProposalCreateContract_ParametersEntry_size 22
 #define protocol_ProposalDeleteContract_size     34
-#define protocol_TransferAssetContract_size      75
+#define protocol_TransferAssetContract_size      78
 #define protocol_TransferContract_size           57
 #define protocol_UnDelegateResourceContract_size 59
 #define protocol_UnfreezeBalanceContract_size    48

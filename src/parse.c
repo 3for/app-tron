@@ -249,20 +249,66 @@ bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txCont
     return true;
 }
 
-static bool printTokenFromID(char *out, size_t outlen, const uint8_t *data, size_t size) {
-    if (size != TOKENID_SIZE && size != 1) {
+static bool is_valid_token_id(const uint8_t *data, size_t size, bool allow_trx) {
+    if ((data == NULL) || (size == 0) || (size > MAX_TRC10_TOKEN_ID_LENGTH)) {
         return false;
     }
 
-    if (size == 1) {
-        if (data[0] != '_') {
+    if ((size == 1) && (data[0] == '_')) {
+        return allow_trx;
+    }
+
+    // Token IDs are positive, canonical decimal representations of java long values.
+    if (data[0] == '0') {
+        return false;
+    }
+
+    uint64_t token_id = 0;
+    for (size_t i = 0; i < size; i++) {
+        if ((data[i] < '0') || (data[i] > '9')) {
             return false;
         }
-        strlcpy(out, "TRX", outlen);
+
+        uint8_t digit = data[i] - '0';
+        if (token_id > (((uint64_t) INT64_MAX - digit) / 10)) {
+            return false;
+        }
+        token_id = token_id * 10 + digit;
+    }
+
+    return token_id > 0;
+}
+
+static bool printTokenFromID(char *out,
+                             size_t outlen,
+                             const uint8_t *data,
+                             size_t size,
+                             bool allow_trx) {
+    if ((out == NULL) || !is_valid_token_id(data, size, allow_trx)) {
+        return false;
+    }
+
+    if ((size == 1) && (data[0] == '_')) {
+        if (outlen < sizeof("TRX")) {
+            return false;
+        }
+        memcpy(out, "TRX", sizeof("TRX"));
         return true;
     }
-    strlcpy(out, (char *) data, outlen);
+
+    if (size >= outlen) {
+        return false;
+    }
+    memcpy(out, data, size);
+    out[size] = '\0';
     return true;
+}
+
+static bool token_id_matches_display(const char *display_token_id, const char *raw_token_id) {
+    if (strcmp(raw_token_id, "_") == 0) {
+        return strcmp(display_token_id, "TRX") == 0;
+    }
+    return strcmp(display_token_id, raw_token_id) == 0;
 }
 
 static bool set_token_info(txContent_t *content,
@@ -285,8 +331,8 @@ static bool set_token_info(txContent_t *content,
 // CHECK SIGNATURE(EXCHANGEID+TOKEN1ID+NAME1+PRECISION1+TOKEN2ID+NAME2+PRECISION2)
 // Parse token Name and Signature
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
-    ExchangeDetails details;
-    char buffer[90];
+    ExchangeDetails details = ExchangeDetails_init_zero;
+    char buffer[2 * MAX_TOKEN_LENGTH];
 
     pb_istream_t stream = pb_istream_from_buffer(data, length);
     if (!pb_decode(&stream, ExchangeDetails_fields, &details)) {
@@ -297,11 +343,15 @@ bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
         return false;
     }
 
-    /* Replace token ID with Name[ID] */
-    if (strlen(details.token1Id) != 1 && strlen(details.token1Id) != 7) {
+    /* Replace token ID with Name[ID]. Exchange metadata may use "_" for TRX. */
+    if (!is_valid_token_id((const uint8_t *) details.token1Id,
+                           strlen(details.token1Id),
+                           true)) {
         return false;
     }
-    if (strlen(details.token2Id) != 1 && strlen(details.token2Id) != 7) {
+    if (!is_valid_token_id((const uint8_t *) details.token2Id,
+                           strlen(details.token2Id),
+                           true)) {
         return false;
     }
 
@@ -337,10 +387,10 @@ bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
     }
 
     int first_token = 0, second_token = 0;
-    if (strcmp((char *) content->tokenNames[0], details.token1Id) == 0) {
+    if (token_id_matches_display(content->tokenNames[0], details.token1Id)) {
         first_token = 0;
         second_token = 1;
-    } else if (strcmp((char *) content->tokenNames[0], details.token2Id) == 0) {
+    } else if (token_id_matches_display(content->tokenNames[0], details.token2Id)) {
         first_token = 1;
         second_token = 0;
     } else {
@@ -402,7 +452,8 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.transfer_asset_contract.asset_name.bytes,
-                          msg.transfer_asset_contract.asset_name.size)) {
+                          msg.transfer_asset_contract.asset_name.size,
+                          false)) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -901,7 +952,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_create_contract.first_token_id.bytes,
-                          msg.exchange_create_contract.first_token_id.size)) {
+                          msg.exchange_create_contract.first_token_id.size,
+                          true)) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -909,7 +961,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[1],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_create_contract.second_token_id.bytes,
-                          msg.exchange_create_contract.second_token_id.size)) {
+                          msg.exchange_create_contract.second_token_id.size,
+                          true)) {
         return false;
     }
     content->tokenNamesLength[1] = strlen(content->tokenNames[1]);
@@ -929,7 +982,8 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_inject_contract.token_id.bytes,
-                          msg.exchange_inject_contract.token_id.size)) {
+                          msg.exchange_inject_contract.token_id.size,
+                          true)) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -950,7 +1004,8 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_withdraw_contract.token_id.bytes,
-                          msg.exchange_withdraw_contract.token_id.size)) {
+                          msg.exchange_withdraw_contract.token_id.size,
+                          true)) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -971,7 +1026,8 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_transaction_contract.token_id.bytes,
-                          msg.exchange_transaction_contract.token_id.size)) {
+                          msg.exchange_transaction_contract.token_id.size,
+                          true)) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);

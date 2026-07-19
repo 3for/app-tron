@@ -5,7 +5,7 @@ protocol.AccountUpdateContract.owner_address        max_size: 21, fixed_length: 
 protocol.TransferContract.owner_address             max_size: 21, fixed_length: true
 protocol.TransferContract.to_address                max_size: 21, fixed_length: true
 
-protocol.TransferAssetContract.asset_name           max_size: 16
+protocol.TransferAssetContract.asset_name           max_size: 19
 protocol.TransferAssetContract.owner_address        max_size: 21, fixed_length: true
 protocol.TransferAssetContract.to_address           max_size: 21, fixed_length: true
 
@@ -49,17 +49,17 @@ protocol.TriggerSmartContract.contract_address      max_size: 21, fixed_length: 
 protocol.TriggerSmartContract.data                  type: FT_CALLBACK
 
 protocol.ExchangeCreateContract.owner_address       max_size: 21, fixed_length: true
-protocol.ExchangeCreateContract.first_token_id      max_size: 8
-protocol.ExchangeCreateContract.second_token_id     max_size: 8
+protocol.ExchangeCreateContract.first_token_id      max_size: 19
+protocol.ExchangeCreateContract.second_token_id     max_size: 19
 
 protocol.ExchangeInjectContract.owner_address       max_size: 21, fixed_length: true
-protocol.ExchangeInjectContract.token_id            max_size: 8
+protocol.ExchangeInjectContract.token_id            max_size: 19
 
 protocol.ExchangeWithdrawContract.owner_address     max_size: 21, fixed_length: true
-protocol.ExchangeWithdrawContract.token_id          max_size: 8
+protocol.ExchangeWithdrawContract.token_id          max_size: 19
 
 protocol.ExchangeTransactionContract.owner_address  max_size: 21, fixed_length: true
-protocol.ExchangeTransactionContract.token_id       max_size: 8
+protocol.ExchangeTransactionContract.token_id       max_size: 19
 
 protocol.AccountPermissionUpdateContract.owner_address  max_size: 21, fixed_length: true
 protocol.AccountPermissionUpdateContract.actives        max_count: 8  # MAX_ACTIVE_PERMISSION_CNT

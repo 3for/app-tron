@@ -243,6 +243,53 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx, tokenSignature)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    @pytest.mark.parametrize(
+        "token_id",
+        [
+            b"10000000",  # 8 digits
+            b"1000000000000000",  # 16 digits
+            b"10000000000000000",  # 17 digits
+            b"9223372036854775807",  # INT64_MAX
+        ])
+    def test_trx_send_asset_future_token_id(self, backend, device, token_id):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=token_id))
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize(
+        "token_id",
+        [
+            b"",
+            b"_",
+            b"0",
+            b"01002000",
+            b"10020A0",
+            b"9223372036854775808",  # INT64_MAX + 1
+            b"10000000000000000000",  # 20 digits
+        ])
+    def test_trx_send_asset_invalid_token_id(self, backend, token_id):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=token_id))
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_exchange_create(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -254,6 +301,52 @@ class TestTRX():
                                             second_token_id="1000166".encode(),
                                             second_token_balance=10000000))
         self.sign_and_validate(client, device, 1, tx)
+
+    @pytest.mark.parametrize("exchange_contract", [
+        "create",
+        "inject",
+        "withdraw",
+        "transaction",
+    ])
+    def test_trx_exchange_max_token_id(self, backend, device,
+                                       exchange_contract):
+        client = TronClient(backend)
+        owner_address = bytes.fromhex(client.getAccount(0)['addressHex'])
+        token_id = b"9223372036854775807"
+
+        if exchange_contract == "create":
+            contract_type = tron.Transaction.Contract.ExchangeCreateContract
+            message = contract.ExchangeCreateContract(
+                owner_address=owner_address,
+                first_token_id=b"_",
+                first_token_balance=10000000000,
+                second_token_id=token_id,
+                second_token_balance=10000000)
+        elif exchange_contract == "inject":
+            contract_type = tron.Transaction.Contract.ExchangeInjectContract
+            message = contract.ExchangeInjectContract(
+                owner_address=owner_address,
+                exchange_id=6,
+                token_id=token_id,
+                quant=10000000)
+        elif exchange_contract == "withdraw":
+            contract_type = tron.Transaction.Contract.ExchangeWithdrawContract
+            message = contract.ExchangeWithdrawContract(
+                owner_address=owner_address,
+                exchange_id=6,
+                token_id=token_id,
+                quant=1000000)
+        else:
+            contract_type = tron.Transaction.Contract.ExchangeTransactionContract
+            message = contract.ExchangeTransactionContract(
+                owner_address=owner_address,
+                exchange_id=6,
+                token_id=token_id,
+                quant=10000,
+                expected=100)
+
+        tx = client.packContract(contract_type, message)
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
 
     def test_trx_exchange_create_with_token_name(self, backend, device):
         client = TronClient(backend)
@@ -285,6 +378,25 @@ class TestTRX():
             "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
         ]
         self.sign_and_validate(client, device, 0, tx, exchangeSignature)
+
+    def test_trx_exchange_inject_trx_with_name(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeInjectContract,
+            contract.ExchangeInjectContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            exchange_id=6,
+                                            token_id=b"_",
+                                            quant=10000000))
+        exchangeSignature = [
+            "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
+        ]
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               exchangeSignature,
+                               do_comparison=False)
 
     def test_trx_exchange_withdraw(self, backend, device):
         client = TronClient(backend)

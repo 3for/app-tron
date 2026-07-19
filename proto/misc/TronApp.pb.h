@@ -13,10 +13,10 @@
 typedef PB_BYTES_ARRAY_T(72) ExchangeDetails_signature_t;
 typedef struct _ExchangeDetails { 
     uint64_t exchangeId; 
-    char token1Id[8]; 
+    char token1Id[20]; 
     char token1Name[32]; 
     uint32_t token1Precision; 
-    char token2Id[8]; 
+    char token2Id[20]; 
     char token2Name[32]; 
     uint32_t token2Precision; 
     ExchangeDetails_signature_t signature; 
@@ -81,7 +81,7 @@ extern const pb_msgdesc_t TokenDetails_msg;
 #define TokenDetails_fields &TokenDetails_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ExchangeDetails_size                     181
+#define ExchangeDetails_size                     205
 #define TokenDetails_size                        113
 
 #ifdef __cplusplus
