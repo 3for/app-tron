@@ -12,9 +12,9 @@
 
 /* Enum definitions */
 typedef enum _protocol_ResourceCode { 
-    protocol_ResourceCode_BANDWIDTH = 0,
-    protocol_ResourceCode_ENERGY = 1,
-    protocol_ResourceCode_TRON_POWER = 2
+    protocol_ResourceCode_BANDWIDTH = 0, 
+    protocol_ResourceCode_ENERGY = 1, 
+    protocol_ResourceCode_TRON_POWER = 2 
 } protocol_ResourceCode;
 
 /* Struct definitions */
@@ -93,7 +93,7 @@ typedef struct _protocol_DelegateResourceContract {
     int64_t balance; 
     pb_byte_t receiver_address[21]; 
     bool lock; 
-    int64_t lock_period;
+    int64_t lock_period; 
 } protocol_DelegateResourceContract;
 
 typedef PB_BYTES_ARRAY_T(8) protocol_ExchangeCreateContract_first_token_id_t;
@@ -157,6 +157,11 @@ typedef struct _protocol_ProposalApproveContract {
     int64_t proposal_id; 
     bool is_add_approval; 
 } protocol_ProposalApproveContract;
+
+typedef struct _protocol_ProposalCreateContract { 
+    pb_byte_t owner_address[21]; 
+    pb_callback_t parameters; 
+} protocol_ProposalCreateContract;
 
 typedef struct _protocol_ProposalCreateContract_ParametersEntry { 
     int64_t key; 
@@ -243,15 +248,10 @@ typedef struct _protocol_WithdrawExpireUnfreezeContract {
     pb_byte_t owner_address[21]; 
 } protocol_WithdrawExpireUnfreezeContract;
 
-typedef struct _protocol_ProposalCreateContract { 
-    pb_byte_t owner_address[21]; 
-    pb_callback_t parameters;
-} protocol_ProposalCreateContract;
-
 typedef struct _protocol_VoteWitnessContract { 
     pb_byte_t owner_address[21]; 
     pb_size_t votes_count;
-    protocol_VoteWitnessContract_Vote votes[5]; 
+    protocol_VoteWitnessContract_Vote votes[30]; 
 } protocol_VoteWitnessContract;
 
 
@@ -271,7 +271,7 @@ extern "C" {
 #define protocol_TransferContract_init_default   {{0}, {0}, 0}
 #define protocol_TransferAssetContract_init_default {{0, {0}}, {0}, {0}, 0}
 #define protocol_VoteAssetContract_init_default  {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
-#define protocol_VoteWitnessContract_init_default {{0}, 0, {protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default}}
+#define protocol_VoteWitnessContract_init_default {{0}, 0, {protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default}}
 #define protocol_VoteWitnessContract_Vote_init_default {{0}, 0}
 #define protocol_WitnessCreateContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}}
 #define protocol_WitnessUpdateContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}}
@@ -306,7 +306,7 @@ extern "C" {
 #define protocol_TransferContract_init_zero      {{0}, {0}, 0}
 #define protocol_TransferAssetContract_init_zero {{0, {0}}, {0}, {0}, 0}
 #define protocol_VoteAssetContract_init_zero     {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
-#define protocol_VoteWitnessContract_init_zero   {{0}, 0, {protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero}}
+#define protocol_VoteWitnessContract_init_zero   {{0}, 0, {protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero}}
 #define protocol_VoteWitnessContract_Vote_init_zero {{0}, 0}
 #define protocol_WitnessCreateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}}
 #define protocol_WitnessUpdateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}}
@@ -412,6 +412,8 @@ extern "C" {
 #define protocol_ProposalApproveContract_owner_address_tag 1
 #define protocol_ProposalApproveContract_proposal_id_tag 2
 #define protocol_ProposalApproveContract_is_add_approval_tag 3
+#define protocol_ProposalCreateContract_owner_address_tag 1
+#define protocol_ProposalCreateContract_parameters_tag 2
 #define protocol_ProposalCreateContract_ParametersEntry_key_tag 1
 #define protocol_ProposalCreateContract_ParametersEntry_value_tag 2
 #define protocol_ProposalDeleteContract_owner_address_tag 1
@@ -454,8 +456,6 @@ extern "C" {
 #define protocol_VoteWitnessContract_Vote_vote_count_tag 2
 #define protocol_WithdrawBalanceContract_owner_address_tag 1
 #define protocol_WithdrawExpireUnfreezeContract_owner_address_tag 1
-#define protocol_ProposalCreateContract_owner_address_tag 1
-#define protocol_ProposalCreateContract_parameters_tag 2
 #define protocol_VoteWitnessContract_owner_address_tag 1
 #define protocol_VoteWitnessContract_votes_tag   2
 
@@ -810,6 +810,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_DeployContract_size depends on runtime parameters */
 /* protocol_UnfreezeAssetContract_size depends on runtime parameters */
 /* protocol_UpdateAssetContract_size depends on runtime parameters */
+/* protocol_ProposalCreateContract_size depends on runtime parameters */
 /* protocol_TriggerSmartContract_size depends on runtime parameters */
 #define protocol_AccountPermissionUpdateContract_size 2883
 #define protocol_AssetIssueContract_FrozenSupply_size 22
@@ -823,7 +824,6 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_FreezeBalanceV2Contract_size    36
 #define protocol_ProposalApproveContract_size    36
 #define protocol_ProposalCreateContract_ParametersEntry_size 22
-/* protocol_ProposalCreateContract_size depends on runtime parameters */
 #define protocol_ProposalDeleteContract_size     34
 #define protocol_TransferAssetContract_size      75
 #define protocol_TransferContract_size           57
@@ -832,7 +832,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_UnfreezeBalanceV2Contract_size  36
 #define protocol_UpdateBrokerageContract_size    34
 #define protocol_VoteWitnessContract_Vote_size   34
-#define protocol_VoteWitnessContract_size        203
+#define protocol_VoteWitnessContract_size        1103
 #define protocol_WithdrawBalanceContract_size    23
 #define protocol_WithdrawExpireUnfreezeContract_size 23
 

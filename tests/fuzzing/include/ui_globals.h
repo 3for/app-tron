@@ -12,10 +12,11 @@ extern char fullContract[MAX_TOKEN_LENGTH];
 extern char TRC20Action[9];
 extern uint8_t G_io_apdu_buffer[260];
 
+#define MAX_VOTE_COUNT        30
 #define VOTE_ADDRESS          0
 #define VOTE_ADDRESS_SIZE     (BASE58CHECK_ADDRESS_SIZE + 1)
 #define VOTE_AMOUNT           VOTE_ADDRESS_SIZE
-#define VOTE_AMOUNT_SIZE      15
+#define VOTE_AMOUNT_SIZE      21
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) (((index) * VOTE_PACK) + (type))
 
@@ -26,7 +27,8 @@ extern uint8_t perm_field_count;
 extern const char *perm_field_items[PERM_MAX_FIELDS];
 extern char (*perm_field_labels)[PERM_ITEM_LEN];
 extern char (*perm_field_values)[PERM_VAL_LEN];
-extern int8_t votes_count;
+extern uint8_t votes_count;
+extern char *vote_display_buffer;
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 

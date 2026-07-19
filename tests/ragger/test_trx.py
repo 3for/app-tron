@@ -51,11 +51,13 @@ class TestTRX():
                        test_name: str,
                        warning: bool = False,
                        custom_screen_text=None,
-                       warning_instruction=None):
+                       warning_instruction=None,
+                       do_comparison: bool = True):
         if not warning:
             self.scenario_navigator.review_approve(
                 test_name=test_name,
-                custom_screen_text=custom_screen_text)
+                custom_screen_text=custom_screen_text,
+                do_comparison=do_comparison)
             return
 
         if warning_instruction is not None:
@@ -84,7 +86,8 @@ class TestTRX():
                           warning_approve=False,
                           warning_instruction=None,
                           ins: InsType = InsType.SIGN,
-                          include_tx_len: bool = False):
+                          include_tx_len: bool = False,
+                          do_comparison: bool = True):
         path = Path(currentframe().f_back.f_code.co_name)
         if signatures is None:
             signatures = []
@@ -98,11 +101,21 @@ class TestTRX():
             self.review_approve(str(path),
                                 warning=warning_approve,
                                 custom_screen_text=custom_screen_text,
-                                warning_instruction=warning_instruction)
+                                warning_instruction=warning_instruction,
+                                do_comparison=do_comparison)
 
         resp = client.response()
         assert check_tx_signature(tx, resp.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
+
+    @staticmethod
+    def make_witness_votes(count: int):
+        return [
+            contract.VoteWitnessContract.Vote(
+                vote_address=b'\x41' + index.to_bytes(20, 'big'),
+                vote_count=100)
+            for index in range(1, count + 1)
+        ]
 
     def test_trx_get_version(self, backend):
         client = TronClient(backend)
@@ -377,45 +390,30 @@ class TestTRX():
                 ]))
         self.sign_and_validate(client, device, 0, tx)
 
-    def test_trx_vote_witness_more_than_5(self, backend):
+    def test_trx_vote_witness_max_count(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
             tron.Transaction.Contract.VoteWitnessContract,
             contract.VoteWitnessContract(
                 owner_address=bytes.fromhex(
                     client.getAccount(0)['addressHex']),
-                votes=[
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")),
-                        vote_count=100),
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TE7hnUtWRRBz3SkFrX8JESWUmEvxxAhoPt")),
-                        vote_count=100),
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TTcYhypP8m4phDhN6oRexz2174zAerjEWP")),
-                        vote_count=100),
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TY65QiDt4hLTMpf3WRzcX357BnmdxT2sw9")),
-                        vote_count=100),
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TSzoLaVCdSNDpNxgChcFt9rSRF5wWAZiR4")),
-                        vote_count=100),
-                    contract.VoteWitnessContract.Vote(
-                        vote_address=bytes.fromhex(
-                            client.address_hex(
-                                "TSNbzxac4WhxN91XvaUfPTKP2jNT18mP6T")),
-                        vote_count=100),
-                ]))
+                votes=self.make_witness_votes(30)))
+        # Exercising all 30 review entries is the boundary assertion. Avoid
+        # storing dozens of redundant screenshots for this navigation-only case.
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               do_comparison=False)
+
+    def test_trx_vote_witness_more_than_30(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=self.make_witness_votes(31)))
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA

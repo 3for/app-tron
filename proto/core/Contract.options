@@ -10,7 +10,7 @@ protocol.TransferAssetContract.owner_address        max_size: 21, fixed_length: 
 protocol.TransferAssetContract.to_address           max_size: 21, fixed_length: true
 
 protocol.VoteWitnessContract.owner_address          max_size: 21, fixed_length: true
-protocol.VoteWitnessContract.votes                  max_count: 5  # Assume 5 votes max
+protocol.VoteWitnessContract.votes                  max_count: 30
 protocol.VoteWitnessContract.Vote.vote_address      max_size: 21, fixed_length: true
 protocol.VoteWitnessContract.support                type: FT_IGNORE
 

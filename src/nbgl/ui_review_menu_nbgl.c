@@ -42,6 +42,10 @@
 #define PROPOSAL_ITEM_LEN    10
 #define PROPOSAL_VALUE_LEN   80
 
+#if MAX_VOTE_COUNT + 3 > MAX_TX_FIELDS
+#error "MAX_TX_FIELDS is too small for the vote review flow"
+#endif
+
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
 static const char *stringLabelTxAmount = "Amount";
@@ -641,7 +645,8 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            if (votes_count > MAX_TX_FIELDS - 2) {
+            if ((votes_count > MAX_VOTE_COUNT) || (votes_count > MAX_TX_FIELDS - 2) ||
+                (vote_display_buffer == NULL)) {
                 THROW(E_INCORRECT_DATA);
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
@@ -649,14 +654,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             for (uint8_t i = 0; i < votes_count; i++) {
 #ifdef SCREEN_SIZE_WALLET
                 txInfos.fields[i + 1].item =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_ADDRESS));
+                    (vote_display_buffer + voteSlot(i, VOTE_ADDRESS));
                 txInfos.fields[i + 1].value =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
+                    (vote_display_buffer + voteSlot(i, VOTE_AMOUNT));
 #else
                 txInfos.fields[i + 1].item =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
+                    (vote_display_buffer + voteSlot(i, VOTE_AMOUNT));
                 txInfos.fields[i + 1].value =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_ADDRESS));
+                    (vote_display_buffer + voteSlot(i, VOTE_ADDRESS));
 #endif
             }
             txInfos.fields[votes_count + 1].item = "Total Vote Count";

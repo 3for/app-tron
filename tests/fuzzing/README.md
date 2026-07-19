@@ -316,7 +316,7 @@ This refreshes:
 - `./corpus/fuzz_personal_message`
 
 Transaction-signing seeds, including locked resource delegation with and
-without `lock_period`:
+without `lock_period`, and witness-vote transactions at the 30/31 boundary:
 
 ```sh
 cd tests/fuzzing

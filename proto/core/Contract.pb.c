@@ -21,7 +21,7 @@ PB_BIND(protocol_TransferAssetContract, protocol_TransferAssetContract, AUTO)
 PB_BIND(protocol_VoteAssetContract, protocol_VoteAssetContract, AUTO)
 
 
-PB_BIND(protocol_VoteWitnessContract, protocol_VoteWitnessContract, AUTO)
+PB_BIND(protocol_VoteWitnessContract, protocol_VoteWitnessContract, 2)
 
 
 PB_BIND(protocol_VoteWitnessContract_Vote, protocol_VoteWitnessContract_Vote, AUTO)

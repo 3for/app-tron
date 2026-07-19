@@ -21,10 +21,11 @@
 #include "parse.h"
 #include "shared_context.h"
 
+#define MAX_VOTE_COUNT        30
 #define VOTE_ADDRESS          0
 #define VOTE_ADDRESS_SIZE     BASE58CHECK_ADDRESS_SIZE + 1
 #define VOTE_AMOUNT           VOTE_ADDRESS_SIZE
-#define VOTE_AMOUNT_SIZE      15
+#define VOTE_AMOUNT_SIZE      21
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 
@@ -57,7 +58,8 @@ extern volatile uint8_t customContractField;
 // fullContract, url, TRC20Action, TRC20ActionSendAllow, fullHash) live in
 // txStringProperties_t (shared_context.h) and are accessed via `strings.common.*`,
 // mirroring app-ethereum.
-extern int8_t votes_count;
+extern uint8_t votes_count;
+extern char *vote_display_buffer;
 extern cx_sha3_t global_sha3;
 extern strings_t strings;
 

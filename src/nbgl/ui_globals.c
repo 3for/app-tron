@@ -36,7 +36,8 @@
 // txStringProperties_t and are accessed via `strings.common.*`, mirroring
 // app-ethereum's shared_context.h layout.
 volatile uint8_t customContractField;
-int8_t votes_count;
+uint8_t votes_count;
+char *vote_display_buffer;
 cx_sha3_t global_sha3;
 strings_t strings;
 

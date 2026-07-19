@@ -48,14 +48,20 @@ static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
 }
 #endif  // HAVE_SWAP
 
-static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
+static void fillVoteAddressSlot(char *destination, const char *from, uint8_t index) {
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
     memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, VOTE_ADDRESS_SIZE);
 }
 
-static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index) {
-    print_amount(value, destination + voteSlot(index, VOTE_AMOUNT), VOTE_AMOUNT_SIZE, 0);
+static bool fillVoteAmountSlot(char *destination, uint64_t value, uint8_t index) {
+    if (print_amount(value,
+                     destination + voteSlot(index, VOTE_AMOUNT),
+                     VOTE_AMOUNT_SIZE,
+                     0) == 0) {
+        return false;
+    }
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
+    return true;
 }
 
 static void setV2ResourceName(protocol_ResourceCode resource) {
@@ -382,11 +388,13 @@ static uint16_t raw_tx_len;
 
 void sign_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &raw_tx);
+    APP_MEM_FREE_AND_NULL((void **) &vote_display_buffer);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
     ui_review_menu_cleanup();
     proposal_parameters_cleanup();
     raw_tx_len = 0;
+    votes_count = 0;
     perm_field_count = 0;
 }
 
@@ -799,25 +807,46 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             PRINTF("Voting!!\n");
             PRINTF("Count: %d\n", contract->votes_count);
-            memset(G_io_apdu_buffer, 0, 200);
             txContent.amount[0] = 0;
-            votes_count = contract->votes_count;
-            uint32_t total_votes = 0;
+            if ((contract->votes_count == 0) || (contract->votes_count > MAX_VOTE_COUNT)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+            votes_count = (uint8_t) contract->votes_count;
+            vote_display_buffer = APP_MEM_ALLOC((size_t) votes_count * VOTE_PACK);
+            if (vote_display_buffer == NULL) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+            memset(vote_display_buffer, 0, (size_t) votes_count * VOTE_PACK);
+            uint64_t total_votes = 0;
 
-            for (int i = 0; i < contract->votes_count; i++) {
+            for (uint8_t i = 0; i < votes_count; i++) {
+                if ((contract->votes[i].vote_count <= 0) ||
+                    ((uint64_t) contract->votes[i].vote_count > UINT64_MAX - total_votes)) {
+                    return io_send_sw(E_INCORRECT_DATA);
+                }
                 getBase58FromAddress(contract->votes[i].vote_address,
                                      strings.common.fullContract,
                                      N_storage.truncateAddress);
-                total_votes += (unsigned int) contract->votes[i].vote_count;
-                fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) strings.common.fullContract, i);
-                fillVoteAmountSlot((void *) G_io_apdu_buffer, contract->votes[i].vote_count, i);
+                total_votes += (uint64_t) contract->votes[i].vote_count;
+                fillVoteAddressSlot(vote_display_buffer, strings.common.fullContract, i);
+                if (!fillVoteAmountSlot(vote_display_buffer,
+                                        (uint64_t) contract->votes[i].vote_count,
+                                        i)) {
+                    return io_send_sw(E_INCORRECT_LENGTH);
+                }
             }
 
-            snprintf((char *) strings.common.fullContract,
-                     sizeof(strings.common.fullContract),
-                     "%d: %u",
-                     contract->votes_count,
-                     total_votes);
+            int prefix_len = snprintf(strings.common.fullContract,
+                                      sizeof(strings.common.fullContract),
+                                      "%u: ",
+                                      (unsigned int) votes_count);
+            if ((prefix_len < 0) || ((size_t) prefix_len >= sizeof(strings.common.fullContract)) ||
+                !u64_to_string(total_votes,
+                               strings.common.fullContract + prefix_len,
+                               (uint8_t) (sizeof(strings.common.fullContract) -
+                                          (size_t) prefix_len))) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
 
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
 
