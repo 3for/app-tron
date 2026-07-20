@@ -35,6 +35,12 @@ message AccountUpdateContract {
     bytes owner_address = 2;
 }
 
+// Set account id if the account has no id. Account id is unique and case insensitive.
+message SetAccountIdContract {
+    bytes account_id = 1;
+    bytes owner_address = 2;
+}
+
 message TransferContract {
     bytes owner_address = 1;
     bytes to_address = 2;

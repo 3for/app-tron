@@ -44,6 +44,8 @@
 #define MAX_TOKEN_LENGTH              67
 #define MAX_ACCOUNT_NAME_SIZE         200
 #define MAX_ACCOUNT_NAME_DISPLAY_SIZE (2 + MAX_ACCOUNT_NAME_SIZE * 2 + 1)
+#define MIN_ACCOUNT_ID_SIZE           8
+#define MAX_ACCOUNT_ID_SIZE           32
 #define MAX_PROPOSAL_PARAMETERS       80
 
 // The length of a 128-bit integer in bytes

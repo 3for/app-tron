@@ -34,6 +34,7 @@ typedef union {
     protocol_ExchangeWithdrawContract exchange_withdraw_contract;
     protocol_ExchangeTransactionContract exchange_transaction_contract;
     protocol_AccountUpdateContract account_update_contract;
+    protocol_SetAccountIdContract set_account_id_contract;
     protocol_ProposalApproveContract proposal_approve_contract;
     protocol_ProposalDeleteContract proposal_delete_contract;
     protocol_WithdrawBalanceContract withdraw_balance_contract;

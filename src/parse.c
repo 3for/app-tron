@@ -150,6 +150,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case ACCOUNTUPDATECONTRACT:
             strlcpy(out, "Account Update", outlen);
             break;
+        case SETACCOUNTIDCONTRACT:
+            strlcpy(out, "Set Account ID", outlen);
+            break;
         case UNFREEZEBALANCECONTRACT:
             strlcpy(out, "Unfreeze Balance", outlen);
             break;
@@ -860,6 +863,38 @@ static bool account_update_contract(txContent_t *content, pb_istream_t *stream) 
     return true;
 }
 
+static bool set_account_id_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream, protocol_SetAccountIdContract_fields, &msg.set_account_id_contract)) {
+        return false;
+    }
+
+    protocol_SetAccountIdContract *contract = &msg.set_account_id_contract;
+    if (contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+
+    // Match java-tron TransactionUtil.validAccountId(): 8..32 readable ASCII
+    // bytes, where the accepted range is '!' (0x21) through '~' (0x7e).
+    if ((contract->account_id.size < MIN_ACCOUNT_ID_SIZE) ||
+        (contract->account_id.size > MAX_ACCOUNT_ID_SIZE)) {
+        return false;
+    }
+    for (pb_size_t i = 0; i < contract->account_id.size; i++) {
+        uint8_t byte = contract->account_id.bytes[i];
+        if ((byte < 0x21) || (byte > 0x7e)) {
+            return false;
+        }
+    }
+
+    // AccountUpdateContract and SetAccountIdContract are mutually exclusive,
+    // so reuse the existing display buffer instead of increasing txContent_t.
+    memcpy(content->accountName, contract->account_id.bytes, contract->account_id.size);
+    content->accountName[contract->account_id.size] = '\0';
+    content->accountNameLength = contract->account_id.size;
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    return true;
+}
+
 bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
                                            const pb_field_t *field,
                                            void **arg) {
@@ -1250,6 +1285,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
                 ret = account_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_SetAccountIdContract:
+                ret = set_account_id_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
                 ret = trigger_smart_contract(content, &tx_stream);

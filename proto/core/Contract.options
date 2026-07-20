@@ -2,6 +2,9 @@
 
 protocol.AccountUpdateContract.owner_address        max_size: 21, fixed_length: true
 
+protocol.SetAccountIdContract.account_id            max_size: 32
+protocol.SetAccountIdContract.owner_address         max_size: 21, fixed_length: true
+
 protocol.TransferContract.owner_address             max_size: 21, fixed_length: true
 protocol.TransferContract.to_address                max_size: 21, fixed_length: true
 

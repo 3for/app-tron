@@ -168,6 +168,13 @@ typedef struct _protocol_ProposalDeleteContract {
     int64_t proposal_id; 
 } protocol_ProposalDeleteContract;
 
+typedef PB_BYTES_ARRAY_T(32) protocol_SetAccountIdContract_account_id_t;
+/* Set account id if the account has no id. Account id is unique and case insensitive. */
+typedef struct _protocol_SetAccountIdContract {
+    protocol_SetAccountIdContract_account_id_t account_id;
+    pb_byte_t owner_address[21];
+} protocol_SetAccountIdContract;
+
 typedef PB_BYTES_ARRAY_T(19) protocol_TransferAssetContract_asset_name_t;
 typedef struct _protocol_TransferAssetContract { 
     protocol_TransferAssetContract_asset_name_t asset_name; 
@@ -263,6 +270,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define protocol_AccountCreateContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, _protocol_AccountType_MIN}
 #define protocol_AccountUpdateContract_init_default {{{NULL}, NULL}, {0}}
+#define protocol_SetAccountIdContract_init_default {{0, {0}}, {0}}
 #define protocol_TransferContract_init_default   {{0}, {0}, 0}
 #define protocol_TransferAssetContract_init_default {{0, {0}}, {0}, {0}, 0}
 #define protocol_VoteAssetContract_init_default  {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
@@ -297,6 +305,7 @@ extern "C" {
 #define protocol_AccountPermissionUpdateContract_init_default {{0}, false, protocol_Permission_init_default, false, protocol_Permission_init_default, 0, {protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default}}
 #define protocol_AccountCreateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}, _protocol_AccountType_MIN}
 #define protocol_AccountUpdateContract_init_zero {{{NULL}, NULL}, {0}}
+#define protocol_SetAccountIdContract_init_zero  {{0, {0}}, {0}}
 #define protocol_TransferContract_init_zero      {{0}, {0}, 0}
 #define protocol_TransferAssetContract_init_zero {{0, {0}}, {0}, {0}, 0}
 #define protocol_VoteAssetContract_init_zero     {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0}
@@ -409,6 +418,8 @@ extern "C" {
 #define protocol_ProposalCreateContract_ParametersEntry_value_tag 2
 #define protocol_ProposalDeleteContract_owner_address_tag 1
 #define protocol_ProposalDeleteContract_proposal_id_tag 2
+#define protocol_SetAccountIdContract_account_id_tag 1
+#define protocol_SetAccountIdContract_owner_address_tag 2
 #define protocol_TransferAssetContract_asset_name_tag 1
 #define protocol_TransferAssetContract_owner_address_tag 2
 #define protocol_TransferAssetContract_to_address_tag 3
@@ -463,6 +474,12 @@ X(a, CALLBACK, SINGULAR, BYTES,    account_name,      1) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     2)
 #define protocol_AccountUpdateContract_CALLBACK pb_default_field_callback
 #define protocol_AccountUpdateContract_DEFAULT NULL
+
+#define protocol_SetAccountIdContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BYTES,    account_id,        1) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     2)
+#define protocol_SetAccountIdContract_CALLBACK NULL
+#define protocol_SetAccountIdContract_DEFAULT NULL
 
 #define protocol_TransferContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
@@ -713,6 +730,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  actives,           4)
 
 extern const pb_msgdesc_t protocol_AccountCreateContract_msg;
 extern const pb_msgdesc_t protocol_AccountUpdateContract_msg;
+extern const pb_msgdesc_t protocol_SetAccountIdContract_msg;
 extern const pb_msgdesc_t protocol_TransferContract_msg;
 extern const pb_msgdesc_t protocol_TransferAssetContract_msg;
 extern const pb_msgdesc_t protocol_VoteAssetContract_msg;
@@ -749,6 +767,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define protocol_AccountCreateContract_fields &protocol_AccountCreateContract_msg
 #define protocol_AccountUpdateContract_fields &protocol_AccountUpdateContract_msg
+#define protocol_SetAccountIdContract_fields &protocol_SetAccountIdContract_msg
 #define protocol_TransferContract_fields &protocol_TransferContract_msg
 #define protocol_TransferAssetContract_fields &protocol_TransferAssetContract_msg
 #define protocol_VoteAssetContract_fields &protocol_VoteAssetContract_msg
@@ -807,6 +826,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_ProposalApproveContract_size    36
 #define protocol_ProposalCreateContract_ParametersEntry_size 22
 #define protocol_ProposalDeleteContract_size     34
+#define protocol_SetAccountIdContract_size       57
 #define protocol_TransferAssetContract_size      78
 #define protocol_TransferContract_size           57
 #define protocol_UnDelegateResourceContract_size 59

@@ -474,6 +474,19 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUpdate Account";
             infoLongPress.text = "Sign transaction to\nUpdate Account";
             break;
+        case APPROVAL_SETACCOUNTID_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Account ID";
+            txInfos.fields[1].value = txContent.accountName;
+            g_pairsList->nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nSet Account ID";
+            infoLongPress.text = "Sign transaction to\nSet Account ID";
+            break;
         case APPROVAL_PROPOSALCREATE_TRANSACTION: {
             pb_size_t count = proposal_parameter_count();
 

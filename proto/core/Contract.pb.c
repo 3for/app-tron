@@ -12,6 +12,9 @@ PB_BIND(protocol_AccountCreateContract, protocol_AccountCreateContract, AUTO)
 PB_BIND(protocol_AccountUpdateContract, protocol_AccountUpdateContract, AUTO)
 
 
+PB_BIND(protocol_SetAccountIdContract, protocol_SetAccountIdContract, AUTO)
+
+
 PB_BIND(protocol_TransferContract, protocol_TransferContract, AUTO)
 
 

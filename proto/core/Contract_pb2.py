@@ -16,7 +16,7 @@ _sym_db = _symbol_database.Default()
 from core import Tron_pb2 as core_dot_Tron__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ore/Contract.proto\x12\x08protocol\x1a\x0f\x63ore/Tron.proto\"l\n\x15\x41\x63\x63ountCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x17\n\x0f\x61\x63\x63ount_address\x18\x02 \x01(\x0c\x12#\n\x04type\x18\x03 \x01(\x0e\x32\x15.protocol.AccountType\"D\n\x15\x41\x63\x63ountUpdateContract\x12\x14\n\x0c\x61\x63\x63ount_name\x18\x01 \x01(\x0c\x12\x15\n\rowner_address\x18\x02 \x01(\x0c\"M\n\x10TransferContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nto_address\x18\x02 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x03\"f\n\x15TransferAssetContract\x12\x12\n\nasset_name\x18\x01 \x01(\x0c\x12\x15\n\rowner_address\x18\x02 \x01(\x0c\x12\x12\n\nto_address\x18\x03 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x04 \x01(\x03\"`\n\x11VoteAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x14\n\x0cvote_address\x18\x02 \x03(\x0c\x12\x0f\n\x07support\x18\x03 \x01(\x08\x12\r\n\x05\x63ount\x18\x05 \x01(\x05\"\xa2\x01\n\x13VoteWitnessContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x31\n\x05votes\x18\x02 \x03(\x0b\x32\".protocol.VoteWitnessContract.Vote\x12\x0f\n\x07support\x18\x03 \x01(\x08\x1a\x30\n\x04Vote\x12\x14\n\x0cvote_address\x18\x01 \x01(\x0c\x12\x12\n\nvote_count\x18\x02 \x01(\x03\";\n\x15WitnessCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x0b\n\x03url\x18\x02 \x01(\x0c\"B\n\x15WitnessUpdateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nupdate_url\x18\x0c \x01(\x0c\"\xe2\x03\n\x12\x41ssetIssueContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x0c\n\x04name\x18\x02 \x01(\x0c\x12\x0c\n\x04\x61\x62\x62r\x18\x03 \x01(\x0c\x12\x14\n\x0ctotal_supply\x18\x04 \x01(\x03\x12@\n\rfrozen_supply\x18\x05 \x03(\x0b\x32).protocol.AssetIssueContract.FrozenSupply\x12\x0f\n\x07trx_num\x18\x06 \x01(\x05\x12\x0b\n\x03num\x18\x08 \x01(\x05\x12\x12\n\nstart_time\x18\t \x01(\x03\x12\x10\n\x08\x65nd_time\x18\n \x01(\x03\x12\x12\n\nvote_score\x18\x10 \x01(\x05\x12\x13\n\x0b\x64\x65scription\x18\x14 \x01(\x0c\x12\x0b\n\x03url\x18\x15 \x01(\x0c\x12\x1c\n\x14\x66ree_asset_net_limit\x18\x16 \x01(\x03\x12#\n\x1bpublic_free_asset_net_limit\x18\x17 \x01(\x03\x12#\n\x1bpublic_free_asset_net_usage\x18\x18 \x01(\x03\x12#\n\x1bpublic_latest_free_net_time\x18\x19 \x01(\x03\x1a:\n\x0c\x46rozenSupply\x12\x15\n\rfrozen_amount\x18\x01 \x01(\x03\x12\x13\n\x0b\x66rozen_days\x18\x02 \x01(\x03\"n\n\x1dParticipateAssetIssueContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nto_address\x18\x02 \x01(\x0c\x12\x12\n\nasset_name\x18\x03 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x04 \x01(\x03\"\xa3\x01\n\x15\x46reezeBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66rozen_balance\x18\x02 \x01(\x03\x12\x17\n\x0f\x66rozen_duration\x18\x03 \x01(\x03\x12(\n\x08resource\x18\n \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x18\n\x10receiver_address\x18\x0f \x01(\x0c\"t\n\x17UnfreezeBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\n \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x18\n\x10receiver_address\x18\x0f \x01(\x0c\"r\n\x17\x46reezeBalanceV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66rozen_balance\x18\x02 \x01(\x03\x12(\n\x08resource\x18\x03 \x01(\x0e\x32\x16.protocol.ResourceCode\"v\n\x19UnfreezeBalanceV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x18\n\x10unfreeze_balance\x18\x02 \x01(\x03\x12(\n\x08resource\x18\x03 \x01(\x0e\x32\x16.protocol.ResourceCode\"7\n\x1eWithdrawExpireUnfreezeContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"4\n\x1b\x43\x61ncelAllUnfreezeV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"\xa9\x01\n\x18\x44\x65legateResourceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\x02 \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x0f\n\x07\x62\x61lance\x18\x03 \x01(\x03\x12\x18\n\x10receiver_address\x18\x04 \x01(\x0c\x12\x0c\n\x04lock\x18\x05 \x01(\x08\x12\x13\n\x0block_period\x18\x06 \x01(\x03\"\x88\x01\n\x1aUnDelegateResourceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\x02 \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x0f\n\x07\x62\x61lance\x18\x03 \x01(\x03\x12\x18\n\x10receiver_address\x18\x04 \x01(\x0c\".\n\x15UnfreezeAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"0\n\x17WithdrawBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"C\n\x17UpdateBrokerageContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x11\n\tbrokerage\x18\x02 \x01(\x05\"{\n\x13UpdateAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\x0c\x12\x0b\n\x03url\x18\x03 \x01(\x0c\x12\x11\n\tnew_limit\x18\x04 \x01(\x03\x12\x18\n\x10new_public_limit\x18\x05 \x01(\x03\"\xa8\x01\n\x16ProposalCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x44\n\nparameters\x18\x02 \x03(\x0b\x32\x30.protocol.ProposalCreateContract.ParametersEntry\x1a\x31\n\x0fParametersEntry\x12\x0b\n\x03key\x18\x01 \x01(\x03\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"^\n\x17ProposalApproveContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0bproposal_id\x18\x02 \x01(\x03\x12\x17\n\x0fis_add_approval\x18\x03 \x01(\x08\"D\n\x16ProposalDeleteContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0bproposal_id\x18\x02 \x01(\x03\"\x95\x01\n\x14TriggerSmartContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x18\n\x10\x63ontract_address\x18\x02 \x01(\x0c\x12\x12\n\ncall_value\x18\x03 \x01(\x03\x12\x0c\n\x04\x64\x61ta\x18\x04 \x01(\x0c\x12\x18\n\x10\x63\x61ll_token_value\x18\x05 \x01(\x03\x12\x10\n\x08token_id\x18\x06 \x01(\x03\"\x9b\x01\n\x16\x45xchangeCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66irst_token_id\x18\x02 \x01(\x0c\x12\x1b\n\x13\x66irst_token_balance\x18\x03 \x01(\x03\x12\x17\n\x0fsecond_token_id\x18\x04 \x01(\x0c\x12\x1c\n\x14second_token_balance\x18\x05 \x01(\x03\"e\n\x16\x45xchangeInjectContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\"g\n\x18\x45xchangeWithdrawContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\"|\n\x1b\x45xchangeTransactionContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\x12\x10\n\x08\x65xpected\x18\x05 \x01(\x03\"\xab\x01\n\x1f\x41\x63\x63ountPermissionUpdateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12#\n\x05owner\x18\x02 \x01(\x0b\x32\x14.protocol.Permission\x12%\n\x07witness\x18\x03 \x01(\x0b\x32\x14.protocol.Permission\x12%\n\x07\x61\x63tives\x18\x04 \x03(\x0b\x32\x14.protocol.Permission*9\n\x0cResourceCode\x12\r\n\tBANDWIDTH\x10\x00\x12\n\n\x06\x45NERGY\x10\x01\x12\x0e\n\nTRON_POWER\x10\x02\x42\x46\n\x0forg.tron.protosB\x08\x43ontractZ)github.com/tronprotocol/grpc-gateway/coreb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ore/Contract.proto\x12\x08protocol\x1a\x0f\x63ore/Tron.proto\"l\n\x15\x41\x63\x63ountCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x17\n\x0f\x61\x63\x63ount_address\x18\x02 \x01(\x0c\x12#\n\x04type\x18\x03 \x01(\x0e\x32\x15.protocol.AccountType\"D\n\x15\x41\x63\x63ountUpdateContract\x12\x14\n\x0c\x61\x63\x63ount_name\x18\x01 \x01(\x0c\x12\x15\n\rowner_address\x18\x02 \x01(\x0c\"A\n\x14SetAccountIdContract\x12\x12\n\naccount_id\x18\x01 \x01(\x0c\x12\x15\n\rowner_address\x18\x02 \x01(\x0c\"M\n\x10TransferContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nto_address\x18\x02 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x03\"f\n\x15TransferAssetContract\x12\x12\n\nasset_name\x18\x01 \x01(\x0c\x12\x15\n\rowner_address\x18\x02 \x01(\x0c\x12\x12\n\nto_address\x18\x03 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x04 \x01(\x03\"`\n\x11VoteAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x14\n\x0cvote_address\x18\x02 \x03(\x0c\x12\x0f\n\x07support\x18\x03 \x01(\x08\x12\r\n\x05\x63ount\x18\x05 \x01(\x05\"\xa2\x01\n\x13VoteWitnessContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x31\n\x05votes\x18\x02 \x03(\x0b\x32\".protocol.VoteWitnessContract.Vote\x12\x0f\n\x07support\x18\x03 \x01(\x08\x1a\x30\n\x04Vote\x12\x14\n\x0cvote_address\x18\x01 \x01(\x0c\x12\x12\n\nvote_count\x18\x02 \x01(\x03\";\n\x15WitnessCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x0b\n\x03url\x18\x02 \x01(\x0c\"B\n\x15WitnessUpdateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nupdate_url\x18\x0c \x01(\x0c\"\xe2\x03\n\x12\x41ssetIssueContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x0c\n\x04name\x18\x02 \x01(\x0c\x12\x0c\n\x04\x61\x62\x62r\x18\x03 \x01(\x0c\x12\x14\n\x0ctotal_supply\x18\x04 \x01(\x03\x12@\n\rfrozen_supply\x18\x05 \x03(\x0b\x32).protocol.AssetIssueContract.FrozenSupply\x12\x0f\n\x07trx_num\x18\x06 \x01(\x05\x12\x0b\n\x03num\x18\x08 \x01(\x05\x12\x12\n\nstart_time\x18\t \x01(\x03\x12\x10\n\x08\x65nd_time\x18\n \x01(\x03\x12\x12\n\nvote_score\x18\x10 \x01(\x05\x12\x13\n\x0b\x64\x65scription\x18\x14 \x01(\x0c\x12\x0b\n\x03url\x18\x15 \x01(\x0c\x12\x1c\n\x14\x66ree_asset_net_limit\x18\x16 \x01(\x03\x12#\n\x1bpublic_free_asset_net_limit\x18\x17 \x01(\x03\x12#\n\x1bpublic_free_asset_net_usage\x18\x18 \x01(\x03\x12#\n\x1bpublic_latest_free_net_time\x18\x19 \x01(\x03\x1a:\n\x0c\x46rozenSupply\x12\x15\n\rfrozen_amount\x18\x01 \x01(\x03\x12\x13\n\x0b\x66rozen_days\x18\x02 \x01(\x03\"n\n\x1dParticipateAssetIssueContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x12\n\nto_address\x18\x02 \x01(\x0c\x12\x12\n\nasset_name\x18\x03 \x01(\x0c\x12\x0e\n\x06\x61mount\x18\x04 \x01(\x03\"\xa3\x01\n\x15\x46reezeBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66rozen_balance\x18\x02 \x01(\x03\x12\x17\n\x0f\x66rozen_duration\x18\x03 \x01(\x03\x12(\n\x08resource\x18\n \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x18\n\x10receiver_address\x18\x0f \x01(\x0c\"t\n\x17UnfreezeBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\n \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x18\n\x10receiver_address\x18\x0f \x01(\x0c\"r\n\x17\x46reezeBalanceV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66rozen_balance\x18\x02 \x01(\x03\x12(\n\x08resource\x18\x03 \x01(\x0e\x32\x16.protocol.ResourceCode\"v\n\x19UnfreezeBalanceV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x18\n\x10unfreeze_balance\x18\x02 \x01(\x03\x12(\n\x08resource\x18\x03 \x01(\x0e\x32\x16.protocol.ResourceCode\"7\n\x1eWithdrawExpireUnfreezeContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"4\n\x1b\x43\x61ncelAllUnfreezeV2Contract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"\xa9\x01\n\x18\x44\x65legateResourceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\x02 \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x0f\n\x07\x62\x61lance\x18\x03 \x01(\x03\x12\x18\n\x10receiver_address\x18\x04 \x01(\x0c\x12\x0c\n\x04lock\x18\x05 \x01(\x08\x12\x13\n\x0block_period\x18\x06 \x01(\x03\"\x88\x01\n\x1aUnDelegateResourceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12(\n\x08resource\x18\x02 \x01(\x0e\x32\x16.protocol.ResourceCode\x12\x0f\n\x07\x62\x61lance\x18\x03 \x01(\x03\x12\x18\n\x10receiver_address\x18\x04 \x01(\x0c\".\n\x15UnfreezeAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"0\n\x17WithdrawBalanceContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\"C\n\x17UpdateBrokerageContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x11\n\tbrokerage\x18\x02 \x01(\x05\"{\n\x13UpdateAssetContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\x0c\x12\x0b\n\x03url\x18\x03 \x01(\x0c\x12\x11\n\tnew_limit\x18\x04 \x01(\x03\x12\x18\n\x10new_public_limit\x18\x05 \x01(\x03\"\xa8\x01\n\x16ProposalCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x44\n\nparameters\x18\x02 \x03(\x0b\x32\x30.protocol.ProposalCreateContract.ParametersEntry\x1a\x31\n\x0fParametersEntry\x12\x0b\n\x03key\x18\x01 \x01(\x03\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"^\n\x17ProposalApproveContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0bproposal_id\x18\x02 \x01(\x03\x12\x17\n\x0fis_add_approval\x18\x03 \x01(\x08\"D\n\x16ProposalDeleteContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0bproposal_id\x18\x02 \x01(\x03\"\x95\x01\n\x14TriggerSmartContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x18\n\x10\x63ontract_address\x18\x02 \x01(\x0c\x12\x12\n\ncall_value\x18\x03 \x01(\x03\x12\x0c\n\x04\x64\x61ta\x18\x04 \x01(\x0c\x12\x18\n\x10\x63\x61ll_token_value\x18\x05 \x01(\x03\x12\x10\n\x08token_id\x18\x06 \x01(\x03\"\x9b\x01\n\x16\x45xchangeCreateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x16\n\x0e\x66irst_token_id\x18\x02 \x01(\x0c\x12\x1b\n\x13\x66irst_token_balance\x18\x03 \x01(\x03\x12\x17\n\x0fsecond_token_id\x18\x04 \x01(\x0c\x12\x1c\n\x14second_token_balance\x18\x05 \x01(\x03\"e\n\x16\x45xchangeInjectContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\"g\n\x18\x45xchangeWithdrawContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\"|\n\x1b\x45xchangeTransactionContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12\x13\n\x0b\x65xchange_id\x18\x02 \x01(\x03\x12\x10\n\x08token_id\x18\x03 \x01(\x0c\x12\r\n\x05quant\x18\x04 \x01(\x03\x12\x10\n\x08\x65xpected\x18\x05 \x01(\x03\"\xab\x01\n\x1f\x41\x63\x63ountPermissionUpdateContract\x12\x15\n\rowner_address\x18\x01 \x01(\x0c\x12#\n\x05owner\x18\x02 \x01(\x0b\x32\x14.protocol.Permission\x12%\n\x07witness\x18\x03 \x01(\x0b\x32\x14.protocol.Permission\x12%\n\x07\x61\x63tives\x18\x04 \x03(\x0b\x32\x14.protocol.Permission*9\n\x0cResourceCode\x12\r\n\tBANDWIDTH\x10\x00\x12\n\n\x06\x45NERGY\x10\x01\x12\x0e\n\nTRON_POWER\x10\x02\x42\x46\n\x0forg.tron.protosB\x08\x43ontractZ)github.com/tronprotocol/grpc-gateway/coreb\x06proto3')
 
 _RESOURCECODE = DESCRIPTOR.enum_types_by_name['ResourceCode']
 ResourceCode = enum_type_wrapper.EnumTypeWrapper(_RESOURCECODE)
@@ -27,6 +27,7 @@ TRON_POWER = 2
 
 _ACCOUNTCREATECONTRACT = DESCRIPTOR.message_types_by_name['AccountCreateContract']
 _ACCOUNTUPDATECONTRACT = DESCRIPTOR.message_types_by_name['AccountUpdateContract']
+_SETACCOUNTIDCONTRACT = DESCRIPTOR.message_types_by_name['SetAccountIdContract']
 _TRANSFERCONTRACT = DESCRIPTOR.message_types_by_name['TransferContract']
 _TRANSFERASSETCONTRACT = DESCRIPTOR.message_types_by_name['TransferAssetContract']
 _VOTEASSETCONTRACT = DESCRIPTOR.message_types_by_name['VoteAssetContract']
@@ -72,6 +73,13 @@ AccountUpdateContract = _reflection.GeneratedProtocolMessageType('AccountUpdateC
   # @@protoc_insertion_point(class_scope:protocol.AccountUpdateContract)
   })
 _sym_db.RegisterMessage(AccountUpdateContract)
+
+SetAccountIdContract = _reflection.GeneratedProtocolMessageType('SetAccountIdContract', (_message.Message,), {
+  'DESCRIPTOR' : _SETACCOUNTIDCONTRACT,
+  '__module__' : 'core.Contract_pb2'
+  # @@protoc_insertion_point(class_scope:protocol.SetAccountIdContract)
+  })
+_sym_db.RegisterMessage(SetAccountIdContract)
 
 TransferContract = _reflection.GeneratedProtocolMessageType('TransferContract', (_message.Message,), {
   'DESCRIPTOR' : _TRANSFERCONTRACT,
@@ -306,74 +314,76 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._serialized_options = b'\n\017org.tron.protosB\010ContractZ)github.com/tronprotocol/grpc-gateway/core'
   _PROPOSALCREATECONTRACT_PARAMETERSENTRY._options = None
   _PROPOSALCREATECONTRACT_PARAMETERSENTRY._serialized_options = b'8\001'
-  _RESOURCECODE._serialized_start=3791
-  _RESOURCECODE._serialized_end=3848
+  _RESOURCECODE._serialized_start=3858
+  _RESOURCECODE._serialized_end=3915
   _ACCOUNTCREATECONTRACT._serialized_start=50
   _ACCOUNTCREATECONTRACT._serialized_end=158
   _ACCOUNTUPDATECONTRACT._serialized_start=160
   _ACCOUNTUPDATECONTRACT._serialized_end=228
-  _TRANSFERCONTRACT._serialized_start=230
-  _TRANSFERCONTRACT._serialized_end=307
-  _TRANSFERASSETCONTRACT._serialized_start=309
-  _TRANSFERASSETCONTRACT._serialized_end=411
-  _VOTEASSETCONTRACT._serialized_start=413
-  _VOTEASSETCONTRACT._serialized_end=509
-  _VOTEWITNESSCONTRACT._serialized_start=512
-  _VOTEWITNESSCONTRACT._serialized_end=674
-  _VOTEWITNESSCONTRACT_VOTE._serialized_start=626
-  _VOTEWITNESSCONTRACT_VOTE._serialized_end=674
-  _WITNESSCREATECONTRACT._serialized_start=676
-  _WITNESSCREATECONTRACT._serialized_end=735
-  _WITNESSUPDATECONTRACT._serialized_start=737
-  _WITNESSUPDATECONTRACT._serialized_end=803
-  _ASSETISSUECONTRACT._serialized_start=806
-  _ASSETISSUECONTRACT._serialized_end=1288
-  _ASSETISSUECONTRACT_FROZENSUPPLY._serialized_start=1230
-  _ASSETISSUECONTRACT_FROZENSUPPLY._serialized_end=1288
-  _PARTICIPATEASSETISSUECONTRACT._serialized_start=1290
-  _PARTICIPATEASSETISSUECONTRACT._serialized_end=1400
-  _FREEZEBALANCECONTRACT._serialized_start=1403
-  _FREEZEBALANCECONTRACT._serialized_end=1566
-  _UNFREEZEBALANCECONTRACT._serialized_start=1568
-  _UNFREEZEBALANCECONTRACT._serialized_end=1684
-  _FREEZEBALANCEV2CONTRACT._serialized_start=1686
-  _FREEZEBALANCEV2CONTRACT._serialized_end=1800
-  _UNFREEZEBALANCEV2CONTRACT._serialized_start=1802
-  _UNFREEZEBALANCEV2CONTRACT._serialized_end=1920
-  _WITHDRAWEXPIREUNFREEZECONTRACT._serialized_start=1922
-  _WITHDRAWEXPIREUNFREEZECONTRACT._serialized_end=1977
-  _CANCELALLUNFREEZEV2CONTRACT._serialized_start=1979
-  _CANCELALLUNFREEZEV2CONTRACT._serialized_end=2031
-  _DELEGATERESOURCECONTRACT._serialized_start=2034
-  _DELEGATERESOURCECONTRACT._serialized_end=2203
-  _UNDELEGATERESOURCECONTRACT._serialized_start=2206
-  _UNDELEGATERESOURCECONTRACT._serialized_end=2342
-  _UNFREEZEASSETCONTRACT._serialized_start=2344
-  _UNFREEZEASSETCONTRACT._serialized_end=2390
-  _WITHDRAWBALANCECONTRACT._serialized_start=2392
-  _WITHDRAWBALANCECONTRACT._serialized_end=2440
-  _UPDATEBROKERAGECONTRACT._serialized_start=2442
-  _UPDATEBROKERAGECONTRACT._serialized_end=2509
-  _UPDATEASSETCONTRACT._serialized_start=2511
-  _UPDATEASSETCONTRACT._serialized_end=2634
-  _PROPOSALCREATECONTRACT._serialized_start=2637
-  _PROPOSALCREATECONTRACT._serialized_end=2805
-  _PROPOSALCREATECONTRACT_PARAMETERSENTRY._serialized_start=2756
-  _PROPOSALCREATECONTRACT_PARAMETERSENTRY._serialized_end=2805
-  _PROPOSALAPPROVECONTRACT._serialized_start=2807
-  _PROPOSALAPPROVECONTRACT._serialized_end=2901
-  _PROPOSALDELETECONTRACT._serialized_start=2903
-  _PROPOSALDELETECONTRACT._serialized_end=2971
-  _TRIGGERSMARTCONTRACT._serialized_start=2974
-  _TRIGGERSMARTCONTRACT._serialized_end=3123
-  _EXCHANGECREATECONTRACT._serialized_start=3126
-  _EXCHANGECREATECONTRACT._serialized_end=3281
-  _EXCHANGEINJECTCONTRACT._serialized_start=3283
-  _EXCHANGEINJECTCONTRACT._serialized_end=3384
-  _EXCHANGEWITHDRAWCONTRACT._serialized_start=3386
-  _EXCHANGEWITHDRAWCONTRACT._serialized_end=3489
-  _EXCHANGETRANSACTIONCONTRACT._serialized_start=3491
-  _EXCHANGETRANSACTIONCONTRACT._serialized_end=3615
-  _ACCOUNTPERMISSIONUPDATECONTRACT._serialized_start=3618
-  _ACCOUNTPERMISSIONUPDATECONTRACT._serialized_end=3789
+  _SETACCOUNTIDCONTRACT._serialized_start=230
+  _SETACCOUNTIDCONTRACT._serialized_end=295
+  _TRANSFERCONTRACT._serialized_start=297
+  _TRANSFERCONTRACT._serialized_end=374
+  _TRANSFERASSETCONTRACT._serialized_start=376
+  _TRANSFERASSETCONTRACT._serialized_end=478
+  _VOTEASSETCONTRACT._serialized_start=480
+  _VOTEASSETCONTRACT._serialized_end=576
+  _VOTEWITNESSCONTRACT._serialized_start=579
+  _VOTEWITNESSCONTRACT._serialized_end=741
+  _VOTEWITNESSCONTRACT_VOTE._serialized_start=693
+  _VOTEWITNESSCONTRACT_VOTE._serialized_end=741
+  _WITNESSCREATECONTRACT._serialized_start=743
+  _WITNESSCREATECONTRACT._serialized_end=802
+  _WITNESSUPDATECONTRACT._serialized_start=804
+  _WITNESSUPDATECONTRACT._serialized_end=870
+  _ASSETISSUECONTRACT._serialized_start=873
+  _ASSETISSUECONTRACT._serialized_end=1355
+  _ASSETISSUECONTRACT_FROZENSUPPLY._serialized_start=1297
+  _ASSETISSUECONTRACT_FROZENSUPPLY._serialized_end=1355
+  _PARTICIPATEASSETISSUECONTRACT._serialized_start=1357
+  _PARTICIPATEASSETISSUECONTRACT._serialized_end=1467
+  _FREEZEBALANCECONTRACT._serialized_start=1470
+  _FREEZEBALANCECONTRACT._serialized_end=1633
+  _UNFREEZEBALANCECONTRACT._serialized_start=1635
+  _UNFREEZEBALANCECONTRACT._serialized_end=1751
+  _FREEZEBALANCEV2CONTRACT._serialized_start=1753
+  _FREEZEBALANCEV2CONTRACT._serialized_end=1867
+  _UNFREEZEBALANCEV2CONTRACT._serialized_start=1869
+  _UNFREEZEBALANCEV2CONTRACT._serialized_end=1987
+  _WITHDRAWEXPIREUNFREEZECONTRACT._serialized_start=1989
+  _WITHDRAWEXPIREUNFREEZECONTRACT._serialized_end=2044
+  _CANCELALLUNFREEZEV2CONTRACT._serialized_start=2046
+  _CANCELALLUNFREEZEV2CONTRACT._serialized_end=2098
+  _DELEGATERESOURCECONTRACT._serialized_start=2101
+  _DELEGATERESOURCECONTRACT._serialized_end=2270
+  _UNDELEGATERESOURCECONTRACT._serialized_start=2273
+  _UNDELEGATERESOURCECONTRACT._serialized_end=2409
+  _UNFREEZEASSETCONTRACT._serialized_start=2411
+  _UNFREEZEASSETCONTRACT._serialized_end=2457
+  _WITHDRAWBALANCECONTRACT._serialized_start=2459
+  _WITHDRAWBALANCECONTRACT._serialized_end=2507
+  _UPDATEBROKERAGECONTRACT._serialized_start=2509
+  _UPDATEBROKERAGECONTRACT._serialized_end=2576
+  _UPDATEASSETCONTRACT._serialized_start=2578
+  _UPDATEASSETCONTRACT._serialized_end=2701
+  _PROPOSALCREATECONTRACT._serialized_start=2704
+  _PROPOSALCREATECONTRACT._serialized_end=2872
+  _PROPOSALCREATECONTRACT_PARAMETERSENTRY._serialized_start=2823
+  _PROPOSALCREATECONTRACT_PARAMETERSENTRY._serialized_end=2872
+  _PROPOSALAPPROVECONTRACT._serialized_start=2874
+  _PROPOSALAPPROVECONTRACT._serialized_end=2968
+  _PROPOSALDELETECONTRACT._serialized_start=2970
+  _PROPOSALDELETECONTRACT._serialized_end=3038
+  _TRIGGERSMARTCONTRACT._serialized_start=3041
+  _TRIGGERSMARTCONTRACT._serialized_end=3190
+  _EXCHANGECREATECONTRACT._serialized_start=3193
+  _EXCHANGECREATECONTRACT._serialized_end=3348
+  _EXCHANGEINJECTCONTRACT._serialized_start=3350
+  _EXCHANGEINJECTCONTRACT._serialized_end=3451
+  _EXCHANGEWITHDRAWCONTRACT._serialized_start=3453
+  _EXCHANGEWITHDRAWCONTRACT._serialized_end=3556
+  _EXCHANGETRANSACTIONCONTRACT._serialized_start=3558
+  _EXCHANGETRANSACTIONCONTRACT._serialized_end=3682
+  _ACCOUNTPERMISSIONUPDATECONTRACT._serialized_start=3685
+  _ACCOUNTPERMISSIONUPDATECONTRACT._serialized_end=3856
 # @@protoc_insertion_point(module_scope)

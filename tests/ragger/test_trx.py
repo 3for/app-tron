@@ -842,6 +842,64 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    def test_trx_set_account_id(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.SetAccountIdContract,
+            contract.SetAccountIdContract(
+                account_id=b'account1',
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_set_account_id_max_length(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.SetAccountIdContract,
+            contract.SetAccountIdContract(
+                account_id=b'a' * 32,
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize('account_id', [
+        b'',
+        b'a' * 7,
+        b'a' * 33,
+        b'validid ',
+        b'validid\x7f',
+    ])
+    def test_trx_set_account_id_invalid(self, backend, account_id):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.SetAccountIdContract,
+            contract.SetAccountIdContract(
+                account_id=account_id,
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_set_account_id_invalid_owner_address(self, backend):
+        client = TronClient(backend)
+        owner_address = bytearray.fromhex(client.getAccount(0)['addressHex'])
+        owner_address[0] = 0x42
+        tx = client.packContract(
+            tron.Transaction.Contract.SetAccountIdContract,
+            contract.SetAccountIdContract(
+                account_id=b'account1',
+                owner_address=bytes(owner_address),
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_permission_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
