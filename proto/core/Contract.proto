@@ -106,11 +106,6 @@ message ParticipateAssetIssueContract {
     int64 amount = 4; // the amount of drops
 }
 
-message DeployContract {
-    bytes owner_address = 1;
-    bytes script = 2;
-}
-
 enum ResourceCode {
     BANDWIDTH = 0x00;
     ENERGY = 0x01;

@@ -18,11 +18,6 @@ typedef enum _protocol_ResourceCode {
 } protocol_ResourceCode;
 
 /* Struct definitions */
-typedef struct _protocol_DeployContract { 
-    pb_callback_t owner_address; 
-    pb_callback_t script; 
-} protocol_DeployContract;
-
 typedef struct _protocol_UnfreezeAssetContract { 
     pb_callback_t owner_address; 
 } protocol_UnfreezeAssetContract;
@@ -278,7 +273,6 @@ extern "C" {
 #define protocol_AssetIssueContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0}
 #define protocol_AssetIssueContract_FrozenSupply_init_default {0, 0}
 #define protocol_ParticipateAssetIssueContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
-#define protocol_DeployContract_init_default     {{{NULL}, NULL}, {{NULL}, NULL}}
 #define protocol_FreezeBalanceContract_init_default {{0}, 0, 0, _protocol_ResourceCode_MIN, {0}}
 #define protocol_UnfreezeBalanceContract_init_default {{0}, _protocol_ResourceCode_MIN, {0}}
 #define protocol_FreezeBalanceV2Contract_init_default {{0}, 0, _protocol_ResourceCode_MIN}
@@ -313,7 +307,6 @@ extern "C" {
 #define protocol_AssetIssueContract_init_zero    {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0}
 #define protocol_AssetIssueContract_FrozenSupply_init_zero {0, 0}
 #define protocol_ParticipateAssetIssueContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
-#define protocol_DeployContract_init_zero        {{{NULL}, NULL}, {{NULL}, NULL}}
 #define protocol_FreezeBalanceContract_init_zero {{0}, 0, 0, _protocol_ResourceCode_MIN, {0}}
 #define protocol_UnfreezeBalanceContract_init_zero {{0}, _protocol_ResourceCode_MIN, {0}}
 #define protocol_FreezeBalanceV2Contract_init_zero {{0}, 0, _protocol_ResourceCode_MIN}
@@ -338,8 +331,6 @@ extern "C" {
 #define protocol_AccountPermissionUpdateContract_init_zero {{0}, false, protocol_Permission_init_zero, false, protocol_Permission_init_zero, 0, {protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero, protocol_Permission_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define protocol_DeployContract_owner_address_tag 1
-#define protocol_DeployContract_script_tag       2
 #define protocol_UnfreezeAssetContract_owner_address_tag 1
 #define protocol_WitnessCreateContract_owner_address_tag 1
 #define protocol_WitnessCreateContract_url_tag   2
@@ -556,12 +547,6 @@ X(a, STATIC,   SINGULAR, INT64,    amount,            4)
 #define protocol_ParticipateAssetIssueContract_CALLBACK pb_default_field_callback
 #define protocol_ParticipateAssetIssueContract_DEFAULT NULL
 
-#define protocol_DeployContract_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, BYTES,    owner_address,     1) \
-X(a, CALLBACK, SINGULAR, BYTES,    script,            2)
-#define protocol_DeployContract_CALLBACK pb_default_field_callback
-#define protocol_DeployContract_DEFAULT NULL
-
 #define protocol_FreezeBalanceContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, INT64,    frozen_balance,    2) \
@@ -738,7 +723,6 @@ extern const pb_msgdesc_t protocol_WitnessUpdateContract_msg;
 extern const pb_msgdesc_t protocol_AssetIssueContract_msg;
 extern const pb_msgdesc_t protocol_AssetIssueContract_FrozenSupply_msg;
 extern const pb_msgdesc_t protocol_ParticipateAssetIssueContract_msg;
-extern const pb_msgdesc_t protocol_DeployContract_msg;
 extern const pb_msgdesc_t protocol_FreezeBalanceContract_msg;
 extern const pb_msgdesc_t protocol_UnfreezeBalanceContract_msg;
 extern const pb_msgdesc_t protocol_FreezeBalanceV2Contract_msg;
@@ -775,7 +759,6 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_AssetIssueContract_fields &protocol_AssetIssueContract_msg
 #define protocol_AssetIssueContract_FrozenSupply_fields &protocol_AssetIssueContract_FrozenSupply_msg
 #define protocol_ParticipateAssetIssueContract_fields &protocol_ParticipateAssetIssueContract_msg
-#define protocol_DeployContract_fields &protocol_DeployContract_msg
 #define protocol_FreezeBalanceContract_fields &protocol_FreezeBalanceContract_msg
 #define protocol_UnfreezeBalanceContract_fields &protocol_UnfreezeBalanceContract_msg
 #define protocol_FreezeBalanceV2Contract_fields &protocol_FreezeBalanceV2Contract_msg
@@ -807,7 +790,6 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_WitnessUpdateContract_size depends on runtime parameters */
 /* protocol_AssetIssueContract_size depends on runtime parameters */
 /* protocol_ParticipateAssetIssueContract_size depends on runtime parameters */
-/* protocol_DeployContract_size depends on runtime parameters */
 /* protocol_UnfreezeAssetContract_size depends on runtime parameters */
 /* protocol_UpdateAssetContract_size depends on runtime parameters */
 /* protocol_ProposalCreateContract_size depends on runtime parameters */

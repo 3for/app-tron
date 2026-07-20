@@ -42,9 +42,6 @@ PB_BIND(protocol_AssetIssueContract_FrozenSupply, protocol_AssetIssueContract_Fr
 PB_BIND(protocol_ParticipateAssetIssueContract, protocol_ParticipateAssetIssueContract, AUTO)
 
 
-PB_BIND(protocol_DeployContract, protocol_DeployContract, AUTO)
-
-
 PB_BIND(protocol_FreezeBalanceContract, protocol_FreezeBalanceContract, AUTO)
 
 
