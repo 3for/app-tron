@@ -156,6 +156,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case UPDATESETTINGCONTRACT:
             strlcpy(out, "Update Setting", outlen);
             break;
+        case UPDATEENERGYLIMITCONTRACT:
+            strlcpy(out, "Update Energy Limit", outlen);
+            break;
         case UNFREEZEBALANCECONTRACT:
             strlcpy(out, "Unfreeze Balance", outlen);
             break;
@@ -1048,6 +1051,26 @@ static bool update_setting_contract(txContent_t *content, pb_istream_t *stream) 
     return true;
 }
 
+static bool update_energy_limit_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_UpdateEnergyLimitContract_fields,
+                   &msg.update_energy_limit_contract)) {
+        return false;
+    }
+
+    protocol_UpdateEnergyLimitContract *contract = &msg.update_energy_limit_contract;
+    if ((contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (contract->contract_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (contract->origin_energy_limit <= 0)) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    COPY_ADDRESS(content->contractAddress, &contract->contract_address);
+    content->amount[0] = (uint64_t) contract->origin_energy_limit;
+    return true;
+}
+
 static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_ExchangeCreateContract_fields, &msg.exchange_create_contract)) {
         return false;
@@ -1368,6 +1391,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
                 ret = update_setting_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateEnergyLimitContract:
+                ret = update_energy_limit_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_ClearABIContract:
                 ret = clear_abi_contract(content, &tx_stream);

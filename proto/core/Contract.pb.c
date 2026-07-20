@@ -102,6 +102,9 @@ PB_BIND(protocol_ClearABIContract, protocol_ClearABIContract, AUTO)
 PB_BIND(protocol_UpdateSettingContract, protocol_UpdateSettingContract, AUTO)
 
 
+PB_BIND(protocol_UpdateEnergyLimitContract, protocol_UpdateEnergyLimitContract, AUTO)
+
+
 PB_BIND(protocol_ExchangeCreateContract, protocol_ExchangeCreateContract, AUTO)
 
 

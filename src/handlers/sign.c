@@ -1088,6 +1088,25 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_UPDATESETTING_TRANSACTION, data_warning);
 
             break;
+        case UPDATEENERGYLIMITCONTRACT:
+            getBase58FromAddress(txContent.contractAddress,
+                                 strings.common.toAddress,
+                                 N_storage.truncateAddress);
+            if (print_amount(txContent.amount[0],
+                             (char *) G_io_apdu_buffer,
+                             100,
+                             0) == 0) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+            if (!setContractType(txContent.contractType,
+                                 strings.common.fullContract,
+                                 sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_UPDATEENERGYLIMIT_TRANSACTION, data_warning);
+
+            break;
         case INVALID_CONTRACT:
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;

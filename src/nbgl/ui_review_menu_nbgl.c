@@ -548,6 +548,21 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUpdate Contract Setting";
             infoLongPress.text = "Sign transaction to\nUpdate Contract Setting";
             break;
+        case APPROVAL_UPDATEENERGYLIMIT_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Contract";
+            txInfos.fields[1].value = strings.common.toAddress;
+            txInfos.fields[2].item = "Origin energy limit";
+            txInfos.fields[2].value = (char *) G_io_apdu_buffer;
+            g_pairsList->nbPairs = 3;
+            txInfos.flowTitle = "Review transaction to\nUpdate Energy Limit";
+            infoLongPress.text = "Sign transaction to\nUpdate Energy Limit";
+            break;
         case APPROVAL_PROPOSALCREATE_TRANSACTION: {
             pb_size_t count = proposal_parameter_count();
 

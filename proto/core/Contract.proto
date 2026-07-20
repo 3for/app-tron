@@ -227,6 +227,12 @@ message UpdateSettingContract {
     int64 consume_user_resource_percent = 3;
 }
 
+message UpdateEnergyLimitContract {
+    bytes owner_address = 1;
+    bytes contract_address = 2;
+    int64 origin_energy_limit = 3;
+}
+
 message ExchangeCreateContract {
     bytes owner_address = 1;
     bytes first_token_id = 2;

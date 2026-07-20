@@ -235,6 +235,12 @@ typedef struct _protocol_UpdateBrokerageContract {
     int32_t brokerage; 
 } protocol_UpdateBrokerageContract;
 
+typedef struct _protocol_UpdateEnergyLimitContract { 
+    pb_byte_t owner_address[21]; 
+    pb_byte_t contract_address[21]; 
+    int64_t origin_energy_limit; 
+} protocol_UpdateEnergyLimitContract;
+
 typedef struct _protocol_UpdateSettingContract { 
     pb_byte_t owner_address[21]; 
     pb_byte_t contract_address[21]; 
@@ -311,6 +317,7 @@ extern "C" {
 #define protocol_TriggerSmartContract_init_default {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
 #define protocol_ClearABIContract_init_default   {{0}, {0}}
 #define protocol_UpdateSettingContract_init_default {{0}, {0}, 0}
+#define protocol_UpdateEnergyLimitContract_init_default {{0}, {0}, 0}
 #define protocol_ExchangeCreateContract_init_default {{0}, {0, {0}}, 0, {0, {0}}, 0}
 #define protocol_ExchangeInjectContract_init_default {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeWithdrawContract_init_default {{0}, 0, {0, {0}}, 0}
@@ -348,6 +355,7 @@ extern "C" {
 #define protocol_TriggerSmartContract_init_zero  {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
 #define protocol_ClearABIContract_init_zero      {{0}, {0}}
 #define protocol_UpdateSettingContract_init_zero {{0}, {0}, 0}
+#define protocol_UpdateEnergyLimitContract_init_zero {{0}, {0}, 0}
 #define protocol_ExchangeCreateContract_init_zero {{0}, {0, {0}}, 0, {0, {0}}, 0}
 #define protocol_ExchangeInjectContract_init_zero {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeWithdrawContract_init_zero {{0}, 0, {0, {0}}, 0}
@@ -467,6 +475,9 @@ extern "C" {
 #define protocol_UpdateAssetContract_new_public_limit_tag 5
 #define protocol_UpdateBrokerageContract_owner_address_tag 1
 #define protocol_UpdateBrokerageContract_brokerage_tag 2
+#define protocol_UpdateEnergyLimitContract_owner_address_tag 1
+#define protocol_UpdateEnergyLimitContract_contract_address_tag 2
+#define protocol_UpdateEnergyLimitContract_origin_energy_limit_tag 3
 #define protocol_UpdateSettingContract_owner_address_tag 1
 #define protocol_UpdateSettingContract_contract_address_tag 2
 #define protocol_UpdateSettingContract_consume_user_resource_percent_tag 3
@@ -716,6 +727,13 @@ X(a, STATIC,   SINGULAR, INT64,    consume_user_resource_percent,   3)
 #define protocol_UpdateSettingContract_CALLBACK NULL
 #define protocol_UpdateSettingContract_DEFAULT NULL
 
+#define protocol_UpdateEnergyLimitContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, contract_address,   2) \
+X(a, STATIC,   SINGULAR, INT64,    origin_energy_limit,   3)
+#define protocol_UpdateEnergyLimitContract_CALLBACK NULL
+#define protocol_UpdateEnergyLimitContract_DEFAULT NULL
+
 #define protocol_ExchangeCreateContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, BYTES,    first_token_id,    2) \
@@ -793,6 +811,7 @@ extern const pb_msgdesc_t protocol_ProposalDeleteContract_msg;
 extern const pb_msgdesc_t protocol_TriggerSmartContract_msg;
 extern const pb_msgdesc_t protocol_ClearABIContract_msg;
 extern const pb_msgdesc_t protocol_UpdateSettingContract_msg;
+extern const pb_msgdesc_t protocol_UpdateEnergyLimitContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeCreateContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeInjectContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeWithdrawContract_msg;
@@ -832,6 +851,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_TriggerSmartContract_fields &protocol_TriggerSmartContract_msg
 #define protocol_ClearABIContract_fields &protocol_ClearABIContract_msg
 #define protocol_UpdateSettingContract_fields &protocol_UpdateSettingContract_msg
+#define protocol_UpdateEnergyLimitContract_fields &protocol_UpdateEnergyLimitContract_msg
 #define protocol_ExchangeCreateContract_fields &protocol_ExchangeCreateContract_msg
 #define protocol_ExchangeInjectContract_fields &protocol_ExchangeInjectContract_msg
 #define protocol_ExchangeWithdrawContract_fields &protocol_ExchangeWithdrawContract_msg
@@ -871,6 +891,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_UnfreezeBalanceContract_size    48
 #define protocol_UnfreezeBalanceV2Contract_size  36
 #define protocol_UpdateBrokerageContract_size    34
+#define protocol_UpdateEnergyLimitContract_size  57
 #define protocol_UpdateSettingContract_size      57
 #define protocol_VoteWitnessContract_Vote_size   34
 #define protocol_VoteWitnessContract_size        1103
