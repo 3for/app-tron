@@ -1071,6 +1071,23 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_CLEARABI_TRANSACTION, data_warning);
 
             break;
+        case UPDATESETTINGCONTRACT:
+            getBase58FromAddress(txContent.contractAddress,
+                                 strings.common.toAddress,
+                                 N_storage.truncateAddress);
+            snprintf((char *) G_io_apdu_buffer,
+                     100,
+                     "%d%%",
+                     (int) txContent.amount[0]);
+            if (!setContractType(txContent.contractType,
+                                 strings.common.fullContract,
+                                 sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_UPDATESETTING_TRANSACTION, data_warning);
+
+            break;
         case INVALID_CONTRACT:
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;

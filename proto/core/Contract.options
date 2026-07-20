@@ -57,6 +57,9 @@ protocol.TriggerSmartContract.data                  type: FT_CALLBACK
 protocol.ClearABIContract.owner_address             max_size: 21, fixed_length: true
 protocol.ClearABIContract.contract_address          max_size: 21, fixed_length: true
 
+protocol.UpdateSettingContract.owner_address        max_size: 21, fixed_length: true
+protocol.UpdateSettingContract.contract_address     max_size: 21, fixed_length: true
+
 protocol.ExchangeCreateContract.owner_address       max_size: 21, fixed_length: true
 protocol.ExchangeCreateContract.first_token_id      max_size: 19
 protocol.ExchangeCreateContract.second_token_id     max_size: 19

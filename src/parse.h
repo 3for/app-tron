@@ -30,6 +30,7 @@ typedef union {
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
     protocol_ClearABIContract clear_abi_contract;
+    protocol_UpdateSettingContract update_setting_contract;
     protocol_VoteWitnessContract vote_witness_contract;
     protocol_WitnessCreateContract witness_create_contract;
     protocol_WitnessUpdateContract witness_update_contract;
