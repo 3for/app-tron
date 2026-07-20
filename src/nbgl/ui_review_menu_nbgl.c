@@ -35,15 +35,22 @@
 #include "settings.h"
 #include "utils.h"  // SET_BIT
 #include "ui_utils.h"
+#include "parse.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER 1
 #define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1)
 #define PROPOSAL_ITEM_LEN    10
 #define PROPOSAL_VALUE_LEN   80
+#define ASSET_ISSUE_NUMBER_LEN       22
+#define ASSET_ISSUE_FROZEN_LABEL_LEN 24
 
 #if MAX_VOTE_COUNT + 3 > MAX_TX_FIELDS
 #error "MAX_TX_FIELDS is too small for the vote review flow"
+#endif
+
+#if MAX_ASSET_FROZEN_SUPPLY_COUNT * 2 + 17 > MAX_TX_FIELDS
+#error "MAX_TX_FIELDS is too small for the asset issue review flow"
 #endif
 
 static const char *stringLabelSenderAddress = "From";
@@ -73,12 +80,34 @@ typedef struct {
     const nbgl_icon_details_t *flowIcon;
 } nbgl_tx_infos_t;
 
+typedef struct {
+    char name[33];
+    char abbreviation[33];
+    char totalSupply[ASSET_ISSUE_NUMBER_LEN];
+    char precision[ASSET_ISSUE_NUMBER_LEN];
+    char trxAmount[ASSET_ISSUE_NUMBER_LEN];
+    char tokenAmount[ASSET_ISSUE_NUMBER_LEN];
+    char startTime[ASSET_ISSUE_NUMBER_LEN];
+    char endTime[ASSET_ISSUE_NUMBER_LEN];
+    char order[ASSET_ISSUE_NUMBER_LEN];
+    char voteScore[ASSET_ISSUE_NUMBER_LEN];
+    char description[403];
+    char url[515];
+    char freeBandwidth[ASSET_ISSUE_NUMBER_LEN];
+    char publicFreeBandwidth[ASSET_ISSUE_NUMBER_LEN];
+    char publicLatestFreeNetTime[ASSET_ISSUE_NUMBER_LEN];
+    char frozenLabels[MAX_ASSET_FROZEN_SUPPLY_COUNT][ASSET_ISSUE_FROZEN_LABEL_LEN];
+    char frozenAmounts[MAX_ASSET_FROZEN_SUPPLY_COUNT][ASSET_ISSUE_NUMBER_LEN];
+    char frozenDays[MAX_ASSET_FROZEN_SUPPLY_COUNT][ASSET_ISSUE_NUMBER_LEN];
+} asset_issue_display_t;
+
 // Static variables
 static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
 static char (*proposalFieldLabels)[PROPOSAL_ITEM_LEN];
 static char (*proposalFieldValues)[PROPOSAL_VALUE_LEN];
 static char proposalIdValue[22];
+static asset_issue_display_t *assetIssueDisplay;
 // Alias extension for the recipient trusted name (lets the user reveal the
 // underlying address behind the resolved name). Mirrors app-ethereum's
 // ui_approve_tx() trusted-name display.
@@ -104,8 +133,13 @@ static void proposal_fields_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &proposalFieldValues);
 }
 
+static void asset_issue_display_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &assetIssueDisplay);
+}
+
 void ui_review_menu_cleanup(void) {
     proposal_fields_cleanup();
+    asset_issue_display_cleanup();
     ui_pairs_cleanup();
 }
 
@@ -313,6 +347,113 @@ static bool format_int64_value(int64_t value, char *out, size_t outlen) {
     return u64_to_string((uint64_t) value, out, outlen);
 }
 
+static bool format_asset_bytes(const uint8_t *value,
+                               size_t value_len,
+                               char *out,
+                               size_t outlen) {
+    if (value_len == 0) {
+        return strlcpy(out, "-", outlen) == 1;
+    }
+
+    bool printable = true;
+    for (size_t i = 0; i < value_len; i++) {
+        if ((value[i] < 0x20) || (value[i] > 0x7e)) {
+            printable = false;
+            break;
+        }
+    }
+    if (printable) {
+        if (value_len >= outlen) {
+            return false;
+        }
+        memcpy(out, value, value_len);
+        out[value_len] = '\0';
+        return true;
+    }
+    return bytes_to_string(out, outlen, value, value_len) == 0;
+}
+
+static bool prepare_asset_issue_display(void) {
+    protocol_AssetIssueContract *contract = &msg.asset_issue_contract;
+
+    asset_issue_display_cleanup();
+    assetIssueDisplay = APP_MEM_ALLOC(sizeof(*assetIssueDisplay));
+    if (assetIssueDisplay == NULL) {
+        return false;
+    }
+    memset(assetIssueDisplay, 0, sizeof(*assetIssueDisplay));
+
+    if (!format_asset_bytes(contract->name.bytes,
+                            contract->name.size,
+                            assetIssueDisplay->name,
+                            sizeof(assetIssueDisplay->name)) ||
+        !format_asset_bytes(contract->abbr.bytes,
+                            contract->abbr.size,
+                            assetIssueDisplay->abbreviation,
+                            sizeof(assetIssueDisplay->abbreviation)) ||
+        !u64_to_string((uint64_t) contract->total_supply,
+                       assetIssueDisplay->totalSupply,
+                       sizeof(assetIssueDisplay->totalSupply)) ||
+        !u64_to_string((uint64_t) contract->precision,
+                       assetIssueDisplay->precision,
+                       sizeof(assetIssueDisplay->precision)) ||
+        !u64_to_string((uint64_t) contract->trx_num,
+                       assetIssueDisplay->trxAmount,
+                       sizeof(assetIssueDisplay->trxAmount)) ||
+        !u64_to_string((uint64_t) contract->num,
+                       assetIssueDisplay->tokenAmount,
+                       sizeof(assetIssueDisplay->tokenAmount)) ||
+        !u64_to_string((uint64_t) contract->start_time,
+                       assetIssueDisplay->startTime,
+                       sizeof(assetIssueDisplay->startTime)) ||
+        !u64_to_string((uint64_t) contract->end_time,
+                       assetIssueDisplay->endTime,
+                       sizeof(assetIssueDisplay->endTime)) ||
+        !format_int64_value(contract->order,
+                            assetIssueDisplay->order,
+                            sizeof(assetIssueDisplay->order)) ||
+        !format_int64_value(contract->vote_score,
+                            assetIssueDisplay->voteScore,
+                            sizeof(assetIssueDisplay->voteScore)) ||
+        !format_asset_bytes(contract->description.bytes,
+                            contract->description.size,
+                            assetIssueDisplay->description,
+                            sizeof(assetIssueDisplay->description)) ||
+        !format_asset_bytes(contract->url.bytes,
+                            contract->url.size,
+                            assetIssueDisplay->url,
+                            sizeof(assetIssueDisplay->url)) ||
+        !u64_to_string((uint64_t) contract->free_asset_net_limit,
+                       assetIssueDisplay->freeBandwidth,
+                       sizeof(assetIssueDisplay->freeBandwidth)) ||
+        !u64_to_string((uint64_t) contract->public_free_asset_net_limit,
+                       assetIssueDisplay->publicFreeBandwidth,
+                       sizeof(assetIssueDisplay->publicFreeBandwidth)) ||
+        !format_int64_value(contract->public_latest_free_net_time,
+                            assetIssueDisplay->publicLatestFreeNetTime,
+                            sizeof(assetIssueDisplay->publicLatestFreeNetTime))) {
+        asset_issue_display_cleanup();
+        return false;
+    }
+
+    for (pb_size_t i = 0; i < contract->frozen_supply_count; i++) {
+        snprintf(assetIssueDisplay->frozenLabels[i],
+                 sizeof(assetIssueDisplay->frozenLabels[i]),
+                 "Frozen amount %u",
+                 (unsigned) i + 1);
+        if (!u64_to_string((uint64_t) contract->frozen_supply[i].frozen_amount,
+                           assetIssueDisplay->frozenAmounts[i],
+                           sizeof(assetIssueDisplay->frozenAmounts[i])) ||
+            !u64_to_string((uint64_t) contract->frozen_supply[i].frozen_days,
+                           assetIssueDisplay->frozenDays[i],
+                           sizeof(assetIssueDisplay->frozenDays[i]))) {
+            asset_issue_display_cleanup();
+            return false;
+        }
+    }
+    return true;
+}
+
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
@@ -492,6 +633,53 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nCreate Account";
             infoLongPress.text = "Sign transaction to\nCreate Account";
+            break;
+        }
+        case APPROVAL_ASSETISSUE_TRANSACTION: {
+            protocol_AssetIssueContract *contract = &msg.asset_issue_contract;
+            uint8_t idx = 0;
+
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if ((contract->frozen_supply_count > MAX_ASSET_FROZEN_SUPPLY_COUNT) ||
+                !prepare_asset_issue_display()) {
+                return false;
+            }
+#define ADD_ASSET_ISSUE_FIELD(label_, value_)           \
+    do {                                                 \
+        txInfos.fields[idx].item = (label_);             \
+        txInfos.fields[idx].value = (value_);            \
+        idx++;                                           \
+    } while (0)
+            ADD_ASSET_ISSUE_FIELD(stringLabelSenderAddress, strings.common.fromAddress);
+            ADD_ASSET_ISSUE_FIELD("Name", assetIssueDisplay->name);
+            ADD_ASSET_ISSUE_FIELD("Abbreviation", assetIssueDisplay->abbreviation);
+            ADD_ASSET_ISSUE_FIELD("Total supply", assetIssueDisplay->totalSupply);
+            ADD_ASSET_ISSUE_FIELD("Precision", assetIssueDisplay->precision);
+            ADD_ASSET_ISSUE_FIELD("TRX amount", assetIssueDisplay->trxAmount);
+            ADD_ASSET_ISSUE_FIELD("Token amount", assetIssueDisplay->tokenAmount);
+            ADD_ASSET_ISSUE_FIELD("Start time (ms)", assetIssueDisplay->startTime);
+            ADD_ASSET_ISSUE_FIELD("End time (ms)", assetIssueDisplay->endTime);
+            ADD_ASSET_ISSUE_FIELD("Description", assetIssueDisplay->description);
+            ADD_ASSET_ISSUE_FIELD(stringLabelUrl, assetIssueDisplay->url);
+            ADD_ASSET_ISSUE_FIELD("Free bandwidth", assetIssueDisplay->freeBandwidth);
+            ADD_ASSET_ISSUE_FIELD("Public bandwidth", assetIssueDisplay->publicFreeBandwidth);
+            ADD_ASSET_ISSUE_FIELD("Vote score", assetIssueDisplay->voteScore);
+            ADD_ASSET_ISSUE_FIELD("Public net time", assetIssueDisplay->publicLatestFreeNetTime);
+            if (contract->order != 0) {
+                ADD_ASSET_ISSUE_FIELD("Legacy order", assetIssueDisplay->order);
+            }
+            for (pb_size_t i = 0; i < contract->frozen_supply_count; i++) {
+                ADD_ASSET_ISSUE_FIELD(assetIssueDisplay->frozenLabels[i],
+                                      assetIssueDisplay->frozenAmounts[i]);
+                ADD_ASSET_ISSUE_FIELD("Frozen days", assetIssueDisplay->frozenDays[i]);
+            }
+#undef ADD_ASSET_ISSUE_FIELD
+            g_pairsList->nbPairs = idx;
+            txInfos.flowTitle = "Review transaction to\nIssue Asset";
+            infoLongPress.text = "Sign transaction to\nIssue Asset";
             break;
         }
         case APPROVAL_ACCOUNTUPDATE_TRANSACTION:

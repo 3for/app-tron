@@ -36,7 +36,7 @@ PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, AUTO)
 PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, AUTO)
 
 
-PB_BIND(protocol_AssetIssueContract, protocol_AssetIssueContract, AUTO)
+PB_BIND(protocol_AssetIssueContract, protocol_AssetIssueContract, 2)
 
 
 PB_BIND(protocol_AssetIssueContract_FrozenSupply, protocol_AssetIssueContract_FrozenSupply, AUTO)

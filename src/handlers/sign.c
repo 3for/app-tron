@@ -632,6 +632,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_ACCOUNTCREATE_TRANSACTION, data_warning);
 
             break;
+        case ASSETISSUECONTRACT:
+            ux_flow_display(APPROVAL_ASSETISSUE_TRANSACTION, data_warning);
+            break;
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
         case TRIGGERSMARTCONTRACT:   // TRC20 Transfer

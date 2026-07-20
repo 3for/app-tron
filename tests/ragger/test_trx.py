@@ -873,6 +873,191 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    def asset_issue_contract(self, client, **overrides):
+        values = {
+            'owner_address': bytes.fromhex(client.getAccount(0)['addressHex']),
+            'name': b'LedgerAsset',
+            'abbr': b'LAS',
+            'total_supply': 1_000_000,
+            'frozen_supply': [
+                contract.AssetIssueContract.FrozenSupply(
+                    frozen_amount=100_000,
+                    frozen_days=30,
+                ),
+            ],
+            'trx_num': 1,
+            'precision': 6,
+            'num': 100,
+            'start_time': 2_000_000_000_000,
+            'end_time': 2_000_086_400_000,
+            'order': 0,
+            'vote_score': 1,
+            'description': b'Ledger TRC10 asset',
+            'url': b'https://ledger.com/trc10',
+            'free_asset_net_limit': 1_000,
+            'public_free_asset_net_limit': 10_000,
+            'public_free_asset_net_usage': 0,
+            'public_latest_free_net_time': 0,
+        }
+        values.update(overrides)
+        return contract.AssetIssueContract(**values)
+
+    def test_trx_asset_issue(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AssetIssueContract,
+            self.asset_issue_contract(client),
+        )
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_asset_issue_valid_boundaries(self, backend, device):
+        client = TronClient(backend)
+        frozen_supply = [
+            contract.AssetIssueContract.FrozenSupply(
+                frozen_amount=1,
+                frozen_days=i + 1,
+            ) for i in range(10)
+        ]
+        tx = client.packContract(
+            tron.Transaction.Contract.AssetIssueContract,
+            self.asset_issue_contract(
+                client,
+                name=b'n' * 32,
+                abbr=b'a' * 32,
+                total_supply=2**63 - 1,
+                frozen_supply=frozen_supply,
+                precision=0,
+                order=2**63 - 1,
+                vote_score=2**31 - 1,
+                description=b'\x00' * 200,
+                url=b'\xff' * 256,
+                public_latest_free_net_time=2**63 - 1,
+            ),
+        )
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    def test_trx_asset_issue_empty_optional_metadata(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AssetIssueContract,
+            self.asset_issue_contract(
+                client,
+                abbr=b'',
+                frozen_supply=[],
+                description=b'',
+            ),
+        )
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize('case', [
+        'invalid_owner',
+        'empty_name',
+        'reserved_name',
+        'invalid_name_character',
+        'name_too_long',
+        'invalid_abbreviation',
+        'abbreviation_too_long',
+        'zero_total_supply',
+        'zero_trx_amount',
+        'negative_precision',
+        'precision_too_large',
+        'zero_token_amount',
+        'zero_start_time',
+        'end_before_start',
+        'empty_url',
+        'description_too_long',
+        'url_too_long',
+        'negative_free_bandwidth',
+        'negative_public_bandwidth',
+        'nonzero_public_usage',
+        'zero_frozen_amount',
+        'zero_frozen_days',
+        'frozen_supply_exceeds_total',
+        'too_many_frozen_supplies',
+        'preset_asset_id',
+    ])
+    def test_trx_asset_issue_invalid(self, backend, case):
+        client = TronClient(backend)
+        overrides = {}
+        if case == 'invalid_owner':
+            overrides['owner_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'empty_name':
+            overrides['name'] = b''
+        elif case == 'reserved_name':
+            overrides['name'] = b'TrX'
+        elif case == 'invalid_name_character':
+            overrides['name'] = b'Invalid Name'
+        elif case == 'name_too_long':
+            overrides['name'] = b'n' * 33
+        elif case == 'invalid_abbreviation':
+            overrides['abbr'] = b'BAD ABBR'
+        elif case == 'abbreviation_too_long':
+            overrides['abbr'] = b'a' * 33
+        elif case == 'zero_total_supply':
+            overrides['total_supply'] = 0
+        elif case == 'zero_trx_amount':
+            overrides['trx_num'] = 0
+        elif case == 'negative_precision':
+            overrides['precision'] = -1
+        elif case == 'precision_too_large':
+            overrides['precision'] = 7
+        elif case == 'zero_token_amount':
+            overrides['num'] = 0
+        elif case == 'zero_start_time':
+            overrides['start_time'] = 0
+        elif case == 'end_before_start':
+            overrides['end_time'] = 2_000_000_000_000
+        elif case == 'empty_url':
+            overrides['url'] = b''
+        elif case == 'description_too_long':
+            overrides['description'] = b'd' * 201
+        elif case == 'url_too_long':
+            overrides['url'] = b'u' * 257
+        elif case == 'negative_free_bandwidth':
+            overrides['free_asset_net_limit'] = -1
+        elif case == 'negative_public_bandwidth':
+            overrides['public_free_asset_net_limit'] = -1
+        elif case == 'nonzero_public_usage':
+            overrides['public_free_asset_net_usage'] = 1
+        elif case == 'zero_frozen_amount':
+            overrides['frozen_supply'] = [
+                contract.AssetIssueContract.FrozenSupply(
+                    frozen_amount=0,
+                    frozen_days=1,
+                ),
+            ]
+        elif case == 'zero_frozen_days':
+            overrides['frozen_supply'] = [
+                contract.AssetIssueContract.FrozenSupply(
+                    frozen_amount=1,
+                    frozen_days=0,
+                ),
+            ]
+        elif case == 'frozen_supply_exceeds_total':
+            overrides['frozen_supply'] = [
+                contract.AssetIssueContract.FrozenSupply(
+                    frozen_amount=1_000_001,
+                    frozen_days=1,
+                ),
+            ]
+        elif case == 'too_many_frozen_supplies':
+            overrides['frozen_supply'] = [
+                contract.AssetIssueContract.FrozenSupply(
+                    frozen_amount=1,
+                    frozen_days=1,
+                ) for _ in range(11)
+            ]
+        elif case == 'preset_asset_id':
+            overrides['id'] = '1000001'
+
+        tx = client.packContract(
+            tron.Transaction.Contract.AssetIssueContract,
+            self.asset_issue_contract(client, **overrides),
+        )
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

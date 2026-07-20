@@ -8,6 +8,14 @@ protocol.AccountUpdateContract.owner_address        max_size: 21, fixed_length: 
 protocol.SetAccountIdContract.account_id            max_size: 32
 protocol.SetAccountIdContract.owner_address         max_size: 21, fixed_length: true
 
+protocol.AssetIssueContract.id                      max_size: 20
+protocol.AssetIssueContract.owner_address           max_size: 21, fixed_length: true
+protocol.AssetIssueContract.name                    max_size: 32
+protocol.AssetIssueContract.abbr                    max_size: 32
+protocol.AssetIssueContract.frozen_supply           max_count: 10
+protocol.AssetIssueContract.description             max_size: 200
+protocol.AssetIssueContract.url                     max_size: 256
+
 protocol.TransferContract.owner_address             max_size: 21, fixed_length: true
 protocol.TransferContract.to_address                max_size: 21, fixed_length: true
 

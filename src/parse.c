@@ -468,6 +468,73 @@ static bool account_create_contract(txContent_t *content, pb_istream_t *stream) 
     return true;
 }
 
+static bool asset_name_is_valid(const uint8_t *name, size_t name_len) {
+    if ((name_len == 0) || (name_len > 32)) {
+        return false;
+    }
+    for (size_t i = 0; i < name_len; i++) {
+        if ((name[i] < 0x21) || (name[i] > 0x7e)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool asset_name_is_trx(const uint8_t *name, size_t name_len) {
+    return (name_len == 3) && ((name[0] | 0x20) == 't') &&
+           ((name[1] | 0x20) == 'r') && ((name[2] | 0x20) == 'x');
+}
+
+static bool asset_issue_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_AssetIssueContract_fields,
+                   &msg.asset_issue_contract)) {
+        return false;
+    }
+
+    protocol_AssetIssueContract *contract = &msg.asset_issue_contract;
+    if (contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+    if (!asset_name_is_valid(contract->name.bytes, contract->name.size) ||
+        asset_name_is_trx(contract->name.bytes, contract->name.size)) {
+        return false;
+    }
+    if ((contract->abbr.size != 0) &&
+        !asset_name_is_valid(contract->abbr.bytes, contract->abbr.size)) {
+        return false;
+    }
+    if ((contract->total_supply <= 0) || (contract->trx_num <= 0) ||
+        (contract->num <= 0) || (contract->precision < 0) ||
+        (contract->precision > 6) || (contract->start_time <= 0) ||
+        (contract->end_time <= contract->start_time) || (contract->url.size == 0) ||
+        (contract->free_asset_net_limit < 0) ||
+        (contract->public_free_asset_net_limit < 0) ||
+        (contract->public_free_asset_net_usage != 0) || (contract->id[0] != '\0')) {
+        return false;
+    }
+    if (contract->frozen_supply_count > MAX_ASSET_FROZEN_SUPPLY_COUNT) {
+        return false;
+    }
+
+    uint64_t total_frozen = 0;
+    uint64_t total_supply = (uint64_t) contract->total_supply;
+    for (pb_size_t i = 0; i < contract->frozen_supply_count; i++) {
+        protocol_AssetIssueContract_FrozenSupply *frozen = &contract->frozen_supply[i];
+        if ((frozen->frozen_amount <= 0) || (frozen->frozen_days <= 0)) {
+            return false;
+        }
+        uint64_t amount = (uint64_t) frozen->frozen_amount;
+        if (amount > total_supply - total_frozen) {
+            return false;
+        }
+        total_frozen += amount;
+    }
+
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    return true;
+}
+
 static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
         return false;
@@ -1336,6 +1403,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         switch (transaction.contract->type) {
             case protocol_Transaction_Contract_ContractType_AccountCreateContract:
                 ret = account_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_AssetIssueContract:
+                ret = asset_issue_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_TransferContract:
                 ret = transfer_contract(content, &tx_stream);

@@ -18,6 +18,7 @@
 #define ADD_PRE_FIX_STRING "T"
 #define ADDRESS_SIZE       21
 #define MAX_TRC10_TOKEN_ID_LENGTH 19
+#define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 #define TRC20_DATA_FIELD_SIZE 68
 
@@ -26,6 +27,7 @@
 
 typedef union {
     protocol_AccountCreateContract account_create_contract;
+    protocol_AssetIssueContract asset_issue_contract;
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;

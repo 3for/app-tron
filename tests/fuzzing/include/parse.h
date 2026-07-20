@@ -20,9 +20,11 @@
 
 #define ADDRESS_SIZE TRON_ADDRESS_SIZE
 #define SUN_DIG      6
+#define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 typedef union {
     protocol_AccountCreateContract account_create_contract;
+    protocol_AssetIssueContract asset_issue_contract;
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
