@@ -92,6 +92,7 @@ typedef struct txContent_t {
     char tokenNames[2][MAX_TOKEN_LENGTH];
     uint8_t tokenNamesLength[2];
     uint8_t resource;
+    uint8_t accountType;
     uint8_t TRC20Method;
     uint32_t customSelector;
     contractType_e contractType;

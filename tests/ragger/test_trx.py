@@ -796,6 +796,83 @@ class TestTRX():
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    def test_trx_account_create(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountCreateContract,
+            contract.AccountCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                account_address=bytes.fromhex(
+                    client.getAccount(1)['addressHex']),
+                type=tron.Normal,
+            ))
+        self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize('account_type', [
+        tron.AssetIssue,
+        tron.Contract,
+    ])
+    def test_trx_account_create_valid_types(self, backend, device, account_type):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountCreateContract,
+            contract.AccountCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                account_address=bytes.fromhex(
+                    client.getAccount(1)['addressHex']),
+                type=account_type,
+            ))
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize(('field', 'invalid_address'), [
+        ('owner_address', b'\x41' + b'\x00' * 19),
+        ('owner_address', b'\x41' + b'\x00' * 21),
+        ('owner_address', b'\x42' + b'\x00' * 20),
+        ('account_address', b'\x41' + b'\x00' * 19),
+        ('account_address', b'\x41' + b'\x00' * 21),
+        ('account_address', b'\x42' + b'\x00' * 20),
+    ])
+    def test_trx_account_create_invalid_address(self,
+                                                backend,
+                                                field,
+                                                invalid_address):
+        client = TronClient(backend)
+        addresses = {
+            'owner_address': bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+            'account_address': bytes.fromhex(
+                client.getAccount(1)['addressHex']),
+        }
+        addresses[field] = invalid_address
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountCreateContract,
+            contract.AccountCreateContract(
+                **addresses,
+                type=tron.Normal,
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_account_create_invalid_type(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountCreateContract,
+            contract.AccountCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                account_address=bytes.fromhex(
+                    client.getAccount(1)['addressHex']),
+                type=3,
+            ))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

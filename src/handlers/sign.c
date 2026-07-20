@@ -619,6 +619,19 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #endif  // HAVE_SWAP
 
     switch (txContent.contractType) {
+        case ACCOUNTCREATECONTRACT:
+            getBase58FromAddress(txContent.destination,
+                                 strings.common.toAddress,
+                                 N_storage.truncateAddress);
+            if (!setContractType(txContent.contractType,
+                                 strings.common.fullContract,
+                                 sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_ACCOUNTCREATE_TRANSACTION, data_warning);
+
+            break;
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
         case TRIGGERSMARTCONTRACT:   // TRC20 Transfer

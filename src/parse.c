@@ -431,6 +431,34 @@ void initTx(txContext_t *context, txContent_t *content) {
 
 contract_t msg;
 
+static bool account_create_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_AccountCreateContract_fields,
+                   &msg.account_create_contract)) {
+        return false;
+    }
+
+    protocol_AccountCreateContract *contract = &msg.account_create_contract;
+    if ((contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (contract->account_address[0] != ADD_PRE_FIX_BYTE_MAINNET)) {
+        return false;
+    }
+
+    switch (contract->type) {
+        case protocol_AccountType_Normal:
+        case protocol_AccountType_AssetIssue:
+        case protocol_AccountType_Contract:
+            break;
+        default:
+            return false;
+    }
+
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    COPY_ADDRESS(content->destination, &contract->account_address);
+    content->accountType = contract->type;
+    return true;
+}
+
 static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
         return false;
@@ -1240,6 +1268,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         bool ret;
 
         switch (transaction.contract->type) {
+            case protocol_Transaction_Contract_ContractType_AccountCreateContract:
+                ret = account_create_contract(content, &tx_stream);
+                break;
             case protocol_Transaction_Contract_ContractType_TransferContract:
                 ret = transfer_contract(content, &tx_stream);
                 break;

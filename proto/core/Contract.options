@@ -1,5 +1,8 @@
 # Address size is 21
 
+protocol.AccountCreateContract.owner_address         max_size: 21, fixed_length: true
+protocol.AccountCreateContract.account_address       max_size: 21, fixed_length: true
+
 protocol.AccountUpdateContract.owner_address        max_size: 21, fixed_length: true
 
 protocol.SetAccountIdContract.account_id            max_size: 32

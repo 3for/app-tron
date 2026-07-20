@@ -33,8 +33,8 @@ typedef struct _protocol_WitnessUpdateContract {
 } protocol_WitnessUpdateContract;
 
 typedef struct _protocol_AccountCreateContract { 
-    pb_callback_t owner_address; 
-    pb_callback_t account_address; 
+    pb_byte_t owner_address[21]; 
+    pb_byte_t account_address[21]; 
     protocol_AccountType type; 
 } protocol_AccountCreateContract;
 
@@ -170,9 +170,9 @@ typedef struct _protocol_ProposalDeleteContract {
 
 typedef PB_BYTES_ARRAY_T(32) protocol_SetAccountIdContract_account_id_t;
 /* Set account id if the account has no id. Account id is unique and case insensitive. */
-typedef struct _protocol_SetAccountIdContract {
-    protocol_SetAccountIdContract_account_id_t account_id;
-    pb_byte_t owner_address[21];
+typedef struct _protocol_SetAccountIdContract { 
+    protocol_SetAccountIdContract_account_id_t account_id; 
+    pb_byte_t owner_address[21]; 
 } protocol_SetAccountIdContract;
 
 typedef PB_BYTES_ARRAY_T(19) protocol_TransferAssetContract_asset_name_t;
@@ -268,7 +268,7 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define protocol_AccountCreateContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, _protocol_AccountType_MIN}
+#define protocol_AccountCreateContract_init_default {{0}, {0}, _protocol_AccountType_MIN}
 #define protocol_AccountUpdateContract_init_default {{{NULL}, NULL}, {0}}
 #define protocol_SetAccountIdContract_init_default {{0, {0}}, {0}}
 #define protocol_TransferContract_init_default   {{0}, {0}, 0}
@@ -303,7 +303,7 @@ extern "C" {
 #define protocol_ExchangeWithdrawContract_init_default {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeTransactionContract_init_default {{0}, 0, {0, {0}}, 0, 0}
 #define protocol_AccountPermissionUpdateContract_init_default {{0}, false, protocol_Permission_init_default, false, protocol_Permission_init_default, 0, {protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default, protocol_Permission_init_default}}
-#define protocol_AccountCreateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}, _protocol_AccountType_MIN}
+#define protocol_AccountCreateContract_init_zero {{0}, {0}, _protocol_AccountType_MIN}
 #define protocol_AccountUpdateContract_init_zero {{{NULL}, NULL}, {0}}
 #define protocol_SetAccountIdContract_init_zero  {{0, {0}}, {0}}
 #define protocol_TransferContract_init_zero      {{0}, {0}, 0}
@@ -463,10 +463,10 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define protocol_AccountCreateContract_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, BYTES,    owner_address,     1) \
-X(a, CALLBACK, SINGULAR, BYTES,    account_address,   2) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, account_address,   2) \
 X(a, STATIC,   SINGULAR, UENUM,    type,              3)
-#define protocol_AccountCreateContract_CALLBACK pb_default_field_callback
+#define protocol_AccountCreateContract_CALLBACK NULL
 #define protocol_AccountCreateContract_DEFAULT NULL
 
 #define protocol_AccountUpdateContract_FIELDLIST(X, a) \
@@ -802,7 +802,6 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_AccountPermissionUpdateContract_fields &protocol_AccountPermissionUpdateContract_msg
 
 /* Maximum encoded size of messages (where known) */
-/* protocol_AccountCreateContract_size depends on runtime parameters */
 /* protocol_AccountUpdateContract_size depends on runtime parameters */
 /* protocol_VoteAssetContract_size depends on runtime parameters */
 /* protocol_WitnessCreateContract_size depends on runtime parameters */
@@ -813,6 +812,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_UpdateAssetContract_size depends on runtime parameters */
 /* protocol_ProposalCreateContract_size depends on runtime parameters */
 /* protocol_TriggerSmartContract_size depends on runtime parameters */
+#define protocol_AccountCreateContract_size      48
 #define protocol_AccountPermissionUpdateContract_size 2883
 #define protocol_AssetIssueContract_FrozenSupply_size 22
 #define protocol_CancelAllUnfreezeV2Contract_size 23

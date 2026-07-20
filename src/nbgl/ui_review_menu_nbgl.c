@@ -269,6 +269,19 @@ static const char *tx_review_action(contractType_e type) {
     }
 }
 
+static const char *account_type_name(uint8_t type) {
+    switch (type) {
+        case protocol_AccountType_Normal:
+            return "Normal";
+        case protocol_AccountType_AssetIssue:
+            return "Asset Issue";
+        case protocol_AccountType_Contract:
+            return "Contract";
+        default:
+            return NULL;
+    }
+}
+
 // Set txInfos.flowTitle / infoLongPress.text from the contract type's verb-first
 // action phrase (composed into static buffers), falling back to a plain title.
 static void set_action_title(contractType_e type) {
@@ -461,6 +474,26 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUpdate Witness";
             infoLongPress.text = "Sign transaction to\nUpdate Witness";
             break;
+        case APPROVAL_ACCOUNTCREATE_TRANSACTION: {
+            const char *accountType = account_type_name(txContent.accountType);
+            if (accountType == NULL) {
+                return false;
+            }
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Account";
+            txInfos.fields[1].value = strings.common.toAddress;
+            txInfos.fields[2].item = "Account type";
+            txInfos.fields[2].value = accountType;
+            g_pairsList->nbPairs = 3;
+            txInfos.flowTitle = "Review transaction to\nCreate Account";
+            infoLongPress.text = "Sign transaction to\nCreate Account";
+            break;
+        }
         case APPROVAL_ACCOUNTUPDATE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
