@@ -1058,6 +1058,19 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_SETACCOUNTID_TRANSACTION, data_warning);
 
             break;
+        case CLEARABICONTRACT:
+            getBase58FromAddress(txContent.contractAddress,
+                                 strings.common.toAddress,
+                                 N_storage.truncateAddress);
+            if (!setContractType(txContent.contractType,
+                                 strings.common.fullContract,
+                                 sizeof(strings.common.fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+
+            ux_flow_display(APPROVAL_CLEARABI_TRANSACTION, data_warning);
+
+            break;
         case INVALID_CONTRACT:
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;

@@ -82,6 +82,11 @@ typedef struct _protocol_CancelAllUnfreezeV2Contract {
     pb_byte_t owner_address[21]; 
 } protocol_CancelAllUnfreezeV2Contract;
 
+typedef struct _protocol_ClearABIContract { 
+    pb_byte_t owner_address[21]; 
+    pb_byte_t contract_address[21]; 
+} protocol_ClearABIContract;
+
 typedef struct _protocol_DelegateResourceContract { 
     pb_byte_t owner_address[21]; 
     protocol_ResourceCode resource; 
@@ -298,6 +303,7 @@ extern "C" {
 #define protocol_ProposalApproveContract_init_default {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_default {{0}, 0}
 #define protocol_TriggerSmartContract_init_default {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
+#define protocol_ClearABIContract_init_default   {{0}, {0}}
 #define protocol_ExchangeCreateContract_init_default {{0}, {0, {0}}, 0, {0, {0}}, 0}
 #define protocol_ExchangeInjectContract_init_default {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeWithdrawContract_init_default {{0}, 0, {0, {0}}, 0}
@@ -333,6 +339,7 @@ extern "C" {
 #define protocol_ProposalApproveContract_init_zero {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_zero {{0}, 0}
 #define protocol_TriggerSmartContract_init_zero  {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
+#define protocol_ClearABIContract_init_zero      {{0}, {0}}
 #define protocol_ExchangeCreateContract_init_zero {{0}, {0, {0}}, 0, {0, {0}}, 0}
 #define protocol_ExchangeInjectContract_init_zero {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeWithdrawContract_init_zero {{0}, 0, {0, {0}}, 0}
@@ -373,6 +380,8 @@ extern "C" {
 #define protocol_AssetIssueContract_FrozenSupply_frozen_amount_tag 1
 #define protocol_AssetIssueContract_FrozenSupply_frozen_days_tag 2
 #define protocol_CancelAllUnfreezeV2Contract_owner_address_tag 1
+#define protocol_ClearABIContract_owner_address_tag 1
+#define protocol_ClearABIContract_contract_address_tag 2
 #define protocol_DelegateResourceContract_owner_address_tag 1
 #define protocol_DelegateResourceContract_resource_tag 2
 #define protocol_DelegateResourceContract_balance_tag 3
@@ -683,6 +692,12 @@ X(a, STATIC,   SINGULAR, INT64,    token_id,          6)
 #define protocol_TriggerSmartContract_CALLBACK pb_default_field_callback
 #define protocol_TriggerSmartContract_DEFAULT NULL
 
+#define protocol_ClearABIContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, contract_address,   2)
+#define protocol_ClearABIContract_CALLBACK NULL
+#define protocol_ClearABIContract_DEFAULT NULL
+
 #define protocol_ExchangeCreateContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, BYTES,    first_token_id,    2) \
@@ -758,6 +773,7 @@ extern const pb_msgdesc_t protocol_ProposalCreateContract_ParametersEntry_msg;
 extern const pb_msgdesc_t protocol_ProposalApproveContract_msg;
 extern const pb_msgdesc_t protocol_ProposalDeleteContract_msg;
 extern const pb_msgdesc_t protocol_TriggerSmartContract_msg;
+extern const pb_msgdesc_t protocol_ClearABIContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeCreateContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeInjectContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeWithdrawContract_msg;
@@ -795,6 +811,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_ProposalApproveContract_fields &protocol_ProposalApproveContract_msg
 #define protocol_ProposalDeleteContract_fields &protocol_ProposalDeleteContract_msg
 #define protocol_TriggerSmartContract_fields &protocol_TriggerSmartContract_msg
+#define protocol_ClearABIContract_fields &protocol_ClearABIContract_msg
 #define protocol_ExchangeCreateContract_fields &protocol_ExchangeCreateContract_msg
 #define protocol_ExchangeInjectContract_fields &protocol_ExchangeInjectContract_msg
 #define protocol_ExchangeWithdrawContract_fields &protocol_ExchangeWithdrawContract_msg
@@ -816,6 +833,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_AccountPermissionUpdateContract_size 2883
 #define protocol_AssetIssueContract_FrozenSupply_size 22
 #define protocol_CancelAllUnfreezeV2Contract_size 23
+#define protocol_ClearABIContract_size           46
 #define protocol_DelegateResourceContract_size   72
 #define protocol_ExchangeCreateContract_size     87
 #define protocol_ExchangeInjectContract_size     66

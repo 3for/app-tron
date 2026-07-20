@@ -520,6 +520,19 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nSet Account ID";
             infoLongPress.text = "Sign transaction to\nSet Account ID";
             break;
+        case APPROVAL_CLEARABI_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Contract";
+            txInfos.fields[1].value = strings.common.toAddress;
+            g_pairsList->nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nClear Contract ABI";
+            infoLongPress.text = "Sign transaction to\nClear Contract ABI";
+            break;
         case APPROVAL_PROPOSALCREATE_TRANSACTION: {
             pb_size_t count = proposal_parameter_count();
 

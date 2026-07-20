@@ -1152,6 +1152,46 @@ class TestTRX():
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_clear_abi(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ClearABIContract,
+            contract.ClearABIContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+            ))
+        self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize(('field', 'invalid_address'), [
+        ('owner_address', b'\x41' + b'\x00' * 19),
+        ('owner_address', b'\x41' + b'\x00' * 21),
+        ('owner_address', b'\x42' + b'\x00' * 20),
+        ('contract_address', b'\x41' + b'\x00' * 19),
+        ('contract_address', b'\x41' + b'\x00' * 21),
+        ('contract_address', b'\x42' + b'\x00' * 20),
+    ])
+    def test_trx_clear_abi_invalid_address(self,
+                                           backend,
+                                           field,
+                                           invalid_address):
+        client = TronClient(backend)
+        addresses = {
+            'owner_address': bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+            'contract_address': bytes.fromhex(
+                client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+        }
+        addresses[field] = invalid_address
+        tx = client.packContract(
+            tron.Transaction.Contract.ClearABIContract,
+            contract.ClearABIContract(**addresses))
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_sign_message(self, backend, device):
         client = TronClient(backend)
         # Magic define
