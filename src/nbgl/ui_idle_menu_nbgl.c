@@ -41,9 +41,6 @@
 enum {
     SWITCH_ALLOW_TX_DATA_TOKEN = FIRST_USER_TOKEN,
     SWITCH_ALLOW_CSTM_CONTRACTS_TOKEN,
-#if !defined(SCREEN_SIZE_WALLET)
-    SWITCH_TRUNCATE_ADDRESS_TOKEN,
-#endif
     SWITCH_ALLOW_HASH_TX_TOKEN,
     SWITCH_TIP712_VERBOSE_TOKEN,
     SWITCH_DISPLAY_HASH_TOKEN,
@@ -53,9 +50,6 @@ enum {
 enum {
     TX_DATA_ID,
     CSTM_CONTRACTS_ID,
-#if !defined(SCREEN_SIZE_WALLET)
-    TRUNCATE_ADDRESS_ID,
-#endif
     HASH_TX_ID,
     TIP712_VERBOSE_ID,
     DISPLAY_HASH_ID,
@@ -92,13 +86,6 @@ static void setting_toggle_callback(int token, uint8_t index, int page) {
             switches[CSTM_CONTRACTS_ID].initState = (nbgl_state_t) value;
             nvm_write((void *) &N_storage.customContract, (void *) &value, sizeof(value));
             break;
-#if !defined(SCREEN_SIZE_WALLET)
-        case SWITCH_TRUNCATE_ADDRESS_TOKEN:
-            value = !N_storage.truncateAddress;
-            switches[TRUNCATE_ADDRESS_ID].initState = (nbgl_state_t) value;
-            nvm_write((void *) &N_storage.truncateAddress, (void *) &value, sizeof(value));
-            break;
-#endif
         case SWITCH_ALLOW_HASH_TX_TOKEN:
             value = !N_storage.signByHash;
             switches[HASH_TX_ID].initState = (nbgl_state_t) value;
@@ -151,20 +138,8 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
     switches[CSTM_CONTRACTS_ID].tuneId = TUNE_TAP_CASUAL;
     switches[CSTM_CONTRACTS_ID].initState = N_storage.customContract ? ON_STATE : OFF_STATE;
 
-#if !defined(SCREEN_SIZE_WALLET)
-    switches[TRUNCATE_ADDRESS_ID].text = "Truncate Address";
-    switches[TRUNCATE_ADDRESS_ID].subText = "Display truncated\naddresses";
-    switches[TRUNCATE_ADDRESS_ID].token = SWITCH_TRUNCATE_ADDRESS_TOKEN;
-    switches[TRUNCATE_ADDRESS_ID].tuneId = TUNE_TAP_CASUAL;
-    switches[TRUNCATE_ADDRESS_ID].initState =
-        N_storage.truncateAddress ? ON_STATE : OFF_STATE;
-
-    switches[HASH_TX_ID].text = "Sign by Hash";
-    switches[HASH_TX_ID].subText = "Allow hash-only\ntransactions";
-#else
     switches[HASH_TX_ID].text = "Blind signing";
     switches[HASH_TX_ID].subText = "Allow transaction blind signing";
-#endif
     switches[HASH_TX_ID].token = SWITCH_ALLOW_HASH_TX_TOKEN;
     switches[HASH_TX_ID].tuneId = TUNE_TAP_CASUAL;
     switches[HASH_TX_ID].initState = N_storage.signByHash ? ON_STATE : OFF_STATE;

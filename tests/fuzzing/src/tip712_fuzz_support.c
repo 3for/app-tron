@@ -40,7 +40,8 @@ uint8_t G_io_apdu_buffer[260];
 void fuzz_set_settings(uint8_t bits) {
     g_fuzz_storage.dataAllowed = (bits >> S_DATA_ALLOWED) & 1U;
     g_fuzz_storage.customContract = (bits >> S_CUSTOM_CONTRACT) & 1U;
-    g_fuzz_storage.truncateAddress = (bits >> S_TRUNCATE_ADDRESS) & 1U;
+    g_fuzz_storage.reservedTruncateAddress =
+        (bits >> S_RESERVED_TRUNCATE_ADDRESS) & 1U;
     g_fuzz_storage.signByHash = (bits >> S_SIGN_BY_HASH) & 1U;
     g_fuzz_storage.verbose_tip712 = (bits >> S_VERBOSE_TIP712) & 1U;
     g_fuzz_storage.displayHash = (bits >> S_DISPLAY_HASH) & 1U;

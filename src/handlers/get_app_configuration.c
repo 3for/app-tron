@@ -33,7 +33,7 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     uint8_t resp[4] = {0};
     resp[0] = (N_storage.dataAllowed ? APP_FLAG_DATA_ALLOWED : 0x00);
     resp[0] |= (N_storage.customContract ? APP_FLAG_CUSTOM_CONTRACT : 0x00);
-    resp[0] |= (N_storage.truncateAddress ? APP_FLAG_TRUNCATE_ADDRESS : 0x00);
+    // APP_FLAG_TRUNCATE_ADDRESS (0x04) is deprecated and intentionally remains clear.
     resp[0] |= (N_storage.signByHash ? APP_FLAG_SIGN_BY_HASH : 0x00);
     resp[0] |= (N_storage.verbose_tip712 ? APP_FLAG_VERBOSE_TIP712 : 0x00);
     resp[0] |= (N_storage.displayHash ? APP_FLAG_DISPLAY_HASH : 0x00);

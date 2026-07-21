@@ -40,7 +40,7 @@ static bool format_contract_address(const uint8_t *addr20, char *out, size_t out
     }
     addr21[0] = ADD_PRE_FIX_BYTE_MAINNET;
     memcpy(addr21 + 1, addr20, ADDRESS_LENGTH);
-    getBase58FromAddress(addr21, out, false);
+    getBase58FromAddress(addr21, out);
     return true;
 }
 

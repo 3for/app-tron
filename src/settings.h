@@ -9,12 +9,12 @@
 
 // The settings, stored in NVRAM. Mirrors app-ethereum's internalStorage_t: a struct of
 // named flags (rather than a flat bitfield), so each setting reads as N_storage.<field>.
-// The field order also defines the GET_APP_CONFIGURATION wire bits -- see the APP_FLAG_*
-// constants in apdu_constants.h, which the host relies on.
+// Keep the field order stable across upgrades; existing installations may retain this layout.
 typedef struct internalStorage_t {
     bool dataAllowed;
     bool customContract;
-    bool truncateAddress;
+    // Reserved slot for the removed truncate-address setting. Do not remove or reuse it.
+    bool reservedTruncateAddress;
     bool signByHash;
     bool verbose_tip712;
     // Always display the transaction hash in the review (app-ethereum's displayHash).

@@ -63,7 +63,7 @@ int initPublicKeyContext(bip32_path_t *bip32_path,
 
     uint8_t address[ADDRESS_SIZE];
     getAddressFromPublicKey(public_key_ctx->publicKey, address);
-    getBase58FromAddress(address, address58, false);
+    getBase58FromAddress(address, address58);
     return 0;
 }
 

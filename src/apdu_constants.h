@@ -34,7 +34,7 @@
 // bit positions are the wire contract the host decodes, so they must stay stable.
 #define APP_FLAG_DATA_ALLOWED     0x01
 #define APP_FLAG_CUSTOM_CONTRACT  0x02
-#define APP_FLAG_TRUNCATE_ADDRESS 0x04
+#define APP_FLAG_TRUNCATE_ADDRESS 0x04  // Deprecated; reserved and always returned clear.
 #define APP_FLAG_SIGN_BY_HASH     0x08
 #define APP_FLAG_VERBOSE_TIP712   0x10
 #define APP_FLAG_DISPLAY_HASH     0x20

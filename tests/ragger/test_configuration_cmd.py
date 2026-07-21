@@ -8,7 +8,9 @@ from ragger.backend import BackendInterface
 from ragger.navigator import Navigator
 from ragger.utils.misc import get_current_app_name_and_version
 
-from settings import SettingID, get_settings_moves
+from settings import (APP_CLA, GET_APP_CONFIGURATION_INS,
+                      RESERVED_TRUNCATE_ADDRESS_MASK, SettingID,
+                      get_settings_moves)
 
 
 @pytest.mark.parametrize("name, setting", [
@@ -46,3 +48,9 @@ def test_check_version(backend: BackendInterface, app_version: tuple[int, int,
     print(f" app_version: {app_version}")
     vers_str = ".".join(map(str, app_version))
     assert version.split("-")[0] == vers_str
+
+
+def test_truncate_address_flag_is_reserved(backend: BackendInterface):
+    """The deprecated truncate-address wire bit must remain clear."""
+    response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
+    assert response.data[0] & RESERVED_TRUNCATE_ADDRESS_MASK == 0

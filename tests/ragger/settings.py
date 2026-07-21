@@ -10,7 +10,6 @@ from ragger.navigator import Navigator, NavInsID, NavIns
 class SettingID(Enum):
     DATA_ALLOWED = auto()
     CUSTOM_CONTRACT = auto()
-    TRUNCATE_ADDRESS = auto()
     SIGN_BY_HASH = auto()
     VERBOSE_TIP712 = auto()
     DISPLAY_HASH = auto()
@@ -19,7 +18,7 @@ class SettingID(Enum):
 SETTING_BITS = {
     SettingID.DATA_ALLOWED: 0,
     SettingID.CUSTOM_CONTRACT: 1,
-    SettingID.TRUNCATE_ADDRESS: 2,
+    # Bit 2 is reserved for the removed truncate-address setting.
     SettingID.SIGN_BY_HASH: 3,
     SettingID.VERBOSE_TIP712: 4,
     SettingID.DISPLAY_HASH: 5,
@@ -27,6 +26,7 @@ SETTING_BITS = {
 
 APP_CLA = 0xE0
 GET_APP_CONFIGURATION_INS = 0x06
+RESERVED_TRUNCATE_ADDRESS_MASK = 1 << 2
 
 # Settings Positions per device. Returns the tuple (page, x, y)
 SETTINGS_POSITIONS = {
@@ -64,15 +64,6 @@ SETTINGS_POSITIONS = {
 # The order of the settings is important, as it is used to navigate
 def get_device_settings(device: Device) -> list[SettingID]:
     """Get the list of settings available on the device"""
-    if device.is_nano:
-        return [
-            SettingID.DATA_ALLOWED,
-            SettingID.CUSTOM_CONTRACT,
-            SettingID.TRUNCATE_ADDRESS,
-            SettingID.SIGN_BY_HASH,
-            SettingID.VERBOSE_TIP712,
-            SettingID.DISPLAY_HASH,
-        ]
     return [
         SettingID.DATA_ALLOWED,
         SettingID.CUSTOM_CONTRACT,

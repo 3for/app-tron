@@ -178,9 +178,9 @@ def test_blind_sign_not_enabled_error(scenario_navigator: NavigateWithScenario,
     """Signing a custom contract with the CUSTOM_CONTRACT setting disabled must error.
 
     TRON's analog of app-ethereum's test_blind_sign_not_enabled_error. The gate is the
-    "Custom contracts" setting (distinct from the separate "Blind signing"/Sign-by-Hash
-    setting), so the device shows the "Custom contracts must be enabled in settings" page,
-    the user dismisses it, and the APDU returns the precise TRON-specific
+    "Custom contracts" setting (distinct from the separate "Blind signing"
+    setting), so the device shows the "Custom contracts must be enabled in
+    settings" page, the user dismisses it, and the APDU returns the precise TRON-specific
     MISSING_SETTING_CUSTOM_CONTRACT (0x6a8d). No `configuration` fixture, so the setting
     stays at its disabled power-on default.
     """

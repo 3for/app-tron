@@ -9,7 +9,8 @@
 typedef struct internalStorage_t {
     bool dataAllowed;
     bool customContract;
-    bool truncateAddress;
+    // Reserved NVRAM-compatible slot for the removed truncate-address setting.
+    bool reservedTruncateAddress;
     bool signByHash;
     bool verbose_tip712;
     bool displayHash;
@@ -28,7 +29,7 @@ extern const internalStorage_t N_storage_real;
 // N_storage from a single fuzzed byte through fuzz_set_settings().
 #define S_DATA_ALLOWED     0
 #define S_CUSTOM_CONTRACT  1
-#define S_TRUNCATE_ADDRESS 2
+#define S_RESERVED_TRUNCATE_ADDRESS 2
 #define S_SIGN_BY_HASH     3
 #define S_VERBOSE_TIP712   4
 #define S_DISPLAY_HASH     5

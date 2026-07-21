@@ -11,19 +11,13 @@ void getAddressFromPublicKey(const uint8_t *public_key, uint8_t address[static A
     address[0] = 0x41U;
 }
 
-void getBase58FromAddress(const uint8_t address[static ADDRESS_SIZE], char *out, bool truncate) {
+void getBase58FromAddress(const uint8_t address[static ADDRESS_SIZE], char *out) {
     static const char hex[] = "0123456789abcdef";
 
     for (size_t i = 0; i < BASE58CHECK_ADDRESS_SIZE; i++) {
         out[i] = hex[address[i % ADDRESS_SIZE] & 0x0FU];
     }
     out[BASE58CHECK_ADDRESS_SIZE] = '\0';
-    if (truncate) {
-        out[5] = '.';
-        out[6] = '.';
-        out[7] = '.';
-        out[13] = '\0';
-    }
 }
 
 off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) {
