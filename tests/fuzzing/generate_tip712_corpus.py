@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 import copy
+import hashlib
 import json
 from pathlib import Path
-
-import base58
 
 OP_STRUCT_DEF = 0
 OP_FILTERING = 1
@@ -43,6 +42,27 @@ S_SIGN_BY_HASH = 3
 S_VERBOSE_TIP712 = 4
 
 DEFAULT_BIP32_PATH = "44'/195'/0'/0/0"
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def b58decode_check(value: str) -> bytes:
+    """Decode Base58Check without requiring the Ragger Python dependencies."""
+    number = 0
+    for char in value:
+        number = number * 58 + BASE58_ALPHABET.index(char)
+
+    byte_length = (number.bit_length() + 7) // 8
+    decoded = number.to_bytes(byte_length, "big")
+    leading_zeroes = len(value) - len(value.lstrip(BASE58_ALPHABET[0]))
+    decoded = b"\x00" * leading_zeroes + decoded
+    if len(decoded) < 5:
+        raise ValueError("Base58Check value is too short")
+
+    payload, checksum = decoded[:-4], decoded[-4:]
+    expected = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    if checksum != expected:
+        raise ValueError("invalid Base58Check checksum")
+    return payload
 
 ROOT = Path(__file__).resolve().parent
 TIP712_INPUTS = ROOT.parent / "ragger" / "tip712_input_files"
@@ -167,7 +187,7 @@ def encode_address(value: str) -> bytes:
     if value.startswith("0x"):
         return bytes.fromhex(value[2:])
     # TRON Base58Check ("T..."): decode and drop the 0x41 mainnet prefix.
-    decoded = base58.b58decode_check(value)
+    decoded = b58decode_check(value)
     if len(decoded) == 21 and decoded[0] == 0x41:
         return decoded[1:]
     raise ValueError(f"unsupported address format: {value}")

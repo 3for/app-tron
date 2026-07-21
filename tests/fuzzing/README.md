@@ -1,345 +1,230 @@
 # Fuzzing Tests
 
-This directory contains host-side fuzzing targets for app-tron. The fuzzers are plain CMake targets and do not require the Ledger secure SDK.
+This directory contains host-side fuzzing targets for app-tron. They build with
+Clang and do not require a Ledger device or secure SDK.
 
-## Quick Start
+## Corpus policy
+
+Everything under `tests/fuzzing/corpus/` is generated or produced by a fuzzer
+and is intentionally ignored by Git. Do not commit generated `.bin`, `.pb`, or
+libFuzzer corpus files.
+
+Five targets have deterministic Python seed generators:
+
+| Target | Generator |
+| --- | --- |
+| `transaction_trigger_decode_fuzzer` | `generate_transaction_trigger_corpus.py` |
+| `fuzz_tip712` | `generate_tip712_corpus.py` |
+| `fuzz_handle_sign` | `generate_handle_sign_corpus.py` |
+| `fuzz_personal_message` | `generate_personal_message_corpus.py` |
+| `fuzz_external_metadata` | `generate_external_metadata_corpus.py` |
+
+The remaining targets intentionally start with an empty corpus, or reuse inputs
+previously discovered by libFuzzer:
+
+- `fuzz_gcs`
+- `fuzz_common_utils_address`
+- `fuzz_common_utils_numbers`
+
+`generate_corpus.sh` is the canonical target-to-generator mapping used by both
+local fuzzing and ClusterFuzzLite. The generators require only Python 3's
+standard library:
+
+```sh
+cd tests/fuzzing
+
+# Generate or refresh every baseline corpus.
+./generate_corpus.sh all
+
+# Generate one target's baseline corpus.
+./generate_corpus.sh fuzz_handle_sign
+
+# Delete the target corpus first, then recreate only its generated baseline.
+./generate_corpus.sh --clean fuzz_handle_sign
+```
+
+Without `--clean`, named baseline files are refreshed while additional inputs
+found by libFuzzer are preserved. With `--clean`, the selected corpus directory
+is removed and recreated. For targets without a generator, `--clean` recreates
+an empty directory.
+
+When a discovered input must become a permanent regression case, encode it in
+the corresponding generator or add a focused unit/functional test. Do not make
+an exception in `.gitignore` for the generated binary.
+
+## Quick start
 
 From the repository root:
 
 ```sh
-cd tests/fuzzing
-./local_run.sh
+tests/fuzzing/local_run.sh
 ```
 
-`local_run.sh` does the common local workflow:
+The helper:
 
-1. removes and recreates `./build`
-2. configures CMake with Clang and AddressSanitizer
-3. builds all fuzzing targets
-4. runs `fuzz_tip712` by default
-5. selects the matching seed corpus automatically
+1. selects `fuzz_tip712` unless `FUZZ_TARGET` is set;
+2. generates the target's default baseline corpus when one exists;
+3. recreates `tests/fuzzing/build`;
+4. builds only the selected target with Clang and AddressSanitizer;
+5. adds the transaction decoder dictionary when applicable;
+6. starts libFuzzer, or performs a one-pass replay on AppleClang installations
+   without a libFuzzer runtime.
 
-The helper runs open-ended in libFuzzer mode. Stop it with `Ctrl-C`.
-
-To run a different target:
+Select another target:
 
 ```sh
-cd tests/fuzzing
-python3 generate_transaction_trigger_corpus.py
-FUZZ_TARGET=transaction_trigger_decode_fuzzer ./local_run.sh
+FUZZ_TARGET=fuzz_handle_sign tests/fuzzing/local_run.sh
 ```
 
-The generated seeds are raw `protocol.Transaction.raw` protobuf messages in
-`./corpus/transaction_trigger_decode_fuzzer`. The harness constructs the
-equivalent top-level `Transaction` wrapper internally and checks that both
-decoder entry modes produce the same result.
-
-To run the `handleSign` fuzzer:
+Run a bounded smoke test instead of an open-ended session:
 
 ```sh
-cd tests/fuzzing
-python3 generate_handle_sign_corpus.py
-FUZZ_TARGET=fuzz_handle_sign ./local_run.sh
+FUZZ_TARGET=fuzz_handle_sign FUZZ_RUNS=10000 \
+  tests/fuzzing/local_run.sh
 ```
 
-By default it uses `./corpus` as its seed corpus. To keep its generated inputs
-separate from other targets that use the shared corpus, pass a dedicated
-directory:
+Supported environment variables:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FUZZ_TARGET` | `fuzz_tip712` | CMake/libFuzzer target to build and run |
+| `FUZZ_RUNS` | unset | In libFuzzer mode, adds `-runs=<value>`; unset means open-ended fuzzing |
+| `CORPUS_DIR` | target-specific directory | Uses a custom corpus and disables automatic generation |
+| `SANITIZER` | `address` | `address` or `memory`, matching `CMakeLists.txt` |
+| `CC` | `clang` | Clang executable passed to CMake |
+
+For example, fuzz a custom corpus without touching the generated default:
 
 ```sh
-cd tests/fuzzing
-FUZZ_TARGET=fuzz_handle_sign CORPUS_DIR=./corpus/fuzz_handle_sign ./local_run.sh
+FUZZ_TARGET=fuzz_tip712 \
+CORPUS_DIR=/tmp/my-tip712-corpus \
+FUZZ_RUNS=10000 \
+tests/fuzzing/local_run.sh
 ```
 
-To run the Generic Clear Signing (GCS) fuzzer:
-
-```sh
-cd tests/fuzzing
-FUZZ_TARGET=fuzz_gcs CORPUS_DIR=./corpus/fuzz_gcs ./local_run.sh
-```
-
-To run the external metadata fuzzer:
-
-```sh
-cd tests/fuzzing
-python3 generate_external_metadata_corpus.py
-FUZZ_TARGET=fuzz_external_metadata ./local_run.sh
-```
-
-To run the personal-message fuzzer:
-
-```sh
-cd tests/fuzzing
-python3 generate_personal_message_corpus.py
-FUZZ_TARGET=fuzz_personal_message ./local_run.sh
-```
-
-To run the common utility fuzzers, use separate corpus directories so their
-generated inputs do not mix with the protocol fuzzers:
-
-```sh
-cd tests/fuzzing
-FUZZ_TARGET=fuzz_common_utils_address \
-  CORPUS_DIR=./corpus/fuzz_common_utils_address ./local_run.sh
-```
-
-```sh
-cd tests/fuzzing
-FUZZ_TARGET=fuzz_common_utils_numbers \
-  CORPUS_DIR=./corpus/fuzz_common_utils_numbers ./local_run.sh
-```
-
-`local_run.sh` creates the corpus directory when needed and builds all targets
-with AddressSanitizer. It starts an open-ended mutation loop when libFuzzer is
-available; on AppleClang installations without the libFuzzer runtime, it replays
-the corpus once in standalone mode. Stop an open-ended run with `Ctrl-C`.
-
-To use a custom corpus directory:
-
-```sh
-cd tests/fuzzing
-FUZZ_TARGET=fuzz_tip712 CORPUS_DIR=/path/to/corpus ./local_run.sh
-```
+The custom directory is created if missing. Because generators write to their
+target-specific default directories, automatic generation is deliberately
+disabled whenever `CORPUS_DIR` is supplied.
 
 ## Targets
 
-| Target | What it covers | Default corpus |
-| --- | --- | --- |
-| `transaction_trigger_decode_fuzzer` | Streaming protobuf decoding in `src/handlers/transaction_trigger_decode.c` | `./corpus/transaction_trigger_decode_fuzzer` |
-| `fuzz_tip712` | Current TIP712 APDU/state-machine flow | `./corpus/fuzz_tip712` |
-| `fuzz_handle_sign` | Transaction-signing APDU flow through `handleSign()` | `./corpus/fuzz_handle_sign` |
-| `fuzz_personal_message` | TIP-191 legacy and full-display personal-message signing flows | `./corpus/fuzz_personal_message` |
-| `fuzz_gcs` | Generic Clear Signing APDU flow through `handleSignGcs()`, `handle_tx_info()`, and `handle_field()` | `./corpus` |
-| `fuzz_external_metadata` | External metadata APDU flows for trusted names, proxy info, and enum values | `./corpus/fuzz_external_metadata` |
-| `fuzz_common_utils_address` | TRON Base58Check address conversion, checksum/prefix rejection, and output boundaries | `./corpus` |
-| `fuzz_common_utils_numbers` | uint128/uint256 decimal formatting, token decimals/tickers, and output boundaries | `./corpus` |
+| Target | Default corpus | Max length used by `local_run.sh` | Main coverage |
+| --- | --- | ---: | --- |
+| `transaction_trigger_decode_fuzzer` | `corpus/transaction_trigger_decode_fuzzer` | 8192 | Streaming raw/wrapped transaction decoding |
+| `fuzz_tip712` | `corpus/fuzz_tip712` | 8192 | TIP-712 command stream and signing state |
+| `fuzz_handle_sign` | `corpus/fuzz_handle_sign` | 8192 | Legacy `INS_SIGN` APDU/state-machine flow |
+| `fuzz_personal_message` | `corpus/fuzz_personal_message` | 8192 | Legacy and full-display personal messages |
+| `fuzz_gcs` | `corpus/fuzz_gcs` | 8192 | Generic Clear Signing commands and descriptors |
+| `fuzz_external_metadata` | `corpus/fuzz_external_metadata` | 8192 | Trusted-name, proxy, and enum metadata commands |
+| `fuzz_common_utils_address` | `corpus/fuzz_common_utils_address` | 64 | TRON address and Base58Check conversions |
+| `fuzz_common_utils_numbers` | `corpus/fuzz_common_utils_numbers` | 64 | uint128/uint256 and amount formatting |
 
-## Manual Local Runs
+## Manual local builds
 
-Use manual commands when you want a bounded smoke test, a single target build, or a more explicit debugging flow.
+Use manual commands for a single replay, explicit sanitizer configuration, or
+dictionary-guided options beyond those in `local_run.sh`.
 
-Build everything:
+Generate all baseline corpora and build every target:
 
 ```sh
 cd tests/fuzzing
-cmake -B build -S . -DCMAKE_C_COMPILER=/usr/bin/clang -DSANITIZER=address
+./generate_corpus.sh all
+cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
 cmake --build build
 ```
 
-Build one target:
+Build and run only `fuzz_handle_sign`:
 
 ```sh
 cd tests/fuzzing
-cmake -B build -S . -DCMAKE_C_COMPILER=/usr/bin/clang -DSANITIZER=address
-cmake --build build --target fuzz_tip712
+./generate_corpus.sh fuzz_handle_sign
+cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
+cmake --build build --target fuzz_handle_sign
+./build/fuzz_handle_sign -runs=10000 -max_len=8192 \
+  ./corpus/fuzz_handle_sign
 ```
 
-Run a bounded libFuzzer smoke test:
+Build the transaction decoder with its dictionary:
 
 ```sh
 cd tests/fuzzing
-./build/fuzz_tip712 -runs=10000 -max_len=8192 ./corpus/fuzz_tip712
-```
-
-Run open-ended libFuzzer:
-
-```sh
-cd tests/fuzzing
-./build/fuzz_tip712 -max_len=8192 ./corpus/fuzz_tip712
-```
-
-Build and run the transaction decoder target with its generated seeds and
-protobuf dictionary:
-
-```sh
-cd tests/fuzzing
-python3 generate_transaction_trigger_corpus.py
+./generate_corpus.sh transaction_trigger_decode_fuzzer
+cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
 cmake --build build --target transaction_trigger_decode_fuzzer
 ./build/transaction_trigger_decode_fuzzer \
-  -runs=10000 -max_len=8192 \
+  -runs=10000 \
+  -max_len=8192 \
   -dict=./dictionaries/transaction_trigger_decode_fuzzer.dict \
   ./corpus/transaction_trigger_decode_fuzzer
 ```
 
-`local_run.sh` automatically selects the target-specific corpus after it has
-been generated, but it does not add the dictionary option. Use the manual
-command above when dictionary-guided mutations are required.
-
-The equivalent commands for `handleSign` are:
+The common-utility harnesses derive valid and invalid cases from arbitrary
+bytes, so an empty starting corpus is sufficient:
 
 ```sh
 cd tests/fuzzing
-python3 generate_handle_sign_corpus.py
-cmake --build build --target fuzz_handle_sign
-./build/fuzz_handle_sign -runs=10000 -max_len=8192 ./corpus/fuzz_handle_sign
-```
-
-Remove `-runs=10000` for an open-ended run.
-
-The equivalent commands for GCS are:
-
-```sh
-cd tests/fuzzing
-cmake --build build --target fuzz_gcs
-mkdir -p corpus/fuzz_gcs
-./build/fuzz_gcs -runs=10000 -max_len=8192 ./corpus/fuzz_gcs
-```
-
-Remove `-runs=10000` for an open-ended run.
-
-The equivalent commands for external metadata are:
-
-```sh
-cd tests/fuzzing
-cmake --build build --target fuzz_external_metadata
-python3 generate_external_metadata_corpus.py
-./build/fuzz_external_metadata -runs=10000 -max_len=8192 ./corpus/fuzz_external_metadata
-```
-
-Remove `-runs=10000` for an open-ended run.
-
-The equivalent commands for personal messages are:
-
-```sh
-cd tests/fuzzing
-cmake --build build --target fuzz_personal_message
-python3 generate_personal_message_corpus.py
-./build/fuzz_personal_message -runs=10000 -max_len=8192 ./corpus/fuzz_personal_message
-```
-
-Remove `-runs=10000` for an open-ended run.
-
-Build and run the common utility targets with bounded smoke tests:
-
-```sh
-cd tests/fuzzing
-cmake --build build --target fuzz_common_utils_address fuzz_common_utils_numbers
-mkdir -p corpus/fuzz_common_utils_address corpus/fuzz_common_utils_numbers
+./generate_corpus.sh --clean fuzz_common_utils_address
+cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
+cmake --build build --target fuzz_common_utils_address
 ./build/fuzz_common_utils_address \
   -runs=10000 -max_len=64 ./corpus/fuzz_common_utils_address
-./build/fuzz_common_utils_numbers \
-  -runs=10000 -max_len=64 ./corpus/fuzz_common_utils_numbers
 ```
 
-Both harnesses derive valid cases and boundary values from arbitrary input, so
-they can start with empty corpus directories. Remove `-runs=10000` for an
-open-ended run.
+Remove `-runs=10000` from a libFuzzer command for an open-ended run.
 
-Replay a corpus without starting a mutation loop:
+### Standalone replay mode on macOS
+
+Some AppleClang/Xcode installations do not include
+`libclang_rt.fuzzer_osx.a`. CMake then builds standalone replay binaries. These
+binaries accept files and directories, but not libFuzzer flags:
 
 ```sh
 cd tests/fuzzing
-./build/fuzz_tip712 -runs=0 ./corpus/fuzz_tip712
-```
-
-Some AppleClang/Xcode installations do not ship the libFuzzer runtime `libclang_rt.fuzzer_osx.a`. In that case CMake automatically builds standalone replay binaries instead of failing at link time. Standalone binaries do not accept libFuzzer flags such as `-runs` or `-max_len`; pass files or directories directly:
-
-```sh
-cd tests/fuzzing
+./generate_corpus.sh all
 ./build/fuzz_tip712 ./corpus/fuzz_tip712
-./build/transaction_trigger_decode_fuzzer ./corpus/transaction_trigger_decode_fuzzer
 ./build/fuzz_handle_sign ./corpus/fuzz_handle_sign
-./build/fuzz_personal_message ./corpus/fuzz_personal_message
-./build/fuzz_gcs ./corpus/fuzz_gcs
-./build/fuzz_external_metadata ./corpus/fuzz_external_metadata
-./build/fuzz_common_utils_address ./corpus/fuzz_common_utils_address
-./build/fuzz_common_utils_numbers ./corpus/fuzz_common_utils_numbers
+./build/transaction_trigger_decode_fuzzer \
+  ./corpus/transaction_trigger_decode_fuzzer
 ```
 
-To check which mode a binary is in:
+If an empty corpus directory is passed, there are no files to replay. Invoke
+the binary without arguments to exercise one empty input:
+
+```sh
+./build/fuzz_gcs
+```
+
+`local_run.sh` detects this mode and handles the empty-input fallback
+automatically.
+
+## Reproducing crashes
+
+libFuzzer writes artifacts such as `crash-*`, `timeout-*`, and `slow-unit-*` in
+its artifact directory. Replay one with the same target:
 
 ```sh
 cd tests/fuzzing
-./build/fuzz_tip712 -help=1
+./build/fuzz_handle_sign ./out/crash-xxxxxxxx
 ```
 
-If that command prints libFuzzer help and exits successfully, libFuzzer mode is available. If it fails, use standalone replay syntax.
+The same syntax works for libFuzzer and standalone replay binaries. Keep crash
+artifacts under an ignored directory while investigating them. If the issue is
+fixed and needs permanent coverage, translate the artifact into a generator
+case or focused regression test.
 
-## Reproduce a Crash
+## ClusterFuzzLite and OSS-Fuzz-compatible builds
 
-libFuzzer writes crash files as `crash-*` in the current working directory, or in the configured output directory when using the OSS-Fuzz runner. Replay the file with the same target:
+The repository workflow uses `.clusterfuzzlite/build.sh`. That script now:
 
-```sh
-cd tests/fuzzing
-./build/fuzz_tip712 ./crash-xxxxxxxx
-```
+1. runs `generate_corpus.sh --clean all` inside the builder;
+2. builds and exports all eight fuzz targets;
+3. packages each generated baseline as
+   `<target>_seed_corpus.zip` in `$OUT`;
+4. exports `transaction_trigger_decode_fuzzer.dict` under the standard name.
 
-The same replay command also works for standalone binaries.
-
-## Regenerate Seed Corpora
-
-Transaction decoder seeds:
-
-```sh
-cd tests/fuzzing
-python3 generate_transaction_trigger_corpus.py
-```
-
-This refreshes:
-
-- `./corpus/transaction_trigger_decode_fuzzer`
-
-Each seed is a raw `protocol.Transaction.raw` protobuf message. The generated
-corpus directory is ignored by Git and can be recreated from the script.
-
-TIP712 seeds:
-
-```sh
-cd tests/fuzzing
-python3 generate_tip712_corpus.py
-```
-
-This refreshes:
-
-- `./corpus/fuzz_tip712`
-
-External metadata seeds:
-
-```sh
-cd tests/fuzzing
-python3 generate_external_metadata_corpus.py
-```
-
-This refreshes:
-
-- `./corpus/fuzz_external_metadata`
-
-Personal-message seeds:
-
-```sh
-cd tests/fuzzing
-python3 generate_personal_message_corpus.py
-```
-
-This refreshes:
-
-- `./corpus/fuzz_personal_message`
-
-Transaction-signing seeds, including locked resource delegation with and
-without `lock_period`, and witness-vote transactions at the 30/31 boundary:
-
-```sh
-cd tests/fuzzing
-python3 generate_handle_sign_corpus.py
-```
-
-This refreshes:
-
-- `./corpus/fuzz_handle_sign`
-
-## Coverage
-
-`local_run.sh` asks whether to compute coverage after the fuzzing run. Coverage requires `llvm-profdata` and `llvm-cov` in `PATH`, plus a Clang setup that emits `*.profraw` data for the built binary.
-
-If coverage is available, the helper writes:
-
-- `default.profdata`
-- `report.html`
-- a text summary from `llvm-cov report`
-
-If no `*.profraw` files are produced, the fuzzing run itself can still be valid; only the coverage report step is unavailable for that local toolchain.
-
-## ClusterFuzzLite / Docker
+Generated corpus files therefore do not need to exist in the Git checkout.
+ClusterFuzzLite/OSS-Fuzz tooling discovers the seed archives and dictionary from
+the build output.
 
 Build the local ClusterFuzzLite image from the repository root:
 
@@ -349,20 +234,7 @@ docker build --platform linux/amd64 --no-cache -t app-tron-fuzz \
   -f .clusterfuzzlite/Dockerfile .
 ```
 
-On non-Apple-Silicon hosts, `--platform linux/amd64` is usually optional.
-
-The default `.clusterfuzzlite/build.sh` exports only:
-
-- `transaction_trigger_decode_fuzzer`
-- `fuzz_tip712`
-- `fuzz_handle_sign`
-- `fuzz_personal_message`
-- `fuzz_gcs`
-- `fuzz_external_metadata`
-- `fuzz_common_utils_address`
-- `fuzz_common_utils_numbers`
-
-Run that default build and write artifacts to `tests/fuzzing/out`:
+Export the binaries, generated seed archives, and dictionary:
 
 ```sh
 docker run --platform linux/amd64 --rm --privileged \
@@ -374,253 +246,191 @@ docker run --platform linux/amd64 --rm --privileged \
   /src/build.sh
 ```
 
-All eight targets are exported by the default build, so no separate "export everything" command is needed.
+Expected generated seed archives:
 
-Run an exported target with the OSS-Fuzz runner. Each target needs the matching seed corpus:
+```text
+transaction_trigger_decode_fuzzer_seed_corpus.zip
+fuzz_tip712_seed_corpus.zip
+fuzz_handle_sign_seed_corpus.zip
+fuzz_personal_message_seed_corpus.zip
+fuzz_external_metadata_seed_corpus.zip
+```
 
-| Target | Host corpus mount |
-| --- | --- |
-| `transaction_trigger_decode_fuzzer` | `$(pwd)/tests/fuzzing/corpus/transaction_trigger_decode_fuzzer` |
-| `fuzz_tip712` | `$(pwd)/tests/fuzzing/corpus/fuzz_tip712` |
-| `fuzz_handle_sign` | `$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign` |
-| `fuzz_personal_message` | `$(pwd)/tests/fuzzing/corpus/fuzz_personal_message` |
-| `fuzz_gcs` | `$(pwd)/tests/fuzzing/corpus/fuzz_gcs` |
-| `fuzz_external_metadata` | `$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata` |
-| `fuzz_common_utils_address` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_address` |
-| `fuzz_common_utils_numbers` | `$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_numbers` |
+`fuzz_gcs` and the two common-utility targets have no baseline archive because
+they can start from an empty corpus.
 
-The runner does not generate seed corpora. Before starting Docker, run the
-generator shown in the corresponding example when one exists. `fuzz_gcs` and
-the two common-utility targets have no generator and may start from empty
-directories.
+### Running every target with Docker
 
-The command shape is the same for every target:
+After exporting the build output, define this helper from the repository root.
+The optional third argument limits the number of inputs; omitting it leaves
+libFuzzer running until interrupted:
+
+```bash
+run_fuzzer_target() {
+  target="$1"
+  max_len="$2"
+  runs="${3:-}"
+  fuzz_options=(-max_len="$max_len")
+  if [[ -n "$runs" ]]; then
+    fuzz_options+=(-runs="$runs")
+  fi
+
+  docker run --platform linux/amd64 --rm --privileged \
+    -e FUZZING_ENGINE=libfuzzer \
+    -e RUN_FUZZER_MODE=interactive \
+    -v "$(pwd)/tests/fuzzing/out:/out" \
+    gcr.io/oss-fuzz-base/base-runner \
+    run_fuzzer "$target" "${fuzz_options[@]}"
+}
+```
+
+Run one of the following for an open-ended session, stopping it with `Ctrl-C`:
 
 ```sh
+run_fuzzer_target transaction_trigger_decode_fuzzer 8192
+run_fuzzer_target fuzz_tip712 8192
+run_fuzzer_target fuzz_handle_sign 8192
+run_fuzzer_target fuzz_personal_message 8192
+run_fuzzer_target fuzz_gcs 8192
+run_fuzzer_target fuzz_external_metadata 8192
+run_fuzzer_target fuzz_common_utils_address 64
+run_fuzzer_target fuzz_common_utils_numbers 64
+```
+
+Pass a third argument for a bounded run instead:
+
+```sh
+# Set libFuzzer's run limit to 10,000, then exit.
+run_fuzzer_target fuzz_handle_sign 8192 10000
+```
+
+Invoke the target commands individually. An open-ended invocation does not
+return until interrupted, so pasting all eight lines will only start the first
+target.
+
+The base runner discovers target-specific build artifacts by filename:
+
+| Target | Generated seed archive | Dictionary |
+| --- | --- | --- |
+| `transaction_trigger_decode_fuzzer` | yes | `transaction_trigger_decode_fuzzer.dict` |
+| `fuzz_tip712` | yes | none |
+| `fuzz_handle_sign` | yes | none |
+| `fuzz_personal_message` | yes | none |
+| `fuzz_gcs` | no; starts empty | none |
+| `fuzz_external_metadata` | yes | none |
+| `fuzz_common_utils_address` | no; starts empty | none |
+| `fuzz_common_utils_numbers` | no; starts empty | none |
+
+The matching seed archive and dictionary are loaded automatically. Targets
+without a generated seed archive are still valid: libFuzzer initializes their
+working corpus and begins from an empty input.
+
+### Running with a custom corpus
+
+To run any target with additional local inputs, set `TARGET`, `MAX_LEN`, and an
+absolute `CUSTOM_CORPUS` path. Leave `RUNS` empty for an open-ended session, or
+set it to a number for a bounded run. The example below uses `fuzz_gcs`:
+
+```bash
+TARGET=fuzz_gcs
+MAX_LEN=8192
+CUSTOM_CORPUS=/absolute/path/to/custom-corpus
+RUNS=
+
 docker run --platform linux/amd64 --rm --privileged \
   -e FUZZING_ENGINE=libfuzzer \
   -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_<target>_corpus \
-  -v "<host-corpus>:/mnt/host_corpus:ro" \
+  -e CORPUS_DIR=/tmp/custom-corpus \
+  -e FUZZ_TARGET="$TARGET" \
+  -e MAX_LEN="$MAX_LEN" \
+  -e FUZZ_RUNS="$RUNS" \
   -v "$(pwd)/tests/fuzzing/out:/out" \
+  -v "$CUSTOM_CORPUS:/mnt/custom-corpus:ro" \
   gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer <target> -runs=10000 -max_len=8192'
+  /bin/bash -lc '
+    mkdir -p "$CORPUS_DIR"
+    cp -R /mnt/custom-corpus/. "$CORPUS_DIR"/
+    fuzz_options=(-max_len="$MAX_LEN")
+    if [[ -n "$FUZZ_RUNS" ]]; then
+      fuzz_options+=(-runs="$FUZZ_RUNS")
+    fi
+    run_fuzzer "$FUZZ_TARGET" "${fuzz_options[@]}"
+  '
 ```
 
-Examples for all current targets:
+## Harness input formats
 
-`transaction_trigger_decode_fuzzer`:
+### Transaction decoder
 
-```sh
-python3 tests/fuzzing/generate_transaction_trigger_corpus.py
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_transaction_trigger_decode_fuzzer_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/transaction_trigger_decode_fuzzer:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/dictionaries/transaction_trigger_decode_fuzzer.dict:/mnt/transaction_trigger_decode_fuzzer.dict:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer transaction_trigger_decode_fuzzer -runs=10000 -max_len=8192 -dict=/mnt/transaction_trigger_decode_fuzzer.dict'
-```
+Each input is a raw `protocol.Transaction.raw` protobuf message. The harness
+constructs the equivalent top-level `Transaction` wrapper and compares raw and
+wrapped decoding. It exercises whole-buffer, byte-at-a-time, and deterministic
+pseudo-random chunking, decoder reuse, truncation, oversized declarations,
+observer failures, trailing data, and result stability.
 
-The default ClusterFuzzLite build exports the target binary but does not copy
-its dictionary into `/out`, so the example mounts the dictionary separately.
+### TIP-712
 
-`fuzz_tip712`:
+Each input is a compact command stream containing operations such as
+`STRUCT_DEF`, `FILTERING`, `STRUCT_IMPL`, `SIGN`, `RESET`, and `SET_SETTINGS`.
+The harness covers BIP32 paths, BASIC/FULL modes, filtering, trusted names,
+amount formatting, arrays, partial values, signed integers, and reset/replay
+flows.
 
-```sh
-python3 tests/fuzzing/generate_tip712_corpus.py
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_tip712_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_tip712:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_tip712 -runs=10000 -max_len=8192'
-```
+### Legacy transaction signing
 
-`fuzz_handle_sign`:
+`fuzz_handle_sign` interprets the first byte as settings. It then reads zero or
+more records containing `p1` (1 byte), `p2` (1 byte), little-endian payload
+length (2 bytes), and payload bytes. This covers valid multi-frame signing,
+TRC-10 metadata frames, restarts, invalid continuation ordering, truncated
+payloads, and contract-specific validation through production `handleSign()`.
 
-```sh
-python3 tests/fuzzing/generate_handle_sign_corpus.py
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_handle_sign_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_handle_sign:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_handle_sign -runs=10000 -max_len=8192'
-```
+### Personal messages
 
-`fuzz_gcs`:
+`fuzz_personal_message` interprets the first byte as public-key status. Each
+following record contains `ins`, `p1`, `p2`, one-byte payload length, and the
+payload. It dispatches legacy and full-display personal-message instructions,
+including fragmentation, instruction interleaving, invalid continuation,
+binary messages, and public-key failures.
 
-```sh
-mkdir -p tests/fuzzing/corpus/fuzz_gcs
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_gcs_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_gcs:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_gcs -runs=10000 -max_len=8192'
-```
+### Generic Clear Signing
 
-`fuzz_personal_message`:
+`fuzz_gcs` starts with one settings byte. Each following record contains `ins`,
+`p1`, `p2`, one-byte payload length, and payload. It dispatches `INS_SIGN_GCS`,
+`INS_GTP_TRANSACTION_INFO`, and `INS_GTP_FIELD` to exercise transaction storage,
+signed descriptors, field hashes, review startup, restarts, ordering failures,
+and truncated streams.
 
-```sh
-python3 tests/fuzzing/generate_personal_message_corpus.py
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_personal_message_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_personal_message:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_personal_message -runs=10000 -max_len=8192'
-```
+### External metadata
 
-`fuzz_external_metadata`:
+`fuzz_external_metadata` starts with a certificate-status control byte. APDU
+records dispatch trusted-name, proxy-info, and enum-value commands. The status
+byte selects PKI success, missing certificate, wrong usage, wrong curve, wrong
+signature, or unknown PKI error. Seeds include complete, fragmented, truncated,
+and invalid descriptors.
 
-```sh
-python3 tests/fuzzing/generate_external_metadata_corpus.py
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_external_metadata_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_external_metadata:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_external_metadata -runs=10000 -max_len=8192'
-```
+### Common utilities
 
-`fuzz_common_utils_address`:
+`fuzz_common_utils_address` derives TRON addresses from arbitrary input and
+checks payload, checksum, Base58 round trips, invalid prefixes/lengths, and
+output-buffer guards.
 
-```sh
-mkdir -p tests/fuzzing/corpus/fuzz_common_utils_address
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_common_utils_address_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_address:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_common_utils_address -runs=10000 -max_len=64'
-```
+`fuzz_common_utils_numbers` compares uint128/uint256 formatting against an
+independent base-256 division implementation and checks decimal placement,
+zero trimming, short buffers, and ticker limits.
 
-`fuzz_common_utils_numbers`:
-
-```sh
-mkdir -p tests/fuzzing/corpus/fuzz_common_utils_numbers
-docker run --platform linux/amd64 --rm --privileged \
-  -e FUZZING_ENGINE=libfuzzer \
-  -e RUN_FUZZER_MODE=interactive \
-  -e CORPUS_DIR=/tmp/seed_fuzz_common_utils_numbers_corpus \
-  -v "$(pwd)/tests/fuzzing/corpus/fuzz_common_utils_numbers:/mnt/host_corpus:ro" \
-  -v "$(pwd)/tests/fuzzing/out:/out" \
-  gcr.io/oss-fuzz-base/base-runner \
-  /bin/bash -lc 'rm -rf "$CORPUS_DIR" && mkdir -p "$CORPUS_DIR" && cp -R /mnt/host_corpus/. "$CORPUS_DIR"/ && run_fuzzer fuzz_common_utils_numbers -runs=10000 -max_len=64'
-```
-
-These two targets can start from empty host corpus directories because each
-input is expanded into valid round-trip cases and boundary variants by the
-harness itself. Their inputs are small, so `-max_len=64` is sufficient.
-
-For open-ended Docker fuzzing, remove `-runs=10000` from the selected target
-command. For example:
-
-```sh
-run_fuzzer fuzz_tip712 -max_len=8192
-```
-
-When using `run_fuzzer`, mount the host corpus somewhere other than `/tmp/<target>_corpus`, copy it into a temporary corpus directory inside the container, and set `CORPUS_DIR` to that temporary directory. The runner may delete and recreate its default corpus directory when `CORPUS_DIR` is unset.
-
-## What the Harnesses Exercise
-
-`transaction_trigger_decode_fuzzer` stresses the stream decoder through:
-
-- `tron_stream_decoder_init()`
-- `tron_stream_decoder_init_raw()`
-- `tron_stream_decoder_set_trigger_data_observer()`
-- `tron_stream_decoder_feed()`
-- `tron_stream_decoder_is_done()`
-- `tron_stream_decoder_get_result()`
-
-Each input is interpreted as a raw `protocol.Transaction.raw` protobuf message.
-The harness constructs an equivalent top-level `Transaction` wrapper, then
-checks that raw and wrapped decoding expose identical fields and trigger-data
-observer streams. It also compares whole-buffer, byte-at-a-time, and
-deterministic pseudo-random chunking, including reuse of the same decoder
-object. Additional runs cover truncated and oversized declared lengths,
-zero-length feeds, observer failure, terminal-state rejection of trailing data,
-and result stability after completion.
-
-`fuzz_tip712` replays a compact command stream with these operations:
-
-- `STRUCT_DEF`
-- `FILTERING`
-- `STRUCT_IMPL`
-- `SIGN`
-- `RESET`
-- `SET_SETTINGS`
-
-It runs the production TIP712 core logic on host-side shims for SDK, UI, settings, and signature-verification dependencies. Coverage includes BIP32 path parsing, BASIC and FULL modes, filtering, trusted-name and amount formatting, partial payloads, permit-style token resolution, signed integers, and reset/replay flows.
-
-`fuzz_handle_sign` treats each input as one settings byte followed by zero or
-more APDU records. Each record contains `p1` (1 byte), `p2` (1 byte), a
-little-endian payload length (2 bytes), and the payload. This exercises valid
-multi-frame transaction signing along with restarts, out-of-order continuation
-frames, TRC10 metadata frames, truncated payloads, and invalid parameter
-combinations through the production `handleSign()` entry point.
-
-`fuzz_personal_message` treats each input as one public-key status control byte
-followed by zero or more APDU records. Each record contains `ins` (1 byte),
-`p1` (1 byte), `p2` (1 byte), a payload length (1 byte), and the payload. It
-dispatches `INS_SIGN_PERSONAL_MESSAGE` and
-`INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY` records through the production
-handlers. Bit 0 of the control byte selects whether public-key initialization
-succeeds or fails. The harness covers legacy hash display, full-message display,
-valid and invalid multi-frame messages, instruction interleaving, restarts,
-invalid continuations, truncated APDUs, and binary message data.
-
-`fuzz_gcs` treats each input as one settings byte followed by zero or more APDU
-records. Each record contains `ins` (1 byte), `p1` (1 byte), `p2` (1 byte), a
-payload length (1 byte), and the payload. It dispatches `INS_SIGN_GCS`,
-`INS_GTP_TRANSACTION_INFO`, and `INS_GTP_FIELD` records through the production
-handlers to exercise transaction storage, signed descriptors, field-hash
-validation, review startup, restarts, invalid ordering, and truncated streams.
-
-`fuzz_external_metadata` treats each input as one certificate-status control
-byte followed by zero or more APDU records. Each record contains `ins` (1 byte),
-`p1` (1 byte), `p2` (1 byte), a payload length (1 byte), and the payload. It
-dispatches `INS_PROVIDE_TRUSTED_NAME`, `INS_PROVIDE_PROXY_INFO`, and
-`INS_PROVIDE_ENUM_VALUE` records through the production handlers. First chunks
-include the production two-byte total TLV length prefix. The control byte modulo
-6 selects PKI success, missing certificate, wrong certificate usage, wrong
-curve, wrong signature, or an unknown PKI error. The harness covers complete
-and fragmented descriptors, instruction interleaving, restarts, oversized or
-truncated streams, and challenge checks.
-
-`fuzz_common_utils_address` derives valid 20-byte addresses from every input and
-checks the complete 20-byte -> 21-byte payload -> 25-byte checksummed payload ->
-34-character Base58 path in both directions. It also verifies rejection of bad
-checksums, non-TRON prefixes, invalid lengths and arbitrary Base58 input, with
-guard bytes around all output buffers.
-
-`fuzz_common_utils_numbers` compares uint128 and uint256 decimal formatting with
-an independent base-256 long-division implementation. It checks exact and short
-buffers, amount decimal placement and zero trimming for all uint8 decimal values,
-and ticker concatenation up to `MAX_TICKER_LEN`.
-
-The host fuzz environment uses deterministic stubs for NBGL transitions, approval flows, and certificate/signature verification. These targets are meant to cover high-value parser and handler behavior; they do not emulate the full device UI or cryptographic verification stack.
+Host fuzzing uses deterministic shims for device UI, settings, and selected
+cryptographic/PKI dependencies. It targets parser and state-machine behavior;
+it is not a full device emulator.
 
 ## Troubleshooting
 
-- `Fuzzer needs to be built with Clang`: pass `-DCMAKE_C_COMPILER=/usr/bin/clang` or another Clang path.
-- `Unknown sanitizer type`: use `-DSANITIZER=address` or `-DSANITIZER=memory`.
-- macOS standalone fallback: expected when the local Clang does not provide the libFuzzer runtime. Use replay syntax without libFuzzer flags.
-- Missing `/usr/lib/libFuzzingEngine.a` in a ClusterFuzzLite image: the CMake setup detects this and falls back to `-fsanitize=fuzzer`.
-- Docker `amd64`/`arm64` warnings on Apple Silicon: pass `--platform linux/amd64` to both `docker build` and `docker run`.
+- `Fuzzer needs to be built with Clang`: set `CC=clang` or pass a Clang path.
+- `Unknown sanitizer type`: use `SANITIZER=address` or `SANITIZER=memory`.
+- macOS standalone fallback: expected when AppleClang lacks the libFuzzer
+  runtime; use replay syntax without `-runs`, `-jobs`, or `-max_len`.
+- Empty generated corpus after cloning: run `./generate_corpus.sh all`, or use
+  `local_run.sh`, which generates the selected default automatically.
+- Missing `/usr/lib/libFuzzingEngine.a`: the CMake configuration falls back to
+  `-fsanitize=fuzzer` when the path supplied by the environment does not exist.
+- Docker `amd64`/`arm64` warning on Apple Silicon: pass
+  `--platform linux/amd64` to both `docker build` and `docker run`.

@@ -1,30 +1,46 @@
 #!/bin/bash
-set -eu
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 FUZZ_TARGET="${FUZZ_TARGET:-fuzz_tip712}"
 CORPUS_DIR="${CORPUS_DIR:-}"
+FUZZ_RUNS="${FUZZ_RUNS:-}"
+SANITIZER="${SANITIZER:-address}"
+CLANG="${CC:-clang}"
+
+case "$FUZZ_TARGET" in
+    fuzz_common_utils_address|fuzz_common_utils_numbers)
+        MAX_LEN=64
+        ;;
+    transaction_trigger_decode_fuzzer|fuzz_tip712|fuzz_handle_sign|fuzz_personal_message|fuzz_gcs|fuzz_external_metadata)
+        MAX_LEN=8192
+        ;;
+    *)
+        echo "Unsupported FUZZ_TARGET: ${FUZZ_TARGET}" >&2
+        ./generate_corpus.sh --help >&2
+        exit 2
+        ;;
+esac
+
+if [[ -z "$CORPUS_DIR" ]]; then
+    CORPUS_DIR="./corpus/${FUZZ_TARGET}"
+    ./generate_corpus.sh "$FUZZ_TARGET"
+else
+    mkdir -p "$CORPUS_DIR"
+    echo "Using custom corpus ${CORPUS_DIR}; automatic baseline generation is disabled"
+fi
 
 rm -rf build
 
-cmake -B build -S . -DCMAKE_C_COMPILER=/usr/bin/clang -DSANITIZER=address
-cmake --build build
+cmake -B build -S . -DCMAKE_C_COMPILER="$CLANG" -DSANITIZER="$SANITIZER"
+cmake --build build --target "$FUZZ_TARGET"
 
 if ! [ -f "./build/${FUZZ_TARGET}" ]; then
     echo "Build failed, please check the output above."
     exit 1
 fi
-
-if [ -z "$CORPUS_DIR" ]; then
-    if [ -d "./corpus/${FUZZ_TARGET}" ]; then
-        CORPUS_DIR="./corpus/${FUZZ_TARGET}"
-    elif [[ "${FUZZ_TARGET}" == fuzz_tip712* ]] && [ -d "./corpus/fuzz_tip712" ]; then
-        CORPUS_DIR="./corpus/fuzz_tip712"
-    else
-        CORPUS_DIR="./corpus"
-    fi
-fi
-
-mkdir -p "$CORPUS_DIR"
 
 if command -v nproc >/dev/null 2>&1; then
     ncpus=$(nproc)
@@ -42,41 +58,21 @@ if [ "$jobs" -lt 1 ]; then
 fi
 
 if "./build/${FUZZ_TARGET}" -help=1 >/dev/null 2>&1; then
+    fuzz_args=(-max_len="$MAX_LEN" -jobs="$jobs")
+    if [[ -n "$FUZZ_RUNS" ]]; then
+        fuzz_args+=(-runs="$FUZZ_RUNS")
+    fi
+    if [[ "$FUZZ_TARGET" == "transaction_trigger_decode_fuzzer" ]]; then
+        fuzz_args+=(-dict=./dictionaries/transaction_trigger_decode_fuzzer.dict)
+    fi
     echo "Starting ${FUZZ_TARGET} in libFuzzer mode. Press Ctrl-C to stop."
-    "./build/${FUZZ_TARGET}" -max_len=8192 -jobs="$jobs" "$CORPUS_DIR"
+    "./build/${FUZZ_TARGET}" "${fuzz_args[@]}" "$CORPUS_DIR"
 else
     echo "Starting ${FUZZ_TARGET} in standalone replay mode."
-    echo "Populate ${CORPUS_DIR} with seed files to replay them through the harness."
-    "./build/${FUZZ_TARGET}" "$CORPUS_DIR"
+    if [[ -n "$(find "$CORPUS_DIR" -type f -print -quit)" ]]; then
+        "./build/${FUZZ_TARGET}" "$CORPUS_DIR"
+    else
+        echo "Corpus is empty; replaying one empty input."
+        "./build/${FUZZ_TARGET}"
+    fi
 fi
-
-read -p "Would you like to compute coverage (y/n)? " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 0
-fi
-
-if ! command -v llvm-profdata >/dev/null 2>&1; then
-    echo "Skipping coverage: llvm-profdata not found in PATH."
-    exit 0
-fi
-
-if ! command -v llvm-cov >/dev/null 2>&1; then
-    echo "Skipping coverage: llvm-cov not found in PATH."
-    exit 0
-fi
-
-rm -f default.profdata default.profraw
-
-if "./build/${FUZZ_TARGET}" -help=1 >/dev/null 2>&1; then
-    "./build/${FUZZ_TARGET}" -max_len=8192 -runs=0 "$CORPUS_DIR"
-else
-    "./build/${FUZZ_TARGET}" "$CORPUS_DIR"
-fi
-
-llvm-profdata merge -sparse *.profraw -o default.profdata
-llvm-cov show "build/${FUZZ_TARGET}" \
-    -instr-profile=default.profdata \
-    -format=html > report.html
-llvm-cov report "build/${FUZZ_TARGET}" \
-    -instr-profile=default.profdata
