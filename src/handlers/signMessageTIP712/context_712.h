@@ -15,6 +15,7 @@ typedef struct {
 extern s_tip712_context *tip712_context;
 
 bool tip712_context_init(void);
+void tip712_context_cleanup(void);
 void tip712_context_deinit(void);
 
 typedef enum { NOT_INITIALIZED, INITIALIZED, DEFINED } e_struct_init;

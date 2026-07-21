@@ -301,6 +301,47 @@ def test_gcs_store_parks_calldata(tron_client: TronClient,
     assert status == StatusWord.OK
 
 
+@pytest.mark.parametrize("case", ["invalid_path", "missing_total_length"])
+def test_gcs_store_initialization_error_resets_state(backend: BackendInterface,
+                                                     case: str):
+    client = TronClient(backend)
+    if case == "invalid_path":
+        payload = b"\x00"
+        expected_status = StatusWord.INCORRECT_BIP32_PATH
+    else:
+        payload = pack_derivation_path(client.getAccount(0)["path"]) + b"\x00" * 3
+        expected_status = StatusWord.INCORRECT_LENGTH
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST, P2_GCS_STORE, payload)
+    assert e.value.status == expected_status
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_MORE, P2_GCS_STORE, b"\x00")
+    assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_gcs_invalid_tx_info_resets_state(backend: BackendInterface):
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    # One-byte TLV payload containing an invalid structure.
+    with pytest.raises(ExceptionRAPDU) as e:
+        backend.exchange(CLA,
+                         InsType.PROVIDE_TRANSACTION_INFO,
+                         P1Type.FIRST_CHUNK,
+                         0x00,
+                         b"\x00\x01\xff")
+    assert e.value.status == StatusWord.INVALID_DATA
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
 # --- Descriptor builders -----------------------------------------------------
 # Keep the host-side GCS serialization in client.gcs, matching app-ethereum.
 

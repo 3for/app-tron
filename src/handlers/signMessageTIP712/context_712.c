@@ -60,12 +60,19 @@ bool tip712_context_init(void) {
 /**
  * De-initialize the TIP712 context
  */
-void tip712_context_deinit(void) {
+void tip712_context_cleanup(void) {
+    if (tip712_context == NULL) {
+        return;
+    }
     typed_data_deinit();
     path_deinit();
     field_hash_deinit();
     ui_712_deinit();
     sol_typenames_deinit();
     APP_MEM_FREE_AND_NULL((void **) &tip712_context);
+}
+
+void tip712_context_deinit(void) {
+    tip712_context_cleanup();
     reset_app_context();
 }

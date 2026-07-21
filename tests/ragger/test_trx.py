@@ -2056,6 +2056,10 @@ class TestTRX():
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
         assert e.value.status == StatusWord.INVALID_DATA
 
+        with pytest.raises(ExceptionRAPDU) as e:
+            backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
+        assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
     def test_trx_freezeV2_balance_invalid_amount(self, backend):
         client = TronClient(backend)
         tx = client.packContract(

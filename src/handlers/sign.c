@@ -41,6 +41,13 @@
 
 extern void reset_app_context();
 
+static int send_sign_status(uint16_t sw) {
+    if (sw != E_OK) {
+        reset_app_context();
+    }
+    return io_send_sw(sw);
+}
+
 #ifdef HAVE_SWAP
 static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
     io_send_sw(sw);
@@ -405,7 +412,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     bool data_warning;
 
     if (p2 != 0x00) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return send_sign_status(E_INCORRECT_P1_P2);
     }
 
     // initialize context
@@ -416,7 +423,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         appState = APP_STATE_SIGNING;
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
-            return io_send_sw(E_INCORRECT_BIP32_PATH);
+            return send_sign_status(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;
@@ -426,7 +433,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         sign_cleanup();
         raw_tx = APP_MEM_ALLOC(MAX_RAW_TX_SIZE);
         if (raw_tx == NULL) {
-            return io_send_sw(E_INCORRECT_DATA);
+            return send_sign_status(E_INCORRECT_DATA);
         }
         raw_tx_len = 0;
 
@@ -437,16 +444,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             case EXCHANGECREATECONTRACT:
                 // Max 2 Tokens Name
                 if ((p1 & 0x07) > 1) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return send_sign_status(E_INCORRECT_P1_P2);
                 }
                 // Decode Token name and validate signature
                 if (!parseTokenName((p1 & 0x07), workBuffer, dataLength, &txContent)) {
                     PRINTF("Unexpected parser status\n");
-                    return io_send_sw(E_INCORRECT_DATA);
+                    return send_sign_status(E_INCORRECT_DATA);
                 }
                 // if not last token name, return
                 if (!(p1 & 0x08)) {
-                    return io_send_sw(E_OK);
+                    return send_sign_status(E_OK);
                 }
                 dataLength = 0;
 
@@ -456,38 +463,38 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             case EXCHANGETRANSACTIONCONTRACT:
                 // Max 1 pair set
                 if ((p1 & 0x07) > 0) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return send_sign_status(E_INCORRECT_P1_P2);
                 }
                 // error if not last
                 if (!(p1 & 0x08)) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return send_sign_status(E_INCORRECT_P1_P2);
                 }
                 PRINTF("Decoding Exchange\n");
                 // Decode Token name and validate signature
                 if (!parseExchange(workBuffer, dataLength, &txContent)) {
                     PRINTF("Unexpected parser status\n");
-                    return io_send_sw(E_INCORRECT_DATA);
+                    return send_sign_status(E_INCORRECT_DATA);
                 }
                 dataLength = 0;
                 break;
             default:
                 // Error if any other contract
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
         }
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return send_sign_status(E_INCORRECT_P1_P2);
     }
 
     if (p1 == P1_MORE && appState != APP_STATE_SIGNING) {
         PRINTF("Signature not initialized\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
 
     // Context must be initialized first
     if (!txContext.initialized) {
         PRINTF("Context not initialized\n");
         // NOTE: if txContext is not initialized, then there must be seq errors in P1/P2.
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return send_sign_status(E_INCORRECT_P1_P2);
     }
 
     // Reject an oversized raw transaction before hashing the incoming chunk. Keeping
@@ -495,8 +502,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     // continuation APDU to resume an invalid signing session.
     if ((uint32_t) raw_tx_len + dataLength > MAX_RAW_TX_SIZE) {
         PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
-        reset_app_context();
-        return io_send_sw(E_INCORRECT_DATA);
+        return send_sign_status(E_INCORRECT_DATA);
     }
 
     // hash data
@@ -529,7 +535,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         parse_len = 0;  // token-name completion → processTx returns USTREAM_FINISHED
     } else {
         if (raw_tx == NULL) {
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
         memcpy(raw_tx + raw_tx_len, workBuffer, dataLength);
         raw_tx_len += dataLength;
@@ -546,7 +552,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (p1 == P1_LAST || p1 == P1_SIGN) {
                 break;
             }
-            return io_send_sw(E_OK);
+            return send_sign_status(E_OK);
         case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
@@ -554,19 +560,19 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             // last chunk arrives (pb_decode fails mid-field). On a non-final chunk,
             // treat this as "need more data" and keep accumulating.
             if (p1 != P1_LAST && p1 != P1_SIGN) {
-                return io_send_sw(E_OK);
+                return send_sign_status(E_OK);
             }
-            return io_send_sw(E_INCORRECT_DATA);
+            return send_sign_status(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
 #ifdef HAVE_SWAP
             if (G_called_from_swap) {
                 finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
             }
 #endif
-            return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
+            return send_sign_status(E_MISSING_SETTING_DATA_ALLOWED);
         default:
             PRINTF("Unexpected parser status\n");
-            return io_send_sw(txResult);
+            return send_sign_status(txResult);
     }
 
     // Last data hash
@@ -634,7 +640,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!setContractType(txContent.contractType,
                                  strings.common.fullContract,
                                  sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_ACCOUNTCREATE_TRANSACTION, data_warning);
@@ -648,7 +654,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                  strings.common.toAddress,
                                  N_storage.truncateAddress);
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             memcpy(strings.common.fullContract,
                    txContent.tokenNames[0],
@@ -670,12 +676,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #ifdef SCREEN_SIZE_WALLET
                 return APDU_NO_RESPONSE;
 #else
-                return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
+                return send_sign_status(E_MISSING_SETTING_CUSTOM_CONTRACT);
 #endif
             }
 #ifdef HAVE_GATING_SUPPORT
             if (set_blind_sign_gating_warning() == false) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 #endif
             ux_flow_display(APPROVAL_CREATESMARTCONTRACT_TRANSACTION, data_warning);
@@ -701,7 +707,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #ifdef SCREEN_SIZE_WALLET
                         return APDU_NO_RESPONSE;
 #else
-                        return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
+                        return send_sign_status(E_MISSING_SETTING_CUSTOM_CONTRACT);
 #endif
                     }
                     customContractField = 1;
@@ -734,7 +740,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     // before signing, and augments the review with a "safer signing"
                     // prelude. Mirrors app-ethereum's ux_approve_tx() gating block.
                     if (set_blind_sign_gating_warning() == false) {
-                        return io_send_sw(E_INCORRECT_DATA);
+                        return send_sign_status(E_INCORRECT_DATA);
                     }
 #endif  // HAVE_GATING_SUPPORT
 
@@ -751,7 +757,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                     (char *) G_io_apdu_buffer,
                                     100,
                                     txContent.decimals[0])) {
-                    return io_send_sw(E_INCORRECT_LENGTH);
+                    return send_sign_status(E_INCORRECT_LENGTH);
                 }
             } else {
                 print_amount(
@@ -835,7 +841,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!setExchangeContractDetail(txContent.contractType,
                                            (char *) G_io_apdu_buffer + 100,
                                            sizeof(G_io_apdu_buffer) - 100)) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_EXCHANGE_WITHDRAW_INJECT, data_warning);
@@ -870,12 +876,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             PRINTF("Count: %d\n", contract->votes_count);
             txContent.amount[0] = 0;
             if ((contract->votes_count == 0) || (contract->votes_count > MAX_VOTE_COUNT)) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
             votes_count = (uint8_t) contract->votes_count;
             vote_display_buffer = APP_MEM_ALLOC((size_t) votes_count * VOTE_PACK);
             if (vote_display_buffer == NULL) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
             memset(vote_display_buffer, 0, (size_t) votes_count * VOTE_PACK);
             uint64_t total_votes = 0;
@@ -883,7 +889,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             for (uint8_t i = 0; i < votes_count; i++) {
                 if ((contract->votes[i].vote_count <= 0) ||
                     ((uint64_t) contract->votes[i].vote_count > UINT64_MAX - total_votes)) {
-                    return io_send_sw(E_INCORRECT_DATA);
+                    return send_sign_status(E_INCORRECT_DATA);
                 }
                 getBase58FromAddress(contract->votes[i].vote_address,
                                      strings.common.fullContract,
@@ -893,7 +899,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 if (!fillVoteAmountSlot(vote_display_buffer,
                                         (uint64_t) contract->votes[i].vote_count,
                                         i)) {
-                    return io_send_sw(E_INCORRECT_LENGTH);
+                    return send_sign_status(E_INCORRECT_LENGTH);
                 }
             }
 
@@ -906,7 +912,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                strings.common.fullContract + prefix_len,
                                (uint8_t) (sizeof(strings.common.fullContract) -
                                           (size_t) prefix_len))) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
 
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
@@ -919,7 +925,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strcpy(strings.common.fullContract, "Energy");
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination,
@@ -953,7 +959,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             setV2ResourceName(txContent.resource);
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
@@ -963,7 +969,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             setV2ResourceName(txContent.resource);
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress, N_storage.truncateAddress);
 
@@ -983,7 +989,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
@@ -997,7 +1003,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strcpy(strings.common.fullContract, "Energy");
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress, N_storage.truncateAddress);
 
@@ -1034,11 +1040,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 &msg.account_permission_update_contract;
 
             if (!format_permission_update_fields(perm)) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
@@ -1046,7 +1052,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         } break;
         case PROPOSALCREATECONTRACT:
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_PROPOSALCREATE_TRANSACTION, data_warning);
@@ -1054,7 +1060,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case PROPOSALAPPROVECONTRACT:
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_PROPOSALAPPROVE_TRANSACTION, data_warning);
@@ -1062,7 +1068,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case PROPOSALDELETECONTRACT:
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_PROPOSALDELETE_TRANSACTION, data_warning);
@@ -1072,7 +1078,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_WITNESSCREATE_TRANSACTION, data_warning);
@@ -1082,7 +1088,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             memcpy(strings.common.url, txContent.url, sizeof(txContent.url));
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_WITNESSUPDATE_TRANSACTION, data_warning);
@@ -1091,7 +1097,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case ACCOUNTUPDATECONTRACT:
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_ACCOUNTUPDATE_TRANSACTION, data_warning);
@@ -1100,7 +1106,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case SETACCOUNTIDCONTRACT:
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_SETACCOUNTID_TRANSACTION, data_warning);
@@ -1113,7 +1119,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!setContractType(txContent.contractType,
                                  strings.common.fullContract,
                                  sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_CLEARABI_TRANSACTION, data_warning);
@@ -1130,7 +1136,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!setContractType(txContent.contractType,
                                  strings.common.fullContract,
                                  sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_UPDATESETTING_TRANSACTION, data_warning);
@@ -1144,23 +1150,23 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                              (char *) G_io_apdu_buffer,
                              100,
                              0) == 0) {
-                return io_send_sw(E_INCORRECT_LENGTH);
+                return send_sign_status(E_INCORRECT_LENGTH);
             }
             if (!setContractType(txContent.contractType,
                                  strings.common.fullContract,
                                  sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_UPDATEENERGYLIMIT_TRANSACTION, data_warning);
 
             break;
         case INVALID_CONTRACT:
-            return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
+            return send_sign_status(E_INCORRECT_DATA);  // Contract not initialized
             break;
         default:
             if (!N_storage.signByHash) {
-                return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
+                return send_sign_status(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
             // Write strings.common.fullHash ("0x" + lowercase hex)
             strlcpy(strings.common.fullHash, "0x", 3);
@@ -1170,7 +1176,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                    HASH_SIZE);
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
-                return io_send_sw(E_INCORRECT_DATA);
+                return send_sign_status(E_INCORRECT_DATA);
             }
 
             ux_flow_display(APPROVAL_SIMPLE_TRANSACTION, data_warning);

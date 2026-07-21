@@ -22,6 +22,10 @@ static void reset_state(void) {
     g_tlv_pos = 0;
 }
 
+void tlv_apdu_reset(void) {
+    reset_state();
+}
+
 bool tlv_from_apdu(bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,
@@ -32,6 +36,7 @@ bool tlv_from_apdu(bool first_chunk,
 
     if (first_chunk) {
         if ((offset + sizeof(g_tlv_size)) > lc) {
+            reset_state();
             return false;
         }
         g_tlv_size = read_u16_be(payload, offset);

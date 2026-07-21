@@ -37,6 +37,8 @@
 #include "tron_tx_stream.h"  // tron_tx_stream_free
 #include "proxy_info.h"    // proxy_cleanup
 #include "enum_value.h"    // enum_value_cleanup
+#include "tlv_apdu.h"      // tlv_apdu_reset
+#include "context_712.h"    // tip712_context_cleanup
 
 #ifdef HAVE_GATING_SUPPORT
 #include "cmd_get_gating.h"  // clear_gating
@@ -69,6 +71,10 @@ extern void roll_challenge(void);
 void reset_app_context() {
     message_cleanup();
     sign_cleanup();
+    // Drop any incomplete metadata/GCS descriptor shared TLV stream.
+    tlv_apdu_reset();
+    // Release TIP-712 allocations without recursively resetting the app.
+    tip712_context_cleanup();
     // Free the shared TriggerSmartContract stream decoder (GCS / legacy signing).
     tron_tx_stream_free();
     // Free any Generic Clear Signing state (tx contexts, field table, parked

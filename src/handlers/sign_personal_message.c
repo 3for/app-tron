@@ -109,6 +109,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
         if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                                  strings.common.fromAddress,
                                  &tmp_public_key_ctx) != 0) {
+            reset_app_context();
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
 

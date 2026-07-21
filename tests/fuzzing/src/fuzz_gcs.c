@@ -6,11 +6,13 @@
 #include "cmd_field.h"
 #include "cmd_tx_info.h"
 #include "gcs_calldata_bridge.h"
+#include "tlv_apdu.h"
 #include "tron_tx_stream.h"
 #include "tx_ctx.h"
 
 void init_tip712_fuzz_environment(void);
 void fuzz_set_settings(uint8_t value);
+void reset_app_context(void);
 
 /*
  * Byte stream format:
@@ -46,10 +48,14 @@ static void fuzz_gcs_apdu_stream(const uint8_t *data, size_t size) {
                 (void) handleSignGcs(p1, p2, payload, (uint16_t) payload_len);
                 break;
             case INS_GTP_TRANSACTION_INFO:
-                (void) handle_tx_info(p1, p2, (uint8_t) payload_len, payload);
+                if (handle_tx_info(p1, p2, (uint8_t) payload_len, payload) != SWO_SUCCESS) {
+                    reset_app_context();
+                }
                 break;
             case INS_GTP_FIELD:
-                (void) handle_field(p1, p2, (uint8_t) payload_len, payload);
+                if (handle_field(p1, p2, (uint8_t) payload_len, payload) != SWO_SUCCESS) {
+                    reset_app_context();
+                }
                 break;
             default:
                 break;
@@ -62,6 +68,7 @@ static void fuzz_gcs_apdu_stream(const uint8_t *data, size_t size) {
 
 /* Complete the firmware reset semantics for this target's GCS-owned globals. */
 void fuzz_reset_extra_context(void) {
+    tlv_apdu_reset();
     tron_tx_stream_free();
     gcs_bridge_abort();
     gcs_cleanup();

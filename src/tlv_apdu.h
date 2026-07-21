@@ -16,6 +16,8 @@
 
 typedef bool (*f_tlv_payload_handler)(const buffer_t *payload);
 
+void tlv_apdu_reset(void);
+
 bool tlv_from_apdu(bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,

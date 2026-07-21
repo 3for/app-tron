@@ -23,6 +23,7 @@
 #include "parse.h"
 
 #include "commands_712.h"
+#include "context_712.h"
 
 #include "trusted_name.h"
 #include "challenge.h"
@@ -40,6 +41,15 @@
 #ifdef HAVE_SWAP
 #include "swap.h"
 #endif  // HAVE_SWAP
+
+static int send_gtp_status(uint16_t sw) {
+    if (sw != SWO_SUCCESS) {
+        if ((appState != APP_STATE_IDLE) || (tip712_context != NULL)) {
+            reset_app_context();
+        }
+    }
+    return io_send_sw(sw);
+}
 
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
@@ -148,11 +158,15 @@ int apdu_dispatcher(const command_t *cmd) {
         // Generic Clear Signing (generic_tx_parser). The ported handlers return a
         // status word (as app-ethereum's main loop expects) rather than sending it
         // themselves, so wrap them in io_send_sw here.
-        case INS_GTP_TRANSACTION_INFO:
-            return io_send_sw(handle_tx_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+        case INS_GTP_TRANSACTION_INFO: {
+            uint16_t sw = handle_tx_info(cmd->p1, cmd->p2, cmd->lc, cmd->data);
+            return send_gtp_status(sw);
+        }
 
-        case INS_GTP_FIELD:
-            return io_send_sw(handle_field(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+        case INS_GTP_FIELD: {
+            uint16_t sw = handle_field(cmd->p1, cmd->p2, cmd->lc, cmd->data);
+            return send_gtp_status(sw);
+        }
 
         case INS_PROVIDE_PROXY_INFO:
             return io_send_sw(handle_proxy_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
