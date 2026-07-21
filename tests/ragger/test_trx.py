@@ -14,7 +14,7 @@ from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
-from client.command_builder import CLA, MAX_APDU_LEN, InsType
+from client.command_builder import CLA, MAX_APDU_LEN, InsType, P1Type
 from client.status_word import StatusWord
 from tron import TronClient
 from ragger.bip import pack_derivation_path
@@ -2023,6 +2023,24 @@ class TestTRX():
             warning_approve=True,
             warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
             if device.touchable else None)
+
+    def test_trx_oversized_raw_tx_resets_signing_state(self, backend):
+        client = TronClient(backend)
+
+        # Legacy INS_SIGN buffers at most 4096 raw transaction bytes. Partial
+        # protobuf is accepted on intermediate APDUs, so the final byte is what
+        # crosses the limit and exercises the overflow error path.
+        oversized_tx = b"\x00" * 4097
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], oversized_tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+        # The overflow must invalidate the whole signing session. Before the
+        # reset fix this continuation was accepted against the stale hash and
+        # accumulated raw transaction.
+        with pytest.raises(ExceptionRAPDU) as e:
+            backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
+        assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
     def test_trx_freezeV2_balance_invalid_owner_address(self, backend):
         client = TronClient(backend)

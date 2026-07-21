@@ -489,6 +489,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         // NOTE: if txContext is not initialized, then there must be seq errors in P1/P2.
         return io_send_sw(E_INCORRECT_P1_P2);
     }
+
+    // Reject an oversized raw transaction before hashing the incoming chunk. Keeping
+    // the partially updated hash/parser state after this error would allow a later
+    // continuation APDU to resume an invalid signing session.
+    if ((uint32_t) raw_tx_len + dataLength > MAX_RAW_TX_SIZE) {
+        PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
+        reset_app_context();
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
     // hash data
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
@@ -518,10 +528,6 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         parse_buf = workBuffer;
         parse_len = 0;  // token-name completion → processTx returns USTREAM_FINISHED
     } else {
-        if ((uint32_t) raw_tx_len + dataLength > MAX_RAW_TX_SIZE) {
-            PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
-            return io_send_sw(E_INCORRECT_DATA);
-        }
         if (raw_tx == NULL) {
             return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
