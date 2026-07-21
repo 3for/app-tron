@@ -141,6 +141,10 @@ typedef struct _protocol_ProposalCreateContract {
     pb_callback_t parameters; 
 } protocol_ProposalCreateContract;
 
+/* Signing-time subset of java-tron's SmartContract schema. ABI is intentionally
+ omitted and skipped by the protobuf decoder; node-populated metadata remains
+ represented so signing requests can require it to be empty/default. The
+ executable bytecode is streamed through a Nanopb callback. */
 typedef struct _protocol_ProposalCreateContract_ParametersEntry { 
     int64_t key; 
     int64_t value; 
@@ -157,6 +161,22 @@ typedef struct _protocol_SetAccountIdContract {
     protocol_SetAccountIdContract_account_id_t account_id; 
     pb_byte_t owner_address[21]; 
 } protocol_SetAccountIdContract;
+
+typedef PB_BYTES_ARRAY_T(21) protocol_SmartContract_contract_address_t;
+typedef PB_BYTES_ARRAY_T(32) protocol_SmartContract_code_hash_t;
+typedef PB_BYTES_ARRAY_T(32) protocol_SmartContract_trx_hash_t;
+typedef struct _protocol_SmartContract { 
+    pb_byte_t origin_address[21]; 
+    protocol_SmartContract_contract_address_t contract_address; 
+    pb_callback_t bytecode; 
+    int64_t call_value; 
+    int64_t consume_user_resource_percent; 
+    char name[33]; 
+    int64_t origin_energy_limit; 
+    protocol_SmartContract_code_hash_t code_hash; 
+    protocol_SmartContract_trx_hash_t trx_hash; 
+    int32_t version; 
+} protocol_SmartContract;
 
 typedef PB_BYTES_ARRAY_T(19) protocol_TransferAssetContract_asset_name_t;
 typedef struct _protocol_TransferAssetContract { 
@@ -278,6 +298,14 @@ typedef struct _protocol_AssetIssueContract {
     char id[20]; 
 } protocol_AssetIssueContract;
 
+typedef struct _protocol_CreateSmartContract { 
+    pb_byte_t owner_address[21]; 
+    bool has_new_contract;
+    protocol_SmartContract new_contract; 
+    int64_t call_token_value; 
+    int64_t token_id; 
+} protocol_CreateSmartContract;
+
 typedef struct _protocol_VoteWitnessContract { 
     pb_byte_t owner_address[21]; 
     pb_size_t votes_count;
@@ -325,6 +353,8 @@ extern "C" {
 #define protocol_ProposalCreateContract_ParametersEntry_init_default {0, 0}
 #define protocol_ProposalApproveContract_init_default {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_default {{0}, 0}
+#define protocol_SmartContract_init_default      {{0}, {0, {0}}, {{NULL}, NULL}, 0, 0, "", 0, {0, {0}}, {0, {0}}, 0}
+#define protocol_CreateSmartContract_init_default {{0}, false, protocol_SmartContract_init_default, 0, 0}
 #define protocol_TriggerSmartContract_init_default {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
 #define protocol_ClearABIContract_init_default   {{0}, {0}}
 #define protocol_UpdateSettingContract_init_default {{0}, {0}, 0}
@@ -363,6 +393,8 @@ extern "C" {
 #define protocol_ProposalCreateContract_ParametersEntry_init_zero {0, 0}
 #define protocol_ProposalApproveContract_init_zero {{0}, 0, 0}
 #define protocol_ProposalDeleteContract_init_zero {{0}, 0}
+#define protocol_SmartContract_init_zero         {{0}, {0, {0}}, {{NULL}, NULL}, 0, 0, "", 0, {0, {0}}, {0, {0}}, 0}
+#define protocol_CreateSmartContract_init_zero   {{0}, false, protocol_SmartContract_init_zero, 0, 0}
 #define protocol_TriggerSmartContract_init_zero  {{0}, {0}, 0, {{NULL}, NULL}, 0, 0}
 #define protocol_ClearABIContract_init_zero      {{0}, {0}}
 #define protocol_UpdateSettingContract_init_zero {{0}, {0}, 0}
@@ -439,6 +471,16 @@ extern "C" {
 #define protocol_ProposalDeleteContract_proposal_id_tag 2
 #define protocol_SetAccountIdContract_account_id_tag 1
 #define protocol_SetAccountIdContract_owner_address_tag 2
+#define protocol_SmartContract_origin_address_tag 1
+#define protocol_SmartContract_contract_address_tag 2
+#define protocol_SmartContract_bytecode_tag      4
+#define protocol_SmartContract_call_value_tag    5
+#define protocol_SmartContract_consume_user_resource_percent_tag 6
+#define protocol_SmartContract_name_tag          7
+#define protocol_SmartContract_origin_energy_limit_tag 8
+#define protocol_SmartContract_code_hash_tag     9
+#define protocol_SmartContract_trx_hash_tag      10
+#define protocol_SmartContract_version_tag       11
 #define protocol_TransferAssetContract_asset_name_tag 1
 #define protocol_TransferAssetContract_owner_address_tag 2
 #define protocol_TransferAssetContract_to_address_tag 3
@@ -503,6 +545,10 @@ extern "C" {
 #define protocol_AssetIssueContract_public_free_asset_net_usage_tag 24
 #define protocol_AssetIssueContract_public_latest_free_net_time_tag 25
 #define protocol_AssetIssueContract_id_tag       41
+#define protocol_CreateSmartContract_owner_address_tag 1
+#define protocol_CreateSmartContract_new_contract_tag 2
+#define protocol_CreateSmartContract_call_token_value_tag 3
+#define protocol_CreateSmartContract_token_id_tag 4
 #define protocol_VoteWitnessContract_owner_address_tag 1
 #define protocol_VoteWitnessContract_votes_tag   2
 
@@ -721,6 +767,29 @@ X(a, STATIC,   SINGULAR, INT64,    proposal_id,       2)
 #define protocol_ProposalDeleteContract_CALLBACK NULL
 #define protocol_ProposalDeleteContract_DEFAULT NULL
 
+#define protocol_SmartContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, origin_address,    1) \
+X(a, STATIC,   SINGULAR, BYTES,    contract_address,   2) \
+X(a, CALLBACK, SINGULAR, BYTES,    bytecode,          4) \
+X(a, STATIC,   SINGULAR, INT64,    call_value,        5) \
+X(a, STATIC,   SINGULAR, INT64,    consume_user_resource_percent,   6) \
+X(a, STATIC,   SINGULAR, STRING,   name,              7) \
+X(a, STATIC,   SINGULAR, INT64,    origin_energy_limit,   8) \
+X(a, STATIC,   SINGULAR, BYTES,    code_hash,         9) \
+X(a, STATIC,   SINGULAR, BYTES,    trx_hash,         10) \
+X(a, STATIC,   SINGULAR, INT32,    version,          11)
+#define protocol_SmartContract_CALLBACK pb_default_field_callback
+#define protocol_SmartContract_DEFAULT NULL
+
+#define protocol_CreateSmartContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  new_contract,      2) \
+X(a, STATIC,   SINGULAR, INT64,    call_token_value,   3) \
+X(a, STATIC,   SINGULAR, INT64,    token_id,          4)
+#define protocol_CreateSmartContract_CALLBACK NULL
+#define protocol_CreateSmartContract_DEFAULT NULL
+#define protocol_CreateSmartContract_new_contract_MSGTYPE protocol_SmartContract
+
 #define protocol_TriggerSmartContract_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, contract_address,   2) \
@@ -825,6 +894,8 @@ extern const pb_msgdesc_t protocol_ProposalCreateContract_msg;
 extern const pb_msgdesc_t protocol_ProposalCreateContract_ParametersEntry_msg;
 extern const pb_msgdesc_t protocol_ProposalApproveContract_msg;
 extern const pb_msgdesc_t protocol_ProposalDeleteContract_msg;
+extern const pb_msgdesc_t protocol_SmartContract_msg;
+extern const pb_msgdesc_t protocol_CreateSmartContract_msg;
 extern const pb_msgdesc_t protocol_TriggerSmartContract_msg;
 extern const pb_msgdesc_t protocol_ClearABIContract_msg;
 extern const pb_msgdesc_t protocol_UpdateSettingContract_msg;
@@ -865,6 +936,8 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_ProposalCreateContract_ParametersEntry_fields &protocol_ProposalCreateContract_ParametersEntry_msg
 #define protocol_ProposalApproveContract_fields &protocol_ProposalApproveContract_msg
 #define protocol_ProposalDeleteContract_fields &protocol_ProposalDeleteContract_msg
+#define protocol_SmartContract_fields &protocol_SmartContract_msg
+#define protocol_CreateSmartContract_fields &protocol_CreateSmartContract_msg
 #define protocol_TriggerSmartContract_fields &protocol_TriggerSmartContract_msg
 #define protocol_ClearABIContract_fields &protocol_ClearABIContract_msg
 #define protocol_UpdateSettingContract_fields &protocol_UpdateSettingContract_msg
@@ -881,6 +954,8 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_WitnessCreateContract_size depends on runtime parameters */
 /* protocol_WitnessUpdateContract_size depends on runtime parameters */
 /* protocol_ProposalCreateContract_size depends on runtime parameters */
+/* protocol_SmartContract_size depends on runtime parameters */
+/* protocol_CreateSmartContract_size depends on runtime parameters */
 /* protocol_TriggerSmartContract_size depends on runtime parameters */
 #define protocol_AccountCreateContract_size      48
 #define protocol_AccountPermissionUpdateContract_size 2883

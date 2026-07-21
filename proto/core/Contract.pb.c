@@ -93,6 +93,12 @@ PB_BIND(protocol_ProposalApproveContract, protocol_ProposalApproveContract, AUTO
 PB_BIND(protocol_ProposalDeleteContract, protocol_ProposalDeleteContract, AUTO)
 
 
+PB_BIND(protocol_SmartContract, protocol_SmartContract, AUTO)
+
+
+PB_BIND(protocol_CreateSmartContract, protocol_CreateSmartContract, AUTO)
+
+
 PB_BIND(protocol_TriggerSmartContract, protocol_TriggerSmartContract, AUTO)
 
 

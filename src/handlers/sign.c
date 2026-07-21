@@ -382,7 +382,9 @@ static bool format_permission_update_fields(const protocol_AccountPermissionUpda
 // processTx() needs the full contract in one contiguous
 // buffer (pb_decode_contract_parameter captures a pointer into it), so we accumulate
 // every raw-tx chunk here and decode the growing buffer.
-#define MAX_RAW_TX_SIZE 4096  // AccountPermissionUpdate max encoded contract is ~3 KiB.
+// Legacy INS_SIGN buffers the complete raw transaction before Nanopb decoding.
+// CreateSmartContract is therefore supported up to this existing transaction limit.
+#define MAX_RAW_TX_SIZE 4096
 static uint8_t *raw_tx;
 static uint16_t raw_tx_len;
 
@@ -652,6 +654,25 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case UPDATEASSETCONTRACT:
             ux_flow_display(APPROVAL_UPDATEASSET_TRANSACTION, data_warning);
+            break;
+        case CREATESMARTCONTRACT:
+            // Deployment bytecode is opaque to the device. Require the same explicit
+            // risk opt-in used for arbitrary TriggerSmartContract calls, while still
+            // displaying the deployment parameters and bytecode hash.
+            if (!N_storage.customContract) {
+                ui_error_custom_contract();
+#ifdef SCREEN_SIZE_WALLET
+                return APDU_NO_RESPONSE;
+#else
+                return io_send_sw(E_MISSING_SETTING_CUSTOM_CONTRACT);
+#endif
+            }
+#ifdef HAVE_GATING_SUPPORT
+            if (set_blind_sign_gating_warning() == false) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+#endif
+            ux_flow_display(APPROVAL_CREATESMARTCONTRACT_TRANSACTION, data_warning);
             break;
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer

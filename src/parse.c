@@ -153,6 +153,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case SETACCOUNTIDCONTRACT:
             strlcpy(out, "Set Account ID", outlen);
             break;
+        case CREATESMARTCONTRACT:
+            strlcpy(out, "Create Smart Contract", outlen);
+            break;
         case UPDATESETTINGCONTRACT:
             strlcpy(out, "Update Setting", outlen);
             break;
@@ -1116,6 +1119,60 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
     return true;
 }
 
+#define MIN_TRC10_TOKEN_ID 1000000
+
+static bool pb_decode_smart_contract_bytecode(pb_istream_t *stream,
+                                              const pb_field_t *field,
+                                              void **arg) {
+    PB_UNUSED(field);
+    txContent_t *content = *arg;
+
+    content->bytecodeSize = stream->bytes_left;
+    if (cx_hash_sha256((const uint8_t *) stream->state,
+                       stream->bytes_left,
+                       content->bytecodeHash,
+                       sizeof(content->bytecodeHash)) != sizeof(content->bytecodeHash)) {
+        return false;
+    }
+    return pb_read(stream, NULL, stream->bytes_left);
+}
+
+static bool create_smart_contract(txContent_t *content, pb_istream_t *stream) {
+    protocol_CreateSmartContract *contract = &msg.create_smart_contract;
+    protocol_SmartContract *new_contract = &contract->new_contract;
+
+    new_contract->bytecode.funcs.decode = pb_decode_smart_contract_bytecode;
+    new_contract->bytecode.arg = content;
+
+    // Preserve an explicit SHA-256 commitment even when bytecode is omitted.
+    if ((cx_hash_sha256((const uint8_t *) "",
+                        0,
+                        content->bytecodeHash,
+                        sizeof(content->bytecodeHash)) != sizeof(content->bytecodeHash)) ||
+        !pb_decode(stream, protocol_CreateSmartContract_fields, contract)) {
+        return false;
+    }
+
+    if (!contract->has_new_contract ||
+        (contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (new_contract->origin_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (memcmp(contract->owner_address, new_contract->origin_address, ADDRESS_SIZE) != 0) ||
+        (new_contract->contract_address.size != 0) || (new_contract->code_hash.size != 0) ||
+        (new_contract->trx_hash.size != 0) || (new_contract->version != 0) ||
+        (new_contract->call_value < 0) ||
+        (new_contract->consume_user_resource_percent < 0) ||
+        (new_contract->consume_user_resource_percent > 100) ||
+        (new_contract->origin_energy_limit <= 0) || (contract->call_token_value < 0) ||
+        (contract->token_id < 0) ||
+        ((contract->token_id != 0) && (contract->token_id <= MIN_TRC10_TOKEN_ID)) ||
+        ((contract->call_token_value > 0) && (contract->token_id == 0))) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    return true;
+}
+
 static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     msg.trigger_smart_contract.data.funcs.decode = pb_decode_trigger_smart_contract_data;
     msg.trigger_smart_contract.data.arg = content;
@@ -1458,6 +1515,12 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         }
         content->permission_id = transaction.contract->Permission_id;
         content->contractType = (contractType_e) transaction.contract->type;
+        if ((transaction.contract->type ==
+             protocol_Transaction_Contract_ContractType_CreateSmartContract) &&
+            (transaction.fee_limit < 0)) {
+            return USTREAM_FAULT;
+        }
+        content->feeLimit = (uint64_t) transaction.fee_limit;
 
         pb_istream_t tx_stream = pb_istream_from_buffer(contract_buffer.buf, contract_buffer.size);
         bool ret;
@@ -1526,6 +1589,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_SetAccountIdContract:
                 ret = set_account_id_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_CreateSmartContract:
+                ret = create_smart_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
                 ret = trigger_smart_contract(content, &tx_stream);

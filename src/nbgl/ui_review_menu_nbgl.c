@@ -101,6 +101,18 @@ typedef struct {
     char frozenDays[MAX_ASSET_FROZEN_SUPPLY_COUNT][ASSET_ISSUE_NUMBER_LEN];
 } asset_issue_display_t;
 
+typedef struct {
+    char name[67];
+    char callValue[32];
+    char feeLimit[32];
+    char userResourcePercent[24];
+    char originEnergyLimit[24];
+    char bytecodeSize[24];
+    char bytecodeHash[67];
+    char tokenId[24];
+    char tokenValue[24];
+} create_smart_contract_display_t;
+
 // Static variables
 static nbgl_contentInfoLongPress_t infoLongPress;
 static nbgl_tx_infos_t txInfos;
@@ -108,6 +120,7 @@ static char (*proposalFieldLabels)[PROPOSAL_ITEM_LEN];
 static char (*proposalFieldValues)[PROPOSAL_VALUE_LEN];
 static char proposalIdValue[22];
 static asset_issue_display_t *assetIssueDisplay;
+static create_smart_contract_display_t *createSmartContractDisplay;
 // Alias extension for the recipient trusted name (lets the user reveal the
 // underlying address behind the resolved name). Mirrors app-ethereum's
 // ui_approve_tx() trusted-name display.
@@ -137,9 +150,14 @@ static void asset_issue_display_cleanup(void) {
     APP_MEM_FREE_AND_NULL((void **) &assetIssueDisplay);
 }
 
+static void create_smart_contract_display_cleanup(void) {
+    APP_MEM_FREE_AND_NULL((void **) &createSmartContractDisplay);
+}
+
 void ui_review_menu_cleanup(void) {
     proposal_fields_cleanup();
     asset_issue_display_cleanup();
+    create_smart_contract_display_cleanup();
     ui_pairs_cleanup();
 }
 
@@ -179,7 +197,8 @@ static void displayTransaction(void) {
         operationType = TYPE_MESSAGE;
     }
 
-    if (txInfos.state == APPROVAL_CUSTOM_CONTRACT) {
+    if ((txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
+        (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION)) {
         // The blind-signing review's finish title must convey the accepted risk,
         // mirroring app-ethereum's "Accept risk and sign" (ui_tx_simulation_finish_str),
         // rather than the plain "Sign transaction".
@@ -214,7 +233,8 @@ static void reviewStart() {
     // blind-signing (and optional gating) warning itself, so skip the bespoke
     // data/custom-contract warning pages. Mirrors app-ethereum, where dataPresent
     // surfaces the blind-signing warning rather than a separate extra-data page.
-    if (txInfos.state == APPROVAL_CUSTOM_CONTRACT) {
+    if ((txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
+        (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION)) {
         displayTransaction();
         return;
     }
@@ -479,6 +499,67 @@ static bool prepare_update_asset_display(void) {
                        assetIssueDisplay->publicFreeBandwidth,
                        sizeof(assetIssueDisplay->publicFreeBandwidth))) {
         asset_issue_display_cleanup();
+        return false;
+    }
+    return true;
+}
+
+static bool format_create_trx_amount(uint64_t value, char *out, size_t outlen) {
+    if (value == 0) {
+        return strlcpy(out, "0 TRX", outlen) == 5;
+    }
+    if ((print_amount(value, out, outlen, SUN_DIG) == 0) ||
+        (strlcat(out, " TRX", outlen) >= outlen)) {
+        return false;
+    }
+    return true;
+}
+
+static bool prepare_create_smart_contract_display(void) {
+    protocol_CreateSmartContract *contract = &msg.create_smart_contract;
+    protocol_SmartContract *new_contract = &contract->new_contract;
+
+    create_smart_contract_display_cleanup();
+    createSmartContractDisplay = APP_MEM_ALLOC(sizeof(*createSmartContractDisplay));
+    if (createSmartContractDisplay == NULL) {
+        return false;
+    }
+    memset(createSmartContractDisplay, 0, sizeof(*createSmartContractDisplay));
+
+    if (!format_asset_bytes((const uint8_t *) new_contract->name,
+                            strlen(new_contract->name),
+                            createSmartContractDisplay->name,
+                            sizeof(createSmartContractDisplay->name)) ||
+        !format_create_trx_amount((uint64_t) new_contract->call_value,
+                                  createSmartContractDisplay->callValue,
+                                  sizeof(createSmartContractDisplay->callValue)) ||
+        !format_create_trx_amount(txContent.feeLimit,
+                                  createSmartContractDisplay->feeLimit,
+                                  sizeof(createSmartContractDisplay->feeLimit)) ||
+        !u64_to_string((uint64_t) new_contract->consume_user_resource_percent,
+                       createSmartContractDisplay->userResourcePercent,
+                       sizeof(createSmartContractDisplay->userResourcePercent)) ||
+        (strlcat(createSmartContractDisplay->userResourcePercent,
+                 "%",
+                 sizeof(createSmartContractDisplay->userResourcePercent)) >=
+         sizeof(createSmartContractDisplay->userResourcePercent)) ||
+        !u64_to_string((uint64_t) new_contract->origin_energy_limit,
+                       createSmartContractDisplay->originEnergyLimit,
+                       sizeof(createSmartContractDisplay->originEnergyLimit)) ||
+        !u64_to_string(txContent.bytecodeSize,
+                       createSmartContractDisplay->bytecodeSize,
+                       sizeof(createSmartContractDisplay->bytecodeSize)) ||
+        (bytes_to_string(createSmartContractDisplay->bytecodeHash,
+                         sizeof(createSmartContractDisplay->bytecodeHash),
+                         txContent.bytecodeHash,
+                         sizeof(txContent.bytecodeHash)) != 0) ||
+        !u64_to_string((uint64_t) contract->token_id,
+                       createSmartContractDisplay->tokenId,
+                       sizeof(createSmartContractDisplay->tokenId)) ||
+        !u64_to_string((uint64_t) contract->call_token_value,
+                       createSmartContractDisplay->tokenValue,
+                       sizeof(createSmartContractDisplay->tokenValue))) {
+        create_smart_contract_display_cleanup();
         return false;
     }
     return true;
@@ -788,6 +869,45 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nSet Account ID";
             infoLongPress.text = "Sign transaction to\nSet Account ID";
             break;
+        case APPROVAL_CREATESMARTCONTRACT_TRANSACTION: {
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if (!prepare_create_smart_contract_display()) {
+                return false;
+            }
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Contract name";
+            txInfos.fields[1].value = createSmartContractDisplay->name;
+            txInfos.fields[2].item = "Call value";
+            txInfos.fields[2].value = createSmartContractDisplay->callValue;
+            txInfos.fields[3].item = "Fee limit";
+            txInfos.fields[3].value = createSmartContractDisplay->feeLimit;
+            txInfos.fields[4].item = "User resource share";
+            txInfos.fields[4].value = createSmartContractDisplay->userResourcePercent;
+            txInfos.fields[5].item = "Origin energy limit";
+            txInfos.fields[5].value = createSmartContractDisplay->originEnergyLimit;
+            txInfos.fields[6].item = "Bytecode size";
+            txInfos.fields[6].value = createSmartContractDisplay->bytecodeSize;
+            txInfos.fields[7].item = "Bytecode hash";
+            txInfos.fields[7].value = createSmartContractDisplay->bytecodeHash;
+            g_pairsList->nbPairs = 8;
+
+            protocol_CreateSmartContract *contract = &msg.create_smart_contract;
+            if ((contract->token_id != 0) || (contract->call_token_value != 0)) {
+                txInfos.fields[8].item = "TRC10 ID";
+                txInfos.fields[8].value = createSmartContractDisplay->tokenId;
+                txInfos.fields[9].item = "TRC10 amount";
+                txInfos.fields[9].value = createSmartContractDisplay->tokenValue;
+                g_pairsList->nbPairs = 10;
+            }
+            txInfos.flowTitle = "Review transaction to\nDeploy Smart Contract";
+            txInfos.flowSubtitle = "Smart contract deployment";
+            infoLongPress.text = "Accept risk and deploy contract";
+            break;
+        }
         case APPROVAL_CLEARABI_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
@@ -1253,7 +1373,8 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     // contract only exposes a few raw protobuf fields (the calldata arguments are
     // discarded at parse), so the hash is the only complete commitment to what is
     // actually signed. Only when there is room left in the fields array.
-    bool blind_sign = (state == APPROVAL_CUSTOM_CONTRACT);
+    bool blind_sign = (state == APPROVAL_CUSTOM_CONTRACT) ||
+                      (state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION);
     if ((N_storage.displayHash || blind_sign) && state_shows_tx_hash(state) &&
         (g_pairsList->nbPairs < MAX_TX_FIELDS)) {
         strlcpy(strings.common.fullHash, "0x", 3);

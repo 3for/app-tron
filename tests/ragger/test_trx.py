@@ -68,14 +68,15 @@ class TestTRX():
                                               nb_warnings=1)
             scenario.dismiss_warning = [warning_instruction]
             self.scenario_navigator._navigate_warning(scenario, test_name,
-                                                      True, "warning")
+                                                      do_comparison, "warning")
             self.scenario_navigator._navigate_with_scenario(
-                scenario, None, test_name, custom_screen_text, True)
+                scenario, None, test_name, custom_screen_text, do_comparison)
             return
 
         self.scenario_navigator.review_approve_with_warning(
             test_name=test_name,
-            custom_screen_text=custom_screen_text)
+            custom_screen_text=custom_screen_text,
+            do_comparison=do_comparison)
 
     def sign_and_validate(self,
                           client,
@@ -1518,6 +1519,178 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
+
+    def create_smart_contract_tx(self,
+                                 client,
+                                 new_contract_overrides=None,
+                                 outer_overrides=None,
+                                 fee_limit=100_000_000,
+                                 include_new_contract=True):
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        new_contract_values = {
+            'origin_address': owner,
+            'bytecode': bytes.fromhex('608060405260008055600160005260206000f3'),
+            'call_value': 1_000_000,
+            'consume_user_resource_percent': 30,
+            'name': 'LedgerContract',
+            'origin_energy_limit': 10_000_000,
+        }
+        if new_contract_overrides:
+            new_contract_values.update(new_contract_overrides)
+
+        outer_values = {
+            'owner_address': owner,
+            'call_token_value': 123,
+            'token_id': 1_000_001,
+        }
+        if outer_overrides:
+            outer_values.update(outer_overrides)
+        if include_new_contract:
+            outer_values['new_contract'] = contract.SmartContract(
+                **new_contract_values)
+
+        return client.packContract(
+            tron.Transaction.Contract.CreateSmartContract,
+            contract.CreateSmartContract(**outer_values),
+            fee_limit=fee_limit,
+        )
+
+    def test_trx_create_smart_contract(self, backend, device):
+        client = TronClient(backend)
+        tx = self.create_smart_contract_tx(client)
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               warning_approve=True)
+
+    @pytest.mark.parametrize('case', ['minimum', 'maximum'])
+    def test_trx_create_smart_contract_valid_boundaries(self,
+                                                        backend,
+                                                        device,
+                                                        case):
+        client = TronClient(backend)
+        if case == 'minimum':
+            tx = self.create_smart_contract_tx(
+                client,
+                new_contract_overrides={
+                    'bytecode': b'',
+                    'call_value': 0,
+                    'consume_user_resource_percent': 0,
+                    'name': '',
+                    'origin_energy_limit': 1,
+                },
+                outer_overrides={
+                    'call_token_value': 0,
+                    'token_id': 0,
+                },
+                fee_limit=0,
+            )
+        else:
+            tx = self.create_smart_contract_tx(
+                client,
+                new_contract_overrides={
+                    'bytecode': b'\xff' * 3_000,
+                    'call_value': 2**63 - 1,
+                    'consume_user_resource_percent': 100,
+                    'name': 'N' * 32,
+                    'origin_energy_limit': 2**63 - 1,
+                },
+                outer_overrides={
+                    'call_token_value': 2**63 - 1,
+                    'token_id': 2**63 - 1,
+                },
+                fee_limit=2**63 - 1,
+            )
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               warning_approve=True,
+                               do_comparison=False)
+
+    @pytest.mark.parametrize('case', [
+        'invalid_owner',
+        'invalid_origin',
+        'origin_mismatch',
+        'missing_new_contract',
+        'preset_contract_address',
+        'preset_code_hash',
+        'preset_trx_hash',
+        'preset_version',
+        'name_too_long',
+        'negative_call_value',
+        'negative_resource_percent',
+        'resource_percent_too_large',
+        'zero_origin_energy_limit',
+        'negative_origin_energy_limit',
+        'negative_token_value',
+        'negative_token_id',
+        'token_id_too_small',
+        'minimum_reserved_token_id',
+        'token_value_without_id',
+        'negative_fee_limit',
+    ])
+    def test_trx_create_smart_contract_invalid(self, backend, case):
+        client = TronClient(backend)
+        new_overrides = {}
+        outer_overrides = {}
+        fee_limit = 100_000_000
+        include_new_contract = True
+
+        if case == 'invalid_owner':
+            outer_overrides['owner_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'invalid_origin':
+            new_overrides['origin_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'origin_mismatch':
+            new_overrides['origin_address'] = bytes.fromhex(
+                client.getAccount(1)['addressHex'])
+        elif case == 'missing_new_contract':
+            include_new_contract = False
+        elif case == 'preset_contract_address':
+            new_overrides['contract_address'] = bytes.fromhex(
+                client.getAccount(1)['addressHex'])
+        elif case == 'preset_code_hash':
+            new_overrides['code_hash'] = b'\x01' * 32
+        elif case == 'preset_trx_hash':
+            new_overrides['trx_hash'] = b'\x01' * 32
+        elif case == 'preset_version':
+            new_overrides['version'] = 1
+        elif case == 'name_too_long':
+            new_overrides['name'] = 'N' * 33
+        elif case == 'negative_call_value':
+            new_overrides['call_value'] = -1
+        elif case == 'negative_resource_percent':
+            new_overrides['consume_user_resource_percent'] = -1
+        elif case == 'resource_percent_too_large':
+            new_overrides['consume_user_resource_percent'] = 101
+        elif case == 'zero_origin_energy_limit':
+            new_overrides['origin_energy_limit'] = 0
+        elif case == 'negative_origin_energy_limit':
+            new_overrides['origin_energy_limit'] = -1
+        elif case == 'negative_token_value':
+            outer_overrides['call_token_value'] = -1
+        elif case == 'negative_token_id':
+            outer_overrides['token_id'] = -1
+        elif case == 'token_id_too_small':
+            outer_overrides['token_id'] = 1
+        elif case == 'minimum_reserved_token_id':
+            outer_overrides['token_id'] = 1_000_000
+        elif case == 'token_value_without_id':
+            outer_overrides['token_id'] = 0
+        elif case == 'negative_fee_limit':
+            fee_limit = -1
+
+        tx = self.create_smart_contract_tx(
+            client,
+            new_contract_overrides=new_overrides,
+            outer_overrides=outer_overrides,
+            fee_limit=fee_limit,
+            include_new_contract=include_new_contract,
+        )
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
 
     def test_trx_clear_abi(self, backend, device):
         client = TronClient(backend)

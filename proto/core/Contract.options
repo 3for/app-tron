@@ -68,6 +68,14 @@ protocol.ProposalApproveContract.owner_address      max_size: 21, fixed_length: 
 
 protocol.ProposalDeleteContract.owner_address       max_size: 21, fixed_length: true
 
+protocol.CreateSmartContract.owner_address          max_size: 21, fixed_length: true
+protocol.SmartContract.origin_address               max_size: 21, fixed_length: true
+protocol.SmartContract.contract_address             max_size: 21
+protocol.SmartContract.bytecode                     type: FT_CALLBACK
+protocol.SmartContract.name                         max_size: 33
+protocol.SmartContract.code_hash                    max_size: 32
+protocol.SmartContract.trx_hash                     max_size: 32
+
 protocol.TriggerSmartContract.owner_address         max_size: 21, fixed_length: true
 protocol.TriggerSmartContract.contract_address      max_size: 21, fixed_length: true
 protocol.TriggerSmartContract.data                  type: FT_CALLBACK

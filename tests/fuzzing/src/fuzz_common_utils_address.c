@@ -31,8 +31,9 @@ static void make_payload25(const uint8_t address20[static ADDRESS_LENGTH],
 
     payload25[0] = prefix;
     memcpy(payload25 + 1, address20, ADDRESS_LENGTH);
-    require(cx_hash_sha256(payload25, TRON_ADDRESS_SIZE, digest, sizeof(digest)) == CX_OK);
-    require(cx_hash_sha256(digest, sizeof(digest), digest, sizeof(digest)) == CX_OK);
+    require(cx_hash_sha256(payload25, TRON_ADDRESS_SIZE, digest, sizeof(digest)) ==
+            sizeof(digest));
+    require(cx_hash_sha256(digest, sizeof(digest), digest, sizeof(digest)) == sizeof(digest));
     memcpy(payload25 + TRON_ADDRESS_SIZE, digest, 4);
 }
 

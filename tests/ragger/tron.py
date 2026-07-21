@@ -283,7 +283,8 @@ class TronClient:
                      contractType,
                      newContract,
                      data=None,
-                     permission_id=None):
+                     permission_id=None,
+                     fee_limit=None):
         tx = tron.Transaction()
         tx.raw_data.timestamp = 1575712492061
         tx.raw_data.expiration = 1575712551000
@@ -304,6 +305,8 @@ class TronClient:
 
         if permission_id:
             c.Permission_id = permission_id
+        if fee_limit is not None:
+            tx.raw_data.fee_limit = fee_limit
         return tx.raw_data.SerializeToString()
 
     def get_next_length(self, tx):

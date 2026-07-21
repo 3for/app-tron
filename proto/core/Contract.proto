@@ -210,6 +210,30 @@ message ProposalDeleteContract {
     int64 proposal_id = 2;
 }
 
+// Signing-time subset of java-tron's SmartContract schema. ABI is intentionally
+// omitted and skipped by the protobuf decoder; node-populated metadata remains
+// represented so signing requests can require it to be empty/default. The
+// executable bytecode is streamed through a Nanopb callback.
+message SmartContract {
+    bytes origin_address = 1;
+    bytes contract_address = 2;
+    bytes bytecode = 4;
+    int64 call_value = 5;
+    int64 consume_user_resource_percent = 6;
+    string name = 7;
+    int64 origin_energy_limit = 8;
+    bytes code_hash = 9;
+    bytes trx_hash = 10;
+    int32 version = 11;
+}
+
+message CreateSmartContract {
+    bytes owner_address = 1;
+    SmartContract new_contract = 2;
+    int64 call_token_value = 3;
+    int64 token_id = 4;
+}
+
 message TriggerSmartContract {
     bytes owner_address = 1;
     bytes contract_address = 2;

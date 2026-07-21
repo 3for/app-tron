@@ -127,14 +127,16 @@ static inline cx_err_t cx_hash_no_throw(cx_hash_t *ctx,
     return CX_OK;
 }
 
-static inline cx_err_t cx_hash_sha256(const uint8_t *in,
-                                      size_t in_len,
-                                      uint8_t *out,
-                                      size_t out_len) {
+static inline size_t cx_hash_sha256(const uint8_t *in,
+                                    size_t in_len,
+                                    uint8_t *out,
+                                    size_t out_len) {
     cx_sha256_t ctx;
 
     cx_sha256_init(&ctx);
-    return cx_hash_no_throw((cx_hash_t *) &ctx, CX_LAST, in, in_len, out, out_len);
+    return (cx_hash_no_throw((cx_hash_t *) &ctx, CX_LAST, in, in_len, out, out_len) == CX_OK)
+               ? out_len
+               : 0;
 }
 
 static inline cx_err_t cx_keccak_256_hash(const uint8_t *in,

@@ -31,6 +31,7 @@ typedef union {
     protocol_ParticipateAssetIssueContract participate_asset_issue_contract;
     protocol_UnfreezeAssetContract unfreeze_asset_contract;
     protocol_UpdateAssetContract update_asset_contract;
+    protocol_CreateSmartContract create_smart_contract;
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;

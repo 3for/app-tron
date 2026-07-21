@@ -13,6 +13,9 @@ PARTICIPATE_ASSET_ISSUE_TYPE_URL = (
 )
 UNFREEZE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UnfreezeAssetContract"
 UPDATE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UpdateAssetContract"
+CREATE_SMART_CONTRACT_TYPE_URL = (
+    b"type.googleapis.com/protocol.CreateSmartContract"
+)
 BIP32_PATH = [0x8000002C, 0x800000C3, 0x80000000, 0, 0]
 
 
@@ -100,6 +103,21 @@ def update_asset() -> bytes:
             + uint_field(5, 10_000))
 
 
+def create_smart_contract() -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    smart_contract = (bytes_field(1, owner)
+                      + bytes_field(4, bytes.fromhex(
+                          "608060405260008055600160005260206000f3"))
+                      + uint_field(5, 1_000_000)
+                      + uint_field(6, 30)
+                      + bytes_field(7, b"LedgerContract")
+                      + uint_field(8, 10_000_000))
+    return (bytes_field(1, owner)
+            + bytes_field(2, smart_contract)
+            + uint_field(3, 123)
+            + uint_field(4, 1_000_001))
+
+
 def raw_transaction(lock_period) -> bytes:
     value = delegate_resource(lock_period)
     any_message = bytes_field(1, TYPE_URL) + bytes_field(2, value)
@@ -135,14 +153,18 @@ def raw_asset_issue_transaction() -> bytes:
 
 def raw_asset_contract_transaction(contract_type: int,
                                    type_url: bytes,
-                                   value: bytes) -> bytes:
+                                   value: bytes,
+                                   fee_limit: int = 0) -> bytes:
     any_message = bytes_field(1, type_url) + bytes_field(2, value)
     contract = uint_field(1, contract_type) + bytes_field(2, any_message)
-    return (bytes_field(1, bytes.fromhex("3dce"))
-            + bytes_field(4, bytes.fromhex("95da42177db00507"))
-            + uint_field(8, 1_575_712_551_000)
-            + bytes_field(11, contract)
-            + uint_field(14, 1_575_712_492_061))
+    transaction = (bytes_field(1, bytes.fromhex("3dce"))
+                   + bytes_field(4, bytes.fromhex("95da42177db00507"))
+                   + uint_field(8, 1_575_712_551_000)
+                   + bytes_field(11, contract)
+                   + uint_field(14, 1_575_712_492_061))
+    if fee_limit:
+        transaction += uint_field(18, fee_limit)
+    return transaction
 
 
 def derivation_path() -> bytes:
@@ -171,9 +193,10 @@ def asset_issue_signing_seed() -> bytes:
 
 def asset_contract_signing_seed(contract_type: int,
                                 type_url: bytes,
-                                value: bytes) -> bytes:
+                                value: bytes,
+                                fee_limit: int = 0) -> bytes:
     payload = derivation_path() + raw_asset_contract_transaction(
-        contract_type, type_url, value
+        contract_type, type_url, value, fee_limit
     )
     record = bytes([0x10, 0x00]) + len(payload).to_bytes(2, "little") + payload
     return b"\x00" + record
@@ -196,6 +219,14 @@ def main() -> None:
     )
     (OUT_DIR / "07-update-asset.bin").write_bytes(
         asset_contract_signing_seed(15, UPDATE_ASSET_TYPE_URL, update_asset())
+    )
+    (OUT_DIR / "08-create-smart-contract.bin").write_bytes(
+        asset_contract_signing_seed(
+            30,
+            CREATE_SMART_CONTRACT_TYPE_URL,
+            create_smart_contract(),
+            fee_limit=100_000_000,
+        )
     )
 
 
