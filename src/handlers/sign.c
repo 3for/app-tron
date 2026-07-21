@@ -635,6 +635,24 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case ASSETISSUECONTRACT:
             ux_flow_display(APPROVAL_ASSETISSUE_TRANSACTION, data_warning);
             break;
+        case PARTICIPATEASSETISSUECONTRACT:
+            getBase58FromAddress(txContent.destination,
+                                 strings.common.toAddress,
+                                 N_storage.truncateAddress);
+            if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+            memcpy(strings.common.fullContract,
+                   txContent.tokenNames[0],
+                   txContent.tokenNamesLength[0] + 1);
+            ux_flow_display(APPROVAL_PARTICIPATEASSETISSUE_TRANSACTION, data_warning);
+            break;
+        case UNFREEZEASSETCONTRACT:
+            ux_flow_display(APPROVAL_UNFREEZETRC10_TRANSACTION, data_warning);
+            break;
+        case UPDATEASSETCONTRACT:
+            ux_flow_display(APPROVAL_UPDATEASSET_TRANSACTION, data_warning);
+            break;
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
         case TRIGGERSMARTCONTRACT:   // TRC20 Transfer

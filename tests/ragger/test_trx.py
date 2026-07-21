@@ -1058,6 +1058,188 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    def participate_asset_issue_contract(self, client, **overrides):
+        values = {
+            'owner_address': bytes.fromhex(client.getAccount(0)['addressHex']),
+            'to_address': bytes.fromhex(client.getAccount(1)['addressHex']),
+            'asset_name': b'1000001',
+            'amount': 1_000_000,
+        }
+        values.update(overrides)
+        return contract.ParticipateAssetIssueContract(**values)
+
+    def test_trx_participate_asset_issue(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ParticipateAssetIssueContract,
+            self.participate_asset_issue_contract(client),
+        )
+        self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize(('asset_id', 'amount'), [
+        (b'1', 1),
+        (b'9223372036854775807', 2**63 - 1),
+    ])
+    def test_trx_participate_asset_issue_valid_boundaries(self,
+                                                          backend,
+                                                          device,
+                                                          asset_id,
+                                                          amount):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ParticipateAssetIssueContract,
+            self.participate_asset_issue_contract(
+                client,
+                asset_name=asset_id,
+                amount=amount,
+            ),
+        )
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize('case', [
+        'invalid_owner',
+        'invalid_issuer',
+        'same_address',
+        'zero_amount',
+        'negative_amount',
+        'empty_asset_id',
+        'zero_asset_id',
+        'leading_zero_asset_id',
+        'nonnumeric_asset_id',
+        'trx_alias',
+        'asset_id_overflow',
+        'asset_id_too_long',
+    ])
+    def test_trx_participate_asset_issue_invalid(self, backend, case):
+        client = TronClient(backend)
+        overrides = {}
+        if case == 'invalid_owner':
+            overrides['owner_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'invalid_issuer':
+            overrides['to_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'same_address':
+            overrides['to_address'] = bytes.fromhex(
+                client.getAccount(0)['addressHex'])
+        elif case == 'zero_amount':
+            overrides['amount'] = 0
+        elif case == 'negative_amount':
+            overrides['amount'] = -1
+        elif case == 'empty_asset_id':
+            overrides['asset_name'] = b''
+        elif case == 'zero_asset_id':
+            overrides['asset_name'] = b'0'
+        elif case == 'leading_zero_asset_id':
+            overrides['asset_name'] = b'01000001'
+        elif case == 'nonnumeric_asset_id':
+            overrides['asset_name'] = b'TOKEN'
+        elif case == 'trx_alias':
+            overrides['asset_name'] = b'_'
+        elif case == 'asset_id_overflow':
+            overrides['asset_name'] = b'9223372036854775808'
+        elif case == 'asset_id_too_long':
+            overrides['asset_name'] = b'1' * 20
+
+        tx = client.packContract(
+            tron.Transaction.Contract.ParticipateAssetIssueContract,
+            self.participate_asset_issue_contract(client, **overrides),
+        )
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_unfreeze_asset(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeAssetContract,
+            contract.UnfreezeAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+            ),
+        )
+        self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize('owner_address', [
+        b'\x41' + b'\x00' * 19,
+        b'\x41' + b'\x00' * 21,
+        b'\x42' + b'\x00' * 20,
+    ])
+    def test_trx_unfreeze_asset_invalid_address(self,
+                                                backend,
+                                                owner_address):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeAssetContract,
+            contract.UnfreezeAssetContract(owner_address=owner_address),
+        )
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+    def update_asset_contract(self, client, **overrides):
+        values = {
+            'owner_address': bytes.fromhex(client.getAccount(0)['addressHex']),
+            'description': b'Updated TRC10 asset',
+            'url': b'https://ledger.com/updated-trc10',
+            'new_limit': 1_000,
+            'new_public_limit': 10_000,
+        }
+        values.update(overrides)
+        return contract.UpdateAssetContract(**values)
+
+    def test_trx_update_asset(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateAssetContract,
+            self.update_asset_contract(client),
+        )
+        self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_update_asset_valid_boundaries(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateAssetContract,
+            self.update_asset_contract(
+                client,
+                description=b'\x00' * 200,
+                url=b'\xff' * 256,
+                new_limit=0,
+                new_public_limit=2**63 - 1,
+            ),
+        )
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize('case', [
+        'invalid_owner',
+        'empty_url',
+        'description_too_long',
+        'url_too_long',
+        'negative_limit',
+        'negative_public_limit',
+    ])
+    def test_trx_update_asset_invalid(self, backend, case):
+        client = TronClient(backend)
+        overrides = {}
+        if case == 'invalid_owner':
+            overrides['owner_address'] = b'\x42' + b'\x00' * 20
+        elif case == 'empty_url':
+            overrides['url'] = b''
+        elif case == 'description_too_long':
+            overrides['description'] = b'd' * 201
+        elif case == 'url_too_long':
+            overrides['url'] = b'u' * 257
+        elif case == 'negative_limit':
+            overrides['new_limit'] = -1
+        elif case == 'negative_public_limit':
+            overrides['new_public_limit'] = -1
+
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateAssetContract,
+            self.update_asset_contract(client, **overrides),
+        )
+        with pytest.raises(ExceptionRAPDU) as e:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
     def test_trx_account_update(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(

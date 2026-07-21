@@ -454,6 +454,36 @@ static bool prepare_asset_issue_display(void) {
     return true;
 }
 
+static bool prepare_update_asset_display(void) {
+    protocol_UpdateAssetContract *contract = &msg.update_asset_contract;
+
+    asset_issue_display_cleanup();
+    assetIssueDisplay = APP_MEM_ALLOC(sizeof(*assetIssueDisplay));
+    if (assetIssueDisplay == NULL) {
+        return false;
+    }
+    memset(assetIssueDisplay, 0, sizeof(*assetIssueDisplay));
+
+    if (!format_asset_bytes(contract->description.bytes,
+                            contract->description.size,
+                            assetIssueDisplay->description,
+                            sizeof(assetIssueDisplay->description)) ||
+        !format_asset_bytes(contract->url.bytes,
+                            contract->url.size,
+                            assetIssueDisplay->url,
+                            sizeof(assetIssueDisplay->url)) ||
+        !u64_to_string((uint64_t) contract->new_limit,
+                       assetIssueDisplay->freeBandwidth,
+                       sizeof(assetIssueDisplay->freeBandwidth)) ||
+        !u64_to_string((uint64_t) contract->new_public_limit,
+                       assetIssueDisplay->publicFreeBandwidth,
+                       sizeof(assetIssueDisplay->publicFreeBandwidth))) {
+        asset_issue_display_cleanup();
+        return false;
+    }
+    return true;
+}
+
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
 // this review. Mirrors app-ethereum's displayHash, which augments clear-signed
 // transactions. Excluded are: the states that already display a hash
@@ -682,6 +712,56 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.text = "Sign transaction to\nIssue Asset";
             break;
         }
+        case APPROVAL_PARTICIPATEASSETISSUE_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Issuer";
+            txInfos.fields[1].value = strings.common.toAddress;
+            txInfos.fields[2].item = "TRX amount";
+            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[3].item = "Asset ID";
+            txInfos.fields[3].value = strings.common.fullContract;
+            g_pairsList->nbPairs = 4;
+            txInfos.flowTitle = "Review transaction to\nParticipate Asset Issue";
+            infoLongPress.text = "Sign transaction to\nParticipate Asset Issue";
+            break;
+        case APPROVAL_UNFREEZETRC10_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            g_pairsList->nbPairs = 1;
+            txInfos.flowTitle = "Review transaction to\nUnfreeze Asset";
+            infoLongPress.text = "Sign transaction to\nUnfreeze Asset";
+            break;
+        case APPROVAL_UPDATEASSET_TRANSACTION:
+#if !defined(SCREEN_SIZE_WALLET)
+            txInfos.flowIcon = &APP_TRON_HOME_ICON;
+            infoLongPress.icon = &APP_TRON_HOME_ICON;
+#endif
+            if (!prepare_update_asset_display()) {
+                return false;
+            }
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = strings.common.fromAddress;
+            txInfos.fields[1].item = "Description";
+            txInfos.fields[1].value = assetIssueDisplay->description;
+            txInfos.fields[2].item = stringLabelUrl;
+            txInfos.fields[2].value = assetIssueDisplay->url;
+            txInfos.fields[3].item = "Free bandwidth";
+            txInfos.fields[3].value = assetIssueDisplay->freeBandwidth;
+            txInfos.fields[4].item = "Public bandwidth";
+            txInfos.fields[4].value = assetIssueDisplay->publicFreeBandwidth;
+            g_pairsList->nbPairs = 5;
+            txInfos.flowTitle = "Review transaction to\nUpdate Asset";
+            infoLongPress.text = "Sign transaction to\nUpdate Asset";
+            break;
         case APPROVAL_ACCOUNTUPDATE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

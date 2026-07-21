@@ -8,6 +8,11 @@ OUT_DIR = Path(__file__).resolve().parent / "corpus" / "fuzz_handle_sign"
 TYPE_URL = b"type.googleapis.com/protocol.DelegateResourceContract"
 VOTE_TYPE_URL = b"type.googleapis.com/protocol.VoteWitnessContract"
 ASSET_ISSUE_TYPE_URL = b"type.googleapis.com/protocol.AssetIssueContract"
+PARTICIPATE_ASSET_ISSUE_TYPE_URL = (
+    b"type.googleapis.com/protocol.ParticipateAssetIssueContract"
+)
+UNFREEZE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UnfreezeAssetContract"
+UPDATE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UpdateAssetContract"
 BIP32_PATH = [0x8000002C, 0x800000C3, 0x80000000, 0, 0]
 
 
@@ -72,6 +77,29 @@ def asset_issue() -> bytes:
             + uint_field(23, 10_000))
 
 
+def participate_asset_issue() -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    issuer = bytes.fromhex("41" + "22" * 20)
+    return (bytes_field(1, owner)
+            + bytes_field(2, issuer)
+            + bytes_field(3, b"1000001")
+            + uint_field(4, 1_000_000))
+
+
+def unfreeze_asset() -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    return bytes_field(1, owner)
+
+
+def update_asset() -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    return (bytes_field(1, owner)
+            + bytes_field(2, b"Updated TRC10 asset")
+            + bytes_field(3, b"https://ledger.com/updated-trc10")
+            + uint_field(4, 1_000)
+            + uint_field(5, 10_000))
+
+
 def raw_transaction(lock_period) -> bytes:
     value = delegate_resource(lock_period)
     any_message = bytes_field(1, TYPE_URL) + bytes_field(2, value)
@@ -105,6 +133,18 @@ def raw_asset_issue_transaction() -> bytes:
             + uint_field(14, 1_575_712_492_061))
 
 
+def raw_asset_contract_transaction(contract_type: int,
+                                   type_url: bytes,
+                                   value: bytes) -> bytes:
+    any_message = bytes_field(1, type_url) + bytes_field(2, value)
+    contract = uint_field(1, contract_type) + bytes_field(2, any_message)
+    return (bytes_field(1, bytes.fromhex("3dce"))
+            + bytes_field(4, bytes.fromhex("95da42177db00507"))
+            + uint_field(8, 1_575_712_551_000)
+            + bytes_field(11, contract)
+            + uint_field(14, 1_575_712_492_061))
+
+
 def derivation_path() -> bytes:
     return bytes([len(BIP32_PATH)]) + b"".join(
         component.to_bytes(4, "big") for component in BIP32_PATH
@@ -129,6 +169,16 @@ def asset_issue_signing_seed() -> bytes:
     return b"\x00" + record
 
 
+def asset_contract_signing_seed(contract_type: int,
+                                type_url: bytes,
+                                value: bytes) -> bytes:
+    payload = derivation_path() + raw_asset_contract_transaction(
+        contract_type, type_url, value
+    )
+    record = bytes([0x10, 0x00]) + len(payload).to_bytes(2, "little") + payload
+    return b"\x00" + record
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "00-delegate-lock-without-period.bin").write_bytes(signing_seed(None))
@@ -136,6 +186,17 @@ def main() -> None:
     (OUT_DIR / "02-vote-witness-30.bin").write_bytes(vote_signing_seed(30))
     (OUT_DIR / "03-vote-witness-31.bin").write_bytes(vote_signing_seed(31))
     (OUT_DIR / "04-asset-issue.bin").write_bytes(asset_issue_signing_seed())
+    (OUT_DIR / "05-participate-asset-issue.bin").write_bytes(
+        asset_contract_signing_seed(
+            9, PARTICIPATE_ASSET_ISSUE_TYPE_URL, participate_asset_issue()
+        )
+    )
+    (OUT_DIR / "06-unfreeze-asset.bin").write_bytes(
+        asset_contract_signing_seed(14, UNFREEZE_ASSET_TYPE_URL, unfreeze_asset())
+    )
+    (OUT_DIR / "07-update-asset.bin").write_bytes(
+        asset_contract_signing_seed(15, UPDATE_ASSET_TYPE_URL, update_asset())
+    )
 
 
 if __name__ == "__main__":

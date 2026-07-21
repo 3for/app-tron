@@ -535,6 +535,68 @@ static bool asset_issue_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
+static bool participate_asset_issue_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_ParticipateAssetIssueContract_fields,
+                   &msg.participate_asset_issue_contract)) {
+        return false;
+    }
+
+    protocol_ParticipateAssetIssueContract *contract =
+        &msg.participate_asset_issue_contract;
+    if ((contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (contract->to_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (memcmp(contract->owner_address, contract->to_address, ADDRESS_SIZE) == 0) ||
+        (contract->amount <= 0)) {
+        return false;
+    }
+    if (!printTokenFromID(content->tokenNames[0],
+                          MAX_TOKEN_LENGTH,
+                          contract->asset_name.bytes,
+                          contract->asset_name.size,
+                          false)) {
+        return false;
+    }
+
+    content->amount[0] = (uint64_t) contract->amount;
+    content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    COPY_ADDRESS(content->destination, &contract->to_address);
+    return true;
+}
+
+static bool unfreeze_asset_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_UnfreezeAssetContract_fields,
+                   &msg.unfreeze_asset_contract)) {
+        return false;
+    }
+    if (msg.unfreeze_asset_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &msg.unfreeze_asset_contract.owner_address);
+    return true;
+}
+
+static bool update_asset_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_UpdateAssetContract_fields,
+                   &msg.update_asset_contract)) {
+        return false;
+    }
+
+    protocol_UpdateAssetContract *contract = &msg.update_asset_contract;
+    if ((contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
+        (contract->url.size == 0) || (contract->new_limit < 0) ||
+        (contract->new_public_limit < 0)) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &contract->owner_address);
+    return true;
+}
+
 static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
         return false;
@@ -1406,6 +1468,15 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_AssetIssueContract:
                 ret = asset_issue_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_ParticipateAssetIssueContract:
+                ret = participate_asset_issue_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UnfreezeAssetContract:
+                ret = unfreeze_asset_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateAssetContract:
+                ret = update_asset_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_TransferContract:
                 ret = transfer_contract(content, &tx_stream);

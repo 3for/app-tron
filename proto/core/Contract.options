@@ -16,6 +16,16 @@ protocol.AssetIssueContract.frozen_supply           max_count: 10
 protocol.AssetIssueContract.description             max_size: 200
 protocol.AssetIssueContract.url                     max_size: 256
 
+protocol.ParticipateAssetIssueContract.owner_address max_size: 21, fixed_length: true
+protocol.ParticipateAssetIssueContract.to_address    max_size: 21, fixed_length: true
+protocol.ParticipateAssetIssueContract.asset_name    max_size: 19
+
+protocol.UnfreezeAssetContract.owner_address        max_size: 21, fixed_length: true
+
+protocol.UpdateAssetContract.owner_address          max_size: 21, fixed_length: true
+protocol.UpdateAssetContract.description            max_size: 200
+protocol.UpdateAssetContract.url                    max_size: 256
+
 protocol.TransferContract.owner_address             max_size: 21, fixed_length: true
 protocol.TransferContract.to_address                max_size: 21, fixed_length: true
 
