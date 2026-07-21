@@ -55,6 +55,7 @@ static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
 }
 #endif  // HAVE_SWAP
 
+#ifdef SCREEN_SIZE_WALLET
 static void fillVoteAddressSlot(char *destination, const char *from, uint8_t index) {
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
     memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, VOTE_ADDRESS_SIZE);
@@ -70,6 +71,26 @@ static bool fillVoteAmountSlot(char *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
     return true;
 }
+#endif
+
+#if !defined(SCREEN_SIZE_WALLET)
+static bool fillVoteCombinedSlot(char *destination,
+                                 const char *address,
+                                 uint64_t value,
+                                 uint8_t index) {
+    char *slot = destination + voteSlot(index, VOTE_ADDRESS);
+    int prefix_len;
+
+    memset(slot, 0, VOTE_PACK);
+    prefix_len = snprintf(slot, VOTE_PACK, "%s\n", address);
+    if ((prefix_len < 0) || ((size_t) prefix_len >= VOTE_PACK) ||
+        (print_amount(value, slot + prefix_len, VOTE_PACK - (size_t) prefix_len, 0) == 0)) {
+        return false;
+    }
+    PRINTF("Vote: %d - %s\n", index, slot);
+    return true;
+}
+#endif
 
 static void setV2ResourceName(protocol_ResourceCode resource) {
     switch (resource) {
@@ -895,10 +916,18 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                      strings.common.fullContract,
                                      N_storage.truncateAddress);
                 total_votes += (uint64_t) contract->votes[i].vote_count;
+#ifdef SCREEN_SIZE_WALLET
                 fillVoteAddressSlot(vote_display_buffer, strings.common.fullContract, i);
-                if (!fillVoteAmountSlot(vote_display_buffer,
-                                        (uint64_t) contract->votes[i].vote_count,
-                                        i)) {
+                bool vote_formatted = fillVoteAmountSlot(vote_display_buffer,
+                                                         (uint64_t) contract->votes[i].vote_count,
+                                                         i);
+#else
+                bool vote_formatted = fillVoteCombinedSlot(vote_display_buffer,
+                                                           strings.common.fullContract,
+                                                           (uint64_t) contract->votes[i].vote_count,
+                                                           i);
+#endif
+                if (!vote_formatted) {
                     return send_sign_status(E_INCORRECT_LENGTH);
                 }
             }

@@ -26,6 +26,8 @@
 #define VOTE_ADDRESS_SIZE     BASE58CHECK_ADDRESS_SIZE + 1
 #define VOTE_AMOUNT           VOTE_ADDRESS_SIZE
 #define VOTE_AMOUNT_SIZE      21
+// Wallet-size devices keep address and amount in separate regions. Nano devices
+// reuse the whole pack for the single-screen "<address>\n<amount>" string.
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 

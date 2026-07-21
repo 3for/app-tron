@@ -1136,9 +1136,8 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                     (vote_display_buffer + voteSlot(i, VOTE_AMOUNT));
 #else
                 txInfos.fields[i + 1].item =
-                    (vote_display_buffer + voteSlot(i, VOTE_AMOUNT));
-                txInfos.fields[i + 1].value =
                     (vote_display_buffer + voteSlot(i, VOTE_ADDRESS));
+                txInfos.fields[i + 1].value = NULL;
 #endif
             }
             txInfos.fields[votes_count + 1].item = "Total Vote Count";
