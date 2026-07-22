@@ -72,7 +72,7 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t* params) {
     // If there is no coin_configuration, consider that we are doing a TRX swap
     if (params->coin_configuration == NULL) {
         memcpy(swap_validated.ticker, "TRX", sizeof("TRX"));
-        swap_validated.decimals = SUN_DIG;
+        swap_validated.decimals = TRX_DECIMALS;
     } else {
         if (!swap_parse_config(params->coin_configuration,
                                params->coin_configuration_length,

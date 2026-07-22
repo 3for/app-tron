@@ -30,7 +30,7 @@ from core import Tron_pb2 as tron  # noqa: E402
 # TRON is single-chain: get_tx_chain_id() always returns TRON mainnet
 # (src/chain_config.h TRON_MAINNET_CHAINID).
 TRON_MAINNET_CHAINID = 728126428
-SUN_PER_TRX = 1_000_000  # parse.h SUN_DIG = 6
+SUN_PER_TRX = 1_000_000  # common_utils.h TRX_DECIMALS = 6
 
 # An arbitrary TriggerSmartContract whose selector is neither TRC20 transfer
 # (a9059cbb) nor approve (095ea7b3): the firmware sets TRC20Method == 0 and takes

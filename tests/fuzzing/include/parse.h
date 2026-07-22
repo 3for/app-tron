@@ -19,7 +19,6 @@
 #include "shared_context.h"
 
 #define ADDRESS_SIZE TRON_ADDRESS_SIZE
-#define SUN_DIG      6
 #define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 typedef union {

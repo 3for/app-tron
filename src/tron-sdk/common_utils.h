@@ -40,8 +40,14 @@
 // The standard length of a TRON Base58Check address string (without '\0')
 #define TRON_BASE58CHECK_ADDRESS_SIZE 34
 
+#define TRX_DECIMALS                  6
+#define MAX_TRC10_PRECISION           6
 #define MAX_URL_SIZE                  256
-#define MAX_TOKEN_LENGTH              67
+#define MAX_TRC10_TOKEN_ID_LENGTH     19
+#define MAX_TRC10_ASSET_NAME_LENGTH   32
+// Maximum formatted TRC-10 label: "<32-byte name>[<19-digit id>]" plus NUL.
+#define TOKEN_DISPLAY_BUFFER_SIZE     \
+    (MAX_TRC10_ASSET_NAME_LENGTH + MAX_TRC10_TOKEN_ID_LENGTH + 3)
 #define MAX_ACCOUNT_NAME_SIZE         200
 #define MAX_ACCOUNT_NAME_DISPLAY_SIZE (2 + MAX_ACCOUNT_NAME_SIZE * 2 + 1)
 #define MIN_ACCOUNT_ID_SIZE           8

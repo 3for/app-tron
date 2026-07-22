@@ -508,7 +508,7 @@ static bool format_create_trx_amount(uint64_t value, char *out, size_t outlen) {
     if (value == 0) {
         return strlcpy(out, "0 TRX", outlen) == 5;
     }
-    if ((print_amount(value, out, outlen, SUN_DIG) == 0) ||
+    if ((print_amount(value, out, outlen, TRX_DECIMALS) == 0) ||
         (strlcat(out, " TRX", outlen) >= outlen)) {
         return false;
     }
@@ -1069,11 +1069,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Token 1";
-            txInfos.fields[1].value = strings.common.fullContract;
+            txInfos.fields[1].value = txContent.tokenNames[0];
             txInfos.fields[2].item = "Amount 1";
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[3].item = "Token 2";
-            txInfos.fields[3].value = strings.common.toAddress;
+            txInfos.fields[3].value = txContent.tokenNames[1];
             txInfos.fields[4].item = "Amount 2";
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
             g_pairsList->nbPairs = 5;
@@ -1088,14 +1088,16 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Exchange ID";
             txInfos.fields[1].value = strings.common.toAddress;
-            txInfos.fields[2].item = "Token pair";
-            txInfos.fields[2].value = strings.common.fullContract;
-            txInfos.fields[3].item = stringLabelTxAmount;
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-            txInfos.fields[4].item = "Expected";
-            txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[2].item = "From token";
+            txInfos.fields[2].value = txContent.tokenNames[0];
+            txInfos.fields[3].item = "To token";
+            txInfos.fields[3].value = txContent.tokenNames[1];
+            txInfos.fields[4].item = stringLabelTxAmount;
+            txInfos.fields[4].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[5].item = "Expected";
+            txInfos.fields[5].value = (const char *) G_io_apdu_buffer + 100;
             set_action_title(txContent.contractType);
-            g_pairsList->nbPairs = 5;
+            g_pairsList->nbPairs = 6;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
 #if !defined(SCREEN_SIZE_WALLET)
@@ -1109,7 +1111,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].item = "Exchange ID";
             txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = "Token Name";
-            txInfos.fields[3].value = strings.common.fullContract;
+            txInfos.fields[3].value = txContent.tokenNames[0];
             txInfos.fields[4].item = stringLabelTxAmount;
             txInfos.fields[4].value = (const char *) G_io_apdu_buffer;
             // Shared by EXCHANGEINJECT/EXCHANGEWITHDRAW; the title now reflects the
@@ -1195,7 +1197,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             txInfos.fields[0].item = "Message hash";
-            txInfos.fields[0].value = strings.common.fullContract;
+            txInfos.fields[0].value = strings.common.fullHash;
             txInfos.fields[1].item = "Sign with";
             txInfos.fields[1].value = strings.common.fromAddress;
             g_pairsList->nbPairs = 2;

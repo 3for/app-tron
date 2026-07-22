@@ -1,8 +1,8 @@
-ExchangeDetails.token1Id    max_size: 20  /* Up to 19 digits plus NUL, or "_" */
-ExchangeDetails.token1Name  max_size: 32
-ExchangeDetails.token2Id    max_size: 20  /* Up to 19 digits plus NUL, or "_" */
-ExchangeDetails.token2Name  max_size: 32
+ExchangeDetails.token1Id    max_length: 19  /* Up to 19 digits, or "_" */
+ExchangeDetails.token1Name  max_length: 32
+ExchangeDetails.token2Id    max_length: 19  /* Up to 19 digits, or "_" */
+ExchangeDetails.token2Name  max_length: 32
 ExchangeDetails.signature   max_size: 72
 
-TokenDetails.name           max_size: 32
+TokenDetails.name           max_length: 32
 TokenDetails.signature      max_size: 72

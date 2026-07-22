@@ -109,11 +109,12 @@ typedef struct txStringProperties_s {
     char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
     char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
     char addressSummary[40];
-    char fullContract[MAX_TOKEN_LENGTH];
+    char fullContract[TOKEN_DISPLAY_BUFFER_SIZE];
     char url[MAX_URL_SIZE + 1];  // +1 for NUL terminator at max length (256)
     char TRC20Action[9];
     char TRC20ActionSendAllow[8];
-    char fullHash[2 + HASH_SIZE * 2 + 1];  // "0x" + lowercase hex + '\0'
+    // Either "0x" + 64 hex chars or a 64-char personal-message hash, plus NUL.
+    char fullHash[2 + HASH_SIZE * 2 + 1];
 } txStringProperties_t;
 
 typedef struct strDataTmp_t {

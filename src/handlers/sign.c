@@ -181,7 +181,7 @@ static bool append_text_checked(char *out, size_t outlen, const char *text) {
 static bool format_trx_amount(uint64_t amount, char *out, size_t outlen) {
     if (amount == 0) {
         strlcpy(out, "0", outlen);
-    } else if (print_amount(amount, out, outlen, SUN_DIG) == 0) {
+    } else if (print_amount(amount, out, outlen, TRX_DECIMALS) == 0) {
         return false;
     }
     return append_text_checked(out, outlen, " TRX");
@@ -671,9 +671,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
             }
-            memcpy(strings.common.fullContract,
-                   txContent.tokenNames[0],
-                   txContent.tokenNamesLength[0] + 1);
+            strlcpy(strings.common.fullContract,
+                    txContent.tokenNames[0],
+                    sizeof(strings.common.fullContract));
             ux_flow_display(APPROVAL_PARTICIPATEASSETISSUE_TRANSACTION, data_warning);
             break;
         case UNFREEZEASSETCONTRACT:
@@ -739,7 +739,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     G_io_apdu_buffer[0] = '\0';
                     G_io_apdu_buffer[100] = '\0';
                     if (txContent.amount[0] > 0) {
-                        print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
+                        print_amount(txContent.amount[0],
+                                     (void *) G_io_apdu_buffer,
+                                     100,
+                                     TRX_DECIMALS);
                         strlcat((char *) G_io_apdu_buffer, " TRX", sizeof(G_io_apdu_buffer));
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
@@ -777,13 +780,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     txContent.amount[0],
                     (void *) G_io_apdu_buffer,
                     100,
-                    (txContent.contractType == TRANSFERCONTRACT) ? SUN_DIG : txContent.decimals[0]);
+                    (txContent.contractType == TRANSFERCONTRACT) ? TRX_DECIMALS
+                                                                : txContent.decimals[0]);
             }
 
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
 
             // get token name if any
-            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            strlcpy(strings.common.fullContract,
+                    txContent.tokenNames[0],
+                    sizeof(strings.common.fullContract));
 #ifdef HAVE_SWAP
             // If we are in swap context, do not redisplay the message data
             // Instead, ensure they are identical with what was previously displayed.
@@ -820,20 +826,17 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case EXCHANGECREATECONTRACT:
-
-            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-            memcpy(strings.common.toAddress, txContent.tokenNames[1], txContent.tokenNamesLength[1] + 1);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,
                          (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                             ? SUN_DIG
+                             ? TRX_DECIMALS
                              : txContent.decimals[0]);
             print_amount(txContent.amount[1],
                          (void *) G_io_apdu_buffer + 100,
                          100,
                          (strncmp((const char *) txContent.tokenNames[1], "TRX", 3) == 0)
-                             ? SUN_DIG
+                             ? TRX_DECIMALS
                              : txContent.decimals[1]);
 
             ux_flow_display(APPROVAL_EXCHANGE_CREATE, data_warning);
@@ -841,14 +844,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case EXCHANGEINJECTCONTRACT:
         case EXCHANGEWITHDRAWCONTRACT:
-
-            memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
             print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,
                          (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                             ? SUN_DIG
+                             ? TRX_DECIMALS
                              : txContent.decimals[0]);
             // write exchange contract type
             if (!setExchangeContractDetail(txContent.contractType,
@@ -861,13 +862,6 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case EXCHANGETRANSACTIONCONTRACT:
-            // memcpy(strings.common.fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0]+1);
-            snprintf(strings.common.fullContract,
-                     sizeof(strings.common.fullContract),
-                     "%s -> %s",
-                     txContent.tokenNames[0],
-                     txContent.tokenNames[1]);
-
             print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,

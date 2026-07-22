@@ -235,14 +235,53 @@ bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen) {
 #include "../proto/misc/TronApp.pb.h"
 #include "pb_decode.h"
 
+_Static_assert(sizeof(((TokenDetails *) 0)->name) == MAX_TRC10_ASSET_NAME_LENGTH + 1,
+               "TokenDetails.name must hold a 32-character name plus NUL");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token1Id) == MAX_TRC10_TOKEN_ID_LENGTH + 1,
+               "ExchangeDetails token IDs must hold 19 digits plus NUL");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token1Name) ==
+                   MAX_TRC10_ASSET_NAME_LENGTH + 1,
+               "ExchangeDetails token names must hold 32 characters plus NUL");
+
 // ALLOW SAME NAME TOKEN
 // CHECK SIGNATURE(ID+NAME+PRECISION)
 // Parse token Name and Signature
+static bool format_token_display(char *out,
+                                 size_t out_size,
+                                 const char *name,
+                                 const char *id) {
+    if ((out == NULL) || (name == NULL) || (id == NULL)) {
+        return false;
+    }
+
+    size_t name_len = strlen(name);
+    size_t id_len = strlen(id);
+    // name + '[' + id + ']' + NUL
+    size_t required_size = name_len + id_len + 3;
+    if ((name_len == 0) || (name_len > MAX_TRC10_ASSET_NAME_LENGTH) || (id_len == 0) ||
+        (id_len > MAX_TRC10_TOKEN_ID_LENGTH) || (required_size > out_size)) {
+        return false;
+    }
+
+    memcpy(out, name, name_len);
+    out[name_len] = '[';
+    memcpy(out + name_len + 1, id, id_len);
+    out[name_len + id_len + 1] = ']';
+    out[name_len + id_len + 2] = '\0';
+    return true;
+}
+
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *content) {
     TokenDetails details = {};
 
+    if ((data == NULL) || (content == NULL) ||
+        (token_id >= ARRAY_SIZE(content->tokenNames))) {
+        return false;
+    }
+
     pb_istream_t stream = pb_istream_from_buffer(data, dataLength);
-    if (!pb_decode(&stream, TokenDetails_fields, &details)) {
+    if (!pb_decode(&stream, TokenDetails_fields, &details) ||
+        (details.precision > MAX_TRC10_PRECISION)) {
         return false;
     }
 
@@ -256,10 +295,15 @@ bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txCont
     }
 
     // UPDATE Token with Name[ID]
-    char tmp[MAX_TOKEN_LENGTH];
-    snprintf(tmp, MAX_TOKEN_LENGTH, "%s[%s]", details.name, content->tokenNames[token_id]);
-    content->tokenNamesLength[token_id] = strlen((const char *) tmp);
-    strlcpy(content->tokenNames[token_id], tmp, MAX_TOKEN_LENGTH);
+    char tmp[TOKEN_DISPLAY_BUFFER_SIZE];
+    if (!format_token_display(tmp,
+                              sizeof(tmp),
+                              details.name,
+                              content->tokenNames[token_id])) {
+        return false;
+    }
+    content->tokenNamesLength[token_id] = strlen(tmp);
+    strlcpy(content->tokenNames[token_id], tmp, sizeof(content->tokenNames[token_id]));
     content->decimals[token_id] = details.precision;
     return true;
 }
@@ -331,14 +375,38 @@ static bool set_token_info(txContent_t *content,
                            const char *name,
                            const char *id,
                            int precision) {
-    if (token_index >= 2) {
+    if ((content == NULL) || (token_index >= ARRAY_SIZE(content->tokenNames)) ||
+        (precision < 0) || (precision > MAX_TRC10_PRECISION)) {
         return false;
     }
 
-    /* Ugly, but snprintf does not have a return value... */
-    snprintf((char *) content->tokenNames[token_index], MAX_TOKEN_LENGTH, "%s[%s]", name, id);
+    if (!format_token_display(content->tokenNames[token_index],
+                              sizeof(content->tokenNames[token_index]),
+                              name,
+                              id)) {
+        return false;
+    }
     content->tokenNamesLength[token_index] = strlen((char *) content->tokenNames[token_index]);
     content->decimals[token_index] = precision;
+    return true;
+}
+
+#define MAX_UINT64_DECIMAL_LENGTH 20
+#define EXCHANGE_SIGNATURE_PREIMAGE_SIZE                                       \
+    (MAX_UINT64_DECIMAL_LENGTH + 2 * MAX_TRC10_TOKEN_ID_LENGTH +               \
+     2 * MAX_TRC10_ASSET_NAME_LENGTH + 2)
+
+static bool append_exchange_preimage(uint8_t *buffer,
+                                     size_t buffer_size,
+                                     size_t *offset,
+                                     const void *value,
+                                     size_t value_size) {
+    if ((buffer == NULL) || (offset == NULL) || (value == NULL) ||
+        (*offset > buffer_size) || (value_size > buffer_size - *offset)) {
+        return false;
+    }
+    memcpy(buffer + *offset, value, value_size);
+    *offset += value_size;
     return true;
 }
 
@@ -347,7 +415,11 @@ static bool set_token_info(txContent_t *content,
 // Parse token Name and Signature
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
     ExchangeDetails details = ExchangeDetails_init_zero;
-    char buffer[2 * MAX_TOKEN_LENGTH];
+    uint8_t buffer[EXCHANGE_SIGNATURE_PREIMAGE_SIZE];
+
+    if ((data == NULL) || (content == NULL)) {
+        return false;
+    }
 
     pb_istream_t stream = pb_istream_from_buffer(data, length);
     if (!pb_decode(&stream, ExchangeDetails_fields, &details)) {
@@ -369,30 +441,51 @@ bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
                            true)) {
         return false;
     }
+    if ((details.token1Precision > MAX_TRC10_PRECISION) ||
+        (details.token2Precision > MAX_TRC10_PRECISION)) {
+        return false;
+    }
 
-    /* Check provided signature. Strange serialization, it would have been
-     * easier to sign the whole protobuf data...
-     *
-     * exchangeId is casted to int32_t as the custom snprintf implementation does
-     * not seem to support %lld. Moreover, two calls to snprintf are made as
-     * implementation does not return the number of written chars...
+    /* The legacy exchange signature covers the exact byte concatenation:
+     * exchangeId || token1Id || token1Name || precision1 ||
+     * token2Id || token2Name || precision2.
      */
-    size_t msg_size;
-    snprintf(buffer, sizeof(buffer), "%d", (int32_t) details.exchangeId);
-    msg_size = strlen(buffer);
-
-    snprintf(buffer,
-             sizeof(buffer),
-             "%d%s%s%c%s%s%c",
-             (int32_t) details.exchangeId,
-             details.token1Id,
-             details.token1Name,
-             details.token1Precision,
-             details.token2Id,
-             details.token2Name,
-             details.token2Precision);
-    msg_size += strlen(details.token1Id) + strlen(details.token1Name) + 1;
-    msg_size += strlen(details.token2Id) + strlen(details.token2Name) + 1;
+    char exchange_id[MAX_UINT64_DECIMAL_LENGTH + 1];
+    if (!u64_to_string(details.exchangeId, exchange_id, sizeof(exchange_id))) {
+        return false;
+    }
+    uint8_t precision1 = (uint8_t) details.token1Precision;
+    uint8_t precision2 = (uint8_t) details.token2Precision;
+    size_t msg_size = 0;
+    if (!append_exchange_preimage(buffer,
+                                  sizeof(buffer),
+                                  &msg_size,
+                                  exchange_id,
+                                  strlen(exchange_id)) ||
+        !append_exchange_preimage(buffer,
+                                  sizeof(buffer),
+                                  &msg_size,
+                                  details.token1Id,
+                                  strlen(details.token1Id)) ||
+        !append_exchange_preimage(buffer,
+                                  sizeof(buffer),
+                                  &msg_size,
+                                  details.token1Name,
+                                  strlen(details.token1Name)) ||
+        !append_exchange_preimage(buffer, sizeof(buffer), &msg_size, &precision1, 1) ||
+        !append_exchange_preimage(buffer,
+                                  sizeof(buffer),
+                                  &msg_size,
+                                  details.token2Id,
+                                  strlen(details.token2Id)) ||
+        !append_exchange_preimage(buffer,
+                                  sizeof(buffer),
+                                  &msg_size,
+                                  details.token2Name,
+                                  strlen(details.token2Name)) ||
+        !append_exchange_preimage(buffer, sizeof(buffer), &msg_size, &precision2, 1)) {
+        return false;
+    }
 
     if (!verifyExchangeID((uint8_t *) buffer,
                           msg_size,
@@ -509,7 +602,7 @@ static bool asset_issue_contract(txContent_t *content, pb_istream_t *stream) {
     }
     if ((contract->total_supply <= 0) || (contract->trx_num <= 0) ||
         (contract->num <= 0) || (contract->precision < 0) ||
-        (contract->precision > 6) || (contract->start_time <= 0) ||
+        (contract->precision > MAX_TRC10_PRECISION) || (contract->start_time <= 0) ||
         (contract->end_time <= contract->start_time) || (contract->url.size == 0) ||
         (contract->free_asset_net_limit < 0) ||
         (contract->public_free_asset_net_limit < 0) ||
@@ -554,7 +647,7 @@ static bool participate_asset_issue_contract(txContent_t *content, pb_istream_t 
         return false;
     }
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           contract->asset_name.bytes,
                           contract->asset_name.size,
                           false)) {
@@ -610,7 +703,7 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     COPY_ADDRESS(content->account, &msg.transfer_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.transfer_contract.to_address);
 
-    content->tokenNamesLength[0] = 4;
+    content->tokenNamesLength[0] = strlen("TRX");
     strcpy(content->tokenNames[0], "TRX");
     return true;
 }
@@ -622,7 +715,7 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     content->amount[0] = msg.transfer_asset_contract.amount;
 
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           msg.transfer_asset_contract.asset_name.bytes,
                           msg.transfer_asset_contract.asset_name.size,
                           false)) {
@@ -1194,8 +1287,8 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     }
 
     content->decimals[0] = trc20->decimals;
-    content->tokenNamesLength[0] = strlen(trc20->ticker) + 1;
-    memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0]);
+    content->tokenNamesLength[0] = strlen(trc20->ticker);
+    memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0] + 1);
 
     return true;
 }
@@ -1265,7 +1358,7 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     COPY_ADDRESS(content->account, &msg.exchange_create_contract.owner_address);
 
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           msg.exchange_create_contract.first_token_id.bytes,
                           msg.exchange_create_contract.first_token_id.size,
                           true)) {
@@ -1274,7 +1367,7 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
 
     if (!printTokenFromID(content->tokenNames[1],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[1]),
                           msg.exchange_create_contract.second_token_id.bytes,
                           msg.exchange_create_contract.second_token_id.size,
                           true)) {
@@ -1295,7 +1388,7 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     content->exchangeID = msg.exchange_inject_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           msg.exchange_inject_contract.token_id.bytes,
                           msg.exchange_inject_contract.token_id.size,
                           true)) {
@@ -1317,7 +1410,7 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
     content->exchangeID = msg.exchange_withdraw_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           msg.exchange_withdraw_contract.token_id.bytes,
                           msg.exchange_withdraw_contract.token_id.size,
                           true)) {
@@ -1339,7 +1432,7 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
     content->exchangeID = msg.exchange_transaction_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
-                          MAX_TOKEN_LENGTH,
+                          sizeof(content->tokenNames[0]),
                           msg.exchange_transaction_contract.token_id.bytes,
                           msg.exchange_transaction_contract.token_id.size,
                           true)) {

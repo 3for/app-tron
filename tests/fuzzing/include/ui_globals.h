@@ -8,7 +8,7 @@ extern strings_t strings;
 extern volatile uint8_t customContractField;
 extern char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];
 extern char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
-extern char fullContract[MAX_TOKEN_LENGTH];
+extern char fullContract[TOKEN_DISPLAY_BUFFER_SIZE];
 extern char TRC20Action[9];
 extern uint8_t G_io_apdu_buffer[260];
 

@@ -1566,15 +1566,23 @@ int verifyTokenNameID(const char *tokenId,
                       uint8_t decimals,
                       uint8_t *signature,
                       uint8_t signatureLength) {
-    uint8_t buffer[65];
+    uint8_t buffer[MAX_TRC10_TOKEN_ID_LENGTH + MAX_TRC10_ASSET_NAME_LENGTH + 1];
     uint8_t hash[32];
     cx_ecfp_public_key_t publicKey;
 
-    if (strlen(tokenId) > 32) return 0;
+    if ((tokenId == NULL) || (tokenName == NULL)) return 0;
+    size_t token_id_len = strlen(tokenId);
+    size_t token_name_len = strlen(tokenName);
+    if ((token_id_len == 0) || (token_id_len > MAX_TRC10_TOKEN_ID_LENGTH) ||
+        (token_name_len == 0) || (token_name_len > MAX_TRC10_ASSET_NAME_LENGTH)) {
+        return 0;
+    }
 
-    snprintf((char *) buffer, sizeof(buffer), "%s%s%c", tokenId, tokenName, decimals);
+    memcpy(buffer, tokenId, token_id_len);
+    memcpy(buffer + token_id_len, tokenName, token_name_len);
+    buffer[token_id_len + token_name_len] = decimals;
 
-    cx_hash_sha256(buffer, strlen(tokenId) + strlen(tokenName) + 1, hash, 32);
+    cx_hash_sha256(buffer, token_id_len + token_name_len + 1, hash, 32);
 
     CX_ASSERT(cx_ecfp_init_public_key_no_throw(CX_CURVE_256K1,
                                                (uint8_t *) PIC(&token_public_key),

@@ -16,6 +16,12 @@ UPDATE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UpdateAssetContract"
 CREATE_SMART_CONTRACT_TYPE_URL = (
     b"type.googleapis.com/protocol.CreateSmartContract"
 )
+EXCHANGE_CREATE_TYPE_URL = (
+    b"type.googleapis.com/protocol.ExchangeCreateContract"
+)
+EXCHANGE_TRANSACTION_TYPE_URL = (
+    b"type.googleapis.com/protocol.ExchangeTransactionContract"
+)
 BIP32_PATH = [0x8000002C, 0x800000C3, 0x80000000, 0, 0]
 
 
@@ -118,6 +124,43 @@ def create_smart_contract() -> bytes:
             + uint_field(4, 1_000_001))
 
 
+def exchange_create(first_token_id: bytes, second_token_id: bytes) -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    return (bytes_field(1, owner)
+            + bytes_field(2, first_token_id)
+            + uint_field(3, 1_000_000)
+            + bytes_field(4, second_token_id)
+            + uint_field(5, 2_000_000))
+
+
+def exchange_transaction(token_id: bytes) -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    return (bytes_field(1, owner)
+            + uint_field(2, 6)
+            + bytes_field(3, token_id)
+            + uint_field(4, 1_000_000)
+            + uint_field(5, 2_000_000))
+
+
+def token_details(name: bytes, precision: int) -> bytes:
+    # Signature verification is intentionally accepted by the fuzz cx mock.
+    return bytes_field(1, name) + uint_field(2, precision)
+
+
+def exchange_details(first_token_id: bytes,
+                     first_name: bytes,
+                     second_token_id: bytes,
+                     second_name: bytes) -> bytes:
+    # Signature verification is intentionally accepted by the fuzz cx mock.
+    return (uint_field(1, 6)
+            + bytes_field(2, first_token_id)
+            + bytes_field(3, first_name)
+            + uint_field(4, 6)
+            + bytes_field(5, second_token_id)
+            + bytes_field(6, second_name)
+            + uint_field(7, 6))
+
+
 def raw_transaction(lock_period) -> bytes:
     value = delegate_resource(lock_period)
     any_message = bytes_field(1, TYPE_URL) + bytes_field(2, value)
@@ -202,6 +245,43 @@ def asset_contract_signing_seed(contract_type: int,
     return b"\x00" + record
 
 
+def apdu_record(p1: int, payload: bytes) -> bytes:
+    return bytes([p1, 0x00]) + len(payload).to_bytes(2, "little") + payload
+
+
+def exchange_create_max_metadata_seed() -> bytes:
+    first_id = b"9223372036854775806"
+    second_id = b"9223372036854775807"
+    raw = raw_asset_contract_transaction(
+        41,
+        EXCHANGE_CREATE_TYPE_URL,
+        exchange_create(first_id, second_id),
+    )
+    return (b"\x00"
+            + apdu_record(0x00, derivation_path() + raw)
+            + apdu_record(0xA0, token_details(b"A" * 32, 6))
+            + apdu_record(0xA9, token_details(b"B" * 32, 6)))
+
+
+def exchange_transaction_max_metadata_seed() -> bytes:
+    first_id = b"9223372036854775806"
+    second_id = b"9223372036854775807"
+    raw = raw_asset_contract_transaction(
+        44,
+        EXCHANGE_TRANSACTION_TYPE_URL,
+        exchange_transaction(first_id),
+    )
+    metadata = exchange_details(
+        first_id,
+        b"A" * 32,
+        second_id,
+        b"B" * 32,
+    )
+    return (b"\x00"
+            + apdu_record(0x00, derivation_path() + raw)
+            + apdu_record(0xA8, metadata))
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "00-delegate-lock-without-period.bin").write_bytes(signing_seed(None))
@@ -227,6 +307,12 @@ def main() -> None:
             create_smart_contract(),
             fee_limit=100_000_000,
         )
+    )
+    (OUT_DIR / "09-exchange-create-max-metadata.bin").write_bytes(
+        exchange_create_max_metadata_seed()
+    )
+    (OUT_DIR / "10-exchange-transaction-max-metadata.bin").write_bytes(
+        exchange_transaction_max_metadata_seed()
     )
 
 

@@ -103,8 +103,8 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    32));
         format_hex(tmpCtx.transactionContext.hash,
                    sizeof(tmpCtx.transactionContext.hash),
-                   strings.common.fullContract,
-                   sizeof(strings.common.fullContract));
+                   strings.common.fullHash,
+                   sizeof(strings.common.fullHash));
         publicKeyContext_t tmp_public_key_ctx;
         if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                                  strings.common.fromAddress,

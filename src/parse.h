@@ -17,12 +17,10 @@
 
 #define ADD_PRE_FIX_STRING "T"
 #define ADDRESS_SIZE       21
-#define MAX_TRC10_TOKEN_ID_LENGTH 19
 #define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 #define TRC20_DATA_FIELD_SIZE 68
 
-#define SUN_DIG                  6
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 
 typedef union {
