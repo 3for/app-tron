@@ -38,12 +38,26 @@
 #include "swap.h"
 #include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
+#ifdef HAVE_MLDSA_POC
+#include "pq_mldsa.h"
+#endif
 
 extern void reset_app_context();
 
+#ifdef HAVE_MLDSA_POC
+static bool pq_signing_active;
+#endif
+
 static int send_sign_status(uint16_t sw) {
     if (sw != E_OK) {
-        reset_app_context();
+#ifdef HAVE_MLDSA_POC
+        if (pq_signing_active && pq_mldsa_has_key()) {
+            pq_sign_transaction_cleanup(false);
+        } else
+#endif
+        {
+            reset_app_context();
+        }
     }
     return io_send_sw(sw);
 }
@@ -428,9 +442,35 @@ void sign_cleanup(void) {
     perm_field_count = 0;
 }
 
-int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+#ifdef HAVE_MLDSA_POC
+void pq_sign_transaction_cleanup(bool keep_signature) {
+    sign_cleanup();
+    memset((uint8_t *) &txContext, 0, sizeof(txContext));
+    memset((uint8_t *) &txContent, 0, sizeof(txContent));
+    memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));
+    customContractField = 0;
+    pq_signing_active = false;
+
+    if (!keep_signature) {
+        pq_mldsa_result_cleanup();
+    }
+    appState = keep_signature ? APP_STATE_PQ_RESULT_READY : APP_STATE_PQ_KEY_READY;
+}
+#endif
+
+static int handleSignInternal(uint8_t p1,
+                              uint8_t p2,
+                              uint8_t *workBuffer,
+                              uint16_t dataLength,
+                              bool pq_signing) {
     uint256_t uint256;
     bool data_warning;
+
+#ifdef HAVE_MLDSA_POC
+    pq_signing_active = pq_signing;
+#else
+    (void) pq_signing;
+#endif
 
     if (p2 != 0x00) {
         return send_sign_status(E_INCORRECT_P1_P2);
@@ -438,16 +478,36 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        if (appState != APP_STATE_IDLE) {
-            reset_app_context();
+#ifdef HAVE_MLDSA_POC
+        if (pq_signing) {
+            if (!pq_mldsa_has_key() ||
+                (appState != APP_STATE_PQ_KEY_READY &&
+                 appState != APP_STATE_PQ_RESULT_READY)) {
+                return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            }
+            if (dataLength < sizeof(uint32_t) ||
+                U4BE(workBuffer, 0) != pq_mldsa_session_id()) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
+            workBuffer += sizeof(uint32_t);
+            dataLength -= sizeof(uint32_t);
+            pq_mldsa_result_cleanup();
+            appState = APP_STATE_PQ_RECEIVING_TX;
+        } else
+#endif
+        {
+            if (appState != APP_STATE_IDLE) {
+                reset_app_context();
+            }
+            appState = APP_STATE_SIGNING;
+            off_t ret =
+                read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
+            if (ret < 0) {
+                return send_sign_status(E_INCORRECT_BIP32_PATH);
+            }
+            workBuffer += ret;
+            dataLength -= ret;
         }
-        appState = APP_STATE_SIGNING;
-        off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
-        if (ret < 0) {
-            return send_sign_status(E_INCORRECT_BIP32_PATH);
-        }
-        workBuffer += ret;
-        dataLength -= ret;
 
         initTx(&txContext, &txContent);
         customContractField = 0;
@@ -458,7 +518,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         }
         raw_tx_len = 0;
 
-    } else if ((p1 & 0xF0) == P1_TRC10_NAME) {
+    } else if (!pq_signing && (p1 & 0xF0) == P1_TRC10_NAME) {
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
         switch (txContent.contractType) {
             case TRANSFERASSETCONTRACT:
@@ -506,7 +566,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         return send_sign_status(E_INCORRECT_P1_P2);
     }
 
+#ifdef HAVE_MLDSA_POC
+    if ((pq_signing && (p1 == P1_MORE || p1 == P1_LAST) &&
+         appState != APP_STATE_PQ_RECEIVING_TX) ||
+        (!pq_signing && p1 == P1_MORE && appState != APP_STATE_SIGNING)) {
+#else
     if (p1 == P1_MORE && appState != APP_STATE_SIGNING) {
+#endif
         PRINTF("Signature not initialized\n");
         return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
@@ -603,6 +669,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                0,
                                tmpCtx.transactionContext.hash,
                                32));
+
+#ifdef HAVE_MLDSA_POC
+    // The first PoC deliberately supports only the smallest useful native
+    // account flow. The default owner permission of a PQ-native account maps
+    // directly to the account address, so no hybrid ECDSA permission is needed.
+    if (pq_signing) {
+        if (txContent.contractType != TRANSFERCONTRACT || txContent.permission_id != 0 ||
+            memcmp(txContent.account, pq_mldsa_address(), TRON_PQ_ADDRESS_SIZE) != 0) {
+            PRINTF("Unsupported or mismatched PQ transaction\n");
+            return send_sign_status(E_INCORRECT_DATA);
+        }
+        appState = APP_STATE_PQ_REVIEW;
+    }
+#endif
 
     if (txContent.permission_id > 0) {
         size_t prefix_len = 0U;
@@ -1190,3 +1270,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     return 0;
 }
+
+int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+    return handleSignInternal(p1, p2, workBuffer, dataLength, false);
+}
+
+#ifdef HAVE_MLDSA_POC
+int handleSignPq(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+    return handleSignInternal(p1, p2, workBuffer, dataLength, true);
+}
+#endif

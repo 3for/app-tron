@@ -1,0 +1,52 @@
+name: ML-DSA PoC
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mldsa_poc.yml"
+      - "Makefile"
+      - "ledger_app.toml"
+      - "src/**"
+      - "tests/pq_poc_probe.py"
+      - "tests/ragger/test_mldsa_poc.py"
+
+permissions:
+  contents: read
+
+jobs:
+  nanosplus-speculos:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:1350bb805ce3f03a7cdf403de701c5e6aa5246c94fa251660f88949bea3c8638
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check API-26 ML-DSA toolchain
+        run: |
+          test "$(git -C /opt/nanosplus-secure-sdk rev-parse HEAD)" = "db03d3e8e65825d2cfba4e68064a7b120eace416"
+          test "$(sha256sum /opt/nanosplus-secure-sdk/lib_cxng/include/lcx_mldsa.h | cut -d ' ' -f 1)" = "d96e4478d142684aea7568b416d22346b849b488250fec931844fddc720f3d70"
+          grep -q '^API_LEVEL := 26$' /opt/nanosplus-secure-sdk/Makefile.defines
+
+      - name: Build Nano S+ PoC
+        run: make BOLOS_SDK=/opt/nanosplus-secure-sdk TARGET=nanos2 MLDSA_POC=1 -j2
+
+      - name: Run Speculos end-to-end probe
+        run: |
+          speculos --model nanosp --api-port 5000 --apdu-port 9999 --display headless bin/app.elf > /tmp/mldsa-speculos.log 2>&1 &
+          echo $! > /tmp/mldsa-speculos.pid
+          python3 tests/pq_poc_probe.py --output-dir /tmp/tron-mldsa-poc
+
+      - name: Stop Speculos and print its log
+        if: always()
+        run: |
+          test ! -f /tmp/mldsa-speculos.pid || kill "$(cat /tmp/mldsa-speculos.pid)" || true
+          test ! -f /tmp/mldsa-speculos.log || cat /tmp/mldsa-speculos.log
+
+      - name: Upload interoperability artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tron-mldsa-poc-artifacts
+          path: /tmp/tron-mldsa-poc
+          retention-days: 7

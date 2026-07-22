@@ -59,6 +59,30 @@ ENABLE_TLV_LIBRARY = 1
 ENABLE_LISTS_LIBRARY = 1
 DEFINES += HAVE_SDK_LL_LIB
 
+# Experimental, RAM-only ML-DSA-44 proof of concept. This is deliberately kept
+# out of production builds: it requires the API-26 lib_cxng implementation and
+# generates an unrecoverable random key that only lives for the app session.
+MLDSA_POC ?= 0
+ifneq ($(MLDSA_POC),0)
+    DEFINES += HAVE_MLDSA_POC
+
+    MLDSA_SDK_SOURCES = \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_internal.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_lowram.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_packing.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_params.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_poly.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_polymat.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_polyvec.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_rounding.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_sample.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_smallpoly.c \
+        $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_util.c
+
+    APP_SOURCE_FILES += $(MLDSA_SDK_SOURCES)
+endif
+
 # Gated/"dated" signing (INS_PROVIDE_GATING 0x38), ported from app-ethereum.
 DEFINES += HAVE_GATING_SUPPORT
 

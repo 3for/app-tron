@@ -14,6 +14,8 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  ********************************************************************************/
+#include <string.h>
+
 #include "ui_globals.h"
 #include "helpers.h"
 #include "io.h"
@@ -25,6 +27,10 @@
 #include "nbgl_use_case.h"
 #include "ui_logic.h"
 #include "ui_callbacks.h"
+
+#ifdef HAVE_MLDSA_POC
+#include "pq_mldsa.h"
+#endif
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -82,6 +88,18 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 }
 
 bool ui_callback_tx_cancel(bool display_menu) {
+#ifdef HAVE_MLDSA_POC
+    if (appState == APP_STATE_PQ_REVIEW) {
+        pq_sign_transaction_cleanup(false);
+        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+
+        if (display_menu) {
+            ui_idle();
+        }
+        return true;
+    }
+#endif
+
     reset_app_context();
     io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
 
@@ -95,6 +113,33 @@ bool ui_callback_tx_cancel(bool display_menu) {
 
 bool ui_callback_tx_ok(bool display_menu) {
     bool ret = true;
+#ifdef HAVE_MLDSA_POC
+    if (appState == APP_STATE_PQ_REVIEW) {
+        uint8_t hash[HASH_SIZE];
+
+        memcpy(hash, tmpCtx.transactionContext.hash, sizeof(hash));
+        // The UI no longer needs the buffered raw transaction. Release its
+        // 4096-byte allocation before allocating the 2420-byte signature and
+        // the ML-DSA signing workspace.
+        pq_sign_transaction_cleanup(false);
+        if (!pq_mldsa_sign_hash(hash)) {
+            // A key/sign/verify failure is fatal for an unrecoverable random-key
+            // session: erase the key instead of allowing it to be reused.
+            reset_app_context();
+            io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+            ret = false;
+        } else {
+            pq_sign_transaction_cleanup(true);
+            sendPqSessionMetadata(true);
+        }
+        explicit_bzero(hash, sizeof(hash));
+
+        if (display_menu) {
+            ui_idle();
+        }
+        return ret;
+    }
+#endif
 #ifdef HAVE_SWAP
     bool quit_swap = G_called_from_swap && G_swap_response_ready;
 #endif  // HAVE_SWAP

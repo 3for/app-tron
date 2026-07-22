@@ -34,6 +34,10 @@
 #include "cmd_proxy_info.h"
 #include "cmd_enum_value.h"
 
+#ifdef HAVE_MLDSA_POC
+#include "pq_mldsa.h"
+#endif
+
 #ifdef HAVE_GATING_SUPPORT
 #include "cmd_get_gating.h"
 #endif  // HAVE_GATING_SUPPORT
@@ -66,7 +70,41 @@ int apdu_dispatcher(const command_t *cmd) {
     }
 #endif  // HAVE_SWAP
 
+#ifdef HAVE_MLDSA_POC
+    // Keep the unrecoverable random key isolated from legacy signing flows.
+    if (pq_mldsa_has_key() && cmd->ins != INS_GET_APP_CONFIGURATION &&
+        cmd->ins != INS_GET_PQ_CAPABILITIES && cmd->ins != INS_GENERATE_PQ_KEY &&
+        cmd->ins != INS_SIGN_PQ && cmd->ins != INS_GET_PQ_RESULT &&
+        cmd->ins != INS_ABORT_PQ_SESSION && cmd->ins != INS_MLDSA_SELFTEST &&
+        cmd->ins != INS_CLOSE_PQ_RESULT) {
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+#endif
+
     switch (cmd->ins) {
+#ifdef HAVE_MLDSA_POC
+        case INS_GET_PQ_CAPABILITIES:
+            return handleGetPqCapabilities(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_GENERATE_PQ_KEY:
+            return handleGeneratePqKey(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_GET_PQ_RESULT:
+            return handleGetPqResult(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_ABORT_PQ_SESSION:
+            return handleDeletePqKey(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_MLDSA_SELFTEST:
+            return handleMldsaSelftest(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_SIGN_PQ:
+            return handleSignPq(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+
+        case INS_CLOSE_PQ_RESULT:
+            return handleClosePqResult(cmd->p1, cmd->p2, cmd->data, cmd->lc);
+#endif
+
         case INS_GET_PUBLIC_KEY:
             forget_known_assets();
             // Request Public Key

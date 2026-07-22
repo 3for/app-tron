@@ -290,6 +290,12 @@ static void rejectChoice(void) {
 
 static void rejectStatusDismissed(void) {
     ui_idle();
+#ifdef HAVE_MLDSA_POC
+    if (appState == APP_STATE_PQ_REVIEW) {
+        ui_callback_tx_cancel(false);
+        return;
+    }
+#endif
     io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, false);
 }
 
@@ -626,6 +632,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[idx].item = stringLabelSenderAddress;
             txInfos.fields[idx].value = strings.common.fromAddress;
             idx++;
+
+#ifdef HAVE_MLDSA_POC
+            if (appState == APP_STATE_PQ_REVIEW) {
+                txInfos.fields[idx].item = "Signer";
+                txInfos.fields[idx].value = "Temporary ML-DSA-44 key";
+                idx++;
+            }
+#endif
 
             // Single "Amount" field carrying "<value> <ticker>" (the token ticker is
             // merged into G_io_apdu_buffer in sign.c), mirroring app-ethereum's
@@ -1367,6 +1381,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             PRINTF("This should not happen !\n");
             break;
     }
+
+#ifdef HAVE_MLDSA_POC
+    if (appState == APP_STATE_PQ_REVIEW) {
+        txInfos.flowTitle = "Review ML-DSA-44\ntransaction";
+        infoLongPress.text = "Sign with temporary\nML-DSA-44 key";
+    }
+#endif
 
     // Append the transaction hash when the displayHash setting is on, or always for the
     // custom-contract blind-signing path. Mirrors app-ethereum's ux_init_strings

@@ -98,6 +98,11 @@ You can choose which device to compile and load for by setting the `BOLOS_SDK` e
 - `BOLOS_SDK=$FLEX_SDK`
 - `BOLOS_SDK=$APEX_P_SDK`
 
+An opt-in, non-production random-key ML-DSA-44 proof of concept is available
+with `MLDSA_POC=1` on API-26 SDKs. Its security boundary, pinned toolchain,
+APDU protocol, and Speculos verification procedure are documented in
+[doc/mldsa-poc.md](doc/mldsa-poc.md).
+
 ## Loading on a physical device
 
 This step will vary slightly depending on your platform.

@@ -68,6 +68,18 @@
 // Gated/"dated" signing descriptor. Same opcode as app-ethereum.
 #define INS_PROVIDE_GATING 0x38
 
+#ifdef HAVE_MLDSA_POC
+// Experimental ML-DSA-44 PoC. These commands use an unrecoverable random key
+// held in app RAM and are intentionally absent from production builds.
+#define INS_GET_PQ_CAPABILITIES 0x30
+#define INS_GENERATE_PQ_KEY     0x32
+#define INS_SIGN_PQ             0x34
+#define INS_GET_PQ_RESULT       0x36
+#define INS_ABORT_PQ_SESSION    0x3A
+#define INS_MLDSA_SELFTEST      0x3C
+#define INS_CLOSE_PQ_RESULT     0x3E
+#endif
+
 #define P1_CONFIRM     0x01
 #define P1_NON_CONFIRM 0x00
 
@@ -97,6 +109,11 @@ int apdu_dispatcher(const command_t *cmd);
 
 int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dataLength);
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+#ifdef HAVE_MLDSA_POC
+int handleSignPq(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+void pq_sign_transaction_cleanup(bool keep_signature);
+int sendPqSessionMetadata(bool include_signature);
+#endif
 int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
@@ -119,3 +136,30 @@ int handleProvideNFTInformation(uint8_t p1,
 // Generic Clear Signing signing (INS_SIGN_GCS): P2_GCS_STORE streams the
 // TriggerSmartContract, P2_GCS_START_FLOW runs the review + signs.
 int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
+
+#ifdef HAVE_MLDSA_POC
+int handleGetPqCapabilities(uint8_t p1,
+                            uint8_t p2,
+                            const uint8_t *data,
+                            uint16_t dataLength);
+int handleGeneratePqKey(uint8_t p1,
+                        uint8_t p2,
+                        const uint8_t *data,
+                        uint16_t dataLength);
+int handleMldsaSelftest(uint8_t p1,
+                        uint8_t p2,
+                        const uint8_t *data,
+                        uint16_t dataLength);
+int handleGetPqResult(uint8_t p1,
+                      uint8_t p2,
+                      const uint8_t *data,
+                      uint16_t dataLength);
+int handleDeletePqKey(uint8_t p1,
+                      uint8_t p2,
+                      const uint8_t *data,
+                      uint16_t dataLength);
+int handleClosePqResult(uint8_t p1,
+                        uint8_t p2,
+                        const uint8_t *data,
+                        uint16_t dataLength);
+#endif

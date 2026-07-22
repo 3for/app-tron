@@ -1,0 +1,41 @@
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+def javaTronDirProvider = providers.gradleProperty('javaTronDir')
+        .orElse(providers.environmentVariable('JAVA_TRON_DIR'))
+
+if (!javaTronDirProvider.isPresent()) {
+    throw new GradleException(
+            'Set JAVA_TRON_DIR or -PjavaTronDir to the PQ-enabled java-tron checkout')
+}
+
+def javaTronCryptoClasses = file(
+        "${javaTronDirProvider.get()}/crypto/build/classes/java/main")
+
+if (!javaTronCryptoClasses.isDirectory()) {
+    throw new GradleException(
+            "java-tron crypto classes not found at ${javaTronCryptoClasses}; " +
+                    'build the java-tron crypto module first')
+}
+
+dependencies {
+    implementation files(javaTronCryptoClasses)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+}
+
+application {
+    mainClass = 'LedgerMldsaFileVerify'
+}

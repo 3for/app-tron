@@ -40,6 +40,10 @@
 #include "tlv_apdu.h"      // tlv_apdu_reset
 #include "context_712.h"    // tip712_context_cleanup
 
+#ifdef HAVE_MLDSA_POC
+#include "pq_mldsa.h"
+#endif
+
 #ifdef HAVE_GATING_SUPPORT
 #include "cmd_get_gating.h"  // clear_gating
 #endif  // HAVE_GATING_SUPPORT
@@ -69,6 +73,11 @@ caller_app_t *caller_app = NULL;
 extern void roll_challenge(void);
 
 void reset_app_context() {
+#ifdef HAVE_MLDSA_POC
+    // A full app reset invalidates the unrecoverable RAM-only PQ key. Recoverable
+    // PQ transaction errors must use their dedicated cleanup path instead.
+    pq_mldsa_full_cleanup();
+#endif
     message_cleanup();
     sign_cleanup();
     // Drop any incomplete metadata/GCS descriptor shared TLV stream.
