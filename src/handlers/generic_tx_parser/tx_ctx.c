@@ -122,7 +122,9 @@ static bool process_empty_tx(const s_tx_ctx *tx_ctx) {
             }
         }
         ticker = get_displayable_ticker(&tx_info->chain_id, chainConfig, true);
-        decimals = WEI_TO_ETHER;
+        // TRON native values are denominated in SUN, including values attached
+        // to nested calls with empty calldata.
+        decimals = SUN_TO_TRX;
         if (!amountToString(tx_ctx->amount,
                             sizeof(tx_ctx->amount),
                             decimals,

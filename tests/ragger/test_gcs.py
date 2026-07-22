@@ -1792,7 +1792,7 @@ def test_gcs_nested_execTransaction_send(
         contract = Web3().eth.contract(abi=json.load(f), address=contract_addr)
     data = contract.encode_abi("execTransaction", [
         contract_addr,
-        Web3.to_wei(0.0042, "ether"),
+        4_200,  # 0.0042 TRX in SUN
         bytes(),
         0,
         0,
