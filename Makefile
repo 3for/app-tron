@@ -81,6 +81,16 @@ ifneq ($(MLDSA_POC),0)
         $(BOLOS_SDK)/lib_cxng/src/cx_mldsa_util.c
 
     APP_SOURCE_FILES += $(MLDSA_SDK_SOURCES)
+
+    # API-26's ML-DSA implementation is compiled from the SDK because it is not
+    # part of the standard linked libraries yet. Keep its known upstream
+    # diagnostics local to the two affected SDK translation units instead of
+    # weakening warning checks for app-tron sources.
+    MLDSA_SDK_UNUSED_RESULT_OBJECTS := \
+        $(OBJ_DIR)/sdk/lib_cxng/src/cx_mldsa.o \
+        $(OBJ_DIR)/sdk/lib_cxng/src/cx_mldsa_util.o
+    $(MLDSA_SDK_UNUSED_RESULT_OBJECTS): CFLAGS += -Wno-unused-result
+    $(OBJ_DIR)/sdk/lib_cxng/src/cx_mldsa.o: CFLAGS += -Wno-typedef-redefinition
 endif
 
 # Gated/"dated" signing (INS_PROVIDE_GATING 0x38), ported from app-ethereum.
