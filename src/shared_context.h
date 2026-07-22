@@ -53,6 +53,7 @@ typedef enum {
     // generic_tx_parser (GCS) module ported from app-ethereum.
     APP_STATE_SIGNING_TX,
 #ifdef HAVE_MLDSA_POC
+    APP_STATE_PQ_ADDRESS_REVIEW,
     APP_STATE_PQ_KEY_READY,
     APP_STATE_PQ_RECEIVING_TX,
     APP_STATE_PQ_REVIEW,

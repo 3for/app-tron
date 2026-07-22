@@ -66,6 +66,27 @@ bool ui_callback_address_ok(bool display_menu) {
     return true;
 }
 
+#ifdef HAVE_MLDSA_POC
+bool ui_callback_pq_address_ok(bool display_menu) {
+    if (appState != APP_STATE_PQ_ADDRESS_REVIEW || !pq_mldsa_has_key()) {
+        pq_mldsa_full_cleanup();
+        appState = APP_STATE_IDLE;
+        io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        return false;
+    }
+
+    // The random key must survive address confirmation so that subsequent
+    // GET_RESULT and SIGN_PQ commands use the exact key the user approved.
+    appState = APP_STATE_PQ_KEY_READY;
+    sendPqSessionMetadata(false);
+
+    if (display_menu) {
+        ui_idle();
+    }
+    return true;
+}
+#endif
+
 bool ui_callback_signMessage_ok(bool display_menu) {
     bool ret = true;
 
@@ -89,6 +110,16 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 
 bool ui_callback_tx_cancel(bool display_menu) {
 #ifdef HAVE_MLDSA_POC
+    if (appState == APP_STATE_PQ_ADDRESS_REVIEW) {
+        pq_mldsa_full_cleanup();
+        appState = APP_STATE_IDLE;
+        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+
+        if (display_menu) {
+            ui_idle();
+        }
+        return true;
+    }
     if (appState == APP_STATE_PQ_REVIEW) {
         pq_sign_transaction_cleanup(false);
         io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);

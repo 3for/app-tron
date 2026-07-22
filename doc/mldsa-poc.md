@@ -14,6 +14,9 @@ is deliberately not a production account implementation.
 - One key can sign multiple transactions during the same uninterrupted app
   session. ML-DSA signatures are randomized, so two valid signatures made by
   the same key over the same transaction ID need not be equal.
+- `INS_GENERATE_PQ_KEY` supports an explicit on-device address confirmation
+  mode (`P1=1`). Hardware workflows must use it before funding the temporary
+  account; `P1=0` remains only for automated PoC probes.
 - `INS_SIGN_PQ` currently accepts only `TransferContract`, owner permission 0,
   where `owner_address` exactly matches the address derived from the active PQ
   public key. Legacy signing, GCS, TIP-712, swap, and other PQ contract types
@@ -60,7 +63,7 @@ and must not be confused with TRON's wire-level `PQScheme.ML_DSA_44 = 2`.
 | INS | Name | Request | Response |
 | --- | --- | --- | --- |
 | `0x30` | capabilities | empty | version, scheme, pk size, sig size, flags |
-| `0x32` | generate key | `P1=0`, `P2=2` | session metadata |
+| `0x32` | generate key | `P1=0` probe or `P1=1` confirmed hardware flow, `P2=2` | session metadata after optional approval |
 | `0x34` | sign raw data | first payload is `session_id || raw_data`; continuation payloads are raw data | asynchronous review, then session metadata |
 | `0x36` | read result | `session_id[4] || object[1] || offset[2] || requested[1]` | chunk header and bytes |
 | `0x3A` | abort session | `session_id[4]` | status only; key is erased |
@@ -119,6 +122,35 @@ normal build where the experimental capability APDU is absent.
 The independent java-tron verifier sources and compilation instructions live
 in `tron-pq-verify/`.
 
+## Real device, Nile, and private-chain broadcast
+
+`tests/pq_hardware_nile.py` is the host-side real-device driver. It confirms
+the temporary PQ address, obtains a node-built `raw_data`, drives chunked
+signing, verifies the artifacts with `tron-pq-verify`, encodes `PQAuthSig`, and
+optionally broadcasts through `/wallet/broadcasthex`.
+
+Install `tests/ragger/requirements.txt`, connect and unlock the device, sideload
+the matching API-26 `MLDSA_POC=1` build, and open the Tron app before running
+the hardware flow. Do not pass the Speculos-only transport options for a real
+device.
+
+Check a network without opening the device:
+
+```sh
+python3 tests/pq_hardware_nile.py --check-chain
+```
+
+Broadcasting has a redundant hard gate: `--broadcast` is rejected before key
+generation unless `getAllowMlDsa44` is exactly 1, and the parameter is checked
+again immediately before the network call. A missing `value` in java-tron's
+JSON response is protobuf default zero. Consequently, public Nile can be used
+for a local signing/verification dry run, but cannot receive a PQ broadcast
+while its ML-DSA parameter remains disabled. Do not fund an ephemeral PQ
+address on such a network.
+
+The reproducible one-node test network and full broadcast procedure are in
+`tests/private-chain/README.md`.
+
 ## Verified result
 
 The Nano S+ API-26 Speculos flow completed key generation, recoverable parser
@@ -145,5 +177,6 @@ These are build/link results, not runtime memory or watchdog measurements.
 
 Remaining production gates are deterministic cross-wallet key derivation and
 recovery, real-device stack/heap/time/watchdog measurements (with Nano X as a
-minimum gate), host protocol integration, broader contract policy, private-chain
-broadcast, and Ledger security review.
+minimum gate), production host integration, broader contract policy, and
+Ledger security review. A PoC-only host flow and private-chain broadcast are
+now covered; they do not satisfy those production gates.

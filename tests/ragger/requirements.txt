@@ -4,5 +4,6 @@ pycryptodome
 ragger[speculos]>=1.7.1
 ragger[ledgerwallet]>=1.7.1
 ecdsa
+ledgerblue
 web3~=7.0
 protobuf==3.20.3

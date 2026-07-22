@@ -103,6 +103,9 @@ with `MLDSA_POC=1` on API-26 SDKs. Its security boundary, pinned toolchain,
 APDU protocol, and Speculos verification procedure are documented in
 [doc/mldsa-poc.md](doc/mldsa-poc.md).
 
+The physical-device and disposable private-chain end-to-end procedure is in
+[tests/private-chain/README.md](tests/private-chain/README.md).
+
 ## Loading on a physical device
 
 This step will vary slightly depending on your platform.

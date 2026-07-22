@@ -9,6 +9,9 @@ on:
       - "ledger_app.toml"
       - "src/**"
       - "tests/pq_poc_probe.py"
+      - "tests/pq_hardware_nile.py"
+      - "tests/host/test_pq_hardware_nile.py"
+      - "tests/private-chain/**"
       - "tests/ragger/test_mldsa_poc.py"
 
 permissions:

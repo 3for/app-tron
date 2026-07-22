@@ -1413,8 +1413,18 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 }
 
 static void display_address_callback(bool confirm) {
+#ifdef HAVE_MLDSA_POC
+    bool pq_address_review = (appState == APP_STATE_PQ_ADDRESS_REVIEW);
+#endif
     if (confirm) {
-        ui_callback_address_ok(false);
+#ifdef HAVE_MLDSA_POC
+        if (pq_address_review) {
+            ui_callback_pq_address_ok(false);
+        } else
+#endif
+        {
+            ui_callback_address_ok(false);
+        }
         nbgl_useCaseReviewStatus(STATUS_TYPE_ADDRESS_VERIFIED, ui_idle);
     } else {
         ui_callback_tx_cancel(false);
@@ -1427,7 +1437,13 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
         nbgl_useCaseAddressReview(strings.common.toAddress,
                                   NULL,
                                   &APP_TRON_HOME_ICON,
+#ifdef HAVE_MLDSA_POC
+                                  appState == APP_STATE_PQ_ADDRESS_REVIEW
+                                      ? "Verify temporary\nML-DSA-44 address"
+                                      : "Verify Tron\naddress",
+#else
                                   "Verify Tron\naddress",
+#endif
                                   NULL,
                                   display_address_callback);
     } else {

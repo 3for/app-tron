@@ -4,10 +4,13 @@
 
 #include "apdu_constants.h"
 #include "app_errors.h"
+#include "helpers.h"
 #include "io.h"
 #include "os.h"
 #include "pq_mldsa.h"
 #include "shared_context.h"
+#include "ui_globals.h"
+#include "ui_review_menu.h"
 
 #define PQ_RESULT_REQUEST_SIZE 8U
 #define PQ_RESULT_MAX_CHUNK    220U
@@ -67,16 +70,25 @@ int handleGeneratePqKey(uint8_t p1,
                         uint16_t data_length) {
     (void) data;
 
-    // Key/address creation is intentionally non-interactive in this PoC. A
-    // production account flow must add explicit address confirmation.
-    if (p1 != P1_NON_CONFIRM || p2 != TRON_PQ_SCHEME_ML_DSA_44 || data_length != 0) {
+    if ((p1 != P1_CONFIRM && p1 != P1_NON_CONFIRM) ||
+        p2 != TRON_PQ_SCHEME_ML_DSA_44 || data_length != 0) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
     if (!pq_mldsa_generate_key()) {
         return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
-    appState = APP_STATE_PQ_KEY_READY;
-    return sendPqSessionMetadata(false);
+    if (p1 == P1_NON_CONFIRM) {
+        // Retained for the automated PoC probes. Hardware account workflows
+        // must use P1_CONFIRM so the address is verified on-device before it
+        // receives funds.
+        appState = APP_STATE_PQ_KEY_READY;
+        return sendPqSessionMetadata(false);
+    }
+
+    getBase58FromAddress(pq_mldsa_address(), strings.common.toAddress);
+    appState = APP_STATE_PQ_ADDRESS_REVIEW;
+    ux_flow_display(APPROVAL_VERIFY_ADDRESS, false);
+    return 0;
 }
 
 int handleMldsaSelftest(uint8_t p1,

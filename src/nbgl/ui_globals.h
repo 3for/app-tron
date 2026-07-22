@@ -70,6 +70,9 @@ static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 bool ui_callback_tx_ok(bool display_menu);
 bool ui_callback_tx_cancel(bool display_menu);
 bool ui_callback_address_ok(bool display_menu);
+#ifdef HAVE_MLDSA_POC
+bool ui_callback_pq_address_ok(bool display_menu);
+#endif
 bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
 

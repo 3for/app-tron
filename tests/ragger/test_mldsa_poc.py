@@ -12,6 +12,7 @@ from Crypto.Hash import keccak
 
 from client.command_builder import CLA
 from client.status_word import StatusWord
+from ragger.backend.interface import RaisePolicy
 from ragger.error import ExceptionRAPDU
 from tron import TronClient
 
@@ -92,6 +93,16 @@ def _generate_key(backend):
     return session_id, address, response.data[31:63]
 
 
+def _parse_key_metadata(data: bytes):
+    assert len(data) == 63
+    assert data[:2] == bytes([1, PQ_SCHEME_ML_DSA_44])
+    session_id = data[2:6]
+    address = data[6:27]
+    assert struct.unpack(">H", data[27:29])[0] == PQ_PUBLIC_KEY_SIZE
+    assert struct.unpack(">H", data[29:31])[0] == 0
+    return session_id, address, data[31:63]
+
+
 def _get_result(backend, session_id: bytes, obj: int, expected_size: int) -> bytes:
     result = bytearray()
     offset = 0
@@ -111,6 +122,52 @@ def _get_result(backend, session_id: bytes, obj: int, expected_size: int) -> byt
         offset += chunk_length
         assert response.data[11] == (offset == expected_size)
     return bytes(result)
+
+
+def test_mldsa_poc_address_confirmed(backend, scenario_navigator, test_name):
+    _capabilities_or_skip(backend)
+
+    with backend.exchange_async(CLA,
+                                INS_GENERATE_PQ_KEY,
+                                1,
+                                PQ_SCHEME_ML_DSA_44,
+                                b""):
+        scenario_navigator.address_review_approve(test_name=test_name,
+                                                  do_comparison=False)
+
+    response = backend.last_async_response
+    assert response.status == StatusWord.OK
+    session_id, pq_address, fingerprint = _parse_key_metadata(response.data)
+    public_key = _get_result(backend, session_id, PQ_RESULT_PUBLIC_KEY,
+                             PQ_PUBLIC_KEY_SIZE)
+    assert hashlib.sha256(public_key).digest() == fingerprint
+    assert pq_address == b"\x41" + keccak.new(digest_bits=256,
+                                                data=public_key).digest()[-20:]
+
+    abort = backend.exchange(CLA, INS_ABORT_PQ_SESSION, 0, 0, session_id)
+    assert abort.status == StatusWord.OK
+
+
+def test_mldsa_poc_address_rejected_erases_key(backend, scenario_navigator):
+    _capabilities_or_skip(backend)
+    previous_policy = backend.raise_policy
+    backend.raise_policy = RaisePolicy.RAISE_NOTHING
+    try:
+        with backend.exchange_async(CLA,
+                                    INS_GENERATE_PQ_KEY,
+                                    1,
+                                    PQ_SCHEME_ML_DSA_44,
+                                    b""):
+            scenario_navigator.address_review_reject(do_comparison=False)
+        assert backend.last_async_response.status == StatusWord.CONDITION_NOT_SATISFIED
+    finally:
+        backend.raise_policy = previous_policy
+
+    # A fresh generation must succeed after rejection. This also proves the UI
+    # state returned to IDLE rather than leaving a half-open address review.
+    session_id, _, _ = _generate_key(backend)
+    abort = backend.exchange(CLA, INS_ABORT_PQ_SESSION, 0, 0, session_id)
+    assert abort.status == StatusWord.OK
 
 
 def test_mldsa_poc_transfer(backend, device, scenario_navigator):
