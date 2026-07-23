@@ -140,3 +140,32 @@ if(NOT APPLE)
 endif()
 
 add_test(test_legacy_tx_stream test_legacy_tx_stream)
+
+add_library(create_smart_contract_stream_lib STATIC
+            ../../src/handlers/create_smart_contract_stream.c)
+target_include_directories(create_smart_contract_stream_lib
+                           PUBLIC
+                           .
+                           ../fuzzing/include
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+
+add_executable(test_create_smart_contract_stream
+               tests/create_smart_contract_stream.c)
+target_include_directories(test_create_smart_contract_stream
+                           PRIVATE
+                           .
+                           ../fuzzing/include
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+target_link_libraries(test_create_smart_contract_stream
+                      PUBLIC
+                      cmocka
+                      create_smart_contract_stream_lib)
+if(NOT APPLE)
+    target_link_libraries(test_create_smart_contract_stream PUBLIC gcov)
+endif()
+
+add_test(test_create_smart_contract_stream test_create_smart_contract_stream)

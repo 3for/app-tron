@@ -61,7 +61,7 @@ static void pop_finished_frames(legacy_tx_stream_t *stream) {
     }
 }
 
-static bool consume_byte(legacy_tx_stream_t *stream) {
+static bool consume_bytes(legacy_tx_stream_t *stream, size_t len) {
     if (stream->depth == 0U || stream->finished || stream->error) {
         return false;
     }
@@ -69,10 +69,14 @@ static bool consume_byte(legacy_tx_stream_t *stream) {
         if (!stream->frames[i].bounded) {
             continue;
         }
-        if (stream->frames[i].remaining == 0U) {
+        if (stream->frames[i].remaining < len) {
             return false;
         }
-        stream->frames[i].remaining--;
+    }
+    for (size_t i = 0; i < stream->depth; i++) {
+        if (stream->frames[i].bounded) {
+            stream->frames[i].remaining -= len;
+        }
     }
     return true;
 }
@@ -249,12 +253,20 @@ static bool start_length_field(legacy_tx_stream_t *stream, size_t len) {
         stream->bytes_action = LEGACY_TX_BYTES_TYPE_URL;
     } else if (context == LEGACY_TX_CTX_ANY &&
                stream->pending_tag == google_protobuf_Any_value_tag) {
-        if (stream->parameter_seen || len > sizeof(stream->parameter)) {
+        if (stream->parameter_seen) {
             return false;
         }
         stream->parameter_seen = true;
         stream->parameter_len = len;
+        stream->parameter_capture_len = 0U;
+        stream->parameter_overflow = len > sizeof(stream->parameter);
         stream->bytes_action = LEGACY_TX_BYTES_PARAMETER;
+        if (stream->parameter_observer.on_begin != NULL) {
+            stream->parameter_observer.on_begin(stream->parameter_observer.ctx, len);
+        }
+        if (len == 0U && stream->parameter_observer.on_end != NULL) {
+            stream->parameter_observer.on_end(stream->parameter_observer.ctx);
+        }
     }
 
     stream->bytes_remaining = len;
@@ -266,7 +278,7 @@ static bool process_byte(legacy_tx_stream_t *stream, uint8_t byte) {
     bool done = false;
     uint64_t value = 0;
 
-    if (!consume_byte(stream)) {
+    if (!consume_bytes(stream, 1U)) {
         return false;
     }
 
@@ -330,21 +342,7 @@ static bool process_byte(legacy_tx_stream_t *stream, uint8_t byte) {
             break;
 
         case LEGACY_TX_MODE_BYTES:
-            if (stream->bytes_remaining == 0U) {
-                return false;
-            }
-            if (stream->bytes_action == LEGACY_TX_BYTES_TYPE_URL) {
-                stream->type_url[stream->capture_offset++] = byte;
-            } else if (stream->bytes_action == LEGACY_TX_BYTES_PARAMETER) {
-                stream->parameter[stream->capture_offset++] = byte;
-            }
-            stream->bytes_remaining--;
-            if (stream->bytes_remaining == 0U) {
-                stream->mode = LEGACY_TX_MODE_KEY;
-                stream->bytes_action = LEGACY_TX_BYTES_SKIP;
-                stream->capture_offset = 0;
-            }
-            break;
+            return false;
 
         default:
             return false;
@@ -354,11 +352,61 @@ static bool process_byte(legacy_tx_stream_t *stream, uint8_t byte) {
     return true;
 }
 
-void legacy_tx_stream_init(legacy_tx_stream_t *stream) {
+static bool process_bytes_chunk(legacy_tx_stream_t *stream,
+                                const uint8_t *data,
+                                size_t len) {
+    if (len == 0U || len > stream->bytes_remaining ||
+        !consume_bytes(stream, len)) {
+        return false;
+    }
+
+    if (stream->bytes_action == LEGACY_TX_BYTES_TYPE_URL) {
+        if (len > sizeof(stream->type_url) - stream->capture_offset) {
+            return false;
+        }
+        memcpy(stream->type_url + stream->capture_offset, data, len);
+        stream->capture_offset += len;
+    } else if (stream->bytes_action == LEGACY_TX_BYTES_PARAMETER) {
+        if (!stream->parameter_overflow) {
+            if (len > sizeof(stream->parameter) -
+                          stream->parameter_capture_len) {
+                return false;
+            }
+            memcpy(stream->parameter + stream->parameter_capture_len,
+                   data,
+                   len);
+            stream->parameter_capture_len += len;
+        }
+        if (stream->parameter_observer.on_chunk != NULL) {
+            stream->parameter_observer.on_chunk(stream->parameter_observer.ctx,
+                                                data,
+                                                len);
+        }
+    }
+
+    stream->bytes_remaining -= len;
+    if (stream->bytes_remaining == 0U) {
+        if (stream->bytes_action == LEGACY_TX_BYTES_PARAMETER &&
+            stream->parameter_observer.on_end != NULL) {
+            stream->parameter_observer.on_end(stream->parameter_observer.ctx);
+        }
+        stream->mode = LEGACY_TX_MODE_KEY;
+        stream->bytes_action = LEGACY_TX_BYTES_SKIP;
+        stream->capture_offset = 0U;
+        pop_finished_frames(stream);
+    }
+    return true;
+}
+
+void legacy_tx_stream_init(legacy_tx_stream_t *stream,
+                           const legacy_parameter_observer_t *observer) {
     if (stream == NULL) {
         return;
     }
     memset(stream, 0, sizeof(*stream));
+    if (observer != NULL) {
+        stream->parameter_observer = *observer;
+    }
     stream->frames[0].context = LEGACY_TX_CTX_RAW;
     stream->frames[0].bounded = false;
     stream->depth = 1U;
@@ -376,10 +424,24 @@ bool legacy_tx_stream_feed(legacy_tx_stream_t *stream, const uint8_t *data, size
         return false;
     }
 
-    for (size_t i = 0; i < len; i++) {
-        if (!process_byte(stream, data[i])) {
-            set_error(stream);
-            return false;
+    size_t offset = 0U;
+    while (offset < len) {
+        if (stream->mode == LEGACY_TX_MODE_BYTES) {
+            size_t take = len - offset;
+            if (take > stream->bytes_remaining) {
+                take = stream->bytes_remaining;
+            }
+            if (!process_bytes_chunk(stream, data + offset, take)) {
+                set_error(stream);
+                return false;
+            }
+            offset += take;
+        } else {
+            if (!process_byte(stream, data[offset])) {
+                set_error(stream);
+                return false;
+            }
+            offset++;
         }
     }
     stream->total_len += len;
@@ -391,6 +453,9 @@ bool legacy_tx_stream_finish(legacy_tx_stream_t *stream, legacy_tx_stream_result
         stream->total_len == 0U || stream->depth != 1U || stream->mode != LEGACY_TX_MODE_KEY ||
         stream->bytes_remaining != 0U || stream->varint_count != 0U || !stream->contract_seen ||
         !stream->parameter_message_seen || !stream->type_url_seen || !stream->parameter_seen ||
+        (!stream->parameter_overflow &&
+         stream->parameter_capture_len != stream->parameter_len) ||
+        (stream->parameter_overflow && stream->parameter_capture_len != 0U) ||
         !type_url_matches_contract(stream)) {
         if (stream != NULL) {
             set_error(stream);
@@ -403,7 +468,8 @@ bool legacy_tx_stream_finish(legacy_tx_stream_t *stream, legacy_tx_stream_result
     result->permission_id = stream->permission_id;
     result->fee_limit = stream->fee_limit;
     result->custom_data_len = stream->custom_data_len;
-    result->parameter = stream->parameter;
+    result->parameter = stream->parameter_overflow ? NULL : stream->parameter;
     result->parameter_len = stream->parameter_len;
+    result->parameter_overflow = stream->parameter_overflow;
     return true;
 }

@@ -110,7 +110,7 @@ static inline cx_err_t cx_hash_no_throw(cx_hash_t *ctx,
     for (size_t i = 0; i < in_len; i++) {
         ctx->mix ^= (uint32_t) in[i] + 0x9E3779B9U + (ctx->mix << 6) + (ctx->mix >> 2);
         ctx->mix = cx_rotl32(ctx->mix, 5U) ^ ctx->seed;
-        ctx->seed += ctx->mix + (uint32_t) i;
+        ctx->seed += ctx->mix + (uint32_t) (ctx->blen + i);
     }
     ctx->blen += in_len;
 

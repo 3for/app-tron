@@ -1525,7 +1525,8 @@ class TestTRX():
                                  new_contract_overrides=None,
                                  outer_overrides=None,
                                  fee_limit=100_000_000,
-                                 include_new_contract=True):
+                                 include_new_contract=True,
+                                 data=None):
         owner = bytes.fromhex(client.getAccount(0)['addressHex'])
         new_contract_values = {
             'origin_address': owner,
@@ -1552,6 +1553,7 @@ class TestTRX():
         return client.packContract(
             tron.Transaction.Contract.CreateSmartContract,
             contract.CreateSmartContract(**outer_values),
+            data=data,
             fee_limit=fee_limit,
         )
 
@@ -1563,6 +1565,27 @@ class TestTRX():
                                0,
                                tx,
                                warning_approve=True)
+
+    def test_trx_create_smart_contract_memo_setting(self, backend, device,
+                                                    navigator):
+        client = TronClient(backend)
+        tx = self.create_smart_contract_tx(client, data=b'Create contract memo')
+
+        settings_toggle(device, navigator, [SettingID.DATA_ALLOWED])
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.MISSING_SETTING_DATA_ALLOWED
+
+        settings_toggle(device, navigator, [SettingID.DATA_ALLOWED])
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None,
+            do_comparison=False)
 
     @pytest.mark.parametrize('case', ['minimum', 'maximum'])
     def test_trx_create_smart_contract_valid_boundaries(self,
@@ -2044,17 +2067,35 @@ class TestTRX():
             if device.touchable else None,
             do_comparison=False)
 
-    def test_trx_oversized_parameter_resets_signing_state(self, backend):
+    @pytest.mark.parametrize('bytecode_len', [5000, 24 * 1024])
+    def test_trx_create_smart_contract_large_bytecode(self, backend, device,
+                                                      bytecode_len):
         client = TronClient(backend)
 
-        # The streamed raw envelope may be large, but the decoded contract
-        # parameter remains capped at 4096 bytes. CreateSmartContract is used
-        # only to construct an oversized parameter; large smart-contract
-        # parameters are intentionally outside the scope of this change.
         oversized_tx = self.create_smart_contract_tx(
             client,
-            new_contract_overrides={'bytecode': b'\xff' * 5000},
+            new_contract_overrides={'bytecode': b'\xff' * bytecode_len},
         )
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               oversized_tx,
+                               warning_approve=True,
+                               do_comparison=False)
+
+    def test_trx_oversized_non_create_parameter_resets_signing_state(
+            self, backend):
+        client = TronClient(backend)
+        oversized_tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(
+                        "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=b'\x12\x34\x56\x78' + b'\xff' * (32 * 128)))
+
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign_sync(client.getAccount(0)['path'], oversized_tx)
         assert e.value.status == StatusWord.INVALID_DATA

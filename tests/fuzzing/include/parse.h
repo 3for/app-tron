@@ -11,6 +11,7 @@
 #include "core/Contract.pb.h"
 #include "pb.h"
 #include "tx_content.h"
+#include "create_smart_contract_stream.h"
 // The application contexts (tmpCtx_t, txContext_t, strings_t, app_state_t,
 // chainConfig, ...) are defined in the real shared_context.h, which is fully
 // standalone-includable against these mocks. Deferring to it keeps a single
@@ -92,6 +93,12 @@ parserStatus_e processContractParameter(protocol_Transaction_Contract_ContractTy
                                         size_t parameter_len,
                                         uint64_t custom_data_len,
                                         txContent_t *content);
+parserStatus_e processStreamedCreateSmartContract(
+    int32_t permission_id,
+    int64_t fee_limit,
+    uint64_t custom_data_len,
+    const create_smart_contract_stream_result_t *result,
+    txContent_t *content);
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *content);
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content);
 bool setContractType(contractType_e type, char *out, size_t outlen);

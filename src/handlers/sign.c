@@ -30,6 +30,7 @@
 #include "uint256.h"
 #include "app_errors.h"
 #include "legacy_tx_stream.h"
+#include "create_smart_contract_stream.h"
 #include "parse.h"
 #include "settings.h"
 #ifdef HAVE_GATING_SUPPORT
@@ -410,31 +411,90 @@ typedef enum {
     SIGN_PHASE_METADATA,
 } sign_phase_t;
 
-// Legacy INS_SIGN streams the Transaction.raw envelope and retains only the
-// bounded contract parameter. Large custom_data/memo bytes are hashed and
-// skipped by the parser instead of being retained in RAM.
-static legacy_tx_stream_t *raw_tx_stream;
+// Legacy INS_SIGN streams the Transaction.raw envelope, retains bounded
+// parameters for the existing contract parsers, and observes the same bytes
+// with the dedicated CreateSmartContract parser.
+typedef struct {
+    legacy_tx_stream_t envelope;
+    create_smart_contract_stream_t create;
+    bool create_started;
+    bool create_complete;
+    bool create_valid;
+} sign_stream_context_t;
+
+static sign_stream_context_t *sign_stream;
 static sign_phase_t sign_phase;
+
+static void create_parameter_begin(void *ctx, size_t parameter_len) {
+    sign_stream_context_t *stream = ctx;
+    create_smart_contract_stream_init(&stream->create, parameter_len);
+    stream->create_started = true;
+    stream->create_complete = false;
+    stream->create_valid = true;
+}
+
+static void create_parameter_chunk(void *ctx, const uint8_t *data, size_t data_len) {
+    sign_stream_context_t *stream = ctx;
+    if (stream->create_valid &&
+        !create_smart_contract_stream_feed(&stream->create, data, data_len)) {
+        // This is only a CreateSmartContract candidate. A decode failure must
+        // not reject a different contract type using the buffered path.
+        stream->create_valid = false;
+    }
+}
+
+static void create_parameter_end(void *ctx) {
+    sign_stream_context_t *stream = ctx;
+    stream->create_complete = true;
+}
 
 static parserStatus_e finish_streamed_transaction(void) {
     legacy_tx_stream_result_t result;
+    parserStatus_e status = USTREAM_FAULT;
 
-    if (raw_tx_stream == NULL ||
-        !legacy_tx_stream_finish(raw_tx_stream, &result)) {
-        return USTREAM_FAULT;
+    if (sign_stream == NULL ||
+        !legacy_tx_stream_finish(&sign_stream->envelope, &result)) {
+        goto cleanup;
     }
 
-    return processContractParameter(result.contract_type,
-                                    result.permission_id,
-                                    result.fee_limit,
-                                    result.parameter,
-                                    result.parameter_len,
-                                    result.custom_data_len,
-                                    &txContent);
+    if (result.contract_type ==
+        protocol_Transaction_Contract_ContractType_CreateSmartContract) {
+        create_smart_contract_stream_result_t create_result;
+        if (!sign_stream->create_started ||
+            !sign_stream->create_complete ||
+            !sign_stream->create_valid ||
+            !create_smart_contract_stream_finish(&sign_stream->create, &create_result)) {
+            goto cleanup;
+        }
+        status = processStreamedCreateSmartContract(result.permission_id,
+                                                    result.fee_limit,
+                                                    result.custom_data_len,
+                                                    &create_result,
+                                                    &txContent);
+        goto cleanup;
+    }
+
+    if (result.parameter_overflow) {
+        goto cleanup;
+    }
+
+    status = processContractParameter(result.contract_type,
+                                      result.permission_id,
+                                      result.fee_limit,
+                                      result.parameter,
+                                      result.parameter_len,
+                                      result.custom_data_len,
+                                      &txContent);
+
+cleanup:
+    // Contract decoding has copied everything needed by the review flow into
+    // msg/txContent. Release the stream before UI-specific allocations.
+    APP_MEM_FREE_AND_NULL((void **) &sign_stream);
+    return status;
 }
 
 void sign_cleanup(void) {
-    APP_MEM_FREE_AND_NULL((void **) &raw_tx_stream);
+    APP_MEM_FREE_AND_NULL((void **) &sign_stream);
     APP_MEM_FREE_AND_NULL((void **) &vote_display_buffer);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
@@ -472,11 +532,18 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         initTx(&txContext, &txContent);
         customContractField = 0;
         sign_cleanup();
-        raw_tx_stream = APP_MEM_ALLOC(sizeof(*raw_tx_stream));
-        if (raw_tx_stream == NULL) {
+        sign_stream = APP_MEM_ALLOC(sizeof(*sign_stream));
+        if (sign_stream == NULL) {
             return send_sign_status(E_INCORRECT_DATA);
         }
-        legacy_tx_stream_init(raw_tx_stream);
+        memset(sign_stream, 0, sizeof(*sign_stream));
+        const legacy_parameter_observer_t observer = {
+            .on_begin = create_parameter_begin,
+            .on_chunk = create_parameter_chunk,
+            .on_end = create_parameter_end,
+            .ctx = sign_stream,
+        };
+        legacy_tx_stream_init(&sign_stream->envelope, &observer);
         sign_phase = SIGN_PHASE_RAW_DATA;
 
     } else if (metadata_apdu) {
@@ -551,12 +618,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     }
 
     if (!metadata_apdu) {
-        if (sign_phase != SIGN_PHASE_RAW_DATA || raw_tx_stream == NULL) {
+        if (sign_phase != SIGN_PHASE_RAW_DATA || sign_stream == NULL) {
             return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
         // Parse before hashing so an oversized/malformed chunk cannot leave a
         // resumable partial hash. send_sign_status() resets all state on error.
-        if (!legacy_tx_stream_feed(raw_tx_stream, workBuffer, dataLength)) {
+        if (!legacy_tx_stream_feed(&sign_stream->envelope, workBuffer, dataLength)) {
             PRINTF("Invalid streamed raw transaction\n");
             return send_sign_status(E_INCORRECT_DATA);
         }

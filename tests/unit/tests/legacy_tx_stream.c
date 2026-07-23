@@ -168,6 +168,38 @@ static bool feed_in_chunks(legacy_tx_stream_t *stream,
 }
 
 typedef struct {
+    size_t begin_count;
+    size_t chunk_count;
+    size_t end_count;
+    size_t declared_len;
+    size_t observed_len;
+    size_t largest_chunk;
+} parameter_observer_capture_t;
+
+static void capture_parameter_begin(void *ctx, size_t parameter_len) {
+    parameter_observer_capture_t *capture = ctx;
+    capture->begin_count++;
+    capture->declared_len = parameter_len;
+}
+
+static void capture_parameter_chunk(void *ctx,
+                                    const uint8_t *data,
+                                    size_t data_len) {
+    parameter_observer_capture_t *capture = ctx;
+    assert_non_null(data);
+    capture->chunk_count++;
+    capture->observed_len += data_len;
+    if (data_len > capture->largest_chunk) {
+        capture->largest_chunk = data_len;
+    }
+}
+
+static void capture_parameter_end(void *ctx) {
+    parameter_observer_capture_t *capture = ctx;
+    capture->end_count++;
+}
+
+typedef struct {
     const uint8_t *parameter;
     size_t parameter_len;
     uint64_t custom_data_len;
@@ -205,7 +237,7 @@ static void test_matches_whole_nanopb_decode(void **state) {
     decoded.custom_data.arg = &whole;
     assert_true(pb_decode(&input, protocol_Transaction_raw_fields, &decoded));
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(feed_in_chunks(stream, &raw, 13U));
     assert_true(legacy_tx_stream_finish(stream, &streamed));
 
@@ -229,7 +261,7 @@ static void test_large_memo_and_reordered_fields(void **state) {
     legacy_tx_stream_result_t result;
     assert_non_null(stream);
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(feed_in_chunks(stream, &raw, 1U));
     assert_true(legacy_tx_stream_finish(stream, &result));
     assert_int_equal(result.contract_type,
@@ -255,13 +287,18 @@ static void test_parameter_limit(void **state) {
     legacy_tx_stream_result_t result;
     assert_non_null(stream);
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(feed_in_chunks(stream, &accepted, 251U));
     assert_true(legacy_tx_stream_finish(stream, &result));
     assert_int_equal(result.parameter_len, LEGACY_TX_MAX_PARAMETER_SIZE);
+    assert_false(result.parameter_overflow);
 
-    legacy_tx_stream_init(stream);
-    assert_false(feed_in_chunks(stream, &rejected, 251U));
+    legacy_tx_stream_init(stream, NULL);
+    assert_true(feed_in_chunks(stream, &rejected, 251U));
+    assert_true(legacy_tx_stream_finish(stream, &result));
+    assert_int_equal(result.parameter_len, LEGACY_TX_MAX_PARAMETER_SIZE + 1U);
+    assert_true(result.parameter_overflow);
+    assert_null(result.parameter);
 
     free(stream);
     buffer_free(&accepted);
@@ -277,11 +314,11 @@ static void test_rejects_incomplete_and_second_contract(void **state) {
     legacy_tx_stream_result_t result;
     assert_non_null(stream);
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(legacy_tx_stream_feed(stream, raw.data, raw.len - 1U));
     assert_false(legacy_tx_stream_finish(stream, &result));
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_false(feed_in_chunks(stream, &two_contracts, 17U));
 
     free(stream);
@@ -297,7 +334,7 @@ static void test_rejects_mismatched_type_url(void **state) {
     legacy_tx_stream_result_t result;
     assert_non_null(stream);
 
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(feed_in_chunks(stream, &raw, 7U));
     assert_false(legacy_tx_stream_finish(stream, &result));
 
@@ -323,17 +360,75 @@ static void test_raw_size_limit(void **state) {
     assert_non_null(stream);
 
     assert_true(accepted.len <= LEGACY_TX_MAX_RAW_SIZE);
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_true(feed_in_chunks(stream, &accepted, 251U));
     assert_true(legacy_tx_stream_finish(stream, &result));
 
     assert_true(rejected.len > LEGACY_TX_MAX_RAW_SIZE);
-    legacy_tx_stream_init(stream);
+    legacy_tx_stream_init(stream, NULL);
     assert_false(feed_in_chunks(stream, &rejected, 251U));
 
     free(stream);
     buffer_free(&accepted);
     buffer_free(&rejected);
+}
+
+static void test_parameter_observer_lifecycle_and_chunks(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    test_buffer_t raw = build_raw(0U, 5000U, false, type_url, 1U);
+    legacy_tx_stream_t *stream = calloc(1U, sizeof(*stream));
+    legacy_tx_stream_result_t result;
+    parameter_observer_capture_t capture = {0};
+    const legacy_parameter_observer_t observer = {
+        .on_begin = capture_parameter_begin,
+        .on_chunk = capture_parameter_chunk,
+        .on_end = capture_parameter_end,
+        .ctx = &capture,
+    };
+    assert_non_null(stream);
+
+    legacy_tx_stream_init(stream, &observer);
+    assert_true(feed_in_chunks(stream, &raw, 251U));
+    assert_true(legacy_tx_stream_finish(stream, &result));
+    assert_true(result.parameter_overflow);
+    assert_int_equal(capture.begin_count, 1U);
+    assert_int_equal(capture.end_count, 1U);
+    assert_int_equal(capture.declared_len, 5000U);
+    assert_int_equal(capture.observed_len, 5000U);
+    assert_true(capture.chunk_count < capture.observed_len);
+    assert_true(capture.largest_chunk > 1U);
+
+    free(stream);
+    buffer_free(&raw);
+}
+
+static void test_zero_length_parameter_observer(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    test_buffer_t raw = build_raw(0U, 0U, false, type_url, 1U);
+    legacy_tx_stream_t *stream = calloc(1U, sizeof(*stream));
+    legacy_tx_stream_result_t result;
+    parameter_observer_capture_t capture = {0};
+    const legacy_parameter_observer_t observer = {
+        .on_begin = capture_parameter_begin,
+        .on_chunk = capture_parameter_chunk,
+        .on_end = capture_parameter_end,
+        .ctx = &capture,
+    };
+    assert_non_null(stream);
+
+    legacy_tx_stream_init(stream, &observer);
+    assert_true(feed_in_chunks(stream, &raw, 17U));
+    assert_true(legacy_tx_stream_finish(stream, &result));
+    assert_false(result.parameter_overflow);
+    assert_int_equal(result.parameter_len, 0U);
+    assert_int_equal(capture.begin_count, 1U);
+    assert_int_equal(capture.chunk_count, 0U);
+    assert_int_equal(capture.end_count, 1U);
+
+    free(stream);
+    buffer_free(&raw);
 }
 
 int main(void) {
@@ -344,6 +439,8 @@ int main(void) {
         cmocka_unit_test(test_rejects_incomplete_and_second_contract),
         cmocka_unit_test(test_rejects_mismatched_type_url),
         cmocka_unit_test(test_raw_size_limit),
+        cmocka_unit_test(test_parameter_observer_lifecycle_and_chunks),
+        cmocka_unit_test(test_zero_length_parameter_observer),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

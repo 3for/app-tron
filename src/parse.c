@@ -28,6 +28,7 @@
 #include "app_errors.h"
 #include "ui_globals.h"
 #include "app_mem_utils.h"
+#include "create_smart_contract_stream.h"
 
 static pb_size_t decoded_proposal_parameters_count;
 static protocol_ProposalCreateContract_ParametersEntry *decoded_proposal_parameters;
@@ -1214,37 +1215,9 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
 
 #define MIN_TRC10_TOKEN_ID 1000000
 
-static bool pb_decode_smart_contract_bytecode(pb_istream_t *stream,
-                                              const pb_field_t *field,
-                                              void **arg) {
-    PB_UNUSED(field);
-    txContent_t *content = *arg;
-
-    content->bytecodeSize = stream->bytes_left;
-    if (cx_hash_sha256((const uint8_t *) stream->state,
-                       stream->bytes_left,
-                       content->bytecodeHash,
-                       sizeof(content->bytecodeHash)) != sizeof(content->bytecodeHash)) {
-        return false;
-    }
-    return pb_read(stream, NULL, stream->bytes_left);
-}
-
-static bool create_smart_contract(txContent_t *content, pb_istream_t *stream) {
-    protocol_CreateSmartContract *contract = &msg.create_smart_contract;
-    protocol_SmartContract *new_contract = &contract->new_contract;
-
-    new_contract->bytecode.funcs.decode = pb_decode_smart_contract_bytecode;
-    new_contract->bytecode.arg = content;
-
-    // Preserve an explicit SHA-256 commitment even when bytecode is omitted.
-    if ((cx_hash_sha256((const uint8_t *) "",
-                        0,
-                        content->bytecodeHash,
-                        sizeof(content->bytecodeHash)) != sizeof(content->bytecodeHash)) ||
-        !pb_decode(stream, protocol_CreateSmartContract_fields, contract)) {
-        return false;
-    }
+static bool validate_create_smart_contract(
+    const protocol_CreateSmartContract *contract) {
+    const protocol_SmartContract *new_contract = &contract->new_contract;
 
     if (!contract->has_new_contract ||
         (contract->owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) ||
@@ -1262,7 +1235,6 @@ static bool create_smart_contract(txContent_t *content, pb_istream_t *stream) {
         return false;
     }
 
-    COPY_ADDRESS(content->account, &contract->owner_address);
     return true;
 }
 
@@ -1561,20 +1533,17 @@ bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **a
     return true;
 }
 
-parserStatus_e processContractParameter(
+static parserStatus_e prepare_contract_context(
     protocol_Transaction_Contract_ContractType type,
     int32_t permission_id,
     int64_t fee_limit,
-    const uint8_t *parameter,
-    size_t parameter_len,
     uint64_t custom_data_len,
     txContent_t *content) {
-    bool ret;
-
-    if (content == NULL || parameter == NULL || permission_id < 0 || permission_id > UINT8_MAX) {
+    if (content == NULL || permission_id < 0 || permission_id > UINT8_MAX) {
         return USTREAM_FAULT;
     }
-    if (type == protocol_Transaction_Contract_ContractType_CreateSmartContract && fee_limit < 0) {
+    if (type == protocol_Transaction_Contract_ContractType_CreateSmartContract &&
+        fee_limit < 0) {
         return USTREAM_FAULT;
     }
 
@@ -1586,8 +1555,60 @@ parserStatus_e processContractParameter(
     content->permission_id = (uint8_t) permission_id;
     content->contractType = (contractType_e) type;
     content->feeLimit = (uint64_t) fee_limit;
-
     memset(&msg, 0, sizeof(msg));
+    return USTREAM_PROCESSING;
+}
+
+parserStatus_e processStreamedCreateSmartContract(
+    int32_t permission_id,
+    int64_t fee_limit,
+    uint64_t custom_data_len,
+    const create_smart_contract_stream_result_t *result,
+    txContent_t *content) {
+    if (result == NULL) {
+        return USTREAM_FAULT;
+    }
+
+    parserStatus_e status = prepare_contract_context(
+        protocol_Transaction_Contract_ContractType_CreateSmartContract,
+        permission_id,
+        fee_limit,
+        custom_data_len,
+        content);
+    if (status != USTREAM_PROCESSING) {
+        return status;
+    }
+
+    msg.create_smart_contract = result->contract;
+    content->bytecodeSize = result->bytecode_size;
+    memcpy(content->bytecodeHash, result->bytecode_hash, sizeof(content->bytecodeHash));
+    if (!validate_create_smart_contract(&msg.create_smart_contract)) {
+        return USTREAM_FAULT;
+    }
+
+    COPY_ADDRESS(content->account, &msg.create_smart_contract.owner_address);
+    return USTREAM_PROCESSING;
+}
+
+parserStatus_e processContractParameter(
+    protocol_Transaction_Contract_ContractType type,
+    int32_t permission_id,
+    int64_t fee_limit,
+    const uint8_t *parameter,
+    size_t parameter_len,
+    uint64_t custom_data_len,
+    txContent_t *content) {
+    bool ret;
+
+    if (parameter == NULL) {
+        return USTREAM_FAULT;
+    }
+
+    parserStatus_e status =
+        prepare_contract_context(type, permission_id, fee_limit, custom_data_len, content);
+    if (status != USTREAM_PROCESSING) {
+        return status;
+    }
     pb_istream_t tx_stream = pb_istream_from_buffer(parameter, parameter_len);
 
     switch (type) {
@@ -1655,8 +1676,7 @@ parserStatus_e processContractParameter(
             ret = set_account_id_contract(content, &tx_stream);
             break;
         case protocol_Transaction_Contract_ContractType_CreateSmartContract:
-            ret = create_smart_contract(content, &tx_stream);
-            break;
+            return USTREAM_FAULT;
         case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
             ret = trigger_smart_contract(content, &tx_stream);
             break;

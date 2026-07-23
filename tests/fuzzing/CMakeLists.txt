@@ -177,6 +177,7 @@ set(HANDLE_SIGN_FUZZ_SOURCES
     src/ui_utils_mock.c
     ../../src/handlers/sign.c
     ../../src/handlers/legacy_tx_stream.c
+    ../../src/handlers/create_smart_contract_stream.c
     ../../src/parse.c
     ../../src/tron-sdk/common_utils.c
     ../../src/uint128.c

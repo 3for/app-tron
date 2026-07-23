@@ -14,6 +14,7 @@
 #include "swap_lib_calls.h"
 #include "main_std_app.h"
 #include "shared_context.h"  // application contexts (tmpCtx, txContext, strings, ...)
+#include "create_smart_contract_stream.h"
 
 #define ADD_PRE_FIX_STRING            "T"
 #define ADDRESS_SIZE                  21
@@ -99,6 +100,12 @@ parserStatus_e processContractParameter(protocol_Transaction_Contract_ContractTy
                                         size_t parameter_len,
                                         uint64_t custom_data_len,
                                         txContent_t *content);
+parserStatus_e processStreamedCreateSmartContract(
+    int32_t permission_id,
+    int64_t fee_limit,
+    uint64_t custom_data_len,
+    const create_smart_contract_stream_result_t *result,
+    txContent_t *content);
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 

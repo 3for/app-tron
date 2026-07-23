@@ -41,12 +41,20 @@ typedef enum {
 } legacy_tx_bytes_action_t;
 
 typedef struct {
+    void (*on_begin)(void *ctx, size_t parameter_len);
+    void (*on_chunk)(void *ctx, const uint8_t *data, size_t data_len);
+    void (*on_end)(void *ctx);
+    void *ctx;
+} legacy_parameter_observer_t;
+
+typedef struct {
     protocol_Transaction_Contract_ContractType contract_type;
     int32_t permission_id;
     int64_t fee_limit;
     uint64_t custom_data_len;
     const uint8_t *parameter;
     size_t parameter_len;
+    bool parameter_overflow;
 } legacy_tx_stream_result_t;
 
 typedef struct {
@@ -84,9 +92,13 @@ typedef struct {
     size_t type_url_len;
     uint8_t parameter[LEGACY_TX_MAX_PARAMETER_SIZE];
     size_t parameter_len;
+    size_t parameter_capture_len;
     size_t capture_offset;
+    bool parameter_overflow;
+    legacy_parameter_observer_t parameter_observer;
 } legacy_tx_stream_t;
 
-void legacy_tx_stream_init(legacy_tx_stream_t *stream);
+void legacy_tx_stream_init(legacy_tx_stream_t *stream,
+                           const legacy_parameter_observer_t *observer);
 bool legacy_tx_stream_feed(legacy_tx_stream_t *stream, const uint8_t *data, size_t len);
 bool legacy_tx_stream_finish(legacy_tx_stream_t *stream, legacy_tx_stream_result_t *result);
