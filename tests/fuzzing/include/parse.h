@@ -18,7 +18,7 @@
 // shared_context.h) never clash with this header.
 #include "shared_context.h"
 
-#define ADDRESS_SIZE TRON_ADDRESS_SIZE
+#define ADDRESS_SIZE                  TRON_ADDRESS_SIZE
 #define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 typedef union {
@@ -85,10 +85,14 @@ tokenDefinition_t *getKnownToken(txContent_t *context);
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun);
 void initTx(txContext_t *context, txContent_t *content);
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
-bool parseTokenName(uint8_t token_id,
-                    uint8_t *data,
-                    uint32_t dataLength,
-                    txContent_t *content);
+parserStatus_e processContractParameter(protocol_Transaction_Contract_ContractType type,
+                                        int32_t permission_id,
+                                        int64_t fee_limit,
+                                        const uint8_t *parameter,
+                                        size_t parameter_len,
+                                        uint64_t custom_data_len,
+                                        txContent_t *content);
+bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *content);
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content);
 bool setContractType(contractType_e type, char *out, size_t outlen);
 bool setExchangeContractDetail(contractType_e type, char *out, size_t outlen);

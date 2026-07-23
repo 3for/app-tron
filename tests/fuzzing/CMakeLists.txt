@@ -176,6 +176,7 @@ set(HANDLE_SIGN_FUZZ_SOURCES
     src/tip712_fuzz_support.c
     src/ui_utils_mock.c
     ../../src/handlers/sign.c
+    ../../src/handlers/legacy_tx_stream.c
     ../../src/parse.c
     ../../src/tron-sdk/common_utils.c
     ../../src/uint128.c

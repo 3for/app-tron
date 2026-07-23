@@ -113,3 +113,30 @@ if(NOT APPLE)
 endif()
 
 add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
+
+add_library(legacy_tx_stream_lib STATIC ../../src/handlers/legacy_tx_stream.c)
+target_include_directories(legacy_tx_stream_lib
+                           PUBLIC
+                           .
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+
+add_executable(test_legacy_tx_stream
+               tests/legacy_tx_stream.c
+               ../../proto/core/Tron.pb.c
+               ../../proto/google/protobuf/any.pb.c
+               ../../nanopb/pb_decode.c
+               ../../nanopb/pb_common.c)
+target_include_directories(test_legacy_tx_stream
+                           PRIVATE
+                           .
+                           ../../src/handlers
+                           ../../proto
+                           ../../nanopb)
+target_link_libraries(test_legacy_tx_stream PUBLIC cmocka legacy_tx_stream_lib)
+if(NOT APPLE)
+    target_link_libraries(test_legacy_tx_stream PUBLIC gcov)
+endif()
+
+add_test(test_legacy_tx_stream test_legacy_tx_stream)

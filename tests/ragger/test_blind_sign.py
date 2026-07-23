@@ -9,15 +9,12 @@ from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
-from tron import TronClient
+from tron import TRON_MAINNET_ADDRESS_PREFIX, TronClient
 from client.gating import Gating
 from client.proxy_info import ProxyInfo
 from client.status_word import StatusWord
 from settings import SettingID, settings_toggle
-from utils import check_tx_signature
-# Shared with the GCS tests: the proxy_info challenge helper and the TRON mainnet
-# address prefix byte.
-from test_gcs import _get_challenge, ADD_PRE_FIX_BYTE_MAINNET
+from utils import check_tx_signature, get_challenge, to_sun
 
 # Tron Protobuf
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
@@ -30,8 +27,6 @@ from core import Tron_pb2 as tron  # noqa: E402
 # TRON is single-chain: get_tx_chain_id() always returns TRON mainnet
 # (src/chain_config.h TRON_MAINNET_CHAINID).
 TRON_MAINNET_CHAINID = 728126428
-SUN_PER_TRX = 1_000_000  # common_utils.h TRX_DECIMALS = 6
-
 # An arbitrary TriggerSmartContract whose selector is neither TRC20 transfer
 # (a9059cbb) nor approve (095ea7b3): the firmware sets TRC20Method == 0 and takes
 # the legacy blind-signing (custom contract) review -- the analog of an Ethereum
@@ -62,8 +57,8 @@ def build_blind_sign_tx(client: TronClient, amount: float = 0.0) -> bytes:
         tron.Transaction.Contract.TriggerSmartContract,
         contract.TriggerSmartContract(
             owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
-            contract_address=bytes([ADD_PRE_FIX_BYTE_MAINNET]) + CUSTOM_CONTRACT_ADDR20,
-            call_value=int(amount * SUN_PER_TRX),
+            contract_address=bytes([TRON_MAINNET_ADDRESS_PREFIX]) + CUSTOM_CONTRACT_ADDR20,
+            call_value=to_sun(amount),
             data=CUSTOM_CALLDATA))
 
 
@@ -134,7 +129,7 @@ def test_blind_sign(scenario_navigator: NavigateWithScenario,
             # Mirrors app-ethereum: the proxy_info carries no selector, so the gating
             # descriptor needs none either (check_gating_address resolves the proxy).
             assert client.provide_proxy_info(
-                ProxyInfo(_get_challenge(client),
+                ProxyInfo(get_challenge(client),
                           CUSTOM_CONTRACT_ADDR20,
                           TRON_MAINNET_CHAINID,
                           gating_params.address).serialize()).status == StatusWord.OK

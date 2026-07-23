@@ -17,7 +17,8 @@ from ragger.error import ExceptionRAPDU
 from pathlib import Path
 from Crypto.Hash import keccak
 from tron import TronClient
-from utils import check_hash_signature
+from utils import (check_hash_signature, get_challenge, get_selector_from_data,
+                   recover_message, to_sun, to_units)
 
 from ragger.backend import BackendInterface
 from ragger.navigator import Navigator, NavInsID
@@ -34,8 +35,7 @@ from client.proxy_info import ProxyInfo
 from client.gcs import (Field, ParamRaw, Value, TypeFamily, DataPath, PathTuple,
                         ParamTokenAmount, ParamCalldata, ContainerPath, PathLeaf,
                         PathLeafType, TxInfo)
-from utils import recover_message, get_selector_from_data
-from test_gcs import compute_inst_hash, ABIS_FOLDER
+from gcs_utils import ABIS_FOLDER, compute_inst_hash
 from fields_utils import get_all_paths, get_all_tuple_array_paths
 from ledgered.devices import Device
 from address import to_tvm_address
@@ -469,11 +469,6 @@ def filt_tn_types_fixture(request) -> list[TrustedNameType]:
     return request.param
 
 
-def _get_challenge(client: TronClient) -> int:
-    return ResponseParser.challenge(
-        client.exchange_raw(CommandBuilder().get_challenge()).data)
-
-
 # GCS (Generic Clear Signing) handlers for the nested-calldata TIP-712 tests. Each
 # is bound -- via the filter's "handler" -- to (client, json_data) and invoked once a
 # calldata's value field has been sent, streaming the GTP descriptor (TX_INFO +
@@ -609,12 +604,12 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
     batchData = contract.encode_abi("batchExecute", [[
         (
             tokens[0]["address"],
-            web3.Web3.to_wei(0, "ether"),
+            to_sun(0),
             tokenData0
         ),
         (
             tokens[1]["address"],
-            web3.Web3.to_wei(0, "ether"),
+            to_sun(0),
             tokenData1
         ),
     ]])
@@ -737,7 +732,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
     ]
 
     proxy_info = ProxyInfo(
-        _get_challenge(client),
+        get_challenge(client),
         to_tvm_address(json_data["message"]["to"]),
         L0_tx_info.chain_id,
         L0_tx_info.contract_addr,
@@ -994,9 +989,9 @@ def test_tip712_advanced_missing_token(
         },
         "message": {
             "token_from": "TBXSw8fM4jpQkGc6zZjsVABFpVN7UvXPdV",
-            "value_from": web3.Web3.to_wei(3.65, "ether"),
+            "value_from": to_units("3.65", 18),
             "token_to": "TD5gsCwxykWsLN9aPrq2TAfNjByuZKYp4E",
-            "value_to": web3.Web3.to_wei(15.47, "ether"),
+            "value_to": to_units("15.47", 18),
         }
     }
     filters = {
@@ -1085,10 +1080,8 @@ def test_tip712_advanced_trusted_name(
         }
     }
 
-    cmd_builder = CommandBuilder()
     if trusted_name[0] is TrustedNameType.ACCOUNT:
-        challenge = ResponseParser.challenge(
-            client.exchange_raw(cmd_builder.get_challenge()).data)
+        challenge = get_challenge(client)
     else:
         challenge = None
 
@@ -1232,7 +1225,7 @@ def test_tip712_calldata_empty_send(
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                     chain_id=json_data["domain"]["chainId"],
-                    challenge=_get_challenge(client),
+                    challenge=get_challenge(client),
                     owner=bytes.fromhex(client.getAccount(0)["addressHex"])[1:],
                     owner_deriv_path=client.getAccount(0)["path"]))
     _tip712_calldata_common(scenario_navigator, test_name, filename)
@@ -1336,9 +1329,8 @@ def test_tip712_proxy(
     filters["name"] = "Proxy test"
     filters["address"] = "TRXcKoEvHr6Y38VMcDYGBEYKznvH3XUX4g"
 
-    cmd_builder = CommandBuilder()
     proxy_info = ProxyInfo(
-        _get_challenge(client),
+        get_challenge(client),
         to_tvm_address(data["domain"]["verifyingContract"]),
         int(data["domain"]["chainId"]),
         to_tvm_address(filters["address"]),

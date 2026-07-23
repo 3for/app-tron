@@ -1,0 +1,409 @@
+#include "legacy_tx_stream.h"
+
+#include <limits.h>
+#include <string.h>
+
+#include "google/protobuf/any.pb.h"
+
+static const uint8_t TYPE_URL_PREFIX[] = "type.googleapis.com/protocol.";
+
+static legacy_tx_context_t current_context(const legacy_tx_stream_t *stream) {
+    return stream->frames[stream->depth - 1U].context;
+}
+
+static void set_error(legacy_tx_stream_t *stream) {
+    stream->error = true;
+}
+
+static void reset_varint(legacy_tx_stream_t *stream) {
+    stream->varint_value = 0;
+    stream->varint_shift = 0;
+    stream->varint_count = 0;
+}
+
+static bool feed_varint(legacy_tx_stream_t *stream, uint8_t byte, bool *done, uint64_t *value) {
+    if (stream->varint_count >= 10U || (stream->varint_count == 9U && byte > 1U)) {
+        return false;
+    }
+
+    stream->varint_value |= ((uint64_t) (byte & 0x7FU)) << stream->varint_shift;
+    stream->varint_shift = (uint8_t) (stream->varint_shift + 7U);
+    stream->varint_count++;
+
+    if ((byte & 0x80U) == 0U) {
+        *done = true;
+        *value = stream->varint_value;
+        reset_varint(stream);
+    } else {
+        *done = false;
+    }
+    return true;
+}
+
+static bool push_frame(legacy_tx_stream_t *stream, legacy_tx_context_t context, size_t len) {
+    if (stream->depth >= LEGACY_TX_STREAM_MAX_NESTING) {
+        return false;
+    }
+    stream->frames[stream->depth].context = context;
+    stream->frames[stream->depth].remaining = len;
+    stream->frames[stream->depth].bounded = true;
+    stream->depth++;
+    return true;
+}
+
+static void pop_finished_frames(legacy_tx_stream_t *stream) {
+    // The unbounded raw-data root is finalized explicitly by P1_SIGN/P1_LAST
+    // or by the first TRC-10 metadata APDU, so it is never popped here.
+    while (stream->depth > 1U && stream->frames[stream->depth - 1U].remaining == 0U &&
+           stream->mode == LEGACY_TX_MODE_KEY && stream->bytes_remaining == 0U &&
+           stream->varint_count == 0U) {
+        stream->depth--;
+    }
+}
+
+static bool consume_byte(legacy_tx_stream_t *stream) {
+    if (stream->depth == 0U || stream->finished || stream->error) {
+        return false;
+    }
+    for (size_t i = 0; i < stream->depth; i++) {
+        if (!stream->frames[i].bounded) {
+            continue;
+        }
+        if (stream->frames[i].remaining == 0U) {
+            return false;
+        }
+        stream->frames[i].remaining--;
+    }
+    return true;
+}
+
+static bool length_fits_current_frame(const legacy_tx_stream_t *stream, uint64_t len) {
+    if (len > SIZE_MAX || len > LEGACY_TX_MAX_RAW_SIZE) {
+        return false;
+    }
+    const legacy_tx_frame_t *frame = &stream->frames[stream->depth - 1U];
+    return !frame->bounded || len <= frame->remaining;
+}
+
+static const char *contract_message_name(protocol_Transaction_Contract_ContractType type) {
+    switch (type) {
+        case protocol_Transaction_Contract_ContractType_AccountCreateContract:
+            return "AccountCreateContract";
+        case protocol_Transaction_Contract_ContractType_TransferContract:
+            return "TransferContract";
+        case protocol_Transaction_Contract_ContractType_TransferAssetContract:
+            return "TransferAssetContract";
+        case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
+            return "VoteWitnessContract";
+        case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
+            return "WitnessCreateContract";
+        case protocol_Transaction_Contract_ContractType_AssetIssueContract:
+            return "AssetIssueContract";
+        case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+            return "WitnessUpdateContract";
+        case protocol_Transaction_Contract_ContractType_ParticipateAssetIssueContract:
+            return "ParticipateAssetIssueContract";
+        case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
+            return "AccountUpdateContract";
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
+            return "FreezeBalanceContract";
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
+            return "UnfreezeBalanceContract";
+        case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
+            return "WithdrawBalanceContract";
+        case protocol_Transaction_Contract_ContractType_UnfreezeAssetContract:
+            return "UnfreezeAssetContract";
+        case protocol_Transaction_Contract_ContractType_UpdateAssetContract:
+            return "UpdateAssetContract";
+        case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
+            return "ProposalCreateContract";
+        case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
+            return "ProposalApproveContract";
+        case protocol_Transaction_Contract_ContractType_ProposalDeleteContract:
+            return "ProposalDeleteContract";
+        case protocol_Transaction_Contract_ContractType_SetAccountIdContract:
+            return "SetAccountIdContract";
+        case protocol_Transaction_Contract_ContractType_CreateSmartContract:
+            return "CreateSmartContract";
+        case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
+            return "TriggerSmartContract";
+        case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
+            return "UpdateSettingContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
+            return "ExchangeCreateContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
+            return "ExchangeInjectContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeWithdrawContract:
+            return "ExchangeWithdrawContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeTransactionContract:
+            return "ExchangeTransactionContract";
+        case protocol_Transaction_Contract_ContractType_UpdateEnergyLimitContract:
+            return "UpdateEnergyLimitContract";
+        case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
+            return "AccountPermissionUpdateContract";
+        case protocol_Transaction_Contract_ContractType_ClearABIContract:
+            return "ClearABIContract";
+        case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+            return "UpdateBrokerageContract";
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
+            return "FreezeBalanceV2Contract";
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
+            return "UnfreezeBalanceV2Contract";
+        case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
+            return "WithdrawExpireUnfreezeContract";
+        case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
+            return "DelegateResourceContract";
+        case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
+            return "UnDelegateResourceContract";
+        case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+            return "CancelAllUnfreezeV2Contract";
+        default:
+            return NULL;
+    }
+}
+
+static bool type_url_matches_contract(const legacy_tx_stream_t *stream) {
+    const char *name = contract_message_name(stream->contract_type);
+    if (name == NULL) {
+        return false;
+    }
+    const size_t prefix_len = sizeof(TYPE_URL_PREFIX) - 1U;
+    const size_t name_len = strlen(name);
+    return stream->type_url_len == prefix_len + name_len &&
+           memcmp(stream->type_url, TYPE_URL_PREFIX, prefix_len) == 0 &&
+           memcmp(stream->type_url + prefix_len, name, name_len) == 0;
+}
+
+static bool handle_varint_value(legacy_tx_stream_t *stream, uint64_t value) {
+    const legacy_tx_context_t context = current_context(stream);
+    if (context == LEGACY_TX_CTX_RAW &&
+        stream->pending_tag == protocol_Transaction_raw_fee_limit_tag) {
+        if (stream->fee_limit_seen) {
+            return false;
+        }
+        stream->fee_limit_seen = true;
+        stream->fee_limit = (int64_t) value;
+    } else if (context == LEGACY_TX_CTX_CONTRACT &&
+               stream->pending_tag == protocol_Transaction_Contract_type_tag) {
+        if (stream->contract_type_seen || value > INT32_MAX) {
+            return false;
+        }
+        stream->contract_type_seen = true;
+        stream->contract_type = (protocol_Transaction_Contract_ContractType) value;
+    } else if (context == LEGACY_TX_CTX_CONTRACT &&
+               stream->pending_tag == protocol_Transaction_Contract_Permission_id_tag) {
+        if (stream->permission_id_seen || value > INT32_MAX) {
+            return false;
+        }
+        stream->permission_id_seen = true;
+        stream->permission_id = (int32_t) value;
+    }
+    return true;
+}
+
+static bool start_length_field(legacy_tx_stream_t *stream, size_t len) {
+    const legacy_tx_context_t context = current_context(stream);
+    stream->bytes_action = LEGACY_TX_BYTES_SKIP;
+    stream->capture_offset = 0;
+
+    if (context == LEGACY_TX_CTX_RAW &&
+        stream->pending_tag == protocol_Transaction_raw_contract_tag) {
+        if (stream->contract_seen) {
+            return false;
+        }
+        stream->contract_seen = true;
+        stream->mode = LEGACY_TX_MODE_KEY;
+        if (!push_frame(stream, LEGACY_TX_CTX_CONTRACT, len)) {
+            return false;
+        }
+        pop_finished_frames(stream);
+        return true;
+    }
+
+    if (context == LEGACY_TX_CTX_RAW &&
+        stream->pending_tag == protocol_Transaction_raw_custom_data_tag) {
+        if (stream->custom_data_seen) {
+            return false;
+        }
+        stream->custom_data_seen = true;
+        stream->custom_data_len = len;
+    } else if (context == LEGACY_TX_CTX_CONTRACT &&
+               stream->pending_tag == protocol_Transaction_Contract_parameter_tag) {
+        if (stream->parameter_message_seen) {
+            return false;
+        }
+        stream->parameter_message_seen = true;
+        stream->mode = LEGACY_TX_MODE_KEY;
+        if (!push_frame(stream, LEGACY_TX_CTX_ANY, len)) {
+            return false;
+        }
+        pop_finished_frames(stream);
+        return true;
+    } else if (context == LEGACY_TX_CTX_ANY &&
+               stream->pending_tag == google_protobuf_Any_type_url_tag) {
+        if (stream->type_url_seen || len > sizeof(stream->type_url)) {
+            return false;
+        }
+        stream->type_url_seen = true;
+        stream->type_url_len = len;
+        stream->bytes_action = LEGACY_TX_BYTES_TYPE_URL;
+    } else if (context == LEGACY_TX_CTX_ANY &&
+               stream->pending_tag == google_protobuf_Any_value_tag) {
+        if (stream->parameter_seen || len > sizeof(stream->parameter)) {
+            return false;
+        }
+        stream->parameter_seen = true;
+        stream->parameter_len = len;
+        stream->bytes_action = LEGACY_TX_BYTES_PARAMETER;
+    }
+
+    stream->bytes_remaining = len;
+    stream->mode = (len == 0U) ? LEGACY_TX_MODE_KEY : LEGACY_TX_MODE_BYTES;
+    return true;
+}
+
+static bool process_byte(legacy_tx_stream_t *stream, uint8_t byte) {
+    bool done = false;
+    uint64_t value = 0;
+
+    if (!consume_byte(stream)) {
+        return false;
+    }
+
+    switch (stream->mode) {
+        case LEGACY_TX_MODE_KEY:
+            if (!feed_varint(stream, byte, &done, &value)) {
+                return false;
+            }
+            if (done) {
+                uint64_t field_number = value >> 3U;
+                if (field_number == 0U || field_number > 0x1FFFFFFFU) {
+                    return false;
+                }
+                stream->pending_tag = (uint32_t) field_number;
+                stream->pending_wire = (pb_wire_type_t) (value & 0x07U);
+                switch (stream->pending_wire) {
+                    case PB_WT_VARINT:
+                        stream->mode = LEGACY_TX_MODE_VARINT;
+                        break;
+                    case PB_WT_STRING:
+                        stream->mode = LEGACY_TX_MODE_LENGTH;
+                        break;
+                    case PB_WT_32BIT:
+                        stream->bytes_action = LEGACY_TX_BYTES_SKIP;
+                        stream->bytes_remaining = 4U;
+                        stream->mode = LEGACY_TX_MODE_BYTES;
+                        break;
+                    case PB_WT_64BIT:
+                        stream->bytes_action = LEGACY_TX_BYTES_SKIP;
+                        stream->bytes_remaining = 8U;
+                        stream->mode = LEGACY_TX_MODE_BYTES;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+            break;
+
+        case LEGACY_TX_MODE_VARINT:
+            if (!feed_varint(stream, byte, &done, &value)) {
+                return false;
+            }
+            if (done) {
+                if (!handle_varint_value(stream, value)) {
+                    return false;
+                }
+                stream->mode = LEGACY_TX_MODE_KEY;
+            }
+            break;
+
+        case LEGACY_TX_MODE_LENGTH:
+            if (!feed_varint(stream, byte, &done, &value)) {
+                return false;
+            }
+            if (done) {
+                if (!length_fits_current_frame(stream, value) ||
+                    !start_length_field(stream, (size_t) value)) {
+                    return false;
+                }
+            }
+            break;
+
+        case LEGACY_TX_MODE_BYTES:
+            if (stream->bytes_remaining == 0U) {
+                return false;
+            }
+            if (stream->bytes_action == LEGACY_TX_BYTES_TYPE_URL) {
+                stream->type_url[stream->capture_offset++] = byte;
+            } else if (stream->bytes_action == LEGACY_TX_BYTES_PARAMETER) {
+                stream->parameter[stream->capture_offset++] = byte;
+            }
+            stream->bytes_remaining--;
+            if (stream->bytes_remaining == 0U) {
+                stream->mode = LEGACY_TX_MODE_KEY;
+                stream->bytes_action = LEGACY_TX_BYTES_SKIP;
+                stream->capture_offset = 0;
+            }
+            break;
+
+        default:
+            return false;
+    }
+
+    pop_finished_frames(stream);
+    return true;
+}
+
+void legacy_tx_stream_init(legacy_tx_stream_t *stream) {
+    if (stream == NULL) {
+        return;
+    }
+    memset(stream, 0, sizeof(*stream));
+    stream->frames[0].context = LEGACY_TX_CTX_RAW;
+    stream->frames[0].bounded = false;
+    stream->depth = 1U;
+    stream->mode = LEGACY_TX_MODE_KEY;
+    // Proto3 omits scalar fields set to their default values.
+    stream->contract_type = protocol_Transaction_Contract_ContractType_AccountCreateContract;
+}
+
+bool legacy_tx_stream_feed(legacy_tx_stream_t *stream, const uint8_t *data, size_t len) {
+    if (stream == NULL || (data == NULL && len != 0U) || stream->error || stream->finished ||
+        len > LEGACY_TX_MAX_RAW_SIZE - stream->total_len) {
+        if (stream != NULL) {
+            set_error(stream);
+        }
+        return false;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        if (!process_byte(stream, data[i])) {
+            set_error(stream);
+            return false;
+        }
+    }
+    stream->total_len += len;
+    return true;
+}
+
+bool legacy_tx_stream_finish(legacy_tx_stream_t *stream, legacy_tx_stream_result_t *result) {
+    if (stream == NULL || result == NULL || stream->error || stream->finished ||
+        stream->total_len == 0U || stream->depth != 1U || stream->mode != LEGACY_TX_MODE_KEY ||
+        stream->bytes_remaining != 0U || stream->varint_count != 0U || !stream->contract_seen ||
+        !stream->parameter_message_seen || !stream->type_url_seen || !stream->parameter_seen ||
+        !type_url_matches_contract(stream)) {
+        if (stream != NULL) {
+            set_error(stream);
+        }
+        return false;
+    }
+
+    stream->finished = true;
+    result->contract_type = stream->contract_type;
+    result->permission_id = stream->permission_id;
+    result->fee_limit = stream->fee_limit;
+    result->custom_data_len = stream->custom_data_len;
+    result->parameter = stream->parameter;
+    result->parameter_len = stream->parameter_len;
+    return true;
+}

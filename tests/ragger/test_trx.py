@@ -2024,20 +2024,43 @@ class TestTRX():
             warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
             if device.touchable else None)
 
-    def test_trx_oversized_raw_tx_resets_signing_state(self, backend):
+    def test_trx_freezeV2_balance_large_memo(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            contract.FreezeBalanceV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                             frozen_balance=100000000,
+                                             resource=contract.BANDWIDTH),
+            data=b"A" * (64 * 1024))
+        assert len(tx) > 4096
+        self.sign_and_validate(
+            client,
+            device,
+            0,
+            tx,
+            warning_approve=True,
+            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
+            if device.touchable else None,
+            do_comparison=False)
+
+    def test_trx_oversized_parameter_resets_signing_state(self, backend):
         client = TronClient(backend)
 
-        # Legacy INS_SIGN buffers at most 4096 raw transaction bytes. Partial
-        # protobuf is accepted on intermediate APDUs, so the final byte is what
-        # crosses the limit and exercises the overflow error path.
-        oversized_tx = b"\x00" * 4097
+        # The streamed raw envelope may be large, but the decoded contract
+        # parameter remains capped at 4096 bytes. CreateSmartContract is used
+        # only to construct an oversized parameter; large smart-contract
+        # parameters are intentionally outside the scope of this change.
+        oversized_tx = self.create_smart_contract_tx(
+            client,
+            new_contract_overrides={'bytecode': b'\xff' * 5000},
+        )
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign_sync(client.getAccount(0)['path'], oversized_tx)
         assert e.value.status == StatusWord.INVALID_DATA
 
-        # The overflow must invalidate the whole signing session. Before the
-        # reset fix this continuation was accepted against the stale hash and
-        # accumulated raw transaction.
+        # Any parser failure must invalidate the whole signing session rather
+        # than leave a resumable partial hash or envelope parser.
         with pytest.raises(ExceptionRAPDU) as e:
             backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
         assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED

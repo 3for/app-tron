@@ -222,6 +222,28 @@ def signing_seed(lock_period) -> bytes:
     return b"\x00" + record
 
 
+def chunked_large_memo_seed() -> bytes:
+    raw = raw_transaction(None) + bytes_field(10, b"A" * 4097)
+    splits = (1, 2, 3, 127, 128, 251, 509, 1021)
+    records = bytearray()
+    offset = 0
+    chunk_index = 0
+
+    while offset < len(raw):
+        take = min(splits[chunk_index % len(splits)], len(raw) - offset)
+        chunk = raw[offset:offset + take]
+        if offset == 0:
+            records += apdu_record(0x00, derivation_path() + chunk)
+        elif offset + take == len(raw):
+            records += apdu_record(0x90, chunk)
+        else:
+            records += apdu_record(0x80, chunk)
+        offset += take
+        chunk_index += 1
+
+    return b"\x01" + bytes(records)
+
+
 def vote_signing_seed(votes_count: int) -> bytes:
     payload = derivation_path() + raw_vote_transaction(votes_count)
     record = bytes([0x10, 0x00]) + len(payload).to_bytes(2, "little") + payload
@@ -313,6 +335,9 @@ def main() -> None:
     )
     (OUT_DIR / "10-exchange-transaction-max-metadata.bin").write_bytes(
         exchange_transaction_max_metadata_seed()
+    )
+    (OUT_DIR / "11-chunked-large-memo.bin").write_bytes(
+        chunked_large_memo_seed()
     )
 
 

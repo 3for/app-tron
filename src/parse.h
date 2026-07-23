@@ -15,8 +15,8 @@
 #include "main_std_app.h"
 #include "shared_context.h"  // application contexts (tmpCtx, txContext, strings, ...)
 
-#define ADD_PRE_FIX_STRING "T"
-#define ADDRESS_SIZE       21
+#define ADD_PRE_FIX_STRING            "T"
+#define ADDRESS_SIZE                  21
 #define MAX_ASSET_FROZEN_SUPPLY_COUNT 10
 
 #define TRC20_DATA_FIELD_SIZE 68
@@ -92,6 +92,13 @@ unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t
 void initTx(txContext_t *context, txContent_t *content);
 
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content);
+parserStatus_e processContractParameter(protocol_Transaction_Contract_ContractType type,
+                                        int32_t permission_id,
+                                        int64_t fee_limit,
+                                        const uint8_t *parameter,
+                                        size_t parameter_len,
+                                        uint64_t custom_data_len,
+                                        txContent_t *content);
 
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 

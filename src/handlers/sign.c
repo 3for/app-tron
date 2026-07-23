@@ -29,6 +29,7 @@
 #include "ui_globals.h"
 #include "uint256.h"
 #include "app_errors.h"
+#include "legacy_tx_stream.h"
 #include "parse.h"
 #include "settings.h"
 #ifdef HAVE_GATING_SUPPORT
@@ -403,27 +404,43 @@ static bool format_permission_update_fields(const protocol_AccountPermissionUpda
     return true;
 }
 
-// Raw transaction accumulation buffer. The raw transaction can exceed one APDU
-// (MAX_APDU_LEN = 255), and a single top-level protobuf field (e.g. `contract`) may
-// also span chunks for ProposalCreate with many parameters or AccountPermissionUpdate
-// with multiple permissions.
-// processTx() needs the full contract in one contiguous
-// buffer (pb_decode_contract_parameter captures a pointer into it), so we accumulate
-// every raw-tx chunk here and decode the growing buffer.
-// Legacy INS_SIGN buffers the complete raw transaction before Nanopb decoding.
-// CreateSmartContract is therefore supported up to this existing transaction limit.
-#define MAX_RAW_TX_SIZE 4096
-static uint8_t *raw_tx;
-static uint16_t raw_tx_len;
+typedef enum {
+    SIGN_PHASE_IDLE = 0,
+    SIGN_PHASE_RAW_DATA,
+    SIGN_PHASE_METADATA,
+} sign_phase_t;
+
+// Legacy INS_SIGN streams the Transaction.raw envelope and retains only the
+// bounded contract parameter. Large custom_data/memo bytes are hashed and
+// skipped by the parser instead of being retained in RAM.
+static legacy_tx_stream_t *raw_tx_stream;
+static sign_phase_t sign_phase;
+
+static parserStatus_e finish_streamed_transaction(void) {
+    legacy_tx_stream_result_t result;
+
+    if (raw_tx_stream == NULL ||
+        !legacy_tx_stream_finish(raw_tx_stream, &result)) {
+        return USTREAM_FAULT;
+    }
+
+    return processContractParameter(result.contract_type,
+                                    result.permission_id,
+                                    result.fee_limit,
+                                    result.parameter,
+                                    result.parameter_len,
+                                    result.custom_data_len,
+                                    &txContent);
+}
 
 void sign_cleanup(void) {
-    APP_MEM_FREE_AND_NULL((void **) &raw_tx);
+    APP_MEM_FREE_AND_NULL((void **) &raw_tx_stream);
     APP_MEM_FREE_AND_NULL((void **) &vote_display_buffer);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
     APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
     ui_review_menu_cleanup();
     proposal_parameters_cleanup();
-    raw_tx_len = 0;
+    sign_phase = SIGN_PHASE_IDLE;
     votes_count = 0;
     perm_field_count = 0;
 }
@@ -431,6 +448,9 @@ void sign_cleanup(void) {
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
+    const bool metadata_apdu = ((p1 & 0xF0) == P1_TRC10_NAME);
+    bool finalize_transaction = false;
+    parserStatus_e txResult = USTREAM_PROCESSING;
 
     if (p2 != 0x00) {
         return send_sign_status(E_INCORRECT_P1_P2);
@@ -452,13 +472,24 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         initTx(&txContext, &txContent);
         customContractField = 0;
         sign_cleanup();
-        raw_tx = APP_MEM_ALLOC(MAX_RAW_TX_SIZE);
-        if (raw_tx == NULL) {
+        raw_tx_stream = APP_MEM_ALLOC(sizeof(*raw_tx_stream));
+        if (raw_tx_stream == NULL) {
             return send_sign_status(E_INCORRECT_DATA);
         }
-        raw_tx_len = 0;
+        legacy_tx_stream_init(raw_tx_stream);
+        sign_phase = SIGN_PHASE_RAW_DATA;
 
-    } else if ((p1 & 0xF0) == P1_TRC10_NAME) {
+    } else if (metadata_apdu) {
+        if (sign_phase == SIGN_PHASE_RAW_DATA) {
+            txResult = finish_streamed_transaction();
+            if (txResult != USTREAM_PROCESSING) {
+                goto handle_parser_result;
+            }
+            sign_phase = SIGN_PHASE_METADATA;
+        } else if (sign_phase != SIGN_PHASE_METADATA) {
+            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
         switch (txContent.contractType) {
             case TRANSFERASSETCONTRACT:
@@ -476,7 +507,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 if (!(p1 & 0x08)) {
                     return send_sign_status(E_OK);
                 }
-                dataLength = 0;
+                finalize_transaction = true;
 
                 break;
             case EXCHANGEINJECTCONTRACT:
@@ -496,7 +527,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     PRINTF("Unexpected parser status\n");
                     return send_sign_status(E_INCORRECT_DATA);
                 }
-                dataLength = 0;
+                finalize_transaction = true;
                 break;
             default:
                 // Error if any other contract
@@ -506,7 +537,8 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         return send_sign_status(E_INCORRECT_P1_P2);
     }
 
-    if (p1 == P1_MORE && appState != APP_STATE_SIGNING) {
+    if ((p1 == P1_MORE || p1 == P1_LAST) &&
+        (appState != APP_STATE_SIGNING || sign_phase != SIGN_PHASE_RAW_DATA)) {
         PRINTF("Signature not initialized\n");
         return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
@@ -518,16 +550,24 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         return send_sign_status(E_INCORRECT_P1_P2);
     }
 
-    // Reject an oversized raw transaction before hashing the incoming chunk. Keeping
-    // the partially updated hash/parser state after this error would allow a later
-    // continuation APDU to resume an invalid signing session.
-    if ((uint32_t) raw_tx_len + dataLength > MAX_RAW_TX_SIZE) {
-        PRINTF("Raw tx exceeds MAX_RAW_TX_SIZE\n");
-        return send_sign_status(E_INCORRECT_DATA);
+    if (!metadata_apdu) {
+        if (sign_phase != SIGN_PHASE_RAW_DATA || raw_tx_stream == NULL) {
+            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+        // Parse before hashing so an oversized/malformed chunk cannot leave a
+        // resumable partial hash. send_sign_status() resets all state on error.
+        if (!legacy_tx_stream_feed(raw_tx_stream, workBuffer, dataLength)) {
+            PRINTF("Invalid streamed raw transaction\n");
+            return send_sign_status(E_INCORRECT_DATA);
+        }
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2,
+                                   0,
+                                   workBuffer,
+                                   dataLength,
+                                   NULL,
+                                   32));
+        finalize_transaction = (p1 == P1_LAST || p1 == P1_SIGN);
     }
-
-    // hash data
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
 
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
@@ -545,44 +585,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     }
 #endif
 
-    // Accumulate raw-tx chunks so a contract that spans multiple APDUs is decoded
-    // as one contiguous buffer. Token-name chunks (handled above, with dataLength
-    // forced to 0) are NOT part of the raw tx and must not re-decode it — re-running
-    // the contract decoder would clobber the resolved token names in txContent.
-    uint8_t *parse_buf;
-    uint32_t parse_len;
-    if ((p1 & 0xF0) == P1_TRC10_NAME) {
-        parse_buf = workBuffer;
-        parse_len = 0;  // token-name completion → processTx returns USTREAM_FINISHED
-    } else {
-        if (raw_tx == NULL) {
-            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
-        }
-        memcpy(raw_tx + raw_tx_len, workBuffer, dataLength);
-        raw_tx_len += dataLength;
-        parse_buf = raw_tx;
-        parse_len = raw_tx_len;
+    if (!finalize_transaction) {
+        return send_sign_status(E_OK);
     }
 
-    // process buffer
-    uint16_t txResult = processTx(parse_buf, parse_len, &txContent);
+    if (!metadata_apdu) {
+        txResult = finish_streamed_transaction();
+    }
+
+handle_parser_result:
     PRINTF("txResult: %04x\n", txResult);
     switch (txResult) {
         case USTREAM_PROCESSING:
-            // Last data should not return
-            if (p1 == P1_LAST || p1 == P1_SIGN) {
-                break;
-            }
-            return send_sign_status(E_OK);
-        case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
-            // A contract spanning multiple APDUs is not fully decodable until its
-            // last chunk arrives (pb_decode fails mid-field). On a non-final chunk,
-            // treat this as "need more data" and keep accumulating.
-            if (p1 != P1_LAST && p1 != P1_SIGN) {
-                return send_sign_status(E_OK);
-            }
             return send_sign_status(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
 #ifdef HAVE_SWAP

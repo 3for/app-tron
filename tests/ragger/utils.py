@@ -1,24 +1,37 @@
-from eth_keys import KeyAPI
-from eth_keys.datatypes import Signature
-from eth_keys.datatypes import PublicKey
-
-from eth_account import Account
-from eth_account.messages import encode_defunct, SignableMessage
-
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
-from client.tip712 import InputData as InputData
-from address import to_tvm_address
-
 import copy
 import hashlib
 import re
 from decimal import Decimal
-from Crypto.Hash import keccak
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from Crypto.Hash import keccak
+from eth_account import Account
+from eth_account.messages import SignableMessage, encode_defunct
 from eth_keys import KeyAPI
 from eth_keys.datatypes import PublicKey
 from eth_keys.datatypes import Signature
 
+import response_parser as ResponseParser
+from address import to_tvm_address
+from client.command_builder import CommandBuilder
+
+SUN_PER_TRX = 10**6
+
+
+def to_units(amount, decimals: int) -> int:
+    """Convert a human-readable amount to its integer on-chain unit."""
+    return int(Decimal(str(amount)) * (10**decimals))
+
+
+def to_sun(amount) -> int:
+    """Convert TRX to SUN using TRON's six-decimal native precision."""
+    return to_units(amount, 6)
+
+
+def get_challenge(client) -> int:
+    """Request and decode the current device challenge."""
+    response = client.exchange_raw(CommandBuilder().get_challenge())
+    return ResponseParser.challenge(response.data)
 
 
 def normalize_vrs(vrs: tuple) -> tuple:

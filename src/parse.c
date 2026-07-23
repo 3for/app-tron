@@ -1560,6 +1560,149 @@ bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **a
     *data_size = (uint64_t) stream->bytes_left;
     return true;
 }
+
+parserStatus_e processContractParameter(
+    protocol_Transaction_Contract_ContractType type,
+    int32_t permission_id,
+    int64_t fee_limit,
+    const uint8_t *parameter,
+    size_t parameter_len,
+    uint64_t custom_data_len,
+    txContent_t *content) {
+    bool ret;
+
+    if (content == NULL || parameter == NULL || permission_id < 0 || permission_id > UINT8_MAX) {
+        return USTREAM_FAULT;
+    }
+    if (type == protocol_Transaction_Contract_ContractType_CreateSmartContract && fee_limit < 0) {
+        return USTREAM_FAULT;
+    }
+
+    content->dataBytes = custom_data_len;
+    if (!N_storage.dataAllowed && content->dataBytes != 0) {
+        return USTREAM_MISSING_SETTING_DATA_ALLOWED;
+    }
+
+    content->permission_id = (uint8_t) permission_id;
+    content->contractType = (contractType_e) type;
+    content->feeLimit = (uint64_t) fee_limit;
+
+    memset(&msg, 0, sizeof(msg));
+    pb_istream_t tx_stream = pb_istream_from_buffer(parameter, parameter_len);
+
+    switch (type) {
+        case protocol_Transaction_Contract_ContractType_AccountCreateContract:
+            ret = account_create_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_AssetIssueContract:
+            ret = asset_issue_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ParticipateAssetIssueContract:
+            ret = participate_asset_issue_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UnfreezeAssetContract:
+            ret = unfreeze_asset_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UpdateAssetContract:
+            ret = update_asset_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_TransferContract:
+            ret = transfer_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_TransferAssetContract:
+            ret = transfer_asset_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
+            ret = vote_witness_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
+            ret = freeze_balance_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
+            ret = unfreeze_balance_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
+            ret = freeze_balance_v2_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
+            ret = unfreeze_balance_v2_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
+            ret = withdraw_expire_unfreeze_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
+            ret = delegate_resource_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
+            ret = undelegate_resource_contrace(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
+            ret = withdraw_balance_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
+            ret = proposal_create_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
+            ret = proposal_approve_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ProposalDeleteContract:
+            ret = proposal_delete_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
+            ret = account_update_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_SetAccountIdContract:
+            ret = set_account_id_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_CreateSmartContract:
+            ret = create_smart_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
+            ret = trigger_smart_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
+            ret = update_setting_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UpdateEnergyLimitContract:
+            ret = update_energy_limit_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ClearABIContract:
+            ret = clear_abi_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
+            ret = exchange_create_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
+            ret = exchange_inject_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ExchangeWithdrawContract:
+            ret = exchange_withdraw_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_ExchangeTransactionContract:
+            ret = exchange_transaction_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
+            ret = account_permission_update_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
+            ret = witness_create_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+            ret = witness_update_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+            ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
+            break;
+        case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+            ret = update_brokerage_contract(content, &tx_stream);
+            break;
+        default:
+            return USTREAM_FAULT;
+    }
+
+    return ret ? USTREAM_PROCESSING : USTREAM_FAULT;
+}
+
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content) {
     protocol_Transaction_raw transaction;
 
@@ -1568,8 +1711,6 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
     }
 
     memset(&transaction, 0, sizeof(transaction));
-    memset(&msg, 0, sizeof(msg));
-
     pb_istream_t stream = pb_istream_from_buffer(buffer, length);
 
     /* Set callbacks to retrieve "Contract" message bounds.
@@ -1591,10 +1732,6 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         return USTREAM_FAULT;
     }
 
-    if (!N_storage.dataAllowed && content->dataBytes != 0) {
-        return USTREAM_MISSING_SETTING_DATA_ALLOWED;
-    }
-
     /* Parse contract parameters if any...
        and it may come in different message chunk
        so test if chunk has the contract
@@ -1606,129 +1743,13 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
         if (contract_buffer.buf == NULL) {
             return USTREAM_FAULT;
         }
-        content->permission_id = transaction.contract->Permission_id;
-        content->contractType = (contractType_e) transaction.contract->type;
-        if ((transaction.contract->type ==
-             protocol_Transaction_Contract_ContractType_CreateSmartContract) &&
-            (transaction.fee_limit < 0)) {
-            return USTREAM_FAULT;
-        }
-        content->feeLimit = (uint64_t) transaction.fee_limit;
-
-        pb_istream_t tx_stream = pb_istream_from_buffer(contract_buffer.buf, contract_buffer.size);
-        bool ret;
-
-        switch (transaction.contract->type) {
-            case protocol_Transaction_Contract_ContractType_AccountCreateContract:
-                ret = account_create_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_AssetIssueContract:
-                ret = asset_issue_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ParticipateAssetIssueContract:
-                ret = participate_asset_issue_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UnfreezeAssetContract:
-                ret = unfreeze_asset_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UpdateAssetContract:
-                ret = update_asset_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_TransferContract:
-                ret = transfer_contract(content, &tx_stream);
-                break;
-
-            case protocol_Transaction_Contract_ContractType_TransferAssetContract:
-                ret = transfer_asset_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
-                ret = vote_witness_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
-                ret = freeze_balance_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
-                ret = unfreeze_balance_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
-                ret = freeze_balance_v2_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
-                ret = unfreeze_balance_v2_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
-                ret = withdraw_expire_unfreeze_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
-                ret = delegate_resource_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
-                ret = undelegate_resource_contrace(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
-                ret = withdraw_balance_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
-                ret = proposal_create_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
-                ret = proposal_approve_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ProposalDeleteContract:
-                ret = proposal_delete_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
-                ret = account_update_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_SetAccountIdContract:
-                ret = set_account_id_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_CreateSmartContract:
-                ret = create_smart_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
-                ret = trigger_smart_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
-                ret = update_setting_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UpdateEnergyLimitContract:
-                ret = update_energy_limit_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ClearABIContract:
-                ret = clear_abi_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
-                ret = exchange_create_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
-                ret = exchange_inject_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ExchangeWithdrawContract:
-                ret = exchange_withdraw_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_ExchangeTransactionContract:
-                ret = exchange_transaction_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
-                ret = account_permission_update_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
-                ret = witness_create_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
-                ret = witness_update_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
-                ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
-                break;
-            case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
-                ret = update_brokerage_contract(content, &tx_stream);
-                break;
-            default:
-                return USTREAM_FAULT;
-        }
-        return ret ? USTREAM_PROCESSING : USTREAM_FAULT;
+        return processContractParameter(transaction.contract->type,
+                                        transaction.contract->Permission_id,
+                                        transaction.fee_limit,
+                                        contract_buffer.buf,
+                                        contract_buffer.size,
+                                        content->dataBytes,
+                                        content);
     }
 
     return USTREAM_PROCESSING;

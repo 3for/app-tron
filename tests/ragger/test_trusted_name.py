@@ -1,7 +1,6 @@
 from typing import Optional
 from pathlib import Path
 import pytest
-from web3 import Web3
 from ledgered.devices import DeviceType
 from ragger.backend import BackendInterface
 from ragger.error import ExceptionRAPDU
@@ -10,6 +9,7 @@ from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 import response_parser as ResponseParser
 from tron import TronClient
+from utils import to_sun
 from client.status_word import StatusWord
 from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from client.command_builder import CommandBuilder
@@ -29,6 +29,9 @@ ALGO_ID = 1
 NONCE = 21
 GAS_PRICE = 13
 GAS_LIMIT = 21000
+# Legacy transaction metadata kept for parity with app-ethereum tests. When
+# populated in TRON tests, express it in SUN rather than Ethereum gwei.
+GAS_PRICE_SUN = to_sun(GAS_PRICE)
 # TRX, decimal 10^6
 AMOUNT = 1_220_000
 # ETH in slip-44
@@ -85,7 +88,7 @@ def test_trusted_name_v1(scenario_navigator: NavigateWithScenario,
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,
@@ -119,7 +122,7 @@ def test_trusted_name_v1_verbose(navigator: Navigator,
 
     tx_params = {
         "nonce": NONCE,
-        "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+        "gasPrice": GAS_PRICE_SUN,
         "gas": GAS_LIMIT,
         "to": ADDR,
         "value": AMOUNT,
@@ -189,7 +192,7 @@ def test_trusted_name_v1_wrong_addr(
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": bytes(addr),
             "value": AMOUNT,
@@ -221,7 +224,7 @@ def test_trusted_name_v1_non_mainnet(
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,
@@ -253,7 +256,7 @@ def test_trusted_name_v1_unknown_chain(
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,
@@ -326,7 +329,7 @@ def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,
@@ -358,7 +361,7 @@ def test_trusted_name_v2_wrong_chainid(
     sign_trusted_name(
         scenario_navigator, app_client, {
             "nonce": NONCE,
-            "gasPrice": Web3.to_wei(GAS_PRICE, "gwei"),
+            "gasPrice": GAS_PRICE_SUN,
             "gas": GAS_LIMIT,
             "to": ADDR,
             "value": AMOUNT,

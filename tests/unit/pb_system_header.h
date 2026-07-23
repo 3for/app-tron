@@ -7,4 +7,8 @@
 #include <string.h>
 #include <limits.h>
 
+#ifndef PIC
+#define PIC(value) (value)
+#endif
+
 #endif

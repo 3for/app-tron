@@ -32,8 +32,7 @@ from typing import Optional
 import pytest
 from web3 import Web3
 
-from client.command_builder import (CLA, MAX_APDU_LEN, CommandBuilder, InsType,
-                                    P1Type, P2Type)
+from client.command_builder import (CLA, MAX_APDU_LEN, InsType, P1Type, P2Type)
 from client.enum_value import EnumValue
 from client.gating import Gating
 from client.proxy_info import ProxyInfo
@@ -46,14 +45,15 @@ from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from client.tlv import eth_to_tron_base58
 from fields_utils import (get_all_paths, get_all_tuple_array_paths,
                           get_all_tuple_paths)
+from gcs_utils import ABIS_FOLDER, compute_inst_hash
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator.navigation_scenario import NavigateWithScenario
-import response_parser as ResponseParser
 from client.status_word import StatusWord
-from tron import TronClient
-from utils import check_tx_signature, get_selector_from_data
+from tron import TRON_MAINNET_ADDRESS_PREFIX, TronClient
+from utils import (check_tx_signature, get_challenge, get_selector_from_data,
+                   to_sun, to_units)
 
 PROTO_PATH = str(Path(__file__).resolve().parents[2] / "proto")
 if PROTO_PATH not in sys.path:
@@ -71,9 +71,6 @@ P2_GCS_START_FLOW = P2Type.GCS_START_FLOW
 
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
 TRON_MAINNET_CHAINID = 728126428
-# TRON mainnet address prefix byte (parse.h ADD_PRE_FIX_BYTE_MAINNET).
-ADD_PRE_FIX_BYTE_MAINNET = 0x41
-ABIS_FOLDER = Path(__file__).parent / "abis"
 # A simple TRC20 `transfer(address,uint256)` call: selector + 2 ABI words.
 TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
 # Same contract as a 20-byte TVM address (0x41 mainnet prefix stripped), i.e.
@@ -86,7 +83,6 @@ TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d7"
     "00000000000000000000000000000000000000000000000000000000000f4240")
 BATCH_CONTRACT20 = bytes.fromhex("2cc8475177918e8c4d840150b68815a4b6f0f5f3")
-
 # A deliberately over-long calldata for the streaming-decode test (see
 # test_gcs_long_calldata). Shielded-mint signature, ~1 KB:
 #   mint(uint256 rawValue, bytes32[9] output, bytes32[2] bindingSignature, bytes32[21] c)
@@ -257,7 +253,7 @@ def build_trigger_smart_contract_tx(client: TronClient,
         tron.Transaction.Contract.TriggerSmartContract,
         contract.TriggerSmartContract(
             owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
-            contract_address=bytes([ADD_PRE_FIX_BYTE_MAINNET]) + contract_addr20,
+            contract_address=bytes([TRON_MAINNET_ADDRESS_PREFIX]) + contract_addr20,
             data=calldata))
 
 
@@ -432,13 +428,6 @@ def build_enum_value(contract_addr20: bytes, selector: bytes, enum_id: int,
                      name).serialize()
 
 
-def compute_inst_hash(fields: list[Field]) -> bytes:
-    inst_hash = hashlib.sha3_256()
-    for field in fields:
-        inst_hash.update(field.serialize())
-    return inst_hash.digest()
-
-
 def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
                   operation: str) -> bytes:
     return TxInfo(1,
@@ -493,11 +482,6 @@ def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
     assert resp.status == StatusWord.OK
     assert check_tx_signature(tx, resp.data[0:65],
                               client.getAccount(0)["publicKey"][2:])
-
-
-def _get_challenge(client: TronClient) -> int:
-    return ResponseParser.challenge(
-        client.exchange_raw(CommandBuilder().get_challenge()).data)
 
 
 def _provide_gating(client: TronClient, gating_params: Optional[Gating]) -> None:
@@ -747,7 +731,7 @@ def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
     data = contract.encode_abi("batchExecute", [[
         (
             bytes.fromhex("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
-            Web3.to_wei(0.0, "ether"),
+            to_sun(0),
             b"",
         ),
     ]])
@@ -943,7 +927,7 @@ def test_gcs_nft(scenario_navigator: NavigateWithScenario):
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
                     chain_id=TRON_MAINNET_CHAINID,
-                    challenge=_get_challenge(client)))
+                    challenge=get_challenge(client)))
     client.provide_nft_metadata("OpenSea Shared Storefront", eth_to_tron_base58(collection_addr20),
                                 TRON_MAINNET_CHAINID)
 
@@ -1310,7 +1294,7 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
             bytes.fromhex("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
             bytes.fromhex("F313B370D28760b98A2E935E56Be92Feb2c4EC04"),
             bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
-            Web3.to_wei(0.22, "ether"),
+            to_sun("2200"),
             682119805,
             0,
         ],
@@ -1443,7 +1427,7 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
                      deploy_date=1711098731)
 
     client.provide_proxy_info(
-        ProxyInfo(_get_challenge(client),
+        ProxyInfo(get_challenge(client),
                   eth_to_tron_base58(proxy_addr20),
                   tx_info.chain_id,
                   tx_info.contract_addr,
@@ -1452,7 +1436,7 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
 
     impl_contract = bytes.fromhex("1111111111111111111111111111111111111111")
     client.provide_proxy_info(
-        ProxyInfo(_get_challenge(client), eth_to_tron_base58(new_owner), tx_info.chain_id,
+        ProxyInfo(get_challenge(client), eth_to_tron_base58(new_owner), tx_info.chain_id,
                   eth_to_tron_base58(impl_contract)).serialize())
     client.provide_trusted_name(
         TrustedName(2,
@@ -1461,7 +1445,7 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
                     tn_type=TrustedNameType.CONTRACT,
                     tn_source=TrustedNameSource.CAL,
                     chain_id=TRON_MAINNET_CHAINID,
-                    challenge=_get_challenge(client)))
+                    challenge=get_challenge(client)))
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -1470,7 +1454,7 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
     # descriptor before the gated-signing match.
     if gating_params is not None:
         client.provide_proxy_info(
-            ProxyInfo(_get_challenge(client),
+            ProxyInfo(get_challenge(client),
                       eth_to_tron_base58(proxy_addr20),
                       tx_info.chain_id,
                       tx_info.contract_addr,
@@ -1493,7 +1477,7 @@ def test_gcs_4226(scenario_navigator: NavigateWithScenario):
             address=None,
         )
     data = contract.encode_abi("deposit", [
-        Web3.to_wei(4.20, "ether"),
+        to_units("4.20", 18),
         bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
     ])
     contract_addr20 = bytes.fromhex("358d94b5b2F147D741088803d932Acb566acB7B6")
@@ -1865,7 +1849,7 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
     ])
     data = contract.encode_abi("execTransaction", [
         contract_addr,
-        Web3.to_wei(0, "ether"),
+        to_sun(0),
         sub_data,
         1,  # operation
         0,
@@ -2073,7 +2057,7 @@ def test_gcs_nested_execTransaction_changeThreshold(
     sub_data = contract.encode_abi("changeThreshold", [3])
     data = contract.encode_abi("execTransaction", [
         contract_addr,
-        Web3.to_wei(0, "ether"),
+        to_sun(0),
         sub_data,
         0,
         0,
@@ -2246,7 +2230,7 @@ def test_gcs_nested_execTransaction_changeThreshold(
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                     chain_id=tx_info.chain_id,
-                    challenge=_get_challenge(client),
+                    challenge=get_challenge(client),
                     owner=wallet_addr,
                     owner_deriv_path=derivation_path))
 
@@ -2276,7 +2260,7 @@ def test_gcs_nested_no_param(scenario_navigator: NavigateWithScenario):
         contract = Web3().eth.contract(abi=json.load(f), address=contract_addr)
     data = contract.encode_abi("execTransaction", [
         sub_contract_addr,
-        Web3.to_wei(0, "ether"),
+        to_sun(0),
         sub_data,
         0,
         0,
@@ -2389,7 +2373,7 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
             tokens[1]["address"],
             bytes.fromhex("F313B370D28760b98A2E935E56Be92Feb2c4EC04"),
             bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D"),
-            Web3.to_wei(0.22, "ether"),
+            to_units("0.22", 18),
             682119805,
             0,
         ],
@@ -2450,7 +2434,7 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
                         tn_type=TrustedNameType.TOKEN,
                         tn_source=TrustedNameSource.CAL,
                         chain_id=TRON_MAINNET_CHAINID,
-                        challenge=_get_challenge(client)))
+                        challenge=get_challenge(client)))
         client.provide_transaction_field_desc(field.serialize())
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
@@ -2487,8 +2471,8 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
         contract = Web3().eth.contract(abi=json.load(f),
                                        address=tokens[1]["address"])
     data = contract.encode_abi("batchExecute", [[
-        (tokens[0]["address"], Web3.to_wei(0, "ether"), data0),
-        (tokens[1]["address"], Web3.to_wei(0, "ether"), data1),
+        (tokens[0]["address"], to_sun(0), data0),
+        (tokens[1]["address"], to_sun(0), data1),
     ]])
     tx = _store_contract_call(client, backend, tokens[1]["address"], data)
 
@@ -2617,8 +2601,8 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
         batch_contract = Web3().eth.contract(abi=json.load(f),
                                              address=tokens[1]["address"])
     batch_data = batch_contract.encode_abi("batchExecute", [[
-        (tokens[0]["address"], Web3.to_wei(0, "ether"), token_data0),
-        (tokens[1]["address"], Web3.to_wei(0, "ether"), token_data1),
+        (tokens[0]["address"], to_sun(0), token_data0),
+        (tokens[1]["address"], to_sun(0), token_data1),
     ]])
 
     safe_addr = bytes.fromhex("60aa01971a2adc1d6b2b59b972fb47b2fec095fc")
@@ -2823,7 +2807,7 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
     ]
 
     client.provide_proxy_info(
-        ProxyInfo(_get_challenge(client), eth_to_tron_base58(tx_to), l0_tx_info.chain_id,
+        ProxyInfo(get_challenge(client), eth_to_tron_base58(tx_to), l0_tx_info.chain_id,
                   l0_tx_info.contract_addr).serialize())
     client.provide_transaction_info(l0_tx_info.serialize())
 
@@ -2879,13 +2863,13 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
                                        address=BATCH_CONTRACT20)
     data = contract.encode_abi("batchExecute", [[
         (bytes.fromhex("0000000000000000000000000000000000000000"),
-         Web3.to_wei(0.0, "ether"), b""),
-        (tokens[0]["address"], Web3.to_wei(0, "ether"), data0),
+         to_sun(0), b""),
+        (tokens[0]["address"], to_sun(0), data0),
         (bytes.fromhex("2222222222222222222222222222222222222222"),
-         Web3.to_wei(2.2, "ether"), b""),
-        (tokens[1]["address"], Web3.to_wei(0, "ether"), data1),
+         to_sun("2.2"), b""),
+        (tokens[1]["address"], to_sun(0), data1),
         (bytes.fromhex("4444444444444444444444444444444444444444"),
-         Web3.to_wei(4.4, "ether"), b""),
+         to_sun("4.4"), b""),
     ]])
     tx = _store_contract_call(client, backend, BATCH_CONTRACT20, data)
 
@@ -2955,7 +2939,7 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.ENS,
                     chain_id=TRON_MAINNET_CHAINID,
-                    challenge=_get_challenge(client)))
+                    challenge=get_challenge(client)))
 
     derivation_path = client.getAccount(0)["path"]
     wallet_addr = bytes.fromhex(client.getAccount(0)["addressHex"])[1:]
@@ -2966,7 +2950,7 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
                     tn_type=TrustedNameType.ACCOUNT,
                     tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
                     chain_id=TRON_MAINNET_CHAINID,
-                    challenge=_get_challenge(client),
+                    challenge=get_challenge(client),
                     owner=wallet_addr,
                     owner_deriv_path=derivation_path))
 
@@ -3095,7 +3079,7 @@ def test_gcs_trusted_name(scenario_navigator: NavigateWithScenario):
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.ENS,
                         chain_id=TRON_MAINNET_CHAINID,
-                        challenge=_get_challenge(client)))
+                        challenge=get_challenge(client)))
 
     tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
 
