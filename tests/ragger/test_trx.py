@@ -1583,8 +1583,6 @@ class TestTRX():
             0,
             tx,
             warning_approve=True,
-            warning_instruction=NavInsID.USE_CASE_CHOICE_CONFIRM
-            if device.touchable else None,
             do_comparison=False)
 
     @pytest.mark.parametrize('case', ['minimum', 'maximum'])
