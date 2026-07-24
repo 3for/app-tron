@@ -53,7 +53,7 @@ void field_hash_deinit(void) {
 static const uint8_t *field_hash_prepare(const s_struct_712_field *field_ptr,
                                          const uint8_t *data,
                                          uint8_t *data_length) {
-    fh->remaining_size = __builtin_bswap16(*(uint16_t *) &data[0]);  // network byte order
+    fh->remaining_size = ((uint16_t) data[0] << 8) | data[1];
     data += sizeof(uint16_t);
     *data_length -= sizeof(uint16_t);
     fh->state = FHS_WAITING_FOR_MORE;
@@ -123,6 +123,7 @@ static uint8_t *field_hash_finalize_dynamic(void) {
     }
     // copy hash into memory
     if (finalize_hash((cx_hash_t *) &global_sha3, value, KECCAK256_HASH_BYTESIZE) != true) {
+        APP_MEM_FREE(value);
         return NULL;
     }
     return value;
@@ -199,6 +200,10 @@ static bool field_hash_domain_special_fields(const s_struct_712_field *field_ptr
         explicit_bzero(&tip712_context->contract_addr[data_length],
                        sizeof(tip712_context->contract_addr) - data_length);
     } else if (strcmp(key, "chainId") == 0) {
+        if ((data_length == 0) || (data_length > sizeof(tip712_context->chain_id))) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
         tip712_context->chain_id = u64_from_BE(data, data_length);
     }
     return true;
@@ -250,13 +255,14 @@ static bool field_hash_finalize(const s_struct_712_field *field_ptr,
  */
 bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
     const s_struct_712_field *field_ptr;
-    bool first = fh->state == FHS_IDLE;
+    bool first;
     uint16_t total_length = 0;
 
     if ((fh == NULL) || ((field_ptr = path_get_field()) == NULL)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
+    first = fh->state == FHS_IDLE;
 
     // first packet for this frame
     if (first) {

@@ -146,13 +146,13 @@ void reset_app_context(void) {
     memset(&txContext, 0, sizeof(txContext));
     memset(&strings, 0, sizeof(strings));
     memset(&g_fuzz_trusted_name, 0, sizeof(g_fuzz_trusted_name));
-    apdu_response_code = SWO_SUCCESS;
     appState = APP_STATE_IDLE;
     seed_default_assets();
 }
 
 void init_tip712_fuzz_environment(void) {
     reset_app_context();
+    apdu_response_code = SWO_SUCCESS;
     fuzz_set_settings(0);
     fuzz_set_tip712_environment(0);
     memset(&g_fuzz_ui_stats, 0, sizeof(g_fuzz_ui_stats));

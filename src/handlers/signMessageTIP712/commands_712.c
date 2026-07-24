@@ -96,7 +96,9 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
     if (tip712_context == NULL) {
         ret = tip712_context_init();
     }
-    if (struct_state == DEFINED) {
+    if ((struct_state == DEFINED) ||
+        ((tip712_context != NULL) && tip712_context->schema_locked)) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         ret = false;
     }
 
@@ -207,10 +209,16 @@ uint16_t handleTIP712Filtering(uint8_t p1,
     }
     switch (p2) {
         case P2_FILT_ACTIVATE:
+            if (tip712_context->schema_locked) {
+                apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+                ret = false;
+                break;
+            }
             if (!N_storage.verbose_tip712) {
                 ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
-                ret = compute_schema_hash();
             }
+            ret = compute_schema_hash();
+            tip712_context->schema_locked = ret;
             forget_known_assets();
             break;
         case P2_FILT_DISCARDED_PATH:
@@ -284,6 +292,9 @@ uint16_t handleTIP712Filtering(uint8_t p1,
  */
 uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags) {
     bool ret = false;
+    off_t path_length;
+    uint8_t current_schema_hash[CX_SHA224_SIZE];
+    volatile uint8_t schema_diff = 0;
 
     if (tip712_context == NULL) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -296,26 +307,48 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
              (path_get_field() != NULL)) {
         apdu_response_code = SWO_INCORRECT_DATA;
     } else if ((ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) &&
-               (!ui_712_message_info_received() || (ui_712_remaining_filters() != 0))) {
+               (!tip712_context->schema_locked || !ui_712_message_info_received() ||
+                (ui_712_remaining_filters() != 0))) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
     } else if (!all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
         PRINTF("Unprocessed calldata\n");
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
-    } else if (read_bip32_path_712(cdata, length, &tmpCtx.messageSigningContext712) < 0) {
+    } else if (((path_length =
+                     read_bip32_path_712(cdata, length, &tmpCtx.messageSigningContext712)) < 0) ||
+               ((size_t) path_length != length)) {
         apdu_response_code = SWO_INCORRECT_DATA;
     } else {
         ret = true;
+        if (ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) {
+            ret = compute_schema_hash_into(current_schema_hash);
+            if (ret) {
+                for (size_t i = 0; i < sizeof(current_schema_hash); i++) {
+                    schema_diff |= current_schema_hash[i] ^ tip712_context->schema_hash[i];
+                }
+                ret = schema_diff == 0;
+            }
+            explicit_bzero(current_schema_hash, sizeof(current_schema_hash));
+            if (!ret) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+            }
+        }
 #ifndef SCREEN_SIZE_WALLET
-        if (!N_storage.verbose_tip712 &&
+        if (ret && !N_storage.verbose_tip712 &&
             (ui_712_get_filtering_mode() == TIP712_FILTERING_BASIC)) {
             ret = ui_712_message_hash();
         }
 #endif
-        ui_712_end_sign();
+        if (ret) {
+            ret = ui_712_end_sign();
+        }
     }
 
     if (!ret) {
+        // Some UI allocation helpers already replied and reset the context.
+        if (tip712_context == NULL) {
+            return APDU_NO_RESPONSE;
+        }
         apdu_reply(false);
         return apdu_response_code;
     }

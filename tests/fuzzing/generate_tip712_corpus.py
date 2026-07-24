@@ -877,13 +877,14 @@ def write_seed(name: str, payload: bytes) -> None:
 
 
 def main() -> None:
+    simple_mail = load_json("00-simple_mail-data.json")
     write_seed(
         "00-simple-mail-sign-by-hash.bin",
-        build_stream(load_json("00-simple_mail-data.json"),
+        build_stream(simple_mail,
                      settings=(1 << S_SIGN_BY_HASH)))
     write_seed(
         "01-simple-mail-verbose.bin",
-        build_stream(load_json("00-simple_mail-data.json"),
+        build_stream(simple_mail,
                      settings=(1 << S_VERBOSE_TIP712)))
     write_seed("02-multidimensional-arrays.bin",
                build_stream(load_json("10-multidimensional_arrays-data.json")))
@@ -919,6 +920,23 @@ def main() -> None:
         "12-trusted-name-fallback.bin",
         build_stream(TRUSTED_NAME_FALLBACK["data"],
                      TRUSTED_NAME_FALLBACK["filters"]))
+    write_seed(
+        "13-schema-mutation-after-activate.bin",
+        emit_command(OP_STRUCT_DEF, P1_COMPLETE, P2_STRUCT_NAME,
+                     b"EIP712Domain") +
+        emit_command(OP_FILTERING, P1_COMPLETE, P2_FILT_ACTIVATE) +
+        emit_command(OP_STRUCT_DEF, P1_COMPLETE, P2_STRUCT_NAME, b"Injected"))
+
+    embedded_nul = copy.deepcopy(simple_mail)
+    embedded_nul["domain"]["name"] = "safe\u0000hidden"
+    write_seed("14-embedded-nul-string.bin", build_stream(embedded_nul))
+
+    oversized_chain_id = copy.deepcopy(simple_mail)
+    oversized_chain_id["domain"]["chainId"] = 1 << 64
+    write_seed("15-oversized-chain-id.bin", build_stream(oversized_chain_id))
+
+    write_seed("16-safe-batch.bin",
+               build_stream(load_json("safe_batch.json")))
 
 
 if __name__ == "__main__":

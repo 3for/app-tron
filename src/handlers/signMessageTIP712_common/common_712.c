@@ -97,16 +97,16 @@ bool tip712_hash_to_sign(uint8_t hash[static INT256_LENGTH]) {
 
 bool ui_712_approve_cb(bool display_menu) {
     uint32_t tx = 0;
-    cx_err_t err;
+    cx_err_t err = CX_INTERNAL_ERROR;
 
-    cx_ecfp_private_key_t privateKey;
-    uint8_t signature[100];
+    cx_ecfp_private_key_t privateKey = {0};
+    uint8_t signature[100] = {0};
     unsigned int info = 0;
-    uint8_t hash[INT256_LENGTH];
+    uint8_t hash[INT256_LENGTH] = {0};
 
     io_seproxyhal_io_heartbeat();
     if (!tip712_hash_to_sign(hash)) {
-        return false;
+        goto end;
     }
 
     io_seproxyhal_io_heartbeat();
@@ -122,15 +122,16 @@ bool ui_712_approve_cb(bool display_menu) {
 
     io_seproxyhal_io_heartbeat();
     unsigned int signatureLength = sizeof(signature);
-    if (cx_ecdsa_sign_no_throw(&privateKey,
-                               CX_RND_RFC6979 | CX_LAST,
-                               CX_SHA256,
-                               hash,
-                               sizeof(hash),
-                               signature,
-                               &signatureLength,
-                               &info) != CX_OK) {
-        return false;
+    err = cx_ecdsa_sign_no_throw(&privateKey,
+                                 CX_RND_RFC6979 | CX_LAST,
+                                 CX_SHA256,
+                                 hash,
+                                 sizeof(hash),
+                                 signature,
+                                 &signatureLength,
+                                 &info);
+    if (err != CX_OK) {
+        goto end;
     }
 
     format_signature_out(signature);
@@ -142,6 +143,8 @@ bool ui_712_approve_cb(bool display_menu) {
 end:
     // Clear tmp buffer data
     explicit_bzero(&privateKey, sizeof(privateKey));
+    explicit_bzero(hash, sizeof(hash));
+    explicit_bzero(signature, sizeof(signature));
 
     reset_app_context();
     if (err == CX_OK) {

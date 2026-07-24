@@ -58,12 +58,6 @@ if (NOT DEFINED ENV{LIB_FUZZING_ENGINE})
   else()
     message(FATAL_ERROR "Unknown sanitizer type. It must be set to `address` or `memory`.")
   endif()
-  # The firmware intentionally performs unaligned big-endian loads (e.g.
-  # `*(uint16_t *) &data[0]` in field_hash.c, identical to app-ethereum). These
-  # are valid on the ARM Cortex-M target, so UBSan's alignment check is a
-  # false positive for the host fuzz build; disable just that sub-check.
-  list(APPEND TARGET_COMPILE_FLAGS -fno-sanitize=alignment)
-  list(APPEND TARGET_LINK_FLAGS -fno-sanitize=alignment)
 else()
   set(TARGET_COMPILE_FLAGS "$ENV{CFLAGS}")
   set(TARGET_LINK_FLAGS "$ENV{CFLAGS}")
@@ -80,6 +74,8 @@ else()
     list(APPEND TARGET_LINK_FLAGS -fsanitize=fuzzer)
   endif()
 endif()
+
+list(APPEND TARGET_COMPILE_FLAGS -fshort-enums)
 
 if (${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message(FATAL_ERROR "In-source builds not allowed. Please use a separate build directory.")
@@ -153,6 +149,7 @@ target_include_directories(fuzz_tip712
                            .
                            include
                            ../../src
+                           ../../src/handlers
                            ../../src/handlers/signMessageTIP712
                            ../../src/handlers/signMessageTIP712_common
                            ../../src/handlers/generic_tx_parser

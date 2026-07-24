@@ -31,23 +31,23 @@ bool tip712_context_init(void) {
     }
 
     if (sol_typenames_init() == false) {
-        return false;
+        goto error;
     }
 
     if (path_init() == false) {
-        return false;
+        goto error;
     }
 
     if (field_hash_init() == false) {
-        return false;
+        goto error;
     }
 
     if (ui_712_init() == false) {
-        return false;
+        goto error;
     }
 
     if (typed_data_init() == false) {
-        return false;
+        goto error;
     }
 
     tip712_context->go_home_on_failure = true;
@@ -55,6 +55,9 @@ bool tip712_context_init(void) {
     struct_state = NOT_INITIALIZED;
 
     return true;
+error:
+    tip712_context_cleanup();
+    return false;
 }
 
 /**
@@ -75,4 +78,19 @@ void tip712_context_cleanup(void) {
 void tip712_context_deinit(void) {
     tip712_context_cleanup();
     reset_app_context();
+}
+
+bool tip712_review_in_progress(void) {
+    if (tip712_context != NULL) {
+        return tip712_context->review_in_progress;
+    }
+    // The legacy TIP-712 command has no heap-backed TIP-712 context, but its
+    // review is asynchronous and still owns tmpCtx until the callback fires.
+    return appState == APP_STATE_SIGNING_TIP712;
+}
+
+void tip712_mark_reviewing(void) {
+    if (tip712_context != NULL) {
+        tip712_context->review_in_progress = true;
+    }
 }

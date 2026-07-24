@@ -63,13 +63,17 @@ uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t 
         workBuffer += 4;
         dataLength -= 4;
     }
-    if (dataLength < HASH_SIZE * 2) {
+    if (dataLength != HASH_SIZE * 2) {
         return E_INCORRECT_DATA;
     }
     memmove(tmpCtx.messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
     memmove(tmpCtx.messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
 
-    ux_flow_display(APPROVAL_SIGN_TIP72_TRANSACTION, false);
+    appState = APP_STATE_SIGNING_TIP712;
+    if (!ux_flow_display(APPROVAL_SIGN_TIP72_TRANSACTION, false)) {
+        // The UI preparation helper already replied and reset the session.
+        return APDU_NO_RESPONSE;
+    }
 
     return APDU_NO_RESPONSE;
 }

@@ -80,6 +80,7 @@ typedef struct {
     s_ui_712_pair *ui_pairs;
     uint16_t ui_pairs_dup_count;  // TRON: length of the current identical-page run
     uint16_t dynamic_value_remaining;
+    uint16_t dynamic_value_written;
     s_eip712_calldata_info *calldata_info;
     uint8_t calldata_index;
 } t_ui_context;
@@ -166,9 +167,13 @@ static void delete_amount_join(s_amount_join *join) {
 }
 
 static bool ui_712_current_pair(s_ui_712_pair **prev, s_ui_712_pair **cur) {
-    s_ui_712_pair *tmp = ui_ctx->ui_pairs;
+    s_ui_712_pair *tmp;
 
-    if ((prev == NULL) || (cur == NULL) || (tmp == NULL)) {
+    if ((ui_ctx == NULL) || (prev == NULL) || (cur == NULL)) {
+        return false;
+    }
+    tmp = ui_ctx->ui_pairs;
+    if (tmp == NULL) {
         return false;
     }
     *prev = NULL;
@@ -182,6 +187,7 @@ static bool ui_712_current_pair(s_ui_712_pair **prev, s_ui_712_pair **cur) {
 
 static void ui_712_finalize_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
     ui_ctx->dynamic_value_remaining = 0;
+    ui_ctx->dynamic_value_written = 0;
     // TRON: number consecutive pages sharing the same key/value into a run
     ui_712_number_duplicate_pair(prev, cur);
     cur->end_intent = validate_instruction_hash();
@@ -254,31 +260,35 @@ void ui_712_finalize_field(void) {
  * Set a new intent for the TIP-712 batch transaction
  *
  */
-void ui_712_set_intent(void) {
+bool ui_712_set_intent(void) {
     s_ui_712_pair *new_pair = NULL;
     const char *title = "Review transaction";
     size_t title_length = strlen(title);
 
+    if (ui_ctx == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     // Allocate memory for the new pair
     if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
-        return;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
     }
-    // Add it to the chained list
-    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
-
     // Allocate and copy the title
-    if (APP_MEM_CALLOC((void **) &new_pair->key, title_length + 1) == false) {
-        return;
-    }
+    if (APP_MEM_CALLOC((void **) &new_pair->key, title_length + 1) == false) goto error;
     memcpy(new_pair->key, title, title_length);
 
     // Allocate and clear the intent buffer
-    if (APP_MEM_CALLOC((void **) &new_pair->value, N_OF_M_LENGTH) == false) {
-        return;
-    }
+    if (APP_MEM_CALLOC((void **) &new_pair->value, N_OF_M_LENGTH) == false) goto error;
 
     // Mark it as an intent
     new_pair->start_intent = true;
+    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
+    return true;
+error:
+    apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    delete_ui_pair(new_pair);
+    return false;
 }
 
 /**
@@ -287,22 +297,28 @@ void ui_712_set_intent(void) {
  * @param[in] str the new title
  * @param[in] length its length
  */
-void ui_712_set_title(const char *str, size_t length) {
+bool ui_712_set_title(const char *str, size_t length) {
     s_ui_712_pair *new_pair = NULL;
 
+    if ((ui_ctx == NULL) || (str == NULL)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
-        return;
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
     }
-    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
-    if (APP_MEM_CALLOC((void **) &new_pair->key, length + 1) == false) {
-        return;
-    }
+    if (APP_MEM_CALLOC((void **) &new_pair->key, length + 1) == false) goto error;
     memcpy(new_pair->key, str, length);
     // TRON: keep an un-numbered copy of the key for duplicate-run detection
-    if (APP_MEM_CALLOC((void **) &new_pair->raw_key, length + 1) == false) {
-        return;
-    }
+    if (APP_MEM_CALLOC((void **) &new_pair->raw_key, length + 1) == false) goto error;
     memcpy(new_pair->raw_key, str, length);
+    flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
+    return true;
+error:
+    apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    delete_ui_pair(new_pair);
+    return false;
 }
 
 /**
@@ -313,31 +329,36 @@ void ui_712_set_title(const char *str, size_t length) {
  * @param[in] str the new value
  * @param[in] length its length
  */
-void ui_712_set_value(const char *str, size_t length) {
+bool ui_712_set_value(const char *str, size_t length) {
     s_ui_712_pair *prev = NULL;
     s_ui_712_pair *tmp = NULL;
 
     if (!ui_712_current_pair(&prev, &tmp)) {
         // No pairs created yet
-        return;
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
     }
     if (tmp->value != NULL) {
         PRINTF("Value already exist for tag %s: %s\n", tmp->key, tmp->value);
-        return;
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
     }
     if ((str != NULL) && (length > 0)) {
         // buffer is directly provided with parameters
         if (APP_MEM_CALLOC((void **) &tmp->value, length + 1) == false) {
-            return;
+            apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            return false;
         }
         memcpy(tmp->value, str, length);
     } else {
         // Add the value from the global variable strings.tmp.tmp
         if ((tmp->value = APP_MEM_STRDUP(strings.tmp.tmp)) == NULL) {
-            return;
+            apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            return false;
         }
     }
     ui_712_finalize_pair(prev, tmp);
+    return true;
 }
 
 /**
@@ -385,9 +406,13 @@ bool ui_712_review_struct(const s_struct_712 *struct_ptr) {
         return false;
     }
 
-    ui_712_set_title(title, strlen(title));
+    if (!ui_712_set_title(title, strlen(title))) {
+        return false;
+    }
     if ((struct_name = struct_ptr->name) != NULL) {
-        ui_712_set_value(struct_name, strlen(struct_name));
+        if (!ui_712_set_value(struct_name, strlen(struct_name))) {
+            return false;
+        }
     }
     return ui_712_redraw_generic_step();
 }
@@ -399,14 +424,18 @@ bool ui_712_review_network(const uint64_t *chain_id) {
     if (*chain_id == chainConfig->chainId) {
         return true;
     }
-    ui_712_set_title(title, strlen(title));
+    if (!ui_712_set_title(title, strlen(title))) {
+        return false;
+    }
     if ((buf = get_network_name_from_chain_id(chain_id)) == NULL) {
         if (!u64_to_string(*chain_id, strings.tmp.tmp, NETWORK_STRING_MAX_SIZE)) {
             return false;
         }
         buf = strings.tmp.tmp;
     }
-    ui_712_set_value(buf, strlen(buf));
+    if (!ui_712_set_value(buf, strlen(buf))) {
+        return false;
+    }
     return ui_712_redraw_generic_step();
 }
 
@@ -416,12 +445,16 @@ bool ui_712_review_network(const uint64_t *chain_id) {
 bool ui_712_message_hash(void) {
     const char *title = "Message hash";
 
-    ui_712_set_title(title, strlen(title));
+    if (!ui_712_set_title(title, strlen(title))) {
+        return false;
+    }
     array_bytes_string(strings.tmp.tmp,
                        sizeof(strings.tmp.tmp),
                        tmpCtx.messageSigningContext712.messageHash,
                        KECCAK256_HASH_BYTESIZE);
-    ui_712_set_value(NULL, 0);
+    if (!ui_712_set_value(NULL, 0)) {
+        return false;
+    }
     ui_ctx->end_reached = true;
     return ui_712_redraw_generic_step();
 }
@@ -432,8 +465,6 @@ static bool ui_712_append_str(const uint8_t *data,
                               bool last) {
     s_ui_712_pair *prev = NULL;
     s_ui_712_pair *pair = NULL;
-    size_t cur_len;
-
     if (!ui_712_current_pair(&prev, &pair)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
@@ -449,19 +480,21 @@ static bool ui_712_append_str(const uint8_t *data,
             return false;
         }
         ui_ctx->dynamic_value_remaining = *complete_length;
+        ui_ctx->dynamic_value_written = 0;
     } else if (pair->value == NULL) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
-    if (length > ui_ctx->dynamic_value_remaining) {
+    if ((length > ui_ctx->dynamic_value_remaining) ||
+        ((length > 0) && (memchr(data, '\0', length) != NULL))) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
-    cur_len = strlen(pair->value);
-    memcpy(pair->value + cur_len, data, length);
-    pair->value[cur_len + length] = '\0';
+    memcpy(pair->value + ui_ctx->dynamic_value_written, data, length);
+    ui_ctx->dynamic_value_written += length;
+    pair->value[ui_ctx->dynamic_value_written] = '\0';
     ui_ctx->dynamic_value_remaining -= length;
 
     if (last) {
@@ -532,7 +565,9 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
         return false;
     }
     str = *data ? true_str : false_str;
-    memcpy(strings.tmp.tmp, str, MIN(max_len, strlen(str)));
+    size_t str_len = MIN(max_len, strlen(str));
+    memcpy(strings.tmp.tmp, str, str_len);
+    strings.tmp.tmp[str_len] = '\0';
     return true;
 }
 
@@ -627,7 +662,8 @@ static bool ui_712_format_int(const uint8_t *data,
     uint8_t tmp[sizeof(int32_t)] = {0};
 
     // no reason for an integer to be received over multiple chunks
-    if (!first) {
+    if (!first || (length == 0) || (length > sizeof(value256))) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if (length < 1) {
@@ -690,7 +726,8 @@ static bool ui_712_format_uint(const uint8_t *data, uint8_t length, bool first) 
     uint256_t value256;
 
     // no reason for an integer to be received over multiple chunks
-    if (!first) {
+    if (!first || (length == 0) || (length > sizeof(value256))) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     convertUint256BE(data, length, &value256);
@@ -710,6 +747,7 @@ static s_amount_join *get_amount_join(uint8_t token_idx) {
 
     // does not exist, create it
     if (APP_MEM_CALLOC((void **) &new, sizeof(*new)) == false) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return NULL;
     }
     new->token_idx = token_idx;
@@ -750,7 +788,9 @@ static bool ui_712_format_amount_join(void) {
         }
     }
     ui_ctx->field_flags |= UI_712_FIELD_SHOWN;
-    ui_712_set_title(amount_join->name, strlen(amount_join->name));
+    if (!ui_712_set_title(amount_join->name, strlen(amount_join->name))) {
+        return false;
+    }
     flist_remove((flist_node_t **) &ui_ctx->amount.joins,
                  (flist_node_t *) amount_join,
                  (f_list_node_del) delete_amount_join);
@@ -870,11 +910,10 @@ static bool ui_712_format_datetime(const uint8_t *data,
     return time_format_to_utc(&timestamp, strings.tmp.tmp, sizeof(strings.tmp.tmp));
 }
 
-static void ui_712_set_intent_field(const char *value) {
+static bool ui_712_set_intent_field(const char *value) {
     const char key[] = "Transaction type";
 
-    ui_712_set_title(key, strlen(key));
-    ui_712_set_value(value, strlen(value));
+    return ui_712_set_title(key, strlen(key)) && ui_712_set_value(value, strlen(value));
 }
 
 static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldata_info) {
@@ -884,7 +923,7 @@ static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldat
     const char *ticker;
 
     if (calldata_info->amount_state == CALLDATA_INFO_PARAM_SET) {
-        ui_712_set_intent_field("Send");
+        if (!ui_712_set_intent_field("Send")) return false;
 
         if (calldata_info->chain_id != 0) {
             chain_id = calldata_info->chain_id;
@@ -901,29 +940,28 @@ static bool handle_fallback_empty_calldata(const s_eip712_calldata_info *calldat
                             buf_size)) {
             return false;
         }
-        ui_712_set_title("Amount", 6);
-        ui_712_set_value(buf, strlen(buf));
+        if (!ui_712_set_title("Amount", 6) || !ui_712_set_value(buf, strlen(buf))) return false;
     } else {
-        ui_712_set_intent_field("Empty transaction");
+        if (!ui_712_set_intent_field("Empty transaction")) return false;
     }
 
     e_name_type types[] = {TN_TYPE_ACCOUNT};
     e_name_source sources[] = {TN_SOURCE_ENS, TN_SOURCE_LAB, TN_SOURCE_MAB};
     const s_trusted_name *trusted_name;
 
-    ui_712_set_title("To", 2);
+    if (!ui_712_set_title("To", 2)) return false;
     if ((trusted_name = get_trusted_name(ARRAYLEN(types),
                                          types,
                                          ARRAYLEN(sources),
                                          sources,
                                          &calldata_info->chain_id,
                                          calldata_info->callee)) != NULL) {
-        ui_712_set_value(trusted_name->name, strlen(trusted_name->name));
+        if (!ui_712_set_value(trusted_name->name, strlen(trusted_name->name))) return false;
     } else {
         if (!ui_712_set_displayable_address(calldata_info->callee)) {
             return false;
         }
-        ui_712_set_value(buf, strlen(buf));
+        if (!ui_712_set_value(buf, strlen(buf))) return false;
     }
     return true;
 }
@@ -1188,7 +1226,9 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
         // fixed-buffer types need committing from strings.tmp.tmp here.
         if ((field_ptr->type != TYPE_SOL_STRING) && (field_ptr->type != TYPE_SOL_BYTES_FIX) &&
             (field_ptr->type != TYPE_SOL_BYTES_DYN)) {
-            ui_712_set_value(NULL, 0);
+            if (!ui_712_set_value(NULL, 0)) {
+                return false;
+            }
         }
 
         return ui_712_redraw_generic_step();
@@ -1200,10 +1240,10 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
  * Used to signal that we are done with reviewing the structs and we can now have
  * the option to approve or reject the signature
  */
-void ui_712_end_sign(void) {
+bool ui_712_end_sign(void) {
     if (ui_ctx == NULL) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
-        return;
+        return false;
     }
 
 #ifdef SCREEN_SIZE_WALLET
@@ -1213,7 +1253,9 @@ void ui_712_end_sign(void) {
 #endif
         ui_ctx->end_reached = true;
         apdu_response_code = ui_sign_712(ui_ctx->filtering_mode);
+        return apdu_response_code == SWO_SUCCESS;
     }
+    return true;
 }
 
 /**
@@ -1415,7 +1457,9 @@ bool ui_712_show_raw_key(const s_struct_712_field *field_ptr) {
     }
 
     if (ui_712_field_shown() && !(ui_ctx->field_flags & UI_712_FIELD_NAME_PROVIDED)) {
-        ui_712_set_title(key, strlen(key));
+        if (!ui_712_set_title(key, strlen(key))) {
+            return false;
+        }
     }
     return true;
 }
@@ -1466,9 +1510,11 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
  */
 bool ui_712_set_discarded_path(const char *path, uint8_t length) {
     if (ui_ctx->discarded_path != NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if ((ui_ctx->discarded_path = APP_MEM_ALLOC(length + 1)) == NULL) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     memcpy(ui_ctx->discarded_path, path, length);
@@ -1503,24 +1549,41 @@ void ui_712_set_trusted_name_requirements(uint8_t type_count,
  * Set the tag/value pairs for the review
  *
  */
-void ui_712_push_pairs(void) {
+bool ui_712_push_pairs(void) {
     uint8_t nbPairs = 0;
     uint8_t pair = 0;
+    size_t pair_count;
     s_ui_712_pair *tmp = NULL;
     uint8_t tx_idx = 0;
 
     // Initialize the pairs list
-    nbPairs = flist_size((flist_node_t **) &ui_ctx->ui_pairs);
+    if (ui_ctx == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    pair_count = flist_size((flist_node_t **) &ui_ctx->ui_pairs);
     if (N_storage.displayHash) {
         // Two extra pages for the domain hash + message hash (the "Transaction
         // hash" / displayHash setting). Mirrors app-ethereum's ui_712_push_pairs.
-        nbPairs += 2;
+        pair_count += 2;
     }
+    if ((pair_count == 0) || (pair_count > UINT8_MAX)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    nbPairs = (uint8_t) pair_count;
 
-    ui_pairs_init(nbPairs);
+    if (!ui_pairs_init(nbPairs)) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
+    }
     // Initialize the tag/value pairs from the chain list
     tmp = ui_ctx->ui_pairs;
     while (tmp != NULL) {
+        if ((g_pairs == NULL) || (g_pairsList == NULL) || (pair >= g_pairsList->nbPairs)) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
         if (tmp->start_intent) {
             // Batch intermediate page
             tx_idx++;
@@ -1530,12 +1593,9 @@ void ui_712_push_pairs(void) {
         }
         g_pairs[pair].item = tmp->key;
         g_pairs[pair].value = tmp->value;
-        LEDGER_ASSERT(pair < g_pairsList->nbPairs,
-                      "TIP-712 pair overflow (%d / %d)",
-                      pair,
-                      g_pairsList->nbPairs);
         pair++;
-        if ((tmp->end_intent) && (txContext.batch_nb_tx > 1)) {
+        if ((tmp->end_intent) && (txContext.batch_nb_tx > 1) &&
+            (pair < g_pairsList->nbPairs)) {
             // End of batch transaction : start next info on full page
             g_pairs[pair].forcePageStart = true;
         }
@@ -1546,14 +1606,16 @@ void ui_712_push_pairs(void) {
         // Append the Domain hash + Message hash pages, mirroring app-ethereum.
         // tip712_format_hash() writes the two hex strings into non-overlapping
         // offsets of strings.tmp.tmp, so both values stay valid simultaneously.
-        LEDGER_ASSERT((pair + 1) < g_pairsList->nbPairs,
-                      "TIP-712 pair overflow for Hash (%d / %d)",
-                      pair,
-                      g_pairsList->nbPairs);
+        if ((g_pairs == NULL) || (g_pairsList == NULL) ||
+            (((size_t) pair + 1U) >= g_pairsList->nbPairs)) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
         tip712_format_hash(0, &g_pairs[pair].item, &g_pairs[pair].value);
         g_pairs[pair].forcePageStart = true;
         tip712_format_hash(1, &g_pairs[pair + 1].item, &g_pairs[pair + 1].value);
     }
+    return true;
 }
 
 void add_calldata_info(s_eip712_calldata_info *node) {

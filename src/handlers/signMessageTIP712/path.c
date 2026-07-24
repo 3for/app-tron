@@ -59,7 +59,8 @@ static const void *get_nth_field_from(const s_path *path, uint8_t *fields_count_
         }
         if (field_ptr->type == TYPE_CUSTOM) {
             typename = get_struct_field_typename(field_ptr);
-            if ((struct_ptr = get_structn(typename, strlen(typename))) == NULL) {
+            if ((typename == NULL) ||
+                ((struct_ptr = get_structn(typename, strlen(typename))) == NULL)) {
                 return NULL;
             }
         }
@@ -193,13 +194,14 @@ static void remove_last_hash_ctx(void) {
  * Finalize the last hashing context
  *
  * @param[out] hash pointer to buffer where the hash will be stored
- * @return whether there was anything hashed at this depth
+ * @param[out] has_data whether there was anything hashed at this depth
+ * @return whether finalization succeeded
  */
-static bool finalize_hash_depth(uint8_t *hash) {
+static bool finalize_hash_depth(uint8_t *hash, bool *has_data) {
     const s_hash_ctx *hash_ctx;
     size_t hashed_bytes;
 
-    if ((hash_ctx = get_last_hash_ctx()) == NULL) {
+    if ((hash == NULL) || (has_data == NULL) || ((hash_ctx = get_last_hash_ctx()) == NULL)) {
         return false;
     }
     hashed_bytes = hash_ctx->hash.blen;
@@ -208,7 +210,8 @@ static bool finalize_hash_depth(uint8_t *hash) {
         return false;
     }
     remove_last_hash_ctx();
-    return hashed_bytes > 0;
+    *has_data = hashed_bytes > 0;
+    return true;
 }
 
 /**
@@ -246,11 +249,13 @@ static bool push_new_hash_depth(bool init) {
 
     // allocate new hash context
     if (APP_MEM_CALLOC((void **) &hash_ctx, sizeof(*hash_ctx)) == false) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     if (init) {
         if (cx_keccak_init_no_throw(&hash_ctx->hash, 256) != CX_OK) {
             APP_MEM_FREE(hash_ctx);
+            apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
     }
@@ -277,7 +282,10 @@ static bool path_depth_list_pop(void) {
     }
     path_struct->depth_count -= 1;
 
-    to_feed = finalize_hash_depth(hash);
+    if (!finalize_hash_depth(hash, &to_feed)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if (path_struct->depth_count > 0) {
         if (to_feed) {
             if (feed_last_hash_depth(hash) == false) {
@@ -334,6 +342,7 @@ static bool array_depth_list_push(uint8_t path_idx, uint8_t size) {
  */
 static bool array_depth_list_pop(void) {
     uint8_t hash[KECCAK256_HASH_BYTESIZE];
+    bool has_data;
 
     if (path_struct == NULL) {
         return false;
@@ -342,7 +351,11 @@ static bool array_depth_list_pop(void) {
         return false;
     }
 
-    finalize_hash_depth(hash);  // return value not checked on purpose
+    if (!finalize_hash_depth(hash, &has_data)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    UNUSED(has_data);  // Empty arrays still hash and feed keccak256("").
     if (feed_last_hash_depth(hash) == false) {
         return false;
     }
@@ -400,7 +413,8 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
             }
         }
         typename = get_struct_field_typename(field_ptr);
-        if ((struct_ptr = get_structn(typename, strlen(typename))) == NULL) {
+        if ((typename == NULL) ||
+            ((struct_ptr = get_structn(typename, strlen(typename))) == NULL)) {
             return false;
         }
         // Tron-side safety guard: app-ethereum currently does not track this, but keeping it
@@ -867,7 +881,8 @@ bool path_exists_in_backup(const char *path, size_t length) {
     const s_struct_712 *struct_ptr;
     const char *key;
 
-    if ((field_ptr = get_nth_field_from(path_backup, NULL, path_backup->depth_count)) == NULL) {
+    if ((path == NULL) || (path_backup == NULL) ||
+        ((field_ptr = get_nth_field_from(path_backup, NULL, path_backup->depth_count)) == NULL)) {
         return false;
     }
     while (offset < length) {
@@ -884,7 +899,8 @@ bool path_exists_in_backup(const char *path, size_t length) {
             for (i = 0; ((offset + i) < length) && (path[offset + i] != '.'); ++i)
                 ;
             typename = field_ptr->type_name;
-            if ((struct_ptr = get_structn(typename, strlen(typename))) == NULL) {
+            if ((typename == NULL) ||
+                ((struct_ptr = get_structn(typename, strlen(typename))) == NULL)) {
                 return false;
             }
             for (field_ptr = struct_ptr->fields; field_ptr != NULL;
@@ -915,11 +931,16 @@ bool path_init(void) {
         path_deinit();
         return false;
     }
-    if ((APP_MEM_CALLOC((void **) &path_struct, sizeof(*path_struct)) == false) ||
-        (APP_MEM_CALLOC((void **) &path_backup, sizeof(*path_backup)) == false)) {
+    if (APP_MEM_CALLOC((void **) &path_struct, sizeof(*path_struct)) == false) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
     }
-    return (path_struct != NULL) && (path_backup != NULL);
+    if (APP_MEM_CALLOC((void **) &path_backup, sizeof(*path_backup)) == false) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        APP_MEM_FREE_AND_NULL((void **) &path_struct);
+        return false;
+    }
+    return true;
 }
 
 /**

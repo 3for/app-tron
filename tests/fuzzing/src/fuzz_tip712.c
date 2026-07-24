@@ -4,6 +4,7 @@
 #include "commands_712.h"
 #include "context_712.h"
 #include "settings.h"
+#include "app_errors.h"
 
 void init_tip712_fuzz_environment(void);
 
@@ -52,7 +53,14 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
         uint32_t flags = 0;
         switch (op % 4U) {
             case OP_STRUCT_DEF:
-                handleTIP712StructDef(p2, (uint8_t *) data, len);
+                {
+                    bool schema_was_locked =
+                        (tip712_context != NULL) && tip712_context->schema_locked;
+                    uint16_t sw = handleTIP712StructDef(p2, (uint8_t *) data, len);
+                    if (schema_was_locked && (sw == SWO_SUCCESS)) {
+                        __builtin_trap();
+                    }
+                }
                 break;
             case OP_FILTERING:
                 handleTIP712Filtering(p1, p2, (uint8_t *) data, len, &flags);

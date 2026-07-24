@@ -28,7 +28,7 @@ nbgl_warning_t warning;
  * divergences: no transaction-checks/gating, and the finish title comes from the
  * blind-signing warning state rather than the tx-simulation string.
  */
-static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
+static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                 nbgl_operationType_t operation_type,
                                 nbgl_choiceCallback_t choice_callback) {
 #ifdef SCREEN_SIZE_WALLET
@@ -49,10 +49,11 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
     // Allocate the finish title buffer (app-ethereum parity: g_finishMsg).
     uint8_t finish_len = strlen(sign_label) + 1;  // +1 for '\0'
     if (!ui_buffers_init(0, 0, finish_len)) {
-        return;
+        return false;
     }
     snprintf(g_finishMsg, finish_len, "%s", sign_label);
 
+    tip712_mark_reviewing();
 #ifndef FUZZ
     nbgl_useCaseAdvancedReview(operation_type,
                                g_pairsList,
@@ -64,6 +65,7 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                &warning,
                                choice_callback);
 #endif
+    return true;
 }
 
 /**
@@ -74,7 +76,9 @@ static void ui_712_start_review(e_tip712_filtering_mode filtering_mode,
  */
 uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     // Build the global tag/value pairs list from the accumulated TIP-712 pairs.
-    ui_712_push_pairs();
+    if (!ui_712_push_pairs()) {
+        return SWO_INSUFFICIENT_MEMORY;
+    }
 
 #ifdef HAVE_GATING_SUPPORT
     if (filtering == TIP712_FILTERING_BASIC) {
@@ -87,6 +91,8 @@ uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     }
 #endif  // HAVE_GATING_SUPPORT
 
-    ui_712_start_review(filtering, TYPE_MESSAGE, ui_typed_message_review_choice);
+    if (!ui_712_start_review(filtering, TYPE_MESSAGE, ui_typed_message_review_choice)) {
+        return SWO_INSUFFICIENT_MEMORY;
+    }
     return SWO_SUCCESS;
 }

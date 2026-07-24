@@ -26,7 +26,7 @@ bool sol_typenames_init(void) {
         sol_typenames_deinit();
         return false;
     }
-    if ((g_sol_types = APP_MEM_ALLOC(sizeof(*g_sol_types) * count)) == NULL) {
+    if (APP_MEM_CALLOC((void **) &g_sol_types, sizeof(*g_sol_types) * count) == false) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -57,10 +57,12 @@ bool sol_typenames_init(void) {
                 break;
             default:
                 apdu_response_code = SWO_INCORRECT_DATA;
+                sol_typenames_deinit();
                 return false;
         }
         if (g_sol_types[i].name == NULL) {
             apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            sol_typenames_deinit();
             return false;
         }
     }

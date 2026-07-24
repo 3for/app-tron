@@ -18,7 +18,7 @@ typedef cx_sha256_t cx_sha224_t;
  *
  * @return whether the schema hash was successful or not
  */
-bool compute_schema_hash(void) {
+bool compute_schema_hash_into(uint8_t out[CX_SHA224_SIZE]) {
     const s_struct_712 *struct_ptr;
     const s_struct_712_field *field_ptr;
     cx_sha224_t hash_ctx;
@@ -57,11 +57,18 @@ bool compute_schema_hash(void) {
     }
     hash_byte('}', (cx_hash_t *) &hash_ctx);
 
-    // copy hash into context struct
-    if (finalize_hash((cx_hash_t *) &hash_ctx,
-                      tip712_context->schema_hash,
-                      sizeof(tip712_context->schema_hash)) != true) {
+    if (out == NULL) {
+        return false;
+    }
+    if (finalize_hash((cx_hash_t *) &hash_ctx, out, CX_SHA224_SIZE) != true) {
         return false;
     }
     return true;
+}
+
+bool compute_schema_hash(void) {
+    if (tip712_context == NULL) {
+        return false;
+    }
+    return compute_schema_hash_into(tip712_context->schema_hash);
 }

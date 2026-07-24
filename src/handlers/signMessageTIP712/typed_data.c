@@ -109,6 +109,7 @@ bool set_struct_name(uint8_t length, const uint8_t *name) {
 
     if ((new_struct->name = APP_MEM_ALLOC(length + 1)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        APP_MEM_FREE(new_struct);
         return false;
     }
     new_struct->name[length] = '\0';
@@ -200,8 +201,13 @@ static bool set_struct_field_array(s_struct_712_field *field,
         return false;
     }
     field->array_level_count = data[(*data_idx)++];
+    if (field->array_level_count == 0) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if ((field->array_levels =
              APP_MEM_ALLOC(sizeof(*field->array_levels) * field->array_level_count)) == NULL) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     for (int idx = 0; idx < field->array_level_count; ++idx) {

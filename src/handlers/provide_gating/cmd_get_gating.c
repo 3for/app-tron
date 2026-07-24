@@ -560,6 +560,7 @@ static bool check_gating_chain_id(void) {
  */
 static bool check_gating_selector(void) {
     uint8_t selector[CALLDATA_SELECTOR_SIZE];
+    uint8_t schema_hash[CX_SHA224_SIZE];
     switch (GATING->type) {
         case TX_TYPE_TRANSACTION:
             // Check if the descriptor is set
@@ -583,20 +584,22 @@ static bool check_gating_selector(void) {
             }
             break;
         case TX_TYPE_TYPED_DATA:
-            if (compute_schema_hash() == false) {
+            if (compute_schema_hash_into(schema_hash) == false) {
                 PRINTF("[GATING] Failed to compute schema hash\n");
                 return false;
             }
             if (memcmp(GATING->hash_selector,
-                       tip712_context->schema_hash,
+                       schema_hash,
                        sizeof(GATING->hash_selector)) != 0) {
                 PRINTF("[GATING] schemaHash mismatch: %.*h != %.*h\n",
                        sizeof(GATING->hash_selector),
                        GATING->hash_selector,
-                       sizeof(tip712_context->schema_hash),
-                       tip712_context->schema_hash);
+                       sizeof(schema_hash),
+                       schema_hash);
+                explicit_bzero(schema_hash, sizeof(schema_hash));
                 return false;
             }
+            explicit_bzero(schema_hash, sizeof(schema_hash));
             break;
         default:
             return false;

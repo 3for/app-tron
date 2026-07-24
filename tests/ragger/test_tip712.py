@@ -1416,5 +1416,23 @@ def test_tip712_bs_not_activated_error(
     assert exc_info.value.status == InputData.StatusWord.INVALID_DATA
 
 
+def test_tip712_filtering_freezes_schema(
+        scenario_navigator: NavigateWithScenario):
+    """Definitions accepted after activation would invalidate the cached schema hash."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+
+    with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        pass
+    with client.tip712_filtering_activate():
+        pass
+
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        with client.tip712_send_struct_def_struct_name("Injected"):
+            pass
+    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
 def test_tip712_skip():
     pytest.skip("Skip action is not exposed by scenario_navigator")

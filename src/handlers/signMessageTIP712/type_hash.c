@@ -85,10 +85,15 @@ static bool get_struct_dependencies(s_struct_dep **first_dep, const s_struct_712
     const s_struct_712 *arg_struct_ptr;
     s_struct_dep *tmp;
     s_struct_dep *new_dep;
+    s_struct_dep *next_dep = NULL;
+    const s_struct_712 *current = struct_ptr;
 
-    for (field_ptr = struct_ptr->fields; field_ptr != NULL;
-         field_ptr = (s_struct_712_field *) ((flist_node_t *) field_ptr)->next) {
-        if (field_ptr->type == TYPE_CUSTOM) {
+    while (current != NULL) {
+        for (field_ptr = current->fields; field_ptr != NULL;
+             field_ptr = (s_struct_712_field *) ((flist_node_t *) field_ptr)->next) {
+            if (field_ptr->type != TYPE_CUSTOM) {
+                continue;
+            }
             // get struct name
             arg_structname = get_struct_field_typename(field_ptr);
             // from its name, get the pointer to its definition
@@ -111,7 +116,8 @@ static bool get_struct_dependencies(s_struct_dep **first_dep, const s_struct_712
                     break;
                 }
             }
-            // if it's not present in the array, add it and recurse into it
+            // If it is not present, append it. The outer loop walks this list
+            // iteratively, avoiding host-controlled recursion depth.
             if (tmp == NULL) {
                 if (APP_MEM_CALLOC((void **) &new_dep, sizeof(*new_dep)) == false) {
                     apdu_response_code = SWO_INSUFFICIENT_MEMORY;
@@ -119,12 +125,14 @@ static bool get_struct_dependencies(s_struct_dep **first_dep, const s_struct_712
                 }
                 new_dep->s = arg_struct_ptr;
                 flist_push_back((flist_node_t **) first_dep, (flist_node_t *) new_dep);
-                // TODO: Move away from recursive calls
-                if (!get_struct_dependencies(first_dep, arg_struct_ptr)) {
-                    return false;
-                }
             }
         }
+        if (next_dep == NULL) {
+            next_dep = *first_dep;
+        } else {
+            next_dep = (s_struct_dep *) ((flist_node_t *) next_dep)->next;
+        }
+        current = (next_dep == NULL) ? NULL : next_dep->s;
     }
     return true;
 }

@@ -246,9 +246,10 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     // Handling
     ui_712_set_filters_count(filters_count);
     if (!N_storage.verbose_tip712) {
-        ui_712_set_title("Contract", 8);
-        ui_712_set_value(name, name_len);
-        ui_712_redraw_generic_step();
+        if (!ui_712_set_title("Contract", 8) || !ui_712_set_value(name, name_len) ||
+            !ui_712_redraw_generic_step()) {
+            return false;
+        }
     }
     return true;
 }
@@ -783,6 +784,7 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
         return false;
     }
     if (APP_MEM_CALLOC((void **) &calldata_info, sizeof(*calldata_info)) == false) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
@@ -935,7 +937,7 @@ bool filtering_trusted_name(const uint8_t *payload,
         return false;
     }
     if (name_len > 0) {  // don't substitute for an empty name
-        ui_712_set_title(name, name_len);
+        if (!ui_712_set_title(name, name_len)) return false;
     }
     ui_712_flag_field(true, name_len > 0, false, false, true, false);
     ui_712_set_trusted_name_requirements(type_count, types, source_count, sources);
@@ -1003,7 +1005,7 @@ bool filtering_date_time(const uint8_t *payload,
         return false;
     }
     if (name_len > 0) {  // don't substitute for an empty name
-        ui_712_set_title(name, name_len);
+        if (!ui_712_set_title(name, name_len)) return false;
     }
     ui_712_flag_field(true, name_len > 0, false, true, false, false);
     return true;
@@ -1214,7 +1216,7 @@ bool filtering_raw_field(const uint8_t *payload,
     if (!discarded) {
         // Handling
         if (name_len > 0) {  // don't substitute for an empty name
-            ui_712_set_title(name, name_len);
+            if (!ui_712_set_title(name, name_len)) return false;
         }
         ui_712_flag_field(true, name_len > 0, false, false, false, false);
     }
