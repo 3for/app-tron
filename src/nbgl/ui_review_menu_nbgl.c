@@ -131,6 +131,9 @@ static nbgl_contentValueExt_t toTrustedNameExt;
 // NBGL review keeps the pointers.
 static char actionReviewTitle[48];
 static char actionSignTitle[48];
+// Reviews are asynchronous while the APDU transport immediately reuses its
+// buffer. Keep a stable snapshot for all review fields prepared in sign.c.
+static uint8_t reviewDisplayBuffer[sizeof(G_io_apdu_buffer)];
 
 // Static functions declarations
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
@@ -585,6 +588,7 @@ static bool state_shows_tx_hash(ui_approval_state_t state) {
 }
 
 static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
+    memcpy(reviewDisplayBuffer, G_io_apdu_buffer, sizeof(reviewDisplayBuffer));
     memset(&txInfos, 0, sizeof(txInfos));
     memset(&infoLongPress, 0, sizeof(infoLongPress));
 
@@ -631,7 +635,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             // merged into G_io_apdu_buffer in sign.c), mirroring app-ethereum's
             // single fullAmount pair instead of separate Amount + Token fields.
             txInfos.fields[idx].item = stringLabelTxAmount;
-            txInfos.fields[idx].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[idx].value = (const char *) reviewDisplayBuffer;
             idx++;
 
             // TRC10 asset transfers keep Amount and Token split: the token is an
@@ -803,7 +807,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = "Issuer";
             txInfos.fields[1].value = strings.common.toAddress;
             txInfos.fields[2].item = "TRX amount";
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = "Asset ID";
             txInfos.fields[3].value = strings.common.fullContract;
             g_pairsList->nbPairs = 4;
@@ -931,7 +935,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = "Contract";
             txInfos.fields[1].value = strings.common.toAddress;
             txInfos.fields[2].item = "User resource share";
-            txInfos.fields[2].value = (char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (char *) reviewDisplayBuffer;
             g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nUpdate Contract Setting";
             infoLongPress.text = "Sign transaction to\nUpdate Contract Setting";
@@ -946,7 +950,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = "Contract";
             txInfos.fields[1].value = strings.common.toAddress;
             txInfos.fields[2].item = "Origin energy limit";
-            txInfos.fields[2].value = (char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (char *) reviewDisplayBuffer;
             g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review transaction to\nUpdate Energy Limit";
             infoLongPress.text = "Sign transaction to\nUpdate Energy Limit";
@@ -1071,11 +1075,11 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = "Token 1";
             txInfos.fields[1].value = txContent.tokenNames[0];
             txInfos.fields[2].item = "Amount 1";
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = "Token 2";
             txInfos.fields[3].value = txContent.tokenNames[1];
             txInfos.fields[4].item = "Amount 2";
-            txInfos.fields[4].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[4].value = (const char *) reviewDisplayBuffer + 100;
             g_pairsList->nbPairs = 5;
             set_action_title(txContent.contractType);
             break;
@@ -1093,9 +1097,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[3].item = "To token";
             txInfos.fields[3].value = txContent.tokenNames[1];
             txInfos.fields[4].item = stringLabelTxAmount;
-            txInfos.fields[4].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[4].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[5].item = "Expected";
-            txInfos.fields[5].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[5].value = (const char *) reviewDisplayBuffer + 100;
             set_action_title(txContent.contractType);
             g_pairsList->nbPairs = 6;
             break;
@@ -1107,13 +1111,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Action";
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[1].value = (const char *) reviewDisplayBuffer + 100;
             txInfos.fields[2].item = "Exchange ID";
             txInfos.fields[2].value = strings.common.toAddress;
             txInfos.fields[3].item = "Token Name";
             txInfos.fields[3].value = txContent.tokenNames[0];
             txInfos.fields[4].item = stringLabelTxAmount;
-            txInfos.fields[4].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[4].value = (const char *) reviewDisplayBuffer;
             // Shared by EXCHANGEINJECT/EXCHANGEWITHDRAW; the title now reflects the
             // actual one ("Inject Exchange" / "Withdraw Exchange") instead of both.
             set_action_title(txContent.contractType);
@@ -1158,7 +1162,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelGain;
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = "Freeze To";
             txInfos.fields[3].value = strings.common.toAddress;
             g_pairsList->nbPairs = 4;
@@ -1229,7 +1233,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             // Custom contracts only ever pay native TRX, so the token + amount are
             // merged into a single "Amount" field ("<value> TRX", built in sign.c).
             txInfos.fields[3].item = "Amount";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[3].value = (const char *) reviewDisplayBuffer;
             g_pairsList->nbPairs = 4;
             txInfos.flowSubtitle = "Custom Contract";
             break;
@@ -1256,7 +1260,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelGain;
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
             g_pairsList->nbPairs = 4;
@@ -1273,7 +1277,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelResource;
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
             g_pairsList->nbPairs = 4;
@@ -1291,17 +1295,17 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelResource;
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = "Lock";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[3].value = (const char *) reviewDisplayBuffer + 100;
             if (txContent.lock) {
                 if (!format_int64_value(txContent.lockPeriod,
-                                        (char *) G_io_apdu_buffer + 106,
-                                        sizeof(G_io_apdu_buffer) - 106)) {
+                                        (char *) reviewDisplayBuffer + 106,
+                                        sizeof(reviewDisplayBuffer) - 106)) {
                     return false;
                 }
                 txInfos.fields[idx].item = "Lock period (blocks)";
-                txInfos.fields[idx].value = (const char *) G_io_apdu_buffer + 106;
+                txInfos.fields[idx].value = (const char *) reviewDisplayBuffer + 106;
                 idx++;
             }
             txInfos.fields[idx].item = stringLabelRecipientAddress;
@@ -1321,7 +1325,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = stringLabelResource;
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = strings.common.toAddress;
             g_pairsList->nbPairs = 4;
@@ -1358,7 +1362,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Brokerage";
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewDisplayBuffer;
             g_pairsList->nbPairs = 2;
             txInfos.flowTitle = "Review transaction to\nUpdate Brokerage";
             infoLongPress.text = "Sign transaction to\nUpdate Brokerage";
@@ -1401,7 +1405,7 @@ static void display_address_callback(bool confirm) {
     }
 }
 
-void ux_flow_display(ui_approval_state_t state, bool data_warning) {
+bool ux_flow_display(ui_approval_state_t state, bool data_warning) {
     if (state == APPROVAL_VERIFY_ADDRESS) {
         nbgl_useCaseAddressReview(strings.common.toAddress,
                                   NULL,
@@ -1409,12 +1413,20 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                                   "Verify Tron\naddress",
                                   NULL,
                                   display_address_callback);
+        return true;
     } else {
         // Prepare transaction infos to be displayed (field values etc.)
         if (!prepareTxInfos(state, data_warning)) {
-            return;
+            // ui_pairs_init() reports and resets its own allocation failures.
+            // Failures occurring later in preparation need the same APDU
+            // completion and cleanup semantics.
+            if (appState != APP_STATE_IDLE) {
+                io_seproxyhal_send_status(SWO_INSUFFICIENT_MEMORY, 0, true, true);
+            }
+            return false;
         }
         // Display transaction
         reviewStart();
+        return true;
     }
 }

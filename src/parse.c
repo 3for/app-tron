@@ -102,29 +102,23 @@ tokenDefinition_t *getKnownToken(txContent_t *context) {
 }
 
 unsigned short print_amount(uint64_t amount, char *out, uint32_t outlen, uint8_t sun) {
-    char tmp[20];
-    char tmp2[25];
-    uint32_t numDigits = 0, i;
-    uint64_t base = 1;
-    while (base <= amount) {
-        base *= 10;
-        numDigits++;
+    char raw_amount[21];
+    size_t raw_amount_len;
+
+    if ((out == NULL) || (outlen == 0)) {
+        return 0;
     }
-    if (numDigits > sizeof(tmp) - 1) {
-        THROW(E_INCORRECT_LENGTH);
+    out[0] = '\0';
+
+    if (!u64_to_string(amount, raw_amount, sizeof(raw_amount))) {
+        return 0;
     }
-    base /= 10;
-    for (i = 0; i < numDigits; i++) {
-        tmp[i] = '0' + ((amount / base) % 10);
-        base /= 10;
-    }
-    tmp[i] = '\0';
-    adjustDecimals(tmp, i, tmp2, 25, sun);
-    if (strlen(tmp2) < outlen - 1) {
-        strlcpy(out, tmp2, outlen);
-    } else {
+    raw_amount_len = strlen(raw_amount);
+    if (!adjustDecimals(raw_amount, raw_amount_len, out, outlen, sun)) {
         out[0] = '\0';
+        return 0;
     }
+
     return strlen(out);
 }
 
@@ -698,8 +692,11 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
         return false;
     }
+    if (msg.transfer_contract.amount <= 0) {
+        return false;
+    }
 
-    content->amount[0] = msg.transfer_contract.amount;
+    content->amount[0] = (uint64_t) msg.transfer_contract.amount;
 
     COPY_ADDRESS(content->account, &msg.transfer_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.transfer_contract.to_address);
@@ -713,7 +710,10 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     if (!pb_decode(stream, protocol_TransferAssetContract_fields, &msg.transfer_asset_contract)) {
         return false;
     }
-    content->amount[0] = msg.transfer_asset_contract.amount;
+    if (msg.transfer_asset_contract.amount <= 0) {
+        return false;
+    }
+    content->amount[0] = (uint64_t) msg.transfer_asset_contract.amount;
 
     if (!printTokenFromID(content->tokenNames[0],
                           sizeof(content->tokenNames[0]),
@@ -843,12 +843,13 @@ static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) 
         return false;
     }
     /* Tron only accepts 3 days freezing */
-    if (msg.freeze_balance_contract.frozen_duration != 3) {
+    if ((msg.freeze_balance_contract.frozen_duration != 3) ||
+        (msg.freeze_balance_contract.frozen_balance < 1000000)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.freeze_balance_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.freeze_balance_contract.receiver_address);
-    content->amount[0] = msg.freeze_balance_contract.frozen_balance;
+    content->amount[0] = (uint64_t) msg.freeze_balance_contract.frozen_balance;
     content->resource = msg.freeze_balance_contract.resource;
     return true;
 }
@@ -968,8 +969,11 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
                    &msg.delegate_resource_contract)) {
         return false;
     }
+    if (msg.delegate_resource_contract.balance < 1000000) {
+        return false;
+    }
     content->resource = msg.delegate_resource_contract.resource;
-    content->amount[0] = msg.delegate_resource_contract.balance;
+    content->amount[0] = (uint64_t) msg.delegate_resource_contract.balance;
     content->lock = msg.delegate_resource_contract.lock;
     content->lockPeriod = msg.delegate_resource_contract.lock_period;
 
@@ -984,8 +988,11 @@ static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *str
                    &msg.undelegate_resource_contract)) {
         return false;
     }
+    if (msg.undelegate_resource_contract.balance <= 0) {
+        return false;
+    }
     content->resource = msg.undelegate_resource_contract.resource;
-    content->amount[0] = msg.undelegate_resource_contract.balance;
+    content->amount[0] = (uint64_t) msg.undelegate_resource_contract.balance;
 
     COPY_ADDRESS(content->account, &msg.undelegate_resource_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.undelegate_resource_contract.receiver_address);
@@ -1245,10 +1252,13 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TriggerSmartContract_fields, &msg.trigger_smart_contract)) {
         return false;
     }
+    if (msg.trigger_smart_contract.call_value < 0) {
+        return false;
+    }
 
     COPY_ADDRESS(content->account, &msg.trigger_smart_contract.owner_address);
     COPY_ADDRESS(content->contractAddress, &msg.trigger_smart_contract.contract_address);
-    content->amount[0] = msg.trigger_smart_contract.call_value;
+    content->amount[0] = (uint64_t) msg.trigger_smart_contract.call_value;
 
     tokenDefinition_t *trc20 = getKnownToken(content);
 
@@ -1326,6 +1336,10 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!pb_decode(stream, protocol_ExchangeCreateContract_fields, &msg.exchange_create_contract)) {
         return false;
     }
+    if ((msg.exchange_create_contract.first_token_balance <= 0) ||
+        (msg.exchange_create_contract.second_token_balance <= 0)) {
+        return false;
+    }
 
     COPY_ADDRESS(content->account, &msg.exchange_create_contract.owner_address);
 
@@ -1347,8 +1361,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     }
     content->tokenNamesLength[1] = strlen(content->tokenNames[1]);
 
-    content->amount[0] = msg.exchange_create_contract.first_token_balance;
-    content->amount[1] = msg.exchange_create_contract.second_token_balance;
+    content->amount[0] = (uint64_t) msg.exchange_create_contract.first_token_balance;
+    content->amount[1] = (uint64_t) msg.exchange_create_contract.second_token_balance;
     return true;
 }
 
@@ -1356,8 +1370,12 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     if (!pb_decode(stream, protocol_ExchangeInjectContract_fields, &msg.exchange_inject_contract)) {
         return false;
     }
+    if ((msg.exchange_inject_contract.exchange_id < 0) ||
+        (msg.exchange_inject_contract.quant <= 0)) {
+        return false;
+    }
     COPY_ADDRESS(content->account, &msg.exchange_inject_contract.owner_address);
-    content->exchangeID = msg.exchange_inject_contract.exchange_id;
+    content->exchangeID = (uint64_t) msg.exchange_inject_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
                           sizeof(content->tokenNames[0]),
@@ -1368,7 +1386,7 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
 
-    content->amount[0] = msg.exchange_inject_contract.quant;
+    content->amount[0] = (uint64_t) msg.exchange_inject_contract.quant;
     return true;
 }
 
@@ -1378,8 +1396,12 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
                    &msg.exchange_withdraw_contract)) {
         return false;
     }
+    if ((msg.exchange_withdraw_contract.exchange_id < 0) ||
+        (msg.exchange_withdraw_contract.quant <= 0)) {
+        return false;
+    }
     COPY_ADDRESS(content->account, &msg.exchange_withdraw_contract.owner_address);
-    content->exchangeID = msg.exchange_withdraw_contract.exchange_id;
+    content->exchangeID = (uint64_t) msg.exchange_withdraw_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
                           sizeof(content->tokenNames[0]),
@@ -1390,7 +1412,7 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
 
-    content->amount[0] = msg.exchange_withdraw_contract.quant;
+    content->amount[0] = (uint64_t) msg.exchange_withdraw_contract.quant;
     return true;
 }
 
@@ -1400,8 +1422,13 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
                    &msg.exchange_transaction_contract)) {
         return false;
     }
+    if ((msg.exchange_transaction_contract.exchange_id < 0) ||
+        (msg.exchange_transaction_contract.quant <= 0) ||
+        (msg.exchange_transaction_contract.expected <= 0)) {
+        return false;
+    }
     COPY_ADDRESS(content->account, &msg.exchange_transaction_contract.owner_address);
-    content->exchangeID = msg.exchange_transaction_contract.exchange_id;
+    content->exchangeID = (uint64_t) msg.exchange_transaction_contract.exchange_id;
 
     if (!printTokenFromID(content->tokenNames[0],
                           sizeof(content->tokenNames[0]),
@@ -1412,8 +1439,8 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
 
-    content->amount[0] = msg.exchange_transaction_contract.quant;
-    content->amount[1] = msg.exchange_transaction_contract.expected;
+    content->amount[0] = (uint64_t) msg.exchange_transaction_contract.quant;
+    content->amount[1] = (uint64_t) msg.exchange_transaction_contract.expected;
     return true;
 }
 

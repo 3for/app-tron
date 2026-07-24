@@ -67,9 +67,10 @@ int initPublicKeyContext(bip32_path_t *bip32_path,
     return 0;
 }
 
-void ux_flow_display(ui_approval_state_t state, bool warning) {
+bool ux_flow_display(ui_approval_state_t state, bool warning) {
     (void) state;
     (void) warning;
+    return true;
 }
 
 void ui_191_start(const char *message) {

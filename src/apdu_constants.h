@@ -108,6 +108,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint16_t dataLength);
 void message_cleanup(void);
 void sign_cleanup(void);
+bool sign_review_in_progress(void);
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,

@@ -43,5 +43,5 @@ typedef enum {
     APPROVAL_SIGN_TIP72_TRANSACTION,
 } ui_approval_state_t;
 
-void ux_flow_display(ui_approval_state_t state, bool warning);
+bool ux_flow_display(ui_approval_state_t state, bool warning);
 void ui_review_menu_cleanup(void);

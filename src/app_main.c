@@ -98,6 +98,23 @@ void reset_app_context() {
     memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));
 }
 
+static void abort_active_context(void) {
+    if (appState == APP_STATE_IDLE) {
+        return;
+    }
+
+    // Replace any asynchronous review before releasing the buffers referenced
+    // by it. During swap there is no standalone app home screen to restore.
+#ifdef HAVE_SWAP
+    if (!G_called_from_swap) {
+        ui_idle();
+    }
+#else
+    ui_idle();
+#endif
+    reset_app_context();
+}
+
 uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle) {
     uint16_t err = 0;
     if (reset) {
@@ -175,6 +192,7 @@ void app_main(void) {
                 // Parse APDU command from G_io_apdu_buffer
                 if (!apdu_parser(&cmd, G_io_apdu_buffer, input_len)) {
                     PRINTF("=> /!\\ BAD LENGTH: %.*H\n", input_len, G_io_apdu_buffer);
+                    abort_active_context();
                     io_send_sw(E_WRONG_DATA_LENGTH);
                     CLOSE_TRY;
                     continue;
@@ -200,6 +218,7 @@ void app_main(void) {
                 THROW(EXCEPTION_IO_RESET);
             }
             CATCH_OTHER(e) {
+                abort_active_context();
                 io_send_sw(e);
             }
             FINALLY {

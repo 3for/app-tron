@@ -57,6 +57,13 @@ int apdu_dispatcher(const command_t *cmd) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
 
+    // INS_SIGN review is asynchronous. Reject every subsequent command without
+    // resetting the signing/UI allocations that the current NBGL page owns.
+    if (sign_review_in_progress()) {
+        PRINTF("Refused APDU while INS_SIGN review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
         if ((cmd->ins != INS_GET_PUBLIC_KEY) && (cmd->ins != INS_SIGN)) {

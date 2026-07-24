@@ -271,9 +271,10 @@ bool check_challenge(uint32_t received_challenge) {
     return received_challenge == g_fuzz_challenge;
 }
 
-void ux_flow_display(ui_approval_state_t state, bool warning) {
+bool ux_flow_display(ui_approval_state_t state, bool warning) {
     (void) state;
     (void) warning;
+    return true;
 }
 
 void ui_review_menu_cleanup(void) {}

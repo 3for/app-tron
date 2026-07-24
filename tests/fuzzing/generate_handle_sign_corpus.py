@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 OUT_DIR = Path(__file__).resolve().parent / "corpus" / "fuzz_handle_sign"
+TRANSFER_TYPE_URL = b"type.googleapis.com/protocol.TransferContract"
 TYPE_URL = b"type.googleapis.com/protocol.DelegateResourceContract"
 VOTE_TYPE_URL = b"type.googleapis.com/protocol.VoteWitnessContract"
 ASSET_ISSUE_TYPE_URL = b"type.googleapis.com/protocol.AssetIssueContract"
@@ -26,6 +27,9 @@ BIP32_PATH = [0x8000002C, 0x800000C3, 0x80000000, 0, 0]
 
 
 def varint(value: int) -> bytes:
+    if value < 0:
+        # Protobuf int64 uses the ten-byte two's-complement varint form.
+        value &= (1 << 64) - 1
     encoded = bytearray()
     while True:
         byte = value & 0x7F
@@ -54,6 +58,14 @@ def delegate_resource(lock_period) -> bytes:
     if lock_period is not None:
         message += uint_field(6, lock_period)
     return message
+
+
+def transfer(amount: int) -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    receiver = bytes.fromhex("41" + "22" * 20)
+    return (bytes_field(1, owner)
+            + bytes_field(2, receiver)
+            + uint_field(3, amount))
 
 
 def vote_witness(votes_count: int) -> bytes:
@@ -338,6 +350,17 @@ def main() -> None:
     )
     (OUT_DIR / "11-chunked-large-memo.bin").write_bytes(
         chunked_large_memo_seed()
+    )
+    (OUT_DIR / "12-transfer-int64-max.bin").write_bytes(
+        asset_contract_signing_seed(
+            1, TRANSFER_TYPE_URL, transfer((1 << 63) - 1)
+        )
+    )
+    (OUT_DIR / "13-transfer-zero.bin").write_bytes(
+        asset_contract_signing_seed(1, TRANSFER_TYPE_URL, transfer(0))
+    )
+    (OUT_DIR / "14-transfer-negative.bin").write_bytes(
+        asset_contract_signing_seed(1, TRANSFER_TYPE_URL, transfer(-1))
     )
 
 

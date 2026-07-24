@@ -243,11 +243,13 @@ static void ui_error_setting_disabled_choice(bool confirm) {
 }
 
 static void ui_error_custom_contract_choice(bool confirm) {
+    // Complete the pending signing APDU and release its state before leaving
+    // the choice page. Both branches terminate the same rejected request.
+    io_seproxyhal_send_status(E_MISSING_SETTING_CUSTOM_CONTRACT, 0, true, false);
     if (confirm) {
         ui_settings();
     } else {
         ui_idle();
-        io_seproxyhal_send_status(E_MISSING_SETTING_CUSTOM_CONTRACT, 0, true, false);
     }
 }
 #endif

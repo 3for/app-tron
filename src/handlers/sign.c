@@ -409,6 +409,7 @@ typedef enum {
     SIGN_PHASE_IDLE = 0,
     SIGN_PHASE_RAW_DATA,
     SIGN_PHASE_METADATA,
+    SIGN_PHASE_REVIEW,
 } sign_phase_t;
 
 // Legacy INS_SIGN streams the Transaction.raw envelope, retains bounded
@@ -424,6 +425,18 @@ typedef struct {
 
 static sign_stream_context_t *sign_stream;
 static sign_phase_t sign_phase;
+
+bool sign_review_in_progress(void) {
+    return sign_phase == SIGN_PHASE_REVIEW;
+}
+
+static bool start_sign_review(ui_approval_state_t state, bool data_warning) {
+    // Mark the session non-resumable before handing control to asynchronous UI.
+    // A preparation failure sends an error and resets this phase via
+    // reset_app_context()/sign_cleanup().
+    sign_phase = SIGN_PHASE_REVIEW;
+    return ux_flow_display(state, data_warning);
+}
 
 static void create_parameter_begin(void *ctx, size_t parameter_len) {
     sign_stream_context_t *stream = ctx;
@@ -511,6 +524,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     const bool metadata_apdu = ((p1 & 0xF0) == P1_TRC10_NAME);
     bool finalize_transaction = false;
     parserStatus_e txResult = USTREAM_PROCESSING;
+
+    // Defense in depth for tests/direct callers that bypass apdu_dispatcher().
+    // Never reset here: the active NBGL page still owns review allocations.
+    if (sign_review_in_progress()) {
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
 
     if (p2 != 0x00) {
         return send_sign_status(E_INCORRECT_P1_P2);
@@ -743,11 +762,11 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_ACCOUNTCREATE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_ACCOUNTCREATE_TRANSACTION, data_warning);
 
             break;
         case ASSETISSUECONTRACT:
-            ux_flow_display(APPROVAL_ASSETISSUE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_ASSETISSUE_TRANSACTION, data_warning);
             break;
         case PARTICIPATEASSETISSUECONTRACT:
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
@@ -757,19 +776,22 @@ handle_parser_result:
             strlcpy(strings.common.fullContract,
                     txContent.tokenNames[0],
                     sizeof(strings.common.fullContract));
-            ux_flow_display(APPROVAL_PARTICIPATEASSETISSUE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_PARTICIPATEASSETISSUE_TRANSACTION, data_warning);
             break;
         case UNFREEZEASSETCONTRACT:
-            ux_flow_display(APPROVAL_UNFREEZETRC10_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UNFREEZETRC10_TRANSACTION, data_warning);
             break;
         case UPDATEASSETCONTRACT:
-            ux_flow_display(APPROVAL_UPDATEASSET_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UPDATEASSET_TRANSACTION, data_warning);
             break;
         case CREATESMARTCONTRACT:
             // Deployment bytecode is opaque to the device. Require the same explicit
             // risk opt-in used for arbitrary TriggerSmartContract calls, while still
             // displaying the deployment parameters and bytecode hash.
             if (!N_storage.customContract) {
+#ifdef SCREEN_SIZE_WALLET
+                sign_phase = SIGN_PHASE_REVIEW;
+#endif
                 ui_error_custom_contract();
 #ifdef SCREEN_SIZE_WALLET
                 return APDU_NO_RESPONSE;
@@ -782,7 +804,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 #endif
-            ux_flow_display(APPROVAL_CREATESMARTCONTRACT_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_CREATESMARTCONTRACT_TRANSACTION, data_warning);
             break;
         case TRANSFERCONTRACT:       // TRX Transfer
         case TRANSFERASSETCONTRACT:  // TRC10 Transfer
@@ -801,6 +823,9 @@ handle_parser_result:
                     // Surface a page naming the correct setting, then return the precise
                     // TRON status word.
                     if (!N_storage.customContract) {
+#ifdef SCREEN_SIZE_WALLET
+                        sign_phase = SIGN_PHASE_REVIEW;
+#endif
                         ui_error_custom_contract();
 #ifdef SCREEN_SIZE_WALLET
                         return APDU_NO_RESPONSE;
@@ -822,11 +847,11 @@ handle_parser_result:
                     G_io_apdu_buffer[0] = '\0';
                     G_io_apdu_buffer[100] = '\0';
                     if (txContent.amount[0] > 0) {
-                        print_amount(txContent.amount[0],
-                                     (void *) G_io_apdu_buffer,
-                                     100,
-                                     TRX_DECIMALS);
-                        strlcat((char *) G_io_apdu_buffer, " TRX", sizeof(G_io_apdu_buffer));
+                        if (!format_trx_amount(txContent.amount[0],
+                                               (char *) G_io_apdu_buffer,
+                                               100)) {
+                            return send_sign_status(E_INCORRECT_LENGTH);
+                        }
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
                     } else {
@@ -844,7 +869,7 @@ handle_parser_result:
 #endif  // HAVE_GATING_SUPPORT
 
                     // approve custom contract
-                    ux_flow_display(APPROVAL_CUSTOM_CONTRACT, data_warning);
+                    start_sign_review(APPROVAL_CUSTOM_CONTRACT, data_warning);
 
                     break;
                 }
@@ -859,12 +884,14 @@ handle_parser_result:
                     return send_sign_status(E_INCORRECT_LENGTH);
                 }
             } else {
-                print_amount(
-                    txContent.amount[0],
-                    (void *) G_io_apdu_buffer,
-                    100,
-                    (txContent.contractType == TRANSFERCONTRACT) ? TRX_DECIMALS
-                                                                : txContent.decimals[0]);
+                if (print_amount(
+                        txContent.amount[0],
+                        (void *) G_io_apdu_buffer,
+                        100,
+                        (txContent.contractType == TRANSFERCONTRACT) ? TRX_DECIMALS
+                                                                    : txContent.decimals[0]) == 0) {
+                    return send_sign_status(E_INCORRECT_LENGTH);
+                }
             }
 
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
@@ -900,40 +927,54 @@ handle_parser_result:
             // keeps Amount and Token split to avoid an ambiguous "<number> <number>".
             if ((txContent.contractType != TRANSFERASSETCONTRACT) &&
                 (strlen(strings.common.fullContract) > 0)) {
-                strlcat((char *) G_io_apdu_buffer, " ", sizeof(G_io_apdu_buffer));
-                strlcat((char *) G_io_apdu_buffer,
-                        strings.common.fullContract,
-                        sizeof(G_io_apdu_buffer));
+                if ((strlcat((char *) G_io_apdu_buffer,
+                             " ",
+                             sizeof(G_io_apdu_buffer)) >= sizeof(G_io_apdu_buffer)) ||
+                    (strlcat((char *) G_io_apdu_buffer,
+                             strings.common.fullContract,
+                             sizeof(G_io_apdu_buffer)) >= sizeof(G_io_apdu_buffer))) {
+                    return send_sign_status(E_INCORRECT_LENGTH);
+                }
             }
-            ux_flow_display(APPROVAL_TRANSFER, data_warning);
+            start_sign_review(APPROVAL_TRANSFER, data_warning);
 
             break;
         case EXCHANGECREATECONTRACT:
-            print_amount(txContent.amount[0],
-                         (void *) G_io_apdu_buffer,
-                         100,
-                         (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                             ? TRX_DECIMALS
-                             : txContent.decimals[0]);
-            print_amount(txContent.amount[1],
-                         (void *) G_io_apdu_buffer + 100,
-                         100,
-                         (strncmp((const char *) txContent.tokenNames[1], "TRX", 3) == 0)
-                             ? TRX_DECIMALS
-                             : txContent.decimals[1]);
+            if ((print_amount(
+                     txContent.amount[0],
+                     (void *) G_io_apdu_buffer,
+                     100,
+                     (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
+                         ? TRX_DECIMALS
+                         : txContent.decimals[0]) == 0) ||
+                (print_amount(
+                     txContent.amount[1],
+                     (void *) G_io_apdu_buffer + 100,
+                     100,
+                     (strncmp((const char *) txContent.tokenNames[1], "TRX", 3) == 0)
+                         ? TRX_DECIMALS
+                         : txContent.decimals[1]) == 0)) {
+                return send_sign_status(E_INCORRECT_LENGTH);
+            }
 
-            ux_flow_display(APPROVAL_EXCHANGE_CREATE, data_warning);
+            start_sign_review(APPROVAL_EXCHANGE_CREATE, data_warning);
 
             break;
         case EXCHANGEINJECTCONTRACT:
         case EXCHANGEWITHDRAWCONTRACT:
-            print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
-            print_amount(txContent.amount[0],
-                         (void *) G_io_apdu_buffer,
-                         100,
-                         (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                             ? TRX_DECIMALS
-                             : txContent.decimals[0]);
+            if ((print_amount(txContent.exchangeID,
+                              (void *) strings.common.toAddress,
+                              sizeof(strings.common.toAddress),
+                              0) == 0) ||
+                (print_amount(
+                     txContent.amount[0],
+                     (void *) G_io_apdu_buffer,
+                     100,
+                     (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
+                         ? TRX_DECIMALS
+                         : txContent.decimals[0]) == 0)) {
+                return send_sign_status(E_INCORRECT_LENGTH);
+            }
             // write exchange contract type
             if (!setExchangeContractDetail(txContent.contractType,
                                            (char *) G_io_apdu_buffer + 100,
@@ -941,21 +982,26 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_EXCHANGE_WITHDRAW_INJECT, data_warning);
+            start_sign_review(APPROVAL_EXCHANGE_WITHDRAW_INJECT, data_warning);
 
             break;
         case EXCHANGETRANSACTIONCONTRACT:
-            print_amount(txContent.exchangeID, (void *) strings.common.toAddress, sizeof(strings.common.toAddress), 0);
-            print_amount(txContent.amount[0],
-                         (void *) G_io_apdu_buffer,
-                         100,
-                         txContent.decimals[0]);
-            print_amount(txContent.amount[1],
-                         (void *) G_io_apdu_buffer + 100,
-                         100,
-                         txContent.decimals[1]);
+            if ((print_amount(txContent.exchangeID,
+                              (void *) strings.common.toAddress,
+                              sizeof(strings.common.toAddress),
+                              0) == 0) ||
+                (print_amount(txContent.amount[0],
+                              (void *) G_io_apdu_buffer,
+                              100,
+                              txContent.decimals[0]) == 0) ||
+                (print_amount(txContent.amount[1],
+                              (void *) G_io_apdu_buffer + 100,
+                              100,
+                              txContent.decimals[1]) == 0)) {
+                return send_sign_status(E_INCORRECT_LENGTH);
+            }
 
-            ux_flow_display(APPROVAL_EXCHANGE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_EXCHANGE_TRANSACTION, data_warning);
 
             break;
         case VOTEWITNESSCONTRACT: {
@@ -1012,7 +1058,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_LENGTH);
             }
 
-            ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
 
         } break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
@@ -1030,7 +1076,7 @@ handle_parser_result:
                 getBase58FromAddress(txContent.account, strings.common.toAddress);
             }
 
-            ux_flow_display(APPROVAL_FREEZEASSET_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_FREEZEASSET_TRANSACTION, data_warning);
 
             break;
         case UNFREEZEBALANCECONTRACT:  // unreeze TRX
@@ -1045,7 +1091,7 @@ handle_parser_result:
                 getBase58FromAddress(txContent.account, strings.common.toAddress);
             }
 
-            ux_flow_display(APPROVAL_UNFREEZEASSET_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UNFREEZEASSET_TRANSACTION, data_warning);
 
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
@@ -1056,7 +1102,7 @@ handle_parser_result:
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
             setV2ResourceName(txContent.resource);
@@ -1066,7 +1112,7 @@ handle_parser_result:
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_UNFREEZEASSETV2_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UNFREEZEASSETV2_TRANSACTION, data_warning);
 
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
@@ -1086,7 +1132,7 @@ handle_parser_result:
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_DELEGATE_RESOURCE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_DELEGATE_RESOURCE_TRANSACTION, data_warning);
 
             break;
         case UNDELEGATERESOURCECONTRACT:  // Undelegate resource
@@ -1100,32 +1146,32 @@ handle_parser_result:
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWEXPIREUNFREEZECONTRACT:  // Withdraw Expire Unfreeze
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
 
             break;
         case CANCELALLUNFREEZEV2CONTRACT:  // Cancel all pending unstake (UnfreezeV2) requests
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION, data_warning);
 
             break;
         case UPDATEBROKERAGECONTRACT:  // Update witness brokerage (reward commission %)
             // brokerage is a percentage in [0, 100], stashed in amount[0] at parse
             snprintf((char *) G_io_apdu_buffer, 100, "%d%%", (int) txContent.amount[0]);
 
-            ux_flow_display(APPROVAL_UPDATEBROKERAGE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UPDATEBROKERAGE_TRANSACTION, data_warning);
 
             break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
-            ux_flow_display(APPROVAL_WITHDRAWBALANCE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_WITHDRAWBALANCE_TRANSACTION, data_warning);
 
             break;
         case ACCOUNTPERMISSIONUPDATECONTRACT: {
@@ -1140,7 +1186,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
+            start_sign_review(APPROVAL_PERMISSION_UPDATE, data_warning);
 
         } break;
         case PROPOSALCREATECONTRACT:
@@ -1148,7 +1194,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_PROPOSALCREATE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_PROPOSALCREATE_TRANSACTION, data_warning);
 
             break;
         case PROPOSALAPPROVECONTRACT:
@@ -1156,7 +1202,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_PROPOSALAPPROVE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_PROPOSALAPPROVE_TRANSACTION, data_warning);
 
             break;
         case PROPOSALDELETECONTRACT:
@@ -1164,7 +1210,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_PROPOSALDELETE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_PROPOSALDELETE_TRANSACTION, data_warning);
 
             break;
         case WITNESSCREATECONTRACT:
@@ -1174,7 +1220,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_WITNESSCREATE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_WITNESSCREATE_TRANSACTION, data_warning);
 
             break;
         case WITNESSUPDATECONTRACT:
@@ -1184,7 +1230,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_WITNESSUPDATE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_WITNESSUPDATE_TRANSACTION, data_warning);
 
             break;
         case ACCOUNTUPDATECONTRACT:
@@ -1193,7 +1239,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_ACCOUNTUPDATE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_ACCOUNTUPDATE_TRANSACTION, data_warning);
 
             break;
         case SETACCOUNTIDCONTRACT:
@@ -1202,7 +1248,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_SETACCOUNTID_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_SETACCOUNTID_TRANSACTION, data_warning);
 
             break;
         case CLEARABICONTRACT:
@@ -1213,7 +1259,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_CLEARABI_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_CLEARABI_TRANSACTION, data_warning);
 
             break;
         case UPDATESETTINGCONTRACT:
@@ -1228,7 +1274,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_UPDATESETTING_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UPDATESETTING_TRANSACTION, data_warning);
 
             break;
         case UPDATEENERGYLIMITCONTRACT:
@@ -1245,7 +1291,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_UPDATEENERGYLIMIT_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_UPDATEENERGYLIMIT_TRANSACTION, data_warning);
 
             break;
         case INVALID_CONTRACT:
@@ -1266,7 +1312,7 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            ux_flow_display(APPROVAL_SIMPLE_TRANSACTION, data_warning);
+            start_sign_review(APPROVAL_SIMPLE_TRANSACTION, data_warning);
 
             break;
     }

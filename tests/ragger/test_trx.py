@@ -141,6 +141,127 @@ class TestTRX():
                 amount=100000000))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_send_int64_max_amount(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=2**63 - 1))
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize(
+        "contract_kind, amount",
+        [
+            ("transfer", 0),
+            ("transfer", -1),
+            ("transfer_asset", 0),
+            ("transfer_asset", -1),
+            ("freeze", 999_999),
+            ("freeze", -1),
+            ("delegate", 999_999),
+            ("delegate", -1),
+            ("undelegate", 0),
+            ("undelegate", -1),
+            ("exchange_create_first", 0),
+            ("exchange_create_second", -1),
+            ("exchange_inject", 0),
+            ("exchange_withdraw", -1),
+            ("exchange_transaction_quant", 0),
+            ("exchange_transaction_expected", -1),
+            ("trigger_call_value", -1),
+        ])
+    def test_trx_rejects_invalid_amounts(self, backend, contract_kind,
+                                         amount):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        destination = bytes.fromhex(
+            client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"))
+
+        if contract_kind == "transfer":
+            contract_type = tron.Transaction.Contract.TransferContract
+            message = contract.TransferContract(
+                owner_address=owner,
+                to_address=destination,
+                amount=amount)
+        elif contract_kind == "transfer_asset":
+            contract_type = tron.Transaction.Contract.TransferAssetContract
+            message = contract.TransferAssetContract(
+                owner_address=owner,
+                to_address=destination,
+                asset_name=b"1002000",
+                amount=amount)
+        elif contract_kind == "freeze":
+            contract_type = tron.Transaction.Contract.FreezeBalanceContract
+            message = contract.FreezeBalanceContract(
+                owner_address=owner,
+                frozen_balance=amount,
+                frozen_duration=3,
+                resource=contract.ENERGY)
+        elif contract_kind == "delegate":
+            contract_type = tron.Transaction.Contract.DelegateResourceContract
+            message = contract.DelegateResourceContract(
+                owner_address=owner,
+                resource=contract.ENERGY,
+                balance=amount,
+                receiver_address=destination)
+        elif contract_kind == "undelegate":
+            contract_type = tron.Transaction.Contract.UnDelegateResourceContract
+            message = contract.UnDelegateResourceContract(
+                owner_address=owner,
+                resource=contract.ENERGY,
+                balance=amount,
+                receiver_address=destination)
+        elif contract_kind.startswith("exchange_create"):
+            contract_type = tron.Transaction.Contract.ExchangeCreateContract
+            message = contract.ExchangeCreateContract(
+                owner_address=owner,
+                first_token_id=b"_",
+                first_token_balance=amount
+                if contract_kind.endswith("first") else 1_000_000,
+                second_token_id=b"1000166",
+                second_token_balance=amount
+                if contract_kind.endswith("second") else 1_000_000)
+        elif contract_kind == "exchange_inject":
+            contract_type = tron.Transaction.Contract.ExchangeInjectContract
+            message = contract.ExchangeInjectContract(
+                owner_address=owner,
+                exchange_id=6,
+                token_id=b"1000166",
+                quant=amount)
+        elif contract_kind == "exchange_withdraw":
+            contract_type = tron.Transaction.Contract.ExchangeWithdrawContract
+            message = contract.ExchangeWithdrawContract(
+                owner_address=owner,
+                exchange_id=6,
+                token_id=b"1000166",
+                quant=amount)
+        elif contract_kind.startswith("exchange_transaction"):
+            contract_type = tron.Transaction.Contract.ExchangeTransactionContract
+            message = contract.ExchangeTransactionContract(
+                owner_address=owner,
+                exchange_id=6,
+                token_id=b"1000166",
+                quant=amount
+                if contract_kind.endswith("quant") else 1_000_000,
+                expected=amount
+                if contract_kind.endswith("expected") else 1_000_000)
+        else:
+            contract_type = tron.Transaction.Contract.TriggerSmartContract
+            message = contract.TriggerSmartContract(
+                owner_address=owner,
+                contract_address=destination,
+                call_value=amount,
+                data=b"\x12\x34\x56\x78")
+
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
     def test_trx_send_with_data_field(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
