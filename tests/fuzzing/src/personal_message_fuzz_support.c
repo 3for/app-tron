@@ -20,9 +20,11 @@ strings_t strings;
 
 static bool g_fail_public_key_init;
 static volatile uint32_t g_display_checksum;
+static const char *g_review_message;
 
 void reset_app_context(void) {
     message_cleanup();
+    personal_message_legacy_cleanup();
     memset(&tmpCtx, 0, sizeof(tmpCtx));
     memset(&txContent, 0, sizeof(txContent));
     memset(&txContext, 0, sizeof(txContext));
@@ -83,4 +85,9 @@ void ui_191_start(const char *message) {
         checksum = (checksum * 33U) ^ (uint8_t) message[i];
     }
     g_display_checksum = checksum;
+    g_review_message = message;
+}
+
+void ui_191_cleanup(void) {
+    g_review_message = NULL;
 }

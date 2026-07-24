@@ -67,6 +67,10 @@ int apdu_dispatcher(const command_t *cmd) {
         PRINTF("Refused APDU while TIP-712 review is active\n");
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
+    if (personal_message_review_in_progress()) {
+        PRINTF("Refused APDU while personal-message review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
 
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {

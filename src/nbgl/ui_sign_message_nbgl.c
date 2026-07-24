@@ -57,3 +57,6 @@ void ui_191_start(const char *message) {
     ui_191_show_message();
 }
 
+void ui_191_cleanup(void) {
+    g_message = NULL;
+}

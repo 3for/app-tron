@@ -77,6 +77,7 @@ bool ui_callback_ecdh_ok(bool display_menu);
 // heap-allocated display buffer (signMsgCtx, see sign_personal_message_full_display.c),
 // mirroring app-ethereum's ui_191_start(const char *message).
 void ui_191_start(const char *message);
+void ui_191_cleanup(void);
 
 // ui_typed_message_review_choice() is declared in ui_message_signing.h.
 

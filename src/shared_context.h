@@ -47,6 +47,7 @@ typedef enum {
     APP_STATE_IDLE,
     APP_STATE_SIGNING_MESSAGE,
     APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
+    APP_STATE_REVIEWING_PERSONAL_MESSAGE,
     APP_STATE_SIGNING,
     APP_STATE_SIGNING_TIP712,
     // Used while a TriggerSmartContract is being clear-signed through the

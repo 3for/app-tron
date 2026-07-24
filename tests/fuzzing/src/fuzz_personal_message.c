@@ -44,6 +44,7 @@ static void fuzz_personal_message_apdu_stream(const uint8_t *data, size_t size) 
             memcpy(payload, data, payload_len);
         }
 
+        bool was_reviewing = personal_message_review_in_progress();
         switch (ins) {
             case INS_SIGN_PERSONAL_MESSAGE:
                 (void) handleSignPersonalMessage(p1, p2, payload, (uint16_t) payload_len);
@@ -56,6 +57,9 @@ static void fuzz_personal_message_apdu_stream(const uint8_t *data, size_t size) 
                 break;
             default:
                 break;
+        }
+        if (was_reviewing && !personal_message_review_in_progress()) {
+            __builtin_trap();
         }
 
         free(payload);

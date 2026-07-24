@@ -70,6 +70,7 @@ extern void roll_challenge(void);
 
 void reset_app_context() {
     message_cleanup();
+    personal_message_legacy_cleanup();
     sign_cleanup();
     // Drop any incomplete metadata/GCS descriptor shared TLV stream.
     tlv_apdu_reset();
@@ -93,9 +94,10 @@ void reset_app_context() {
     // Free cached enum-value descriptors (INS_PROVIDE_ENUM_VALUE).
     enum_value_cleanup();
     forget_known_assets();
-    memset((uint8_t *) &txContext, 0, sizeof(txContext));
-    memset((uint8_t *) &txContent, 0, sizeof(txContent));
-    memset((uint8_t *) &tmpCtx, 0, sizeof(tmpCtx));
+    explicit_bzero(&global_sha3, sizeof(global_sha3));
+    explicit_bzero(&txContext, sizeof(txContext));
+    explicit_bzero(&txContent, sizeof(txContent));
+    explicit_bzero(&tmpCtx, sizeof(tmpCtx));
 }
 
 static void abort_active_context(void) {

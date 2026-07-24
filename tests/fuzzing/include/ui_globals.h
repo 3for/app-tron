@@ -33,6 +33,7 @@ extern char *vote_display_buffer;
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
 void ui_191_start(const char *message);
+void ui_191_cleanup(void);
 
 // ui_712_start is declared by the real common_712.h (uint16_t / filtering arg).
 void ui_712_switch_to_message(void);

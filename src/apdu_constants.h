@@ -79,6 +79,9 @@
 
 #define P1_TRC10_NAME 0xA0
 
+#define MAX_PERSONAL_MESSAGE_LENGTH 4096U
+#define MAX_PERSONAL_MESSAGE_APDUS   64U
+
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01
 
@@ -107,6 +110,8 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint8_t *workBuffer,
                                          uint16_t dataLength);
 void message_cleanup(void);
+void personal_message_legacy_cleanup(void);
+bool personal_message_review_in_progress(void);
 void sign_cleanup(void);
 bool sign_review_in_progress(void);
 int handleProvideTrc20TokenInformation(uint8_t p1,

@@ -36,6 +36,14 @@ def message_stream(ins: int, message: bytes, chunk_size: int = 0xFF) -> bytes:
     return b"".join(chunks)
 
 
+def declared_length_stream(ins: int, declared_length: int) -> bytes:
+    return record(
+        ins,
+        P1_FIRST,
+        derivation_path() + declared_length.to_bytes(4, "big"),
+    )
+
+
 def write_seed(name: str, stream: bytes, public_key_status: int = 0) -> None:
     (OUT_DIR / name).write_bytes(bytes([public_key_status]) + stream)
 
@@ -98,6 +106,47 @@ def main() -> None:
         "09-continuation-after-complete.bin",
         message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"complete")
         + record(INS_PERSONAL_MESSAGE_FULL_DISPLAY, P1_MORE, b""),
+    )
+    write_seed(
+        "10-review-interleaved-first.bin",
+        message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"review remains active")
+        + message_stream(INS_PERSONAL_MESSAGE, b"must be rejected"),
+    )
+    write_seed(
+        "11-full-display-max-ascii.bin",
+        message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"A" * 4096),
+    )
+    write_seed(
+        "12-full-display-max-binary.bin",
+        message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"\xff" * 4096),
+    )
+    write_seed(
+        "13-full-display-over-limit.bin",
+        declared_length_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, 4097),
+    )
+    write_seed(
+        "14-legacy-over-limit.bin",
+        declared_length_stream(INS_PERSONAL_MESSAGE, 0x80000000),
+    )
+    write_seed(
+        "15-control-whitespace.bin",
+        message_stream(
+            INS_PERSONAL_MESSAGE_FULL_DISPLAY,
+            b"line1\tline2\vline3\fline4\rline5\nline6",
+        ),
+    )
+    write_seed(
+        "16-too-many-apdus.bin",
+        declared_length_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, 65)
+        + b"".join(
+            record(INS_PERSONAL_MESSAGE_FULL_DISPLAY, P1_MORE, bytes([i]))
+            for i in range(65)
+        ),
+    )
+    write_seed(
+        "17-zero-length-continuation.bin",
+        declared_length_stream(INS_PERSONAL_MESSAGE, 1)
+        + record(INS_PERSONAL_MESSAGE, P1_MORE, b""),
     )
 
 

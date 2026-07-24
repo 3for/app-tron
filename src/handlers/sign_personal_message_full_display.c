@@ -40,6 +40,8 @@
 typedef struct {
     uint16_t msg_length;
     uint16_t processed_size;
+    uint16_t apdu_count;
+    size_t display_buffer_size;
     char *received_buffer;
     char *display_buffer;
 } signMsgCtx_t;
@@ -56,11 +58,22 @@ extern void reset_app_context();
  * context. Called from reset_app_context().
  */
 void message_cleanup(void) {
+    ui_191_cleanup();
     if (signMsgCtx != NULL) {
+        if (signMsgCtx->received_buffer != NULL) {
+            explicit_bzero(signMsgCtx->received_buffer, (size_t) signMsgCtx->msg_length + 1U);
+        }
         APP_MEM_FREE_AND_NULL((void **) &signMsgCtx->received_buffer);
+        if (signMsgCtx->display_buffer != NULL) {
+            explicit_bzero(signMsgCtx->display_buffer, signMsgCtx->display_buffer_size);
+        }
         APP_MEM_FREE_AND_NULL((void **) &signMsgCtx->display_buffer);
+        explicit_bzero(signMsgCtx, sizeof(*signMsgCtx));
     }
     APP_MEM_FREE_AND_NULL((void **) &signMsgCtx);
+    if (g_msg_hash_ctx != NULL) {
+        explicit_bzero(g_msg_hash_ctx, sizeof(*g_msg_hash_ctx));
+    }
     APP_MEM_FREE_AND_NULL((void **) &g_msg_hash_ctx);
 }
 
@@ -72,6 +85,8 @@ void message_cleanup(void) {
  * @return whether it was successful or not
  */
 static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
+    uint32_t msg_length;
+
     // Initialize the message context
     message_cleanup();
 
@@ -79,13 +94,6 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
     off_t ret = read_bip32_path(*work_buffer, *data_length, &tmpCtx.transactionContext.bip32_path);
     if (ret < 0) {
         return E_INCORRECT_BIP32_PATH;
-    }
-
-    publicKeyContext_t tmp_public_key_ctx;
-    if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
-                             strings.common.fromAddress,
-                             &tmp_public_key_ctx) != 0) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
     }
 
     *work_buffer += ret;
@@ -96,26 +104,35 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
         return E_INCORRECT_LENGTH;
     }
 
+    // Apply the real display/heap limit before doing key work or allocating.
+    msg_length = U4BE(*work_buffer, 0);
+    if (msg_length > MAX_PERSONAL_MESSAGE_LENGTH) {
+        PRINTF("Error: message too long (%u > %u)\n",
+               msg_length,
+               MAX_PERSONAL_MESSAGE_LENGTH);
+        return E_INCORRECT_LENGTH;
+    }
+
+    publicKeyContext_t tmp_public_key_ctx;
+    if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
+                             strings.common.fromAddress,
+                             &tmp_public_key_ctx) != 0) {
+        return E_SECURITY_STATUS_NOT_SATISFIED;
+    }
+
     if (APP_MEM_CALLOC((void **) &signMsgCtx, sizeof(signMsgCtx_t)) == false) {
         PRINTF("Memory allocation failed for Sign Context\n");
         return SWO_INSUFFICIENT_MEMORY;
     }
-
-    // Get the message length. The wire format uses 4 bytes but the rest of the
-    // flow tracks it as a uint16_t, so reject anything that would not fit.
-    uint32_t msg_length = U4BE(*work_buffer, 0);
-    if (msg_length > UINT16_MAX) {
-        return E_INCORRECT_LENGTH;
-    }
     signMsgCtx->msg_length = (uint16_t) msg_length;
+    signMsgCtx->apdu_count = 1;
 
-    // Allocate the buffer for the message
-    if (signMsgCtx->msg_length > 0) {
-        if (APP_MEM_CALLOC((void **) &signMsgCtx->received_buffer, signMsgCtx->msg_length) ==
-            false) {
-            PRINTF("Error: Not enough memory!\n");
-            return SWO_INSUFFICIENT_MEMORY;
-        }
+    // Keep one spare byte so printable messages can reuse this allocation as
+    // their NUL-terminated display buffer.
+    if (APP_MEM_CALLOC((void **) &signMsgCtx->received_buffer,
+                       (size_t) signMsgCtx->msg_length + 1U) == false) {
+        PRINTF("Error: Not enough memory!\n");
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     // Skip data & length to the message itself
@@ -128,22 +145,26 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
     }
 
     // Initialize message header + length hash
-    CX_ASSERT(cx_keccak_init_no_throw(g_msg_hash_ctx, 256));
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
-                               0,
-                               (const uint8_t *) SIGN_MAGIC,
-                               sizeof(SIGN_MAGIC) - 1,
-                               NULL,
-                               0));
+    if ((cx_keccak_init_no_throw(g_msg_hash_ctx, 256) != CX_OK) ||
+        (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
+                          0,
+                          (const uint8_t *) SIGN_MAGIC,
+                          sizeof(SIGN_MAGIC) - 1,
+                          NULL,
+                          0) != CX_OK)) {
+        return E_SECURITY_STATUS_NOT_SATISFIED;
+    }
 
     char length_str[11];
     snprintf(length_str, sizeof(length_str), "%u", signMsgCtx->msg_length);
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
-                               0,
-                               (const uint8_t *) length_str,
-                               strlen(length_str),
-                               NULL,
-                               0));
+    if (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
+                         0,
+                         (const uint8_t *) length_str,
+                         strlen(length_str),
+                         NULL,
+                         0) != CX_OK) {
+        return E_SECURITY_STATUS_NOT_SATISFIED;
+    }
 
     return E_OK;
 }
@@ -157,7 +178,9 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
  */
 static int process_data(const uint8_t *data, uint16_t length) {
     // Hash the data
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx, 0, data, length, NULL, 0));
+    if (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx, 0, data, length, NULL, 0) != CX_OK) {
+        return E_SECURITY_STATUS_NOT_SATISFIED;
+    }
 
     // Copy the data to the buffer
     if (length > 0) {
@@ -175,24 +198,16 @@ static int process_data(const uint8_t *data, uint16_t length) {
  */
 static int final_process(void) {
     bool is_hex = false;
-    uint16_t buffer_length;
+    size_t buffer_length;
 
     // Finalize hash
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
-                               CX_LAST,
-                               NULL,
-                               0,
-                               tmpCtx.transactionContext.hash,
-                               HASH_SIZE));
-
-    // Guard against uint16_t overflow in the display buffer length calculation.
-    // In the worst case (hex path) the length becomes msg_length * 2 + 3, so
-    // reject messages that would cause that expression to exceed UINT16_MAX.
-    if (signMsgCtx->msg_length > ((UINT16_MAX - 3) / 2)) {
-        PRINTF("Error: message too long (%u > %u)\n",
-               signMsgCtx->msg_length,
-               ((UINT16_MAX - 3) / 2));
-        return E_INCORRECT_LENGTH;
+    if (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx,
+                         CX_LAST,
+                         NULL,
+                         0,
+                         tmpCtx.transactionContext.hash,
+                         HASH_SIZE) != CX_OK) {
+        return E_SECURITY_STATUS_NOT_SATISFIED;
     }
 
     // Display buffer length
@@ -210,14 +225,13 @@ static int final_process(void) {
         }
     }
 
-    // Allocate the buffer for the display
-    buffer_length++;  // for the NULL byte
-    if (APP_MEM_CALLOC((void **) &signMsgCtx->display_buffer, buffer_length) == false) {
-        PRINTF("Error: Not enough memory!\n");
-        return SWO_INSUFFICIENT_MEMORY;
-    }
-
     if (is_hex) {
+        buffer_length = ((size_t) signMsgCtx->msg_length * 2U) + 3U;
+        signMsgCtx->display_buffer_size = buffer_length;
+        if (APP_MEM_CALLOC((void **) &signMsgCtx->display_buffer, buffer_length) == false) {
+            PRINTF("Error: Not enough memory!\n");
+            return SWO_INSUFFICIENT_MEMORY;
+        }
         // Copy the "0x" prefix
         memcpy(signMsgCtx->display_buffer, "0x", 2);
         // Convert the message to ascii
@@ -229,23 +243,22 @@ static int final_process(void) {
             PRINTF("Error: Not enough memory!\n");
             return SWO_INSUFFICIENT_MEMORY;
         }
+        explicit_bzero(signMsgCtx->received_buffer, (size_t) signMsgCtx->msg_length + 1U);
+        APP_MEM_FREE_AND_NULL((void **) &signMsgCtx->received_buffer);
     } else {
-#ifdef SCREEN_SIZE_NANO
-        uint16_t j = 0;
         for (uint16_t i = 0; i < signMsgCtx->msg_length; i++) {
-            char c = signMsgCtx->received_buffer[i];
-            // to replace all white-space characters as spaces
-            signMsgCtx->display_buffer[j++] = isspace((int) c) ? ' ' : c;
+            uint8_t c = (uint8_t) signMsgCtx->received_buffer[i];
+            // Normalize layout-affecting whitespace consistently on all devices.
+            signMsgCtx->received_buffer[i] = isspace((int) c) ? ' ' : (char) c;
         }
-        signMsgCtx->display_buffer[j] = '\0';
-#else   // SCREEN_SIZE_NANO
-        // Copy the message to the display buffer
-        memcpy(signMsgCtx->display_buffer, signMsgCtx->received_buffer, signMsgCtx->msg_length);
-        signMsgCtx->display_buffer[signMsgCtx->msg_length] = '\0';
-#endif  // SCREEN_SIZE_NANO
+        signMsgCtx->received_buffer[signMsgCtx->msg_length] = '\0';
+        signMsgCtx->display_buffer = signMsgCtx->received_buffer;
+        signMsgCtx->display_buffer_size = (size_t) signMsgCtx->msg_length + 1U;
+        signMsgCtx->received_buffer = NULL;
     }
 
     // The dedicated hash context is no longer needed
+    explicit_bzero(g_msg_hash_ctx, sizeof(*g_msg_hash_ctx));
     APP_MEM_FREE_AND_NULL((void **) &g_msg_hash_ctx);
     return E_OK;
 }
@@ -263,6 +276,16 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint8_t p2,
                                          uint8_t *workBuffer,
                                          uint16_t dataLength) {
+    if (personal_message_review_in_progress()) {
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+    if (p2 != 0) {
+        if (appState != APP_STATE_IDLE) {
+            reset_app_context();
+        }
+        return io_send_sw(E_INCORRECT_P1_P2);
+    }
+
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
         if (appState != APP_STATE_IDLE) {
             reset_app_context();
@@ -284,16 +307,20 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (p2 != 0) {
-        reset_app_context();
-        return io_send_sw(E_INCORRECT_P1_P2);
-    }
-
     // Check if the context is valid
     if ((signMsgCtx == NULL) || (g_msg_hash_ctx == NULL)) {
         PRINTF("Error: Invalid data received!\n");
         reset_app_context();
         return io_send_sw(E_INCORRECT_DATA);
+    }
+    if (p1 == P1_MORE) {
+        if ((signMsgCtx->apdu_count >= MAX_PERSONAL_MESSAGE_APDUS) ||
+            ((dataLength == 0) &&
+             (signMsgCtx->processed_size != signMsgCtx->msg_length))) {
+            reset_app_context();
+            return io_send_sw(E_INCORRECT_LENGTH);
+        }
+        signMsgCtx->apdu_count++;
     }
 
     // Check if the received chunk data is too long
@@ -318,6 +345,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
             reset_app_context();
             return io_send_sw(sw);
         }
+        appState = APP_STATE_REVIEWING_PERSONAL_MESSAGE;
         ui_191_start(signMsgCtx->display_buffer);
         return 0;
     }
