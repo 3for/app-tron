@@ -17,10 +17,14 @@
 typedef bool (*f_tlv_payload_handler)(const buffer_t *payload);
 
 void tlv_apdu_reset(void);
+bool tlv_apdu_in_progress(void);
+bool tlv_apdu_owner_matches(uint8_t owner);
 
-bool tlv_from_apdu(bool first_chunk,
+bool tlv_from_apdu(uint8_t owner,
+                   bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,
+                   uint16_t max_payload_size,
                    f_tlv_payload_handler handler);
 
 // Helper functions for common TLV parsing operations

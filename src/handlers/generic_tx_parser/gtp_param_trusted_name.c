@@ -31,8 +31,14 @@ static bool handle_value(const tlv_data_t *data, s_param_trusted_name_context *c
 }
 
 static bool handle_types(const tlv_data_t *data, s_param_trusted_name_context *context) {
-    if (data->value.size > sizeof(context->param->types)) {
+    if ((data->value.size == 0) || (data->value.size > sizeof(context->param->types))) {
         return false;
+    }
+    for (size_t i = 0; i < data->value.size; i++) {
+        if ((data->value.ptr[i] < TN_TYPE_ACCOUNT) ||
+            (data->value.ptr[i] >= _TN_TYPE_COUNT_)) {
+            return false;
+        }
     }
     memcpy(context->param->types, data->value.ptr, data->value.size);
     context->param->type_count = data->value.size;
@@ -40,8 +46,13 @@ static bool handle_types(const tlv_data_t *data, s_param_trusted_name_context *c
 }
 
 static bool handle_sources(const tlv_data_t *data, s_param_trusted_name_context *context) {
-    if (data->value.size > sizeof(context->param->sources)) {
+    if ((data->value.size == 0) || (data->value.size > sizeof(context->param->sources))) {
         return false;
+    }
+    for (size_t i = 0; i < data->value.size; i++) {
+        if (data->value.ptr[i] >= TN_SOURCE_COUNT) {
+            return false;
+        }
     }
     memcpy(context->param->sources, data->value.ptr, data->value.size);
     context->param->source_count = data->value.size;
@@ -64,8 +75,15 @@ static bool handle_sender_addr(const tlv_data_t *data, s_param_trusted_name_cont
 DEFINE_TLV_PARSER(PARAM_TRUSTED_NAME_TAGS, NULL, param_trusted_name_tlv_parser)
 
 bool handle_param_trusted_name_struct(const buffer_t *buf, s_param_trusted_name_context *context) {
-    TLV_reception_t received_tags;
-    return param_trusted_name_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    if (!param_trusted_name_tlv_parser(buf, context, &received_tags)) {
+        return false;
+    }
+    return TLV_CHECK_RECEIVED_TAGS(received_tags,
+                                   TAG_VERSION,
+                                   TAG_VALUE,
+                                   TAG_TYPES,
+                                   TAG_SOURCES);
 }
 
 /**

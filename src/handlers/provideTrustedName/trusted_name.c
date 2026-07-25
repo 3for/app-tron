@@ -14,6 +14,7 @@
 #include "lcx_ecdsa.h"
 #include "shared_context.h"  // CX_SECP256_PUB_KEY_SIZE
 #include "ox_ec.h"
+#include "app_errors.h"
 
 #define STRUCT_VERSION_1 0x01
 #define STRUCT_VERSION_2 0x02
@@ -21,6 +22,8 @@
 #define STRUCT_TYPE_TRUSTED_NAME 0x03
 #define SIG_ALGO_SECP256K1       0x01
 #define SLIP_44_ETHEREUM         60
+#define DOMAIN_CERTIFICATE_NAME  "Trusted_Name"
+#define CAL_CERTIFICATE_NAME     "Trusted_Name_CAL"
 
 static s_trusted_name *g_trusted_name_list = NULL;
 
@@ -196,8 +199,11 @@ static bool handle_not_valid_after(const tlv_data_t *data, s_trusted_name_ctx *c
  * @return whether it was successful
  */
 static bool handle_challenge(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    UNUSED(context);
-    return tlv_check_challenge(data);
+    if (!tlv_check_challenge(data)) {
+        return false;
+    }
+    context->challenge_received = true;
+    return true;
 }
 
 /**
@@ -399,7 +405,7 @@ static bool handle_owner(const tlv_data_t *data, s_trusted_name_ctx *context) {
  */
 static bool handle_owner_deriv_path(const tlv_data_t *data, s_trusted_name_ctx *context) {
     buffer_t field = {0};
-    uint32_t bip32_max_size = MAX_BIP32_PATH * sizeof(uint32_t);
+    const uint32_t bip32_max_size = 1U + (MAX_BIP32_PATH * sizeof(uint32_t));
     if (data->value.size < sizeof(context->owner_deriv_path.length)) {
         PRINTF("OWNER_DERIV_PATH: data too short\n");
         return false;
@@ -409,6 +415,13 @@ static bool handle_owner_deriv_path(const tlv_data_t *data, s_trusted_name_ctx *
         return false;
     }
     context->owner_deriv_path.length = field.ptr[0];
+    if ((context->owner_deriv_path.length == 0) ||
+        (context->owner_deriv_path.length > MAX_BIP32_PATH) ||
+        (field.size !=
+         (1U + ((size_t) context->owner_deriv_path.length * sizeof(uint32_t))))) {
+        PRINTF("OWNER_DERIV_PATH: invalid path length\n");
+        return false;
+    }
     if (!bip32_path_read(&field.ptr[sizeof(context->owner_deriv_path.length)],
                          field.size - sizeof(context->owner_deriv_path.length),
                          context->owner_deriv_path.indices,
@@ -501,6 +514,7 @@ bool handle_trusted_name_tlv_payload(const buffer_t *payload, s_trusted_name_ctx
  */
 static bool verify_signature(const s_trusted_name_ctx *context) {
     uint8_t hash[INT256_LENGTH];
+    const char *expected_certificate_name;
 
     if (finalize_hash((cx_hash_t *) &context->hash_ctx, hash, sizeof(hash)) != true) {
         return false;
@@ -515,7 +529,10 @@ static bool verify_signature(const s_trusted_name_ctx *context) {
                                     context->sig_size) != true) {
         return false;
     }
-    return true;
+    expected_certificate_name = (context->key_id == TN_KEY_ID_CAL)
+                                    ? CAL_CERTIFICATE_NAME
+                                    : DOMAIN_CERTIFICATE_NAME;
+    return check_loaded_pki_certificate_name(expected_certificate_name);
 }
 
 /**
@@ -650,11 +667,34 @@ static bool check_trusted_name(const char *name, bool (*check_func)(char)) {
  * @param[in] context the trusted name context
  * @return whether the struct is valid
  */
-bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
+static bool trusted_name_key_matches(const s_trusted_name *left, const s_trusted_name *right) {
+    if ((left->struct_version != right->struct_version) ||
+        (memcmp(left->addr, right->addr, sizeof(left->addr)) != 0)) {
+        return false;
+    }
+    if (left->struct_version == STRUCT_VERSION_1) {
+        return true;
+    }
+    return (left->name_type == right->name_type) &&
+           (left->name_source == right->name_source) &&
+           (left->chain_id == right->chain_id);
+}
+
+static s_trusted_name *find_trusted_name_key(const s_trusted_name *trusted_name) {
+    for (s_trusted_name *node = g_trusted_name_list; node != NULL;
+         node = (s_trusted_name *) node->_list.next) {
+        if (trusted_name_key_matches(node, trusted_name)) {
+            return node;
+        }
+    }
+    return NULL;
+}
+
+uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
     s_trusted_name *node = NULL;
     if (!verify_fields(context)) {
         PRINTF("Error: Missing mandatory fields in descriptor!\n");
-        return false;
+        return SWO_INCORRECT_DATA;
     }
 
     if (context->trusted_name.struct_version == STRUCT_VERSION_2) {
@@ -662,7 +702,7 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             case TN_TYPE_ACCOUNT:
                 if (context->trusted_name.name_source == TN_SOURCE_CAL) {
                     PRINTF("Error: cannot accept an account name from the CAL!\n");
-                    return false;
+                    return SWO_INCORRECT_DATA;
                 }
                 break;
             case TN_TYPE_CONTRACT:
@@ -670,11 +710,11 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
                 if (context->trusted_name.name_source != TN_SOURCE_CAL) {
                     PRINTF("Error: cannot accept a contract name from given source (%u)!\n",
                            context->trusted_name.name_source);
-                    return false;
+                    return SWO_INCORRECT_DATA;
                 }
                 break;
             default:
-                return false;
+                return SWO_INCORRECT_DATA;
         }
         // MAB source requires OWNER
         if (context->trusted_name.name_source == TN_SOURCE_MAB) {
@@ -688,7 +728,7 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
                                             NULL,
                                             CX_SHA512) != CX_OK) {
                 PRINTF("Error: could not derive pubkey!\n");
-                return false;
+                return SWO_INCORRECT_DATA;
             }
             getEthAddressFromRawKey(raw_pubkey, wallet_addr);
 
@@ -698,9 +738,19 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
                        context->owner,
                        sizeof(wallet_addr),
                        wallet_addr);
-                return false;
+                return SWO_INCORRECT_DATA;
             }
         }
+    }
+
+    e_tn_key_id expected_key_id =
+        ((context->trusted_name.struct_version == STRUCT_VERSION_2) &&
+         (context->trusted_name.name_source == TN_SOURCE_CAL))
+            ? TN_KEY_ID_CAL
+            : TN_KEY_ID_DOMAIN_SVC;
+    if (context->key_id != expected_key_id) {
+        PRINTF("Error: trusted-name signer key ID does not match its source\n");
+        return SWO_INCORRECT_DATA;
     }
 
     size_t name_length = strnlen(context->trusted_name.name, sizeof(context->trusted_name.name));
@@ -710,28 +760,41 @@ bool verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         if ((name_length < 5) ||
             (strncmp(".eth", (char *) &context->trusted_name.name[name_length - 4], 4) != 0)) {
             PRINTF("Unexpected TLD!\n");
-            return false;
+            return SWO_INCORRECT_DATA;
         }
         if (!check_trusted_name(context->trusted_name.name, &ens_charset)) {
-            return false;
+            return SWO_INCORRECT_DATA;
         }
     } else {
         if (!check_trusted_name(context->trusted_name.name, &generic_trusted_name_charset)) {
-            return false;
+            return SWO_INCORRECT_DATA;
         }
     }
 
     if (!verify_signature(context)) {
-        return false;
+        return SWO_INCORRECT_DATA;
+    }
+
+    node = find_trusted_name_key(&context->trusted_name);
+    if (node != NULL) {
+        flist_node_t list_link = node->_list;
+        memcpy(node, &context->trusted_name, sizeof(*node));
+        node->_list = list_link;
+        print_trusted_name_info(context);
+        return SWO_SUCCESS;
+    }
+    if (flist_size((flist_node_t **) &g_trusted_name_list) >= MAX_TRUSTED_NAMES) {
+        PRINTF("Error: too many trusted names loaded\n");
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     if ((node = APP_MEM_ALLOC(sizeof(*node))) == NULL) {
         PRINTF("Error: could not allocate trusted name struct!\n");
-        return false;
+        return SWO_INSUFFICIENT_MEMORY;
     }
     memcpy(node, &context->trusted_name, sizeof(*node));
     flist_push_back((flist_node_t **) &g_trusted_name_list, (flist_node_t *) node);
 
     print_trusted_name_info(context);
-    return true;
+    return SWO_SUCCESS;
 }

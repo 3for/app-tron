@@ -53,7 +53,12 @@ uint16_t handle_field(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload
         return SWO_COMMAND_NOT_ALLOWED;
     }
 
-    if (!tlv_from_apdu(p1 == P1_FIRST_CHUNK, lc, payload, &handle_tlv_payload)) {
+    if (!tlv_from_apdu(INS_GTP_FIELD,
+                       p1 == P1_FIRST_CHUNK,
+                       lc,
+                       payload,
+                       UINT16_MAX,
+                       &handle_tlv_payload)) {
         return SWO_INCORRECT_DATA;
     }
     return SWO_SUCCESS;

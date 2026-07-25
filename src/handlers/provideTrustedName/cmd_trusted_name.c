@@ -6,18 +6,21 @@
 #include "apdu_constants.h"
 #include "ui_utils.h"
 
-static bool handle_tlv_payload(const buffer_t *buf) {
-    s_trusted_name_ctx ctx = {0};
-    uint16_t ret = false;
+static uint16_t g_trusted_name_status;
 
-    // Initialize the hash context
+static bool handle_tlv_payload_with_status(const buffer_t *buf) {
+    s_trusted_name_ctx ctx = {0};
+
     cx_sha256_init(&ctx.hash_ctx);
     if (!handle_trusted_name_tlv_payload(buf, &ctx)) {
+        g_trusted_name_status = SWO_INCORRECT_DATA;
         return false;
     }
-    ret = verify_trusted_name_struct(&ctx);
-    roll_challenge();  // prevent brute-force guesses & replays
-    return ret;
+    g_trusted_name_status = verify_trusted_name_struct(&ctx);
+    if (ctx.challenge_received) {
+        roll_challenge();
+    }
+    return g_trusted_name_status == SWO_SUCCESS;
 }
 
 /**
@@ -27,9 +30,19 @@ static bool handle_tlv_payload(const buffer_t *buf) {
  * @param[in] data APDU payload
  * @param[in] length payload size
  */
-uint16_t handle_trusted_name(uint8_t p1, const uint8_t *data, uint8_t length) {
-    if (!tlv_from_apdu(p1 == P1_FIRST_CHUNK, length, data, &handle_tlv_payload)) {
-        return SWO_INCORRECT_DATA;
+uint16_t handle_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_t length) {
+    if ((p2 != 0) || ((p1 != P1_FIRST_CHUNK) && (p1 != P1_FOLLOWING_CHUNK))) {
+        tlv_apdu_reset();
+        return SWO_WRONG_P1_P2;
+    }
+    g_trusted_name_status = SWO_INCORRECT_DATA;
+    if (!tlv_from_apdu(INS_PROVIDE_TRUSTED_NAME,
+                       p1 == P1_FIRST_CHUNK,
+                       length,
+                       data,
+                       TRUSTED_NAME_DESCRIPTOR_MAX_LENGTH,
+                       &handle_tlv_payload_with_status)) {
+        return g_trusted_name_status;
     }
     return SWO_SUCCESS;
 }

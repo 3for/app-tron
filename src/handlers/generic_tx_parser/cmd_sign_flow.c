@@ -10,6 +10,10 @@ static int send_gcs_flow_status(uint16_t sw) {
     return io_send_sw(sw);
 }
 
+bool gcs_review_in_progress(void) {
+    return appState == APP_STATE_REVIEWING_GCS;
+}
+
 int handle_gcs_start_flow(void) {
     // The GCS STORE must have run first (it sets APP_STATE_SIGNING_TX).
     if (appState != APP_STATE_SIGNING_TX) {
@@ -35,6 +39,7 @@ int handle_gcs_start_flow(void) {
     // Build and display the review screen. ui_gcs() starts the async NBGL review
     // and signs through review_choice -> io_seproxyhal_touch_tx_ok on approval, so
     // the APDU reply is sent later, not here.
+    appState = APP_STATE_REVIEWING_GCS;
     if (!ui_gcs()) {
         PRINTF("GCS start flow: ui_gcs() failed!\n");
         return send_gcs_flow_status(E_INCORRECT_DATA);

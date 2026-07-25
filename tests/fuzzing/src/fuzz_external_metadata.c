@@ -9,6 +9,7 @@
 #include "enum_value.h"
 #include "proxy_info.h"
 #include "trusted_name.h"
+#include "tlv_apdu.h"
 
 void fuzz_external_metadata_set_certificate_status(uint8_t control);
 
@@ -41,7 +42,7 @@ static void fuzz_external_metadata_apdu_stream(const uint8_t *data, size_t size)
 
         switch (ins) {
             case INS_PROVIDE_TRUSTED_NAME:
-                (void) handle_trusted_name(p1, payload, (uint8_t) payload_len);
+                (void) handle_trusted_name(p1, p2, payload, (uint8_t) payload_len);
                 break;
             case INS_PROVIDE_PROXY_INFO:
                 (void) handle_proxy_info(p1, p2, (uint8_t) payload_len, payload);
@@ -59,13 +60,7 @@ static void fuzz_external_metadata_apdu_stream(const uint8_t *data, size_t size)
 }
 
 static void reset_external_metadata_context(void) {
-    /*
-     * tlv_from_apdu() owns a private reassembly buffer. Starting an empty TLV
-     * resets either a pending fragmented payload or a completed empty payload,
-     * keeping fuzz inputs independent without exposing production-only APIs.
-     */
-    const uint8_t empty_tlv[] = {0x00, 0x00};
-    (void) handle_proxy_info(P1_FIRST_CHUNK, 0, sizeof(empty_tlv), empty_tlv);
+    tlv_apdu_reset();
     trusted_name_cleanup();
     proxy_cleanup();
     enum_value_cleanup();

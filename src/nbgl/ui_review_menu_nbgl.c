@@ -608,13 +608,17 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
 
     uint64_t chain_id = chainConfig->chainId;
     e_name_type type = TN_TYPE_ACCOUNT;
-    e_name_source source = TN_SOURCE_ENS;
-    bool trusted_name_loaded = has_trusted_name();
+    e_name_source sources[] = {TN_SOURCE_ENS, TN_SOURCE_MAB};
     const s_trusted_name *trusted_name =
-        get_trusted_name(1, &type, 1, &source, &chain_id, &txContent.destination[1]);
+        get_trusted_name(1,
+                         &type,
+                         ARRAYLEN(sources),
+                         sources,
+                         &chain_id,
+                         &txContent.destination[1]);
     bool trusted_name_match = trusted_name != NULL;
     PRINTF("### trusted_name_match:%d\n", trusted_name_match);
-    if (trusted_name_loaded) {
+    if (trusted_name_match) {
         txInfos.flowIcon = &APP_TRON_HOME_ICON;
         infoLongPress.icon = &APP_TRON_HOME_ICON;
     }
@@ -652,7 +656,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 // Show the resolved name with an ENS alias so the user can reveal
                 // the underlying address. Mirrors app-ethereum's ui_approve_tx().
                 txInfos.fields[idx].value = trusted_name->name;
-                toTrustedNameExt.aliasType = ENS_ALIAS;
+                toTrustedNameExt.aliasType = (trusted_name->name_source == TN_SOURCE_MAB)
+                                                 ? ADDRESS_BOOK_ALIAS
+                                                 : ENS_ALIAS;
                 toTrustedNameExt.title = trusted_name->name;
                 toTrustedNameExt.fullValue = strings.common.toAddress;
                 toTrustedNameExt.explanation = strings.common.toAddress;

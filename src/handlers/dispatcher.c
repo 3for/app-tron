@@ -31,8 +31,10 @@
 
 #include "cmd_tx_info.h"
 #include "cmd_field.h"
+#include "cmd_sign_flow.h"
 #include "cmd_proxy_info.h"
 #include "cmd_enum_value.h"
+#include "tlv_apdu.h"
 
 #ifdef HAVE_GATING_SUPPORT
 #include "cmd_get_gating.h"
@@ -53,6 +55,12 @@ static int send_gtp_status(uint16_t sw) {
 
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
+    if (tlv_apdu_in_progress() &&
+        ((cmd->cla != CLA) || !tlv_apdu_owner_matches(cmd->ins))) {
+        PRINTF("Aborted metadata stream on mismatched APDU\n");
+        tlv_apdu_reset();
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
     if (cmd->cla != CLA) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
@@ -71,7 +79,10 @@ int apdu_dispatcher(const command_t *cmd) {
         PRINTF("Refused APDU while personal-message review is active\n");
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
-
+    if (gcs_review_in_progress()) {
+        PRINTF("Refused APDU while GCS review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
         if ((cmd->ins != INS_GET_PUBLIC_KEY) && (cmd->ins != INS_SIGN)) {
@@ -165,7 +176,7 @@ int apdu_dispatcher(const command_t *cmd) {
             return handle_get_challenge(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_PROVIDE_TRUSTED_NAME:
-            return io_send_sw(handle_trusted_name(cmd->p1, cmd->data, cmd->lc));
+            return io_send_sw(handle_trusted_name(cmd->p1, cmd->p2, cmd->data, cmd->lc));
 
         case INS_PROVIDE_ENUM_VALUE:
             return io_send_sw(handle_enum_value(cmd->p1, cmd->p2, cmd->lc, cmd->data));

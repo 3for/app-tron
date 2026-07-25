@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 // Generic Clear Signing "start flow" trigger.
 //
 // Sent by the host (INS_SIGN_GCS, P2_GCS_START_FLOW) after the GCS
@@ -10,3 +12,4 @@
 // Returns 0 on success (the APDU reply is sent asynchronously by the review
 // callback) or the int returned by io_send_sw() on error.
 int handle_gcs_start_flow(void);
+bool gcs_review_in_progress(void);

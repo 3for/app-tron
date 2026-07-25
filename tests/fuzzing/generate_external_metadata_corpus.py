@@ -9,6 +9,7 @@ INS_TRUSTED_NAME = 0x22
 INS_ENUM_VALUE = 0x24
 INS_PROXY_INFO = 0x2A
 P1_FIRST_CHUNK = 0x01
+P1_FOLLOWING_CHUNK = 0x00
 
 TRON_ADDRESS = b"TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"
 TRON_ADDRESS_2 = b"TFMA7iav1S9K46K2QaSKL5PV73qk4LcEcZ"
@@ -43,10 +44,12 @@ def single_chunk(ins: int, descriptor: bytes) -> bytes:
 
 def fragmented(ins: int, descriptor: bytes, split: int) -> bytes:
     first = len(descriptor).to_bytes(2, "big") + descriptor[:split]
-    return record(ins, P1_FIRST_CHUNK, first) + record(ins, 0, descriptor[split:])
+    return record(ins, P1_FIRST_CHUNK, first) + record(
+        ins, P1_FOLLOWING_CHUNK, descriptor[split:]
+    )
 
 
-def trusted_name_v1(challenge: int = 0) -> bytes:
+def trusted_name_v1(challenge: int = 0, key_id: int = 7) -> bytes:
     return b"".join(
         [
             tlv(0x01, 0x03),
@@ -55,6 +58,47 @@ def trusted_name_v1(challenge: int = 0) -> bytes:
             tlv(0x20, "ledger.eth"),
             tlv(0x22, TRON_ADDRESS),
             tlv(0x12, challenge),
+            tlv(0x13, key_id),
+            tlv(0x14, 1),
+            tlv(0x15, DUMMY_DER_SIGNATURE),
+        ]
+    )
+
+
+def trusted_name_v2_cal(
+    chain_id: int = TRON_MAINNET_CHAIN_ID,
+    key_id: int = 9,
+    name: str = "Test Token",
+) -> bytes:
+    return b"".join(
+        [
+            tlv(0x01, 0x03),
+            tlv(0x02, 0x02),
+            tlv(0x70, 0x04),
+            tlv(0x71, 0x01),
+            tlv(0x20, name),
+            tlv(0x22, TRON_ADDRESS),
+            tlv(0x23, chain_id),
+            tlv(0x13, key_id),
+            tlv(0x14, 1),
+            tlv(0x15, DUMMY_DER_SIGNATURE),
+        ]
+    )
+
+
+def trusted_name_v2_mab(path: bytes) -> bytes:
+    return b"".join(
+        [
+            tlv(0x01, 0x03),
+            tlv(0x02, 0x02),
+            tlv(0x70, 0x01),
+            tlv(0x71, 0x07),
+            tlv(0x20, "Address Book"),
+            tlv(0x22, TRON_ADDRESS),
+            tlv(0x23, TRON_MAINNET_CHAIN_ID),
+            tlv(0x12, 0),
+            tlv(0x74, b"\x00" * 20),
+            tlv(0x75, path),
             tlv(0x13, 7),
             tlv(0x14, 1),
             tlv(0x15, DUMMY_DER_SIGNATURE),
@@ -121,6 +165,86 @@ def main() -> None:
             status,
             single_chunk(INS_PROXY_INFO, proxy),
         )
+
+    cal = trusted_name_v2_cal()
+    write_seed("09-trusted-name-cal.bin", 0x80, single_chunk(INS_TRUSTED_NAME, cal))
+    write_seed(
+        "10-domain-certificate-for-cal.bin",
+        0,
+        single_chunk(INS_TRUSTED_NAME, cal),
+    )
+    write_seed(
+        "11-cal-certificate-for-domain.bin",
+        0x80,
+        single_chunk(INS_TRUSTED_NAME, trusted),
+    )
+    write_seed(
+        "12-cal-wrong-key-id.bin",
+        0x80,
+        single_chunk(INS_TRUSTED_NAME, trusted_name_v2_cal(key_id=7)),
+    )
+    write_seed(
+        "13-trusted-name-oversized-declaration.bin",
+        0,
+        record(INS_TRUSTED_NAME, P1_FIRST_CHUNK, (513).to_bytes(2, "big")),
+    )
+    write_seed(
+        "14-cross-ins-continuation.bin",
+        0,
+        record(
+            INS_TRUSTED_NAME,
+            P1_FIRST_CHUNK,
+            (300).to_bytes(2, "big") + trusted[:20],
+        )
+        + record(INS_PROXY_INFO, P1_FOLLOWING_CHUNK, proxy[:20]),
+    )
+    write_seed(
+        "15-zero-length-continuation.bin",
+        0,
+        record(
+            INS_TRUSTED_NAME,
+            P1_FIRST_CHUNK,
+            len(trusted).to_bytes(2, "big") + trusted[:20],
+        )
+        + record(INS_TRUSTED_NAME, P1_FOLLOWING_CHUNK, b""),
+    )
+    write_seed(
+        "16-invalid-trusted-name-p1-p2.bin",
+        0,
+        record(INS_TRUSTED_NAME, 0x7F, b"", p2=1),
+    )
+    write_seed(
+        "17-replayed-cal-descriptor.bin",
+        0x80,
+        b"".join(single_chunk(INS_TRUSTED_NAME, cal) for _ in range(12)),
+    )
+    write_seed(
+        "18-trusted-name-cache-cap.bin",
+        0x80,
+        b"".join(
+            single_chunk(
+                INS_TRUSTED_NAME,
+                trusted_name_v2_cal(chain_id=TRON_MAINNET_CHAIN_ID + i),
+            )
+            for i in range(10)
+        ),
+    )
+    write_seed(
+        "19-mab-ten-component-path.bin",
+        0,
+        single_chunk(
+            INS_TRUSTED_NAME,
+            trusted_name_v2_mab(bytes([10]) + (b"\x80\x00\x00\x00" * 10)),
+        ),
+    )
+    write_seed(
+        "20-mab-path-trailing-byte.bin",
+        0,
+        single_chunk(
+            INS_TRUSTED_NAME,
+            trusted_name_v2_mab(bytes([1]) + b"\x80\x00\x00\x00\xff"),
+        ),
+    )
 
 
 if __name__ == "__main__":

@@ -403,7 +403,12 @@ uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *da
 
     switch (p2) {
         case 0x00:
-            if (!tlv_from_apdu(p1 == P1_FIRST_CHUNK, length, data, &handle_tlv_payload)) {
+            if (!tlv_from_apdu(INS_PROVIDE_GATING,
+                               p1 == P1_FIRST_CHUNK,
+                               length,
+                               data,
+                               UINT16_MAX,
+                               &handle_tlv_payload)) {
                 sw = SWO_INCORRECT_DATA;
             } else {
                 sw = SWO_SUCCESS;

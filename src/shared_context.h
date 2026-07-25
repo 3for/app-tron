@@ -52,7 +52,8 @@ typedef enum {
     APP_STATE_SIGNING_TIP712,
     // Used while a TriggerSmartContract is being clear-signed through the
     // generic_tx_parser (GCS) module ported from app-ethereum.
-    APP_STATE_SIGNING_TX
+    APP_STATE_SIGNING_TX,
+    APP_STATE_REVIEWING_GCS
 } app_state_t;
 
 // The GCS module (generic_tx_parser) ported from app-ethereum refers to the

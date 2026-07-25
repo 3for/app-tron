@@ -13,6 +13,8 @@ from utils import to_sun
 from client.status_word import StatusWord
 from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from client.command_builder import CommandBuilder
+from client.keychain import Key, sign_data
+from client.ledger_pki import PKIPubKeyUsage
 from client.tlv import eth_to_tron_base58
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
@@ -48,6 +50,24 @@ def common(app_client: TronClient,
         challenge = app_client.exchange_raw(cmd_builder.get_challenge())
         return ResponseParser.challenge(challenge.data)
     return None
+
+
+def provide_trusted_name_with_key(app_client: TronClient,
+                                  descriptor: TrustedName,
+                                  signing_key: Key,
+                                  certificate_from_cal: bool) -> None:
+    """Send a descriptor whose source/key-id fields intentionally differ
+    from its signer."""
+    descriptor.signature = b""
+    unsigned_payload = descriptor.serialize()
+    assert unsigned_payload.endswith(b"\x15\x00")
+    descriptor.signature = sign_data(signing_key, unsigned_payload[:-2])
+
+    app_client.pki_client.send_certificate(
+        PKIPubKeyUsage.PUBKEY_USAGE_TRUSTED_NAME,
+        certificate_from_cal)
+    for apdu in CommandBuilder().provide_trusted_name(descriptor.serialize()):
+        app_client.exchange_raw(apdu)
 
 
 def trusted_name_tx(app_client: TronClient, tx_params: dict) -> bytes:
@@ -380,6 +400,32 @@ def test_trusted_name_v2_missing_challenge(backend: BackendInterface):
                         tn_type=TrustedNameType.ACCOUNT,
                         tn_source=TrustedNameSource.ENS,
                         chain_id=CHAIN_ID))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_rejects_cal_certificate_for_ens(backend: BackendInterface):
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+    descriptor = TrustedName(2, ADDR_B58, NAME,
+                             tn_type=TrustedNameType.ACCOUNT,
+                             tn_source=TrustedNameSource.ENS,
+                             chain_id=CHAIN_ID,
+                             challenge=challenge)
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        provide_trusted_name_with_key(app_client, descriptor, Key.CAL, True)
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_rejects_domain_certificate_for_cal(backend: BackendInterface):
+    app_client = TronClient(backend)
+    descriptor = TrustedName(2, ADDR_B58, "Token",
+                             tn_type=TrustedNameType.TOKEN,
+                             tn_source=TrustedNameSource.CAL,
+                             chain_id=CHAIN_ID)
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        provide_trusted_name_with_key(app_client, descriptor, Key.TRUSTED_NAME, False)
     assert e.value.status == StatusWord.INVALID_DATA
 
 

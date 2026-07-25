@@ -8,6 +8,8 @@
 #include "bip32_utils.h"
 
 #define TRUSTED_NAME_MAX_LENGTH 30
+#define TRUSTED_NAME_DESCRIPTOR_MAX_LENGTH 512
+#define MAX_TRUSTED_NAMES 8
 
 // clang-format off
 typedef enum {
@@ -40,6 +42,9 @@ typedef enum {
     TN_KEY_ID_CAL = 0x09
 } e_tn_key_id;
 
+_Static_assert(sizeof(e_name_type) == sizeof(uint8_t), "e_name_type must use the wire ABI");
+_Static_assert(sizeof(e_name_source) == sizeof(uint8_t), "e_name_source must use the wire ABI");
+
 typedef struct {
     flist_node_t _list;
     uint8_t struct_version;
@@ -62,6 +67,7 @@ typedef struct {
     uint8_t owner[ADDRESS_LENGTH];
     bip32_path_t owner_deriv_path;
     TLV_reception_t received_tags;
+    bool challenge_received;
 } s_trusted_name_ctx;
 // clang-format on
 
@@ -73,7 +79,7 @@ const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const uint8_t *addr);
 
 bool handle_trusted_name_tlv_payload(const buffer_t *buf, s_trusted_name_ctx *context);
-bool verify_trusted_name_struct(const s_trusted_name_ctx *ctx);
+uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *ctx);
 void trusted_name_cleanup(void);
 
 // TRON addition: used by the UI to know whether a trusted name was loaded.

@@ -73,3 +73,5 @@ bool check_signature_with_pubkey(uint8_t *buffer,
                                  const uint8_t keyUsageExp,
                                  const uint8_t *signature,
                                  const uint8_t sigLen);
+
+bool check_loaded_pki_certificate_name(const char *expected_name);

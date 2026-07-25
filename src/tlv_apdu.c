@@ -12,29 +12,56 @@
 #include "challenge.h"
 #include "chain_config.h"
 
-static uint8_t *g_tlv_payload = NULL;
-static uint16_t g_tlv_size = 0;
-static uint16_t g_tlv_pos = 0;
+static uint8_t *g_tlv_payload;
+static uint16_t g_tlv_size;
+static uint16_t g_tlv_pos;
+static uint8_t g_tlv_owner;
+static f_tlv_payload_handler g_tlv_handler;
 
 static void reset_state(void) {
+    if (g_tlv_payload != NULL) {
+        explicit_bzero(g_tlv_payload, g_tlv_size);
+    }
     APP_MEM_FREE_AND_NULL((void **) &g_tlv_payload);
     g_tlv_size = 0;
     g_tlv_pos = 0;
+    g_tlv_owner = 0;
+    g_tlv_handler = NULL;
 }
 
 void tlv_apdu_reset(void) {
     reset_state();
 }
 
-bool tlv_from_apdu(bool first_chunk,
+bool tlv_apdu_in_progress(void) {
+    return g_tlv_payload != NULL;
+}
+
+bool tlv_apdu_owner_matches(uint8_t owner) {
+    return tlv_apdu_in_progress() && (g_tlv_owner == owner);
+}
+
+bool tlv_from_apdu(uint8_t owner,
+                   bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,
+                   uint16_t max_payload_size,
                    f_tlv_payload_handler handler) {
     bool ret = true;
     uint8_t offset = 0;
     uint8_t chunk_length;
 
+    if ((handler == NULL) || (max_payload_size == 0)) {
+        reset_state();
+        return false;
+    }
+
     if (first_chunk) {
+        if (g_tlv_payload != NULL) {
+            PRINTF("Error: remnants from an incomplete TLV payload!\n");
+            reset_state();
+            return false;
+        }
         if ((offset + sizeof(g_tlv_size)) > lc) {
             reset_state();
             return false;
@@ -42,8 +69,8 @@ bool tlv_from_apdu(bool first_chunk,
         g_tlv_size = read_u16_be(payload, offset);
         offset += sizeof(g_tlv_size);
         g_tlv_pos = 0;
-        if (g_tlv_payload != NULL) {
-            PRINTF("Error: remnants from an incomplete TLV payload!\n");
+        if ((g_tlv_size == 0) || (g_tlv_size > max_payload_size)) {
+            PRINTF("TLV payload length out of bounds: %u\n", g_tlv_size);
             reset_state();
             return false;
         }
@@ -53,7 +80,14 @@ bool tlv_from_apdu(bool first_chunk,
                 reset_state();
                 return false;
             }
+            g_tlv_owner = owner;
+            g_tlv_handler = handler;
         }
+    } else if ((g_tlv_payload == NULL) || (g_tlv_owner != owner) ||
+               (g_tlv_handler != handler) || (lc == 0)) {
+        PRINTF("Invalid or non-progressing TLV continuation\n");
+        reset_state();
+        return false;
     }
     chunk_length = lc - offset;
     if ((g_tlv_pos + chunk_length) > g_tlv_size) {

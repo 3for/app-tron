@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "public_keys.h"
 #include "ledger_pki.h"
 
@@ -59,4 +61,35 @@ bool check_signature_with_pubkey(uint8_t *hash,
     }
 #endif
     return ret;
+}
+
+bool check_loaded_pki_certificate_name(const char *expected_name) {
+#ifdef HAVE_BYPASS_SIGNATURES
+    UNUSED(expected_name);
+    return true;
+#else
+    uint8_t key_usage = 0;
+    uint8_t trusted_name[CERTIFICATE_TRUSTED_NAME_MAXLEN] = {0};
+    size_t trusted_name_len = 0;
+    cx_ecfp_384_public_key_t public_key = {0};
+
+    if (expected_name == NULL) {
+        return false;
+    }
+    if (os_pki_get_info(&key_usage, trusted_name, &trusted_name_len, &public_key) != 0) {
+        PRINTF("Failed to retrieve loaded PKI certificate identity\n");
+        return false;
+    }
+    if (key_usage != CERTIFICATE_PUBLIC_KEY_USAGE_TRUSTED_NAME) {
+        return false;
+    }
+    if (trusted_name_len > sizeof(trusted_name)) {
+        return false;
+    }
+    if ((trusted_name_len > 0) && (trusted_name[trusted_name_len - 1] == '\0')) {
+        trusted_name_len--;
+    }
+    return (trusted_name_len == strlen(expected_name)) &&
+           (memcmp(trusted_name, expected_name, trusted_name_len) == 0);
+#endif
 }

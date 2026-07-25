@@ -314,6 +314,7 @@ static const nbgl_contentValueExt_t *handle_extra_data_trusted_name(
             alias_type = ENS_ALIAS;
             break;
         case TN_SOURCE_LAB:
+        case TN_SOURCE_MAB:
             alias_type = ADDRESS_BOOK_ALIAS;
             break;
         default:
