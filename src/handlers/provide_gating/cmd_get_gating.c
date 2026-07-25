@@ -53,6 +53,7 @@
 
 #define GATING_MSG_SIZE 100
 #define GATING_URL_SIZE 30
+#define GATING_DESCRIPTOR_MAX_LENGTH 512
 
 // clang-format off
 typedef enum {
@@ -63,10 +64,10 @@ typedef enum {
 
 typedef struct gating_s {
     uint64_t chain_id;
-    const uint8_t hash_selector[CX_SHA224_SIZE];  // function selector for SignTx or schemaHash for TIP712
-    const char intro_msg[GATING_MSG_SIZE + 1];    // +1 for the null terminator
-    const char tiny_url[GATING_URL_SIZE + 1];     // +1 for the null terminator
-    const uint8_t address[ADDRESS_LENGTH];        // Contract address to check in the gating
+    uint8_t hash_selector[CX_SHA224_SIZE];  // function selector for SignTx or schemaHash for TIP712
+    char intro_msg[GATING_MSG_SIZE + 1];    // +1 for the null terminator
+    char tiny_url[GATING_URL_SIZE + 1];     // +1 for the null terminator
+    uint8_t address[ADDRESS_LENGTH];        // Contract address to check in the gating
     tx_type_t type;
 } gating_t;
 
@@ -76,6 +77,7 @@ typedef struct {
     const uint8_t *sig;
     cx_sha256_t hash_ctx;
     TLV_reception_t received_tags;
+    uint8_t hash_selector_size;
 } s_gating_ctx;
 // clang-format on
 
@@ -124,7 +126,11 @@ static bool parse_hash_selector(const tlv_data_t *data, s_gating_ctx *context) {
         PRINTF("HASH/SELECTOR: invalid size\n");
         return false;
     }
-    return tlv_get_hash(data, (uint8_t *) context->gating->hash_selector, data->value.size);
+    if (!tlv_get_hash(data, context->gating->hash_selector, data->value.size)) {
+        return false;
+    }
+    context->hash_selector_size = data->value.size;
+    return true;
 }
 
 /**
@@ -135,7 +141,7 @@ static bool parse_hash_selector(const tlv_data_t *data, s_gating_ctx *context) {
  * @return whether it was successful
  */
 static bool parse_address(const tlv_data_t *data, s_gating_ctx *context) {
-    if (!tlv_get_address(data, (uint8_t *) context->gating->address)) {
+    if (!tlv_get_address(data, context->gating->address)) {
         return false;
     }
     if (allzeroes(context->gating->address, ADDRESS_LENGTH) == 1) {
@@ -165,7 +171,7 @@ static bool parse_chain_id(const tlv_data_t *data, s_gating_ctx *context) {
  */
 static bool parse_intro_msg(const tlv_data_t *data, s_gating_ctx *context) {
     if (!tlv_get_printable_string(data,
-                                  (char *) context->gating->intro_msg,
+                                  context->gating->intro_msg,
                                   0,
                                   sizeof(context->gating->intro_msg))) {
         PRINTF("INTRO_MSG: error\n");
@@ -183,7 +189,7 @@ static bool parse_intro_msg(const tlv_data_t *data, s_gating_ctx *context) {
  */
 static bool parse_tiny_url(const tlv_data_t *data, s_gating_ctx *context) {
     if (!tlv_get_printable_string(data,
-                                  (char *) context->gating->tiny_url,
+                                  context->gating->tiny_url,
                                   0,
                                   sizeof(context->gating->tiny_url))) {
         PRINTF("TINY_URL: error\n");
@@ -317,10 +323,15 @@ static bool verify_fields(s_gating_ctx *context) {
             if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHAIN_ID)) {
                 return false;
             }
+            if (TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_HASH_SELECTOR) &&
+                (context->hash_selector_size != CALLDATA_SELECTOR_SIZE)) {
+                return false;
+            }
             break;
         case TX_TYPE_TYPED_DATA:
             // For TIP-712, we expect the schema hash
-            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_HASH_SELECTOR)) {
+            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_HASH_SELECTOR) ||
+                (context->hash_selector_size != CX_SHA224_SIZE)) {
                 return false;
             }
             break;
@@ -362,30 +373,32 @@ static void print_gating_info(s_gating_ctx *context) {
  */
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_gating_ctx ctx = {0};
+    gating_t *candidate = NULL;
+    gating_t *previous;
 
-    // Free any previously allocated GATING to avoid memory leak
-    APP_MEM_FREE(GATING);
-
-    if (APP_MEM_CALLOC((void **) &GATING, sizeof(gating_t)) == false) {
+    if (APP_MEM_CALLOC((void **) &candidate, sizeof(*candidate)) == false) {
         PRINTF("Error: Not enough memory!\n");
         return false;
     }
-    ctx.gating = GATING;
+    ctx.gating = candidate;
 
     // Initialize the hash context
     cx_sha256_init(&ctx.hash_ctx);
 
     if (!gating_tlv_parser(buf, &ctx, &ctx.received_tags)) {
-        APP_MEM_FREE_AND_NULL((void **) &GATING);
+        APP_MEM_FREE(candidate);
         return false;
     }
 
     if (!verify_fields(&ctx) || !verify_signature(&ctx)) {
-        APP_MEM_FREE_AND_NULL((void **) &GATING);
+        APP_MEM_FREE(candidate);
         return false;
     }
 
     print_gating_info(&ctx);
+    previous = GATING;
+    GATING = candidate;
+    APP_MEM_FREE(previous);
     return true;
 }
 
@@ -401,13 +414,18 @@ static bool handle_tlv_payload(const buffer_t *buf) {
 uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *data) {
     uint16_t sw = SWO_PARAMETER_ERROR_NO_INFO;
 
+    if ((p1 != P1_FIRST_CHUNK) && (p1 != P1_FOLLOWING_CHUNK)) {
+        tlv_apdu_reset();
+        return SWO_WRONG_P1_P2;
+    }
     switch (p2) {
         case 0x00:
             if (!tlv_from_apdu(INS_PROVIDE_GATING,
+                               p2,
                                p1 == P1_FIRST_CHUNK,
                                length,
                                data,
-                               UINT16_MAX,
+                               GATING_DESCRIPTOR_MAX_LENGTH,
                                &handle_tlv_payload)) {
                 sw = SWO_INCORRECT_DATA;
             } else {
@@ -416,6 +434,7 @@ uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *da
             break;
         default:
             PRINTF("Error: Unexpected P2 (%u)!\n", p2);
+            tlv_apdu_reset();
             sw = SWO_WRONG_P1_P2;
             break;
     }

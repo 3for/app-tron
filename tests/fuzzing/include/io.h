@@ -10,3 +10,4 @@
 #endif
 
 int io_send_sw(uint16_t sw);
+int io_send_response_pointer(const uint8_t *buffer, uint16_t tx, uint16_t sw);

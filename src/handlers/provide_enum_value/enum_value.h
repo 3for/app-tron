@@ -7,6 +7,8 @@
 #include "cx.h"
 
 #define MAX_ENUM_NAME_SIZE 21
+#define ENUM_VALUE_DESCRIPTOR_MAX_LENGTH 256
+#define MAX_ENUM_VALUES 16
 // 4-byte EVM function selector.
 #define SELECTOR_SIZE      4
 
@@ -29,7 +31,7 @@ typedef struct {
 } s_enum_value_ctx;
 
 bool handle_enum_value_tlv_payload(const buffer_t *buf, s_enum_value_ctx *context);
-bool verify_enum_value_struct(const s_enum_value_ctx *context);
+uint16_t verify_enum_value_struct(const s_enum_value_ctx *context);
 const s_enum_value_entry *get_matching_enum(const uint64_t *chain_id,
                                             const uint8_t *contract_addr,
                                             const uint8_t *selector,

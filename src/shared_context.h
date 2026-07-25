@@ -90,6 +90,7 @@ typedef struct transactionContext_t {
     uint8_t signatureLength;
     union extraInfo_t extraInfo[MAX_ASSETS];
     bool assetSet[MAX_ASSETS];
+    asset_kind_t assetKind[MAX_ASSETS];
     uint8_t currentAssetIndex;
 } transactionContext_t;
 

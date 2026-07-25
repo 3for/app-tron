@@ -50,4 +50,10 @@ typedef union extraInfo_t {
     nftInfo_t nft;
 #endif
 } extraInfo_t;
+
+typedef enum {
+    ASSET_KIND_NONE = 0,
+    ASSET_KIND_TOKEN,
+    ASSET_KIND_NFT,
+} asset_kind_t;
 // --8<-- [end:asset_info]

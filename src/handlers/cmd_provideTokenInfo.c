@@ -7,21 +7,26 @@
 #include "ui_globals.h"
 #include "app_errors.h"
 #include "os_pki.h"
+#include "parse.h"
 
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,
                                        uint8_t dataLength) {
-    UNUSED(p1);
-    UNUSED(p2);
     uint32_t offset = 0;
+    uint32_t decimals;
     uint8_t tickerLength;
     uint64_t chain_id;
     uint8_t hash[INT256_LENGTH];
-    tokenDefinition_t *token = &get_current_asset_info()->token;
+    extraInfo_t candidate = {0};
+    tokenDefinition_t *token = &candidate.token;
+    int asset_index;
 
     PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
 
+    if ((p1 != 0x00) || (p2 != 0x00)) {
+        return io_send_sw(E_INCORRECT_P1_P2);
+    }
     if (dataLength < 1) {
         return io_send_sw(E_INCORRECT_DATA);
     }
@@ -44,7 +49,7 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     dataLength -= tickerLength;
     // The address is a 34-char TRON Base58Check string ("T..."); decode +
     // checksum-validate it to the canonical 20-byte (EVM) form retained internally,
-    // so get_asset_info_by_addr() and the UI/token comparison logic are unchanged.
+    // so typed asset lookup and the UI/token comparison logic are unchanged.
     if (!tronBase58ToBinaryLen((const char *) (workBuffer + offset),
                                TRON_BASE58CHECK_ADDRESS_SIZE,
                                token->address)) {
@@ -53,7 +58,11 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     offset += TRON_BASE58CHECK_ADDRESS_SIZE;
     dataLength -= TRON_BASE58CHECK_ADDRESS_SIZE;
     // TODO: 4 bytes for this is overkill
-    token->decimals = U4BE(workBuffer, offset);
+    decimals = U4BE(workBuffer, offset);
+    if (decimals > UINT8_MAX) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    token->decimals = (uint8_t) decimals;
     offset += 4;
     dataLength -= 4;
     // TODO: Handle 64-bit long chain IDs
@@ -77,7 +86,10 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
         return io_send_sw(E_INCORRECT_DATA);
 #endif
     }
-    G_io_apdu_buffer[0] = tmpCtx.transactionContext.currentAssetIndex;
-    validate_current_asset_info();
+    asset_index = commit_current_asset_info(ASSET_KIND_TOKEN, &candidate);
+    if (asset_index < 0) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    G_io_apdu_buffer[0] = (uint8_t) asset_index;
     return io_send_response_pointer(G_io_apdu_buffer, 1, E_OK);
 }

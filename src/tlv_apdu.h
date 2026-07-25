@@ -18,9 +18,10 @@ typedef bool (*f_tlv_payload_handler)(const buffer_t *payload);
 
 void tlv_apdu_reset(void);
 bool tlv_apdu_in_progress(void);
-bool tlv_apdu_owner_matches(uint8_t owner);
+bool tlv_apdu_owner_matches(uint8_t owner, uint8_t owner_p2);
 
 bool tlv_from_apdu(uint8_t owner,
+                   uint8_t owner_p2,
                    bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,

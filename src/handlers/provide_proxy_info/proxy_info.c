@@ -186,9 +186,27 @@ bool handle_proxy_info_tlv_payload(const buffer_t *buf, s_proxy_info_ctx *contex
     return proxy_info_tlv_parser(buf, context, &context->received_tags);
 }
 
+static bool verify_fields(const s_proxy_info_ctx *context) {
+    return TLV_CHECK_RECEIVED_TAGS(context->received_tags,
+                                   TAG_STRUCT_TYPE,
+                                   TAG_STRUCT_VERSION,
+                                   TAG_CHALLENGE,
+                                   TAG_ADDRESS,
+                                   TAG_CHAIN_ID,
+                                   TAG_IMPLEM_ADDRESS,
+                                   TAG_DELEGATION_TYPE,
+                                   TAG_SIGNATURE);
+}
+
 bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
     uint8_t hash[INT256_LENGTH];
+    s_proxy_info *new_proxy_info;
+    s_proxy_info *old_proxy_info;
 
+    if (!verify_fields(context)) {
+        PRINTF("Error: Missing mandatory proxy fields!\n");
+        return false;
+    }
     if (finalize_hash((cx_hash_t *) &context->struct_hash, hash, sizeof(hash)) != true) {
         return false;
     }
@@ -202,11 +220,15 @@ bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
                                     context->sig_size) != true) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &g_proxy_info, sizeof(s_proxy_info)) == false) {
+    if (APP_MEM_CALLOC((void **) &new_proxy_info, sizeof(*new_proxy_info)) == false) {
         PRINTF("Error: Not enough memory!\n");
         return false;
     }
-    memcpy(g_proxy_info, &context->proxy_info, sizeof(s_proxy_info));
+    memcpy(new_proxy_info, &context->proxy_info, sizeof(*new_proxy_info));
+    old_proxy_info = g_proxy_info;
+    g_proxy_info = new_proxy_info;
+    APP_MEM_FREE(old_proxy_info);
+
     PRINTF("================== PROXY INFO ====================\n");
     PRINTF("chain ID = %u\n", (uint32_t) g_proxy_info->chain_id);
     PRINTF("address = 0x%.*h\n", sizeof(g_proxy_info->address), g_proxy_info->address);
@@ -223,16 +245,21 @@ bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
 static bool check_proxy_params(const uint64_t *chain_id,
                                const uint8_t *addr,
                                const uint8_t *selector,
+                               bool has_selector,
                                const uint64_t *ref_chain_id,
                                const uint8_t *ref_addr,
                                const uint8_t *ref_selector) {
-    if ((chain_id == NULL) || (*chain_id != *ref_chain_id)) {
+    if ((chain_id == NULL) || (addr == NULL) || (ref_chain_id == NULL) ||
+        (ref_addr == NULL) || (*chain_id != *ref_chain_id)) {
         return false;
     }
     if (memcmp(addr, ref_addr, ADDRESS_LENGTH) != 0) {
         return false;
     }
-    if (selector != NULL) {
+    if (has_selector) {
+        if ((selector == NULL) || (ref_selector == NULL)) {
+            return false;
+        }
         if (memcmp(selector, ref_selector, CALLDATA_SELECTOR_SIZE) != 0) {
             return false;
         }
@@ -250,7 +277,8 @@ const uint8_t *get_proxy_contract(const uint64_t *chain_id,
 
     if (!check_proxy_params(chain_id,
                             addr,
-                            g_proxy_info->has_selector ? selector : NULL,
+                            selector,
+                            g_proxy_info->has_selector,
                             &g_proxy_info->chain_id,
                             g_proxy_info->implem_address,
                             g_proxy_info->selector)) {
@@ -269,7 +297,8 @@ const uint8_t *get_implem_contract(const uint64_t *chain_id,
 
     if (!check_proxy_params(chain_id,
                             addr,
-                            g_proxy_info->has_selector ? selector : NULL,
+                            selector,
+                            g_proxy_info->has_selector,
                             &g_proxy_info->chain_id,
                             g_proxy_info->address,
                             g_proxy_info->selector)) {

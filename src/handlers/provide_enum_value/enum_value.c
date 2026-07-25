@@ -7,6 +7,7 @@
 #include "hash_bytes.h"
 #include "tlv_apdu.h"
 #include "lcx_ecdsa.h"
+#include "app_errors.h"
 
 #define STRUCT_VERSION 0x01
 
@@ -216,27 +217,57 @@ bool handle_enum_value_tlv_payload(const buffer_t *buf, s_enum_value_ctx *contex
     return enum_value_tlv_parser(buf, context, &context->received_tags);
 }
 
-bool verify_enum_value_struct(const s_enum_value_ctx *context) {
+static bool enum_value_key_matches(const s_enum_value_entry *left,
+                                   const s_enum_value_entry *right) {
+    return (left->chain_id == right->chain_id) &&
+           (memcmp(left->contract_addr, right->contract_addr, ADDRESS_LENGTH) == 0) &&
+           (memcmp(left->selector, right->selector, SELECTOR_SIZE) == 0) &&
+           (left->id == right->id) && (left->value == right->value);
+}
+
+static s_enum_value_entry *find_enum_value_key(const s_enum_value_entry *candidate) {
+    for (s_enum_value_entry *entry = g_enum_value_list; entry != NULL;
+         entry = (s_enum_value_entry *) entry->_list.next) {
+        if (enum_value_key_matches(entry, candidate)) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+uint16_t verify_enum_value_struct(const s_enum_value_ctx *context) {
     s_enum_value_entry *entry;
 
     if (!verify_fields(context)) {
         PRINTF("Error: Missing mandatory fields in descriptor!\n");
-        return false;
+        return SWO_INCORRECT_DATA;
     }
 
     if (!verify_signature(context)) {
         PRINTF("Error: Signature verification failed for descriptor!\n");
-        return false;
+        return SWO_INCORRECT_DATA;
+    }
+
+    entry = find_enum_value_key(&context->entry);
+    if (entry != NULL) {
+        flist_node_t list_link = entry->_list;
+        memcpy(entry, &context->entry, sizeof(*entry));
+        entry->_list = list_link;
+        return SWO_SUCCESS;
+    }
+    if (flist_size((flist_node_t **) &g_enum_value_list) >= MAX_ENUM_VALUES) {
+        PRINTF("Error: Too many enum values!\n");
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     if ((entry = APP_MEM_ALLOC(sizeof(*entry))) == NULL) {
         PRINTF("Error: Not enough memory!\n");
-        return false;
+        return SWO_INSUFFICIENT_MEMORY;
     }
 
     memcpy(entry, &context->entry, sizeof(*entry));
     flist_push_back((flist_node_t **) &g_enum_value_list, (flist_node_t *) entry);
-    return true;
+    return SWO_SUCCESS;
 }
 
 static bool is_matching_enum(const s_enum_value_entry *node,

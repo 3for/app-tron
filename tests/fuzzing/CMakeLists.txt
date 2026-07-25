@@ -298,6 +298,8 @@ set(EXTERNAL_METADATA_FUZZ_SOURCES
     ../../src/handlers/provide_proxy_info/proxy_info.c
     ../../src/handlers/provide_enum_value/cmd_enum_value.c
     ../../src/handlers/provide_enum_value/enum_value.c
+    ../../src/handlers/cmd_provideTokenInfo.c
+    ../../src/handlers/provide_nft_information/cmd_provide_nft_info.c
     ../../src/tlv_apdu.c
     ../../src/ledger_pki.c
     ../../src/mem_utils.c

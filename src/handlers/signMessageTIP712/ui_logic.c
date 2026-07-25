@@ -20,6 +20,7 @@
 #include "utils.h"       // ethToTronBase58
 #include "tx_ctx.h"      // g_parked_calldata, validate_instruction_hash
 #include "read.h"        // read_u64_be
+#include "parse.h"       // asset_slot_is_kind
 #include <string.h>
 #include <time.h>
 
@@ -765,7 +766,7 @@ static bool ui_712_format_amount_join(void) {
     const tokenDefinition_t *token = NULL;
     s_amount_join *amount_join;
 
-    if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
+    if (asset_slot_is_kind(ui_ctx->amount.idx, ASSET_KIND_TOKEN)) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     }
     if ((amount_join = get_amount_join(ui_ctx->amount.idx)) == NULL) {
@@ -819,7 +820,7 @@ static bool update_amount_join(const uint8_t *data, uint8_t length) {
     const tokenDefinition_t *token = NULL;
     s_amount_join *amount_join;
 
-    if (tmpCtx.transactionContext.assetSet[ui_ctx->amount.idx]) {
+    if (asset_slot_is_kind(ui_ctx->amount.idx, ASSET_KIND_TOKEN)) {
         token = &tmpCtx.transactionContext.extraInfo[ui_ctx->amount.idx].token;
     } else {
         if (tmpCtx.transactionContext.currentAssetIndex == ui_ctx->amount.idx) {

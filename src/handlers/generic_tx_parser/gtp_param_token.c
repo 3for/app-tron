@@ -72,7 +72,7 @@ bool format_param_token(const s_param_token *param, const char *name) {
             buf_shrink_expand(collec.value[i].ptr, collec.value[i].length, addr, sizeof(addr));
             if (match_native(addr, param)) {
                 ticker = get_displayable_ticker(&chain_id, chainConfig, true);
-            } else if ((token_def = (const tokenDefinition_t *) get_asset_info_by_addr(addr))) {
+            } else if ((token_def = get_token_info_by_addr(addr)) != NULL) {
                 ticker = token_def->ticker;
             }
             if (ticker == NULL) {

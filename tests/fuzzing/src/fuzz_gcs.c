@@ -9,10 +9,32 @@
 #include "tlv_apdu.h"
 #include "tron_tx_stream.h"
 #include "tx_ctx.h"
+#include "parse.h"
+#include "shared_context.h"
 
 void init_tip712_fuzz_environment(void);
 void fuzz_set_settings(uint8_t value);
 void reset_app_context(void);
+
+static void assert_asset_type_isolation(void) {
+#ifndef TARGET_NANOS
+    static const uint8_t nft_address[ADDRESS_LENGTH] = {
+        0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee,
+        0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee,
+    };
+    const uint8_t index = MAX_ASSETS - 1U;
+
+    memcpy(tmpCtx.transactionContext.extraInfo[index].nft.contractAddress,
+           nft_address,
+           sizeof(nft_address));
+    tmpCtx.transactionContext.assetSet[index] = true;
+    tmpCtx.transactionContext.assetKind[index] = ASSET_KIND_NFT;
+    if ((get_token_info_by_addr(nft_address) != NULL) ||
+        (get_nft_info_by_addr(nft_address) == NULL)) {
+        __builtin_trap();
+    }
+#endif
+}
 
 /*
  * Byte stream format:
@@ -76,6 +98,7 @@ void fuzz_reset_extra_context(void) {
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     init_tip712_fuzz_environment();
+    assert_asset_type_isolation();
     if (size != 0U) {
         fuzz_set_settings(*data++);
         size--;

@@ -16,6 +16,7 @@ static uint8_t *g_tlv_payload;
 static uint16_t g_tlv_size;
 static uint16_t g_tlv_pos;
 static uint8_t g_tlv_owner;
+static uint8_t g_tlv_owner_p2;
 static f_tlv_payload_handler g_tlv_handler;
 
 static void reset_state(void) {
@@ -26,6 +27,7 @@ static void reset_state(void) {
     g_tlv_size = 0;
     g_tlv_pos = 0;
     g_tlv_owner = 0;
+    g_tlv_owner_p2 = 0;
     g_tlv_handler = NULL;
 }
 
@@ -37,11 +39,13 @@ bool tlv_apdu_in_progress(void) {
     return g_tlv_payload != NULL;
 }
 
-bool tlv_apdu_owner_matches(uint8_t owner) {
-    return tlv_apdu_in_progress() && (g_tlv_owner == owner);
+bool tlv_apdu_owner_matches(uint8_t owner, uint8_t owner_p2) {
+    return tlv_apdu_in_progress() && (g_tlv_owner == owner) &&
+           (g_tlv_owner_p2 == owner_p2);
 }
 
 bool tlv_from_apdu(uint8_t owner,
+                   uint8_t owner_p2,
                    bool first_chunk,
                    uint8_t lc,
                    const uint8_t *payload,
@@ -81,9 +85,11 @@ bool tlv_from_apdu(uint8_t owner,
                 return false;
             }
             g_tlv_owner = owner;
+            g_tlv_owner_p2 = owner_p2;
             g_tlv_handler = handler;
         }
     } else if ((g_tlv_payload == NULL) || (g_tlv_owner != owner) ||
+               (g_tlv_owner_p2 != owner_p2) ||
                (g_tlv_handler != handler) || (lc == 0)) {
         PRINTF("Invalid or non-progressing TLV continuation\n");
         reset_state();

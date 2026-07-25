@@ -5,10 +5,20 @@
 #include "chain_config.h"
 #include "ledger_pki.h"
 #include "os_pki.h"
+#include "parse.h"
+#include "app_errors.h"
+#include "ui_globals.h"
 
 static uint32_t g_fuzz_challenge;
 static check_signature_with_pki_status_t g_fuzz_pki_status;
 static bool g_fuzz_cal_certificate;
+static chain_config_t g_fuzz_chain_config = {.chainId = TRON_MAINNET_CHAINID};
+
+tmpCtx_t tmpCtx;
+const chain_config_t *chainConfig = &g_fuzz_chain_config;
+uint8_t G_io_apdu_buffer[260];
+const uint8_t LEDGER_SIGNATURE_PUBLIC_KEY[65] = {0};
+const uint8_t LEDGER_NFT_METADATA_PUBLIC_KEY[65] = {0};
 
 void fuzz_external_metadata_set_certificate_status(uint8_t control) {
     g_fuzz_cal_certificate = (control & 0x80U) != 0U;
@@ -77,4 +87,40 @@ bool check_challenge(uint32_t received_challenge) {
 bool chain_is_ethereum_compatible(const uint64_t *chain_id) {
     return (chain_id != NULL) &&
            ((*chain_id == TRON_MAINNET_CHAINID) || (*chain_id == TRON_NILE_CHAINID));
+}
+
+bool app_compatible_with_chain_id(const uint64_t *chain_id) {
+    return (chain_id != NULL) && (*chain_id == chainConfig->chainId);
+}
+
+int io_send_sw(uint16_t sw) {
+    return sw;
+}
+
+int io_send_response_pointer(const uint8_t *buffer, uint16_t tx, uint16_t sw) {
+    (void) buffer;
+    (void) tx;
+    return sw;
+}
+
+void fuzz_external_metadata_reset_assets(void) {
+    memset(&tmpCtx.transactionContext, 0, sizeof(tmpCtx.transactionContext));
+}
+
+bool asset_slot_is_kind(uint8_t index, asset_kind_t kind) {
+    return (index < MAX_ASSETS) && tmpCtx.transactionContext.assetSet[index] &&
+           (tmpCtx.transactionContext.assetKind[index] == kind);
+}
+
+int commit_current_asset_info(asset_kind_t kind, const extraInfo_t *candidate) {
+    uint8_t index = tmpCtx.transactionContext.currentAssetIndex;
+
+    if ((candidate == NULL) || (index >= MAX_ASSETS)) {
+        return -1;
+    }
+    memcpy(&tmpCtx.transactionContext.extraInfo[index], candidate, sizeof(*candidate));
+    tmpCtx.transactionContext.assetSet[index] = true;
+    tmpCtx.transactionContext.assetKind[index] = kind;
+    tmpCtx.transactionContext.currentAssetIndex = (index + 1U) % MAX_ASSETS;
+    return index;
 }

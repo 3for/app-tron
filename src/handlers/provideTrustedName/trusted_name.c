@@ -610,11 +610,12 @@ static void print_trusted_name_info(const s_trusted_name_ctx *context) {
 }
 
 static bool ens_charset(char c) {
-    if (isalpha((int) c)) {
-        if (!islower((int) c)) {
+    const unsigned char value = (unsigned char) c;
+    if (isalpha(value)) {
+        if (!islower(value)) {
             return false;
         }
-    } else if (!isdigit((int) c)) {
+    } else if (!isdigit(value)) {
         switch (c) {
             case '.':
             case '-':
@@ -628,7 +629,8 @@ static bool ens_charset(char c) {
 }
 
 static bool generic_trusted_name_charset(char c) {
-    if (!isalpha((int) c) && !isdigit((int) c)) {
+    const unsigned char value = (unsigned char) c;
+    if (!isalpha(value) && !isdigit(value)) {
         switch (c) {
             case '.':
             case '-':

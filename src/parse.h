@@ -110,10 +110,13 @@ parserStatus_e processStreamedCreateSmartContract(
 int bytes_to_string(char *out, size_t outl, const void *value, size_t len);
 
 void forget_known_assets(void);
-extraInfo_t *get_current_asset_info(void);
-int get_asset_index_by_addr(const uint8_t *addr);
-extraInfo_t *get_asset_info_by_addr(const uint8_t *addr);
-void validate_current_asset_info(void);
+bool asset_slot_is_kind(uint8_t index, asset_kind_t kind);
+int get_token_index_by_addr(const uint8_t *addr);
+const tokenDefinition_t *get_token_info_by_addr(const uint8_t *addr);
+#ifndef TARGET_NANOS
+const nftInfo_t *get_nft_info_by_addr(const uint8_t *addr);
+#endif
+int commit_current_asset_info(asset_kind_t kind, const extraInfo_t *candidate);
 
 typedef struct tron_libargs_s {
     unsigned int id;

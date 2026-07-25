@@ -37,6 +37,7 @@ uint16_t handle_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_
     }
     g_trusted_name_status = SWO_INCORRECT_DATA;
     if (!tlv_from_apdu(INS_PROVIDE_TRUSTED_NAME,
+                       p2,
                        p1 == P1_FIRST_CHUNK,
                        length,
                        data,

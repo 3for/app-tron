@@ -8,13 +8,15 @@ OUT_DIR = Path(__file__).resolve().parent / "corpus" / "fuzz_external_metadata"
 INS_TRUSTED_NAME = 0x22
 INS_ENUM_VALUE = 0x24
 INS_PROXY_INFO = 0x2A
+INS_PROVIDE_NFT = 0x14
+INS_PROVIDE_TRC20 = 0xCA
 P1_FIRST_CHUNK = 0x01
 P1_FOLLOWING_CHUNK = 0x00
 
 TRON_ADDRESS = b"TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"
 TRON_ADDRESS_2 = b"TFMA7iav1S9K46K2QaSKL5PV73qk4LcEcZ"
 TRON_MAINNET_CHAIN_ID = 728126428
-DUMMY_DER_SIGNATURE = b"\x30\x06\x02\x01\x01\x02\x01\x01"
+DUMMY_DER_SIGNATURE = b"\x30" + (b"\x00" * 66)
 
 
 def der_uint(value: int) -> bytes:
@@ -122,7 +124,7 @@ def proxy_info(challenge: int = 0) -> bytes:
     )
 
 
-def enum_value() -> bytes:
+def enum_value(value: int = 2, name: str = "approved") -> bytes:
     return b"".join(
         [
             tlv(0x00, 1),
@@ -130,10 +132,51 @@ def enum_value() -> bytes:
             tlv(0x02, TRON_ADDRESS),
             tlv(0x03, b"\xa9\x05\x9c\xbb"),
             tlv(0x04, 1),
-            tlv(0x05, 2),
-            tlv(0x06, "approved"),
+            tlv(0x05, value),
+            tlv(0x06, name),
             tlv(0xFF, DUMMY_DER_SIGNATURE),
         ]
+    )
+
+
+def trc20_metadata(
+    ticker: str = "TOK",
+    decimals: int = 6,
+    chain_id: int = TRON_MAINNET_CHAIN_ID,
+) -> bytes:
+    return b"".join(
+        [
+            bytes([len(ticker)]),
+            ticker.encode(),
+            TRON_ADDRESS,
+            decimals.to_bytes(4, "big"),
+            chain_id.to_bytes(4, "big"),
+            DUMMY_DER_SIGNATURE,
+        ]
+    )
+
+
+def nft_metadata(
+    name: str = "Collection",
+    chain_id: int = TRON_MAINNET_CHAIN_ID,
+    key_id: int = 1,
+    trailing: bytes = b"",
+) -> bytes:
+    signed_payload = b"".join(
+        [
+            b"\x01\x01",
+            bytes([len(name)]),
+            name.encode(),
+            TRON_ADDRESS,
+            chain_id.to_bytes(8, "big"),
+            bytes([key_id, 1]),
+        ]
+    )
+    return (
+        signed_payload
+        + bytes([len(DUMMY_DER_SIGNATURE)])
+        + DUMMY_DER_SIGNATURE
+        + trailing
     )
 
 
@@ -244,6 +287,90 @@ def main() -> None:
             INS_TRUSTED_NAME,
             trusted_name_v2_mab(bytes([1]) + b"\x80\x00\x00\x00\xff"),
         ),
+    )
+    write_seed(
+        "21-cross-p2-continuation.bin",
+        0,
+        record(
+            INS_ENUM_VALUE,
+            P1_FIRST_CHUNK,
+            len(enum).to_bytes(2, "big") + enum[:20],
+        )
+        + record(INS_ENUM_VALUE, P1_FOLLOWING_CHUNK, enum[20:], p2=1),
+    )
+    write_seed(
+        "22-replayed-enum-value.bin",
+        0,
+        b"".join(single_chunk(INS_ENUM_VALUE, enum) for _ in range(20)),
+    )
+    write_seed(
+        "23-enum-value-cache-cap.bin",
+        0,
+        b"".join(
+            single_chunk(
+                INS_ENUM_VALUE,
+                enum_value(value=i, name=f"value-{i}"),
+            )
+            for i in range(18)
+        ),
+    )
+    proxy_without_challenge = proxy.replace(tlv(0x12, 0), b"", 1)
+    write_seed(
+        "24-proxy-missing-challenge.bin",
+        0,
+        single_chunk(INS_PROXY_INFO, proxy_without_challenge),
+    )
+    write_seed(
+        "25-trc20-valid.bin",
+        0,
+        record(INS_PROVIDE_TRC20, 0, trc20_metadata()),
+    )
+    write_seed(
+        "26-trc20-ring-invalid-replacement.bin",
+        0,
+        b"".join(
+            record(INS_PROVIDE_TRC20, 0, trc20_metadata(ticker=f"TOK{i}"))
+            for i in range(5)
+        )
+        + record(
+            INS_PROVIDE_TRC20,
+            0,
+            trc20_metadata(ticker="EVIL", chain_id=TRON_MAINNET_CHAIN_ID + 1),
+        ),
+    )
+    write_seed(
+        "27-trc20-decimals-overflow.bin",
+        0,
+        record(INS_PROVIDE_TRC20, 0, trc20_metadata(decimals=256)),
+    )
+    write_seed(
+        "28-nft-valid.bin",
+        0,
+        record(INS_PROVIDE_NFT, 0, nft_metadata()),
+    )
+    write_seed(
+        "29-nft-ring-invalid-replacement.bin",
+        0,
+        b"".join(
+            record(INS_PROVIDE_NFT, 0, nft_metadata(name=f"NFT{i}"))
+            for i in range(5)
+        )
+        + record(INS_PROVIDE_NFT, 0, nft_metadata(name="EVIL", key_id=2)),
+    )
+    write_seed(
+        "30-nft-trailing-data.bin",
+        0,
+        record(INS_PROVIDE_NFT, 0, nft_metadata(trailing=b"\xff")),
+    )
+    write_seed(
+        "31-trc20-invalid-p1-p2.bin",
+        0,
+        record(INS_PROVIDE_TRC20, 1, trc20_metadata(), p2=1),
+    )
+    write_seed(
+        "32-nft-invalid-p1-p2.bin",
+        0,
+        record(INS_PROVIDE_NFT, 1, nft_metadata(), p2=1),
     )
 
 

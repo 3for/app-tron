@@ -83,6 +83,7 @@ static void seed_default_assets(void) {
 
     memset(tmpCtx.transactionContext.extraInfo, 0, sizeof(tmpCtx.transactionContext.extraInfo));
     memset(tmpCtx.transactionContext.assetSet, 0, sizeof(tmpCtx.transactionContext.assetSet));
+    memset(tmpCtx.transactionContext.assetKind, 0, sizeof(tmpCtx.transactionContext.assetKind));
     tmpCtx.transactionContext.currentAssetIndex = 0;
     memset(fuzz_assets, 0, sizeof(fuzz_assets));
 
@@ -98,6 +99,7 @@ static void seed_default_assets(void) {
         fuzz_assets[i].token.decimals = decimals[i];
         tmpCtx.transactionContext.extraInfo[i].token.decimals = decimals[i];
         tmpCtx.transactionContext.assetSet[i] = true;
+        tmpCtx.transactionContext.assetKind[i] = ASSET_KIND_TOKEN;
     }
 }
 
@@ -300,31 +302,48 @@ __attribute__((weak)) void forget_known_assets(void) {
     seed_default_assets();
 }
 
-__attribute__((weak)) extraInfo_t *get_current_asset_info(void) {
-    uint8_t idx = tmpCtx.transactionContext.currentAssetIndex;
-
-    if (idx >= MAX_ASSETS) {
-        return NULL;
-    }
-    return &fuzz_assets[idx];
+__attribute__((weak)) bool asset_slot_is_kind(uint8_t index, asset_kind_t kind) {
+    return (index < MAX_ASSETS) && tmpCtx.transactionContext.assetSet[index] &&
+           (tmpCtx.transactionContext.assetKind[index] == kind);
 }
 
-__attribute__((weak)) int get_asset_index_by_addr(const uint8_t *addr) {
+__attribute__((weak)) int get_token_index_by_addr(const uint8_t *addr) {
     for (size_t i = 0; i < MAX_ASSETS; i++) {
-        if (memcmp(fuzz_assets[i].token.address, addr, ADDRESS_LENGTH) == 0) {
+        if (asset_slot_is_kind(i, ASSET_KIND_TOKEN) &&
+            (memcmp(fuzz_assets[i].token.address, addr, ADDRESS_LENGTH) == 0)) {
             return (int) i;
         }
     }
     return -1;
 }
 
-__attribute__((weak)) extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
-    int idx = get_asset_index_by_addr(addr);
+__attribute__((weak)) const tokenDefinition_t *get_token_info_by_addr(const uint8_t *addr) {
+    int idx = get_token_index_by_addr(addr);
 
-    return (idx >= 0) ? &fuzz_assets[idx] : NULL;
+    return (idx >= 0) ? &fuzz_assets[idx].token : NULL;
 }
 
-__attribute__((weak)) void validate_current_asset_info(void) {}
+#ifndef TARGET_NANOS
+__attribute__((weak)) const nftInfo_t *get_nft_info_by_addr(const uint8_t *addr) {
+    (void) addr;
+    return NULL;
+}
+#endif
+
+__attribute__((weak)) int commit_current_asset_info(asset_kind_t kind,
+                                                    const extraInfo_t *candidate) {
+    uint8_t idx = tmpCtx.transactionContext.currentAssetIndex;
+
+    if ((idx >= MAX_ASSETS) || (candidate == NULL)) {
+        return -1;
+    }
+    memcpy(&fuzz_assets[idx], candidate, sizeof(*candidate));
+    memcpy(&tmpCtx.transactionContext.extraInfo[idx], candidate, sizeof(*candidate));
+    tmpCtx.transactionContext.assetSet[idx] = true;
+    tmpCtx.transactionContext.assetKind[idx] = kind;
+    tmpCtx.transactionContext.currentAssetIndex = (idx + 1U) % MAX_ASSETS;
+    return idx;
+}
 
 bool check_signature_with_pubkey(uint8_t *buffer,
                                  const uint8_t bufLen,

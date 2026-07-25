@@ -7,6 +7,8 @@
 #include "common_utils.h"  // ADDRESS_LENGTH
 #include "calldata.h"      // CALLDATA_SELECTOR_SIZE
 
+#define PROXY_INFO_DESCRIPTOR_MAX_LENGTH 256
+
 typedef struct {
     uint64_t chain_id;
     uint8_t address[ADDRESS_LENGTH];

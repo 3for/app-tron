@@ -10,8 +10,21 @@
 #include "proxy_info.h"
 #include "trusted_name.h"
 #include "tlv_apdu.h"
+#include "shared_context.h"
+#include "app_errors.h"
+#include "ui_globals.h"
+#include "parse.h"
 
 void fuzz_external_metadata_set_certificate_status(uint8_t control);
+void fuzz_external_metadata_reset_assets(void);
+int handleProvideTrc20TokenInformation(uint8_t p1,
+                                       uint8_t p2,
+                                       const uint8_t *workBuffer,
+                                       uint8_t dataLength);
+int handleProvideNFTInformation(uint8_t p1,
+                                uint8_t p2,
+                                const uint8_t *workBuffer,
+                                uint8_t dataLength);
 
 /*
  * Byte stream format:
@@ -50,6 +63,35 @@ static void fuzz_external_metadata_apdu_stream(const uint8_t *data, size_t size)
             case INS_PROVIDE_ENUM_VALUE:
                 (void) handle_enum_value(p1, p2, (uint8_t) payload_len, payload);
                 break;
+            case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
+            case INS_PROVIDE_NFT_INFORMATION: {
+                transactionContext_t before = tmpCtx.transactionContext;
+                int sw = (ins == INS_PROVIDE_TRC20_TOKEN_INFORMATION)
+                             ? handleProvideTrc20TokenInformation(p1,
+                                                                 p2,
+                                                                 payload,
+                                                                 (uint8_t) payload_len)
+                             : handleProvideNFTInformation(p1,
+                                                           p2,
+                                                           payload,
+                                                           (uint8_t) payload_len);
+                if (sw != E_OK) {
+                    if (memcmp(&before,
+                               &tmpCtx.transactionContext,
+                               sizeof(before)) != 0) {
+                        __builtin_trap();
+                    }
+                } else {
+                    asset_kind_t expected_kind =
+                        (ins == INS_PROVIDE_TRC20_TOKEN_INFORMATION)
+                            ? ASSET_KIND_TOKEN
+                            : ASSET_KIND_NFT;
+                    if (!asset_slot_is_kind(G_io_apdu_buffer[0], expected_kind)) {
+                        __builtin_trap();
+                    }
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -64,6 +106,7 @@ static void reset_external_metadata_context(void) {
     trusted_name_cleanup();
     proxy_cleanup();
     enum_value_cleanup();
+    fuzz_external_metadata_reset_assets();
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {

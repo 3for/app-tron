@@ -62,8 +62,7 @@ bool format_param_nft(const s_param_nft *param, const char *name) {
                                           collections.value[collection_idx].length,
                                           addr_buf,
                                           sizeof(addr_buf));
-                        if ((asset = (const nftInfo_t *) get_asset_info_by_addr(addr_buf)) ==
-                            NULL) {
+                        if ((asset = get_nft_info_by_addr(addr_buf)) == NULL) {
                             ret = false;
                             break;
                         }

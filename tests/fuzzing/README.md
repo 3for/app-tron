@@ -115,7 +115,7 @@ disabled whenever `CORPUS_DIR` is supplied.
 | `fuzz_handle_sign` | `corpus/fuzz_handle_sign` | 8192 | Legacy `INS_SIGN` APDU/state-machine flow |
 | `fuzz_personal_message` | `corpus/fuzz_personal_message` | 8192 | Legacy and full-display personal messages |
 | `fuzz_gcs` | `corpus/fuzz_gcs` | 8192 | Generic Clear Signing commands and descriptors |
-| `fuzz_external_metadata` | `corpus/fuzz_external_metadata` | 8192 | Trusted-name, proxy, and enum metadata commands |
+| `fuzz_external_metadata` | `corpus/fuzz_external_metadata` | 8192 | Trusted-name, proxy, enum, TRC20, and NFT metadata commands |
 | `fuzz_common_utils_address` | `corpus/fuzz_common_utils_address` | 64 | TRON address and Base58Check conversions |
 | `fuzz_common_utils_numbers` | `corpus/fuzz_common_utils_numbers` | 64 | uint128/uint256 and amount formatting |
 

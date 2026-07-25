@@ -7,6 +7,8 @@
 #include "gtp_tx_info.h"
 #include "tx_ctx.h"
 
+#define GTP_FIELD_DESCRIPTOR_MAX_LENGTH 4096
+
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_field field = {0};
     s_field_ctx ctx = {0};
@@ -41,23 +43,30 @@ static bool handle_tlv_payload(const buffer_t *buf) {
 }
 
 uint16_t handle_field(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload) {
-    (void) p2;
+    if ((p2 != 0x00) ||
+        ((p1 != P1_FIRST_CHUNK) && (p1 != P1_FOLLOWING_CHUNK))) {
+        tlv_apdu_reset();
+        return SWO_WRONG_P1_P2;
+    }
     if ((appState != APP_STATE_SIGNING_TX) && (appState != APP_STATE_SIGNING_EIP712)) {
         PRINTF("App not in TX signing mode!\n");
+        tlv_apdu_reset();
         return SWO_COMMAND_NOT_ALLOWED;
     }
 
     if (get_current_tx_info() == NULL) {
         PRINTF("Error: Field received without a TX info!\n");
+        tlv_apdu_reset();
         gcs_cleanup();
         return SWO_COMMAND_NOT_ALLOWED;
     }
 
     if (!tlv_from_apdu(INS_GTP_FIELD,
+                       p2,
                        p1 == P1_FIRST_CHUNK,
                        lc,
                        payload,
-                       UINT16_MAX,
+                       GTP_FIELD_DESCRIPTOR_MAX_LENGTH,
                        &handle_tlv_payload)) {
         return SWO_INCORRECT_DATA;
     }

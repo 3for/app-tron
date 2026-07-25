@@ -8,6 +8,7 @@
 #include "io.h"
 #include "app_errors.h"
 #include "os_pki.h"
+#include "ui_globals.h"
 
 #define TYPE_SIZE        1
 #define VERSION_SIZE     1
@@ -44,15 +45,15 @@ int handleProvideNFTInformation(uint8_t p1,
                                 uint8_t p2,
                                 const uint8_t *workBuffer,
                                 uint8_t dataLength) {
-    UNUSED(p1);
-    UNUSED(p2);
     uint8_t hash[INT256_LENGTH];
-    nftInfo_t *nft = NULL;
+    extraInfo_t candidate = {0};
+    nftInfo_t *nft = &candidate.nft;
     size_t offset = 0;
     size_t payloadSize = 0;
     uint8_t collectionNameLength = 0;
     uint64_t chain_id = 0;
     uint8_t signatureLen = 0;
+    int asset_index;
 #ifdef HAVE_NFT_STAGING_KEY
     uint8_t valid_keyId = STAGING_NFT_METADATA_KEY;
 #else
@@ -61,10 +62,11 @@ int handleProvideNFTInformation(uint8_t p1,
 
     PRINTF("In handle provide NFTInformation\n");
 
-    // Retrieve the NFT sub-structure from the current asset info slot.
-    nft = &get_current_asset_info()->nft;
-
     PRINTF("Provisioning currentAssetIndex %d\n", tmpCtx.transactionContext.currentAssetIndex);
+
+    if ((p1 != 0x00) || (p2 != 0x00)) {
+        return io_send_sw(E_INCORRECT_P1_P2);
+    }
 
     // --- Header validation ---
     if (dataLength <= HEADER_SIZE) {
@@ -170,8 +172,8 @@ int handleProvideNFTInformation(uint8_t p1,
     }
     offset += SIGNATURE_LENGTH_SIZE;
 
-    if (dataLength < payloadSize + SIGNATURE_LENGTH_SIZE + signatureLen) {
-        PRINTF("Signature could not fit in data\n");
+    if (dataLength != payloadSize + SIGNATURE_LENGTH_SIZE + signatureLen) {
+        PRINTF("Signature length does not consume the complete APDU\n");
         return io_send_sw(E_INCORRECT_DATA);
     }
 
@@ -189,7 +191,10 @@ int handleProvideNFTInformation(uint8_t p1,
     }
 
     // --- Commit the validated metadata ---
-    G_io_apdu_buffer[0] = tmpCtx.transactionContext.currentAssetIndex;
-    validate_current_asset_info();
+    asset_index = commit_current_asset_info(ASSET_KIND_NFT, &candidate);
+    if (asset_index < 0) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    G_io_apdu_buffer[0] = (uint8_t) asset_index;
     return io_send_response_pointer(G_io_apdu_buffer, 1, E_OK);
 }

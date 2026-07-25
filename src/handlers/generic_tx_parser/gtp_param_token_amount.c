@@ -110,8 +110,7 @@ static bool process_token_amount(const s_param_token_amount *param,
             // decimals, not ETH's WEI_TO_ETHER (18).
             decimals = SUN_TO_TRX;
         } else {
-            if ((token_def = (const tokenDefinition_t *) get_asset_info_by_addr(addr_buf)) !=
-                NULL) {
+            if ((token_def = get_token_info_by_addr(addr_buf)) != NULL) {
                 ticker = token_def->ticker;
                 decimals = token_def->decimals;
             }

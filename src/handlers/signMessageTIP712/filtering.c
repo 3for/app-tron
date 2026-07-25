@@ -1138,7 +1138,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
         // Permit (TRC-2612)
-        int resolved_idx = get_asset_index_by_addr(tip712_context->contract_addr);
+        int resolved_idx = get_token_index_by_addr(tip712_context->contract_addr);
 
         if (resolved_idx == -1) {
             PRINTF("ERROR: Could not find asset info for verifyingContract address!\n");

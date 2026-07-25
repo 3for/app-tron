@@ -1821,6 +1821,9 @@ err:
 
 void forget_known_assets(void) {
     memset(tmpCtx.transactionContext.assetSet, false, MAX_ASSETS);
+    memset(tmpCtx.transactionContext.assetKind,
+           ASSET_KIND_NONE,
+           sizeof(tmpCtx.transactionContext.assetKind));
     tmpCtx.transactionContext.currentAssetIndex = 0;
 }
 
@@ -1831,53 +1834,74 @@ static extraInfo_t *get_asset_info(int index) {
     return &tmpCtx.transactionContext.extraInfo[index];
 }
 
-static bool asset_info_is_set(int index) {
+static bool asset_info_is_kind(int index, asset_kind_t kind) {
     if ((index < 0) || (index >= MAX_ASSETS)) {
         return false;
     }
-    return tmpCtx.transactionContext.assetSet[index];
+    return tmpCtx.transactionContext.assetSet[index] &&
+           (tmpCtx.transactionContext.assetKind[index] == kind);
 }
 
-static int get_asset_index_by_canonical_addr(const uint8_t *addr) {
+bool asset_slot_is_kind(uint8_t index, asset_kind_t kind) {
+    return asset_info_is_kind(index, kind);
+}
+
+static int get_asset_index_by_canonical_addr(const uint8_t *addr, asset_kind_t kind) {
     if (addr == NULL) {
         return -1;
     }
 
-    // Works for ERC-20 & NFT tokens since both structs in the union have the
-    // contract address aligned
     for (int i = 0; i < MAX_ASSETS; i++) {
         extraInfo_t *asset = get_asset_info(i);
-        if (asset_info_is_set(i) && (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
-            PRINTF("Token found at index %d\n", i);
+        if (asset_info_is_kind(i, kind) &&
+            (memcmp(asset->token.address, addr, ADDRESS_LENGTH) == 0)) {
+            PRINTF("Asset kind %u found at index %d\n", kind, i);
             return i;
         }
     }
     return -1;
 }
 
-int get_asset_index_by_addr(const uint8_t *addr) {
-    int index = get_asset_index_by_canonical_addr(addr);
+static int get_asset_index_by_addr_and_kind(const uint8_t *addr, asset_kind_t kind) {
+    // All clear-sign consumers normalize contract addresses to the canonical
+    // 20-byte EVM form before lookup. Do not infer a 21-byte TRON address from
+    // addr[0]: a valid 20-byte contract can itself start with 0x41.
+    return get_asset_index_by_canonical_addr(addr, kind);
+}
 
-    if ((index == -1) && (addr != NULL) && (addr[0] == ADD_PRE_FIX_BYTE_MAINNET)) {
-        PRINTF("Retry asset lookup after stripping TRON 0x41 prefix\n");
-        index = get_asset_index_by_canonical_addr(addr + 1);
+int get_token_index_by_addr(const uint8_t *addr) {
+    return get_asset_index_by_addr_and_kind(addr, ASSET_KIND_TOKEN);
+}
+
+const tokenDefinition_t *get_token_info_by_addr(const uint8_t *addr) {
+    extraInfo_t *asset = get_asset_info(get_token_index_by_addr(addr));
+    return (asset == NULL) ? NULL : &asset->token;
+}
+
+#ifndef TARGET_NANOS
+const nftInfo_t *get_nft_info_by_addr(const uint8_t *addr) {
+    extraInfo_t *asset =
+        get_asset_info(get_asset_index_by_addr_and_kind(addr, ASSET_KIND_NFT));
+    return (asset == NULL) ? NULL : &asset->nft;
+}
+#endif
+
+int commit_current_asset_info(asset_kind_t kind, const extraInfo_t *candidate) {
+    uint8_t index = tmpCtx.transactionContext.currentAssetIndex;
+    extraInfo_t *destination;
+
+    if ((candidate == NULL) || (index >= MAX_ASSETS) ||
+        ((kind != ASSET_KIND_TOKEN) && (kind != ASSET_KIND_NFT))) {
+        return -1;
+    }
+    destination = get_asset_info(index);
+    if (destination == NULL) {
+        return -1;
     }
 
+    memcpy(destination, candidate, sizeof(*destination));
+    tmpCtx.transactionContext.assetKind[index] = kind;
+    tmpCtx.transactionContext.assetSet[index] = true;
+    tmpCtx.transactionContext.currentAssetIndex = (index + 1U) % MAX_ASSETS;
     return index;
-}
-
-extraInfo_t *get_asset_info_by_addr(const uint8_t *addr) {
-    return get_asset_info(get_asset_index_by_addr(addr));
-}
-
-extraInfo_t *get_current_asset_info(void) {
-    return get_asset_info(tmpCtx.transactionContext.currentAssetIndex);
-}
-
-void validate_current_asset_info(void) {
-    // mark it as set
-    tmpCtx.transactionContext.assetSet[tmpCtx.transactionContext.currentAssetIndex] = true;
-    // increment index
-    tmpCtx.transactionContext.currentAssetIndex =
-        (tmpCtx.transactionContext.currentAssetIndex + 1) % MAX_ASSETS;
 }

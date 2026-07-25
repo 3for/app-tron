@@ -3,12 +3,9 @@
 // ---------------------------------------------------------------------------
 // GCS dependency header.
 //
-// The generic_tx_parser TOKEN / TOKEN_AMOUNT / NFT field formatters look up
-// token/NFT metadata (ticker, decimals, collection name) via
-// get_asset_info_by_addr(). app-ethereum declares this in manage_asset_info.h;
-// app-tron already implements it in parse.c (backed by the TRC20 token registry
-// populated through INS_PROVIDE_TRC20_TOKEN_INFORMATION), so this header just
-// re-declares it for the ported module with app-ethereum's signature.
+// The generic_tx_parser TOKEN / TOKEN_AMOUNT / NFT field formatters use strict
+// typed lookups so metadata from one asset class can never be interpreted as
+// another union member.
 // ---------------------------------------------------------------------------
 
 #include <stdint.h>
@@ -18,7 +15,7 @@
 // this header.
 #include "shared_context.h"
 
-// Returns metadata (ticker/decimals/collection) for the given contract address
-// from the TRC20/NFT registry, or NULL when no matching token/NFT was provided
-// via INS_PROVIDE_TRC20_TOKEN_INFORMATION / INS_PROVIDE_NFT_INFORMATION.
-extraInfo_t *get_asset_info_by_addr(const uint8_t *contractAddress);
+const tokenDefinition_t *get_token_info_by_addr(const uint8_t *contractAddress);
+#ifndef TARGET_NANOS
+const nftInfo_t *get_nft_info_by_addr(const uint8_t *contractAddress);
+#endif

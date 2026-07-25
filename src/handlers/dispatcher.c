@@ -56,7 +56,7 @@ static int send_gtp_status(uint16_t sw) {
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
     if (tlv_apdu_in_progress() &&
-        ((cmd->cla != CLA) || !tlv_apdu_owner_matches(cmd->ins))) {
+        ((cmd->cla != CLA) || !tlv_apdu_owner_matches(cmd->ins, cmd->p2))) {
         PRINTF("Aborted metadata stream on mismatched APDU\n");
         tlv_apdu_reset();
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
