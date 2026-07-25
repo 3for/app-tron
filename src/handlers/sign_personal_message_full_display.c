@@ -248,8 +248,17 @@ static int final_process(void) {
     } else {
         for (uint16_t i = 0; i < signMsgCtx->msg_length; i++) {
             uint8_t c = (uint8_t) signMsgCtx->received_buffer[i];
-            // Normalize layout-affecting whitespace consistently on all devices.
+#ifdef SCREEN_SIZE_NANO
+            // Nano review flows do not render multiline messages reliably.
             signMsgCtx->received_buffer[i] = isspace((int) c) ? ' ' : (char) c;
+#else
+            // Preserve meaningful line breaks on screen wallets, while
+            // normalizing other control whitespace that can alter the layout
+            // without an unambiguous visual representation.
+            if ((c == '\t') || (c == '\v') || (c == '\f') || (c == '\r')) {
+                signMsgCtx->received_buffer[i] = ' ';
+            }
+#endif
         }
         signMsgCtx->received_buffer[signMsgCtx->msg_length] = '\0';
         signMsgCtx->display_buffer = signMsgCtx->received_buffer;
