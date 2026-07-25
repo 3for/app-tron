@@ -156,7 +156,12 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
                     }
                     if ((path_get_root_type() == ROOT_MESSAGE) &&
                         (ui_712_get_filtering_mode() == TIP712_FILTERING_FULL)) {
-                        ret = ui_712_review_network(&tip712_context->chain_id);
+                        if (!tip712_context->chain_id_fits_u64) {
+                            apdu_response_code = SWO_INCORRECT_DATA;
+                            ret = false;
+                        } else {
+                            ret = ui_712_review_network(&tip712_context->chain_id);
+                        }
                     }
                     ui_712_field_flags_reset();
                 }
@@ -211,6 +216,11 @@ uint16_t handleTIP712Filtering(uint8_t p1,
         case P2_FILT_ACTIVATE:
             if (tip712_context->schema_locked) {
                 apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+                ret = false;
+                break;
+            }
+            if (tip712_context->chain_id_seen && !tip712_context->chain_id_fits_u64) {
+                apdu_response_code = SWO_INCORRECT_DATA;
                 ret = false;
                 break;
             }

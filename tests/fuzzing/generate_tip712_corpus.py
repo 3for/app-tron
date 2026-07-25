@@ -933,7 +933,10 @@ def main() -> None:
 
     oversized_chain_id = copy.deepcopy(simple_mail)
     oversized_chain_id["domain"]["chainId"] = 1 << 64
-    write_seed("15-oversized-chain-id.bin", build_stream(oversized_chain_id))
+    write_seed(
+        "15-filtered-oversized-chain-id.bin",
+        build_stream(oversized_chain_id,
+                     load_json("00-simple_mail-filter.json")))
 
     write_seed("16-safe-batch.bin",
                build_stream(load_json("safe_batch.json")))

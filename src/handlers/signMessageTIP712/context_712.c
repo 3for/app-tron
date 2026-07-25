@@ -51,6 +51,10 @@ bool tip712_context_init(void) {
     }
 
     tip712_context->go_home_on_failure = true;
+    // A missing domain chainId historically maps to zero. If a chainId is
+    // received later, field_hash_domain_special_fields() updates this flag
+    // after checking whether its numeric value can safely back u64 metadata.
+    tip712_context->chain_id_fits_u64 = true;
 
     struct_state = NOT_INITIALIZED;
 

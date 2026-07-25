@@ -1434,5 +1434,23 @@ def test_tip712_filtering_freezes_schema(
     assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
 
+def test_tip712_filtering_rejects_chain_id_above_u64(
+        scenario_navigator: NavigateWithScenario):
+    """Filtering metadata must never bind a truncated uint256 domain chainId."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    input_dir = Path(tip712_json_path())
+
+    with open(input_dir / "00-simple_mail-data.json", encoding="utf-8") as data_file:
+        data = json.load(data_file)
+    with open(input_dir / "00-simple_mail-filter.json", encoding="utf-8") as filter_file:
+        filters = json.load(filter_file)
+
+    data["domain"]["chainId"] = 1 << 64
+    with pytest.raises(ExceptionRAPDU):
+        InputData.process_data(client, data, filters)
+
+
 def test_tip712_skip():
     pytest.skip("Skip action is not exposed by scenario_navigator")

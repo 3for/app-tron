@@ -94,6 +94,11 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     uint64_t chain_id;
     const uint8_t *addr;
 
+    if (!tip712_context->chain_id_fits_u64) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+
     cx_sha256_init(hash_ctx);
 
     // Magic number, makes it so a signature of one type can't be used as another

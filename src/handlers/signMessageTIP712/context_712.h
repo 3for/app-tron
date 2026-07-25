@@ -10,6 +10,8 @@ typedef struct {
     uint64_t chain_id;
     uint8_t schema_hash[CX_SHA224_SIZE];
     bool go_home_on_failure;
+    bool chain_id_seen;
+    bool chain_id_fits_u64;
     bool schema_locked;
     bool review_in_progress;
 } s_tip712_context;

@@ -200,11 +200,32 @@ static bool field_hash_domain_special_fields(const s_struct_712_field *field_ptr
         explicit_bzero(&tip712_context->contract_addr[data_length],
                        sizeof(tip712_context->contract_addr) - data_length);
     } else if (strcmp(key, "chainId") == 0) {
-        if ((data_length == 0) || (data_length > sizeof(tip712_context->chain_id))) {
+        if (data_length == 0) {
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
+
+        tip712_context->chain_id_seen = true;
+        // TIP-712 hashes chainId as the declared Solidity integer (up to
+        // uint256), but filtering certificates and network metadata use a
+        // uint64_t chain ID. Strip harmless leading zeroes and never silently
+        // truncate a genuinely larger value into that metadata context.
+        while ((data_length > 1) && (*data == 0)) {
+            data++;
+            data_length--;
+        }
+        if (data_length > sizeof(tip712_context->chain_id)) {
+            tip712_context->chain_id = 0;
+            tip712_context->chain_id_fits_u64 = false;
+            if (ui_712_get_filtering_mode() == TIP712_FILTERING_FULL) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                return false;
+            }
+            return true;
+        }
+
         tip712_context->chain_id = u64_from_BE(data, data_length);
+        tip712_context->chain_id_fits_u64 = true;
     }
     return true;
 }
