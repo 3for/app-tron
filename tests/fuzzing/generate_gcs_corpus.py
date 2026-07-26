@@ -118,6 +118,16 @@ def main() -> None:
     write_seed("12-trc10-value-without-id.bin",
                seed(1, store(token_value_without_id)))
 
+    incompressible = bytes.fromhex("a9059cbb") + (
+        bytes(range(1, 256)) * 17
+    )[:4092]
+    maximum_root = raw(trigger(OWNER, CALLEE, incompressible), custom_data=b"")
+    write_seed("13-maximum-root-clean-reentry.bin",
+               seed(1,
+                    store(maximum_root),
+                    record(INS_SIGN_GCS, P1_FIRST, P2_GCS_START_FLOW),
+                    store(valid)))
+
 
 if __name__ == "__main__":
     main()

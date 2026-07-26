@@ -2,6 +2,7 @@
 #include "apdu_constants.h"
 #include "enum_value.h"
 #include "tlv_apdu.h"
+#include "gcs_memory.h"
 
 static uint16_t g_enum_value_status;
 
@@ -30,7 +31,8 @@ uint16_t handle_enum_value(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *pa
                        payload,
                        ENUM_VALUE_DESCRIPTOR_MAX_LENGTH,
                        &handle_tlv_payload)) {
-        return g_enum_value_status;
+        return gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                 : g_enum_value_status;
     }
     return SWO_SUCCESS;
 }

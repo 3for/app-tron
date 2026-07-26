@@ -22,7 +22,7 @@
 tmpCtx_t tmpCtx;
 txContent_t txContent;
 txContext_t txContext;
-uint8_t appState;
+app_state_t appState;
 uint16_t apdu_response_code;
 cx_sha3_t global_sha3;
 strings_t strings;

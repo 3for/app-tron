@@ -98,9 +98,6 @@ int apdu_dispatcher(const command_t *cmd) {
                       (cmd->ins == INS_GTP_FIELD) ||
                       ((cmd->ins == INS_SIGN_GCS) &&
                        (cmd->p2 == P2_GCS_START_FLOW));
-#ifdef HAVE_GATING_SUPPORT
-            allowed = allowed || (cmd->ins == INS_PROVIDE_GATING);
-#endif
         }
         if (!allowed) {
             PRINTF("Refused APDU outside the active GCS phase\n");

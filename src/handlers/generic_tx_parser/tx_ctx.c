@@ -1,5 +1,5 @@
 #include "tx_ctx.h"
-#include "app_mem_utils.h"
+#include "gcs_memory.h"
 #include "gtp_field_table.h"
 #include "proxy_info.h"
 #include "common_ui.h"       // ui_gcs_cleanup
@@ -85,6 +85,19 @@ bool validate_instruction_hash(void) {
     return validate_inst_hash_on(g_tx_ctx_current);
 }
 
+bool tx_ctx_release_root_calldata(void) {
+    if ((g_tx_ctx_list == NULL) || (g_tx_ctx_current != g_tx_ctx_list) ||
+        (g_tx_ctx_list->calldata == NULL)) {
+        return false;
+    }
+    if (g_parked_calldata == g_tx_ctx_list->calldata) {
+        g_parked_calldata = NULL;
+    }
+    calldata_delete(g_tx_ctx_list->calldata);
+    g_tx_ctx_list->calldata = NULL;
+    return gcs_mem_category_live_bytes(GCS_MEM_CALLDATA) == 0U;
+}
+
 static void delete_tx_ctx(s_tx_ctx *node) {
     if (node->tx_info != NULL) {
         delete_tx_info(node->tx_info);
@@ -95,7 +108,7 @@ static void delete_tx_ctx(s_tx_ctx *node) {
         }
         calldata_delete(node->calldata);
     }
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 void tx_ctx_pop(void) {
@@ -271,7 +284,8 @@ bool tx_ctx_init(s_calldata *calldata,
     if (get_tx_ctx_count() >= GCS_MAX_TX_CONTEXTS) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
+    node = gcs_mem_calloc(sizeof(*node), GCS_MEM_TX_CONTEXT);
+    if (node == NULL) {
         return false;
     }
     node->calldata = calldata;
@@ -280,7 +294,7 @@ bool tx_ctx_init(s_calldata *calldata,
         if (appState == APP_STATE_SIGNING_EIP712) {
             calldata_info = get_current_calldata_info();
             if (!calldata_info_all_received(calldata_info) || calldata_info->processed) {
-                APP_MEM_FREE(node);
+                gcs_mem_free(node);
                 return false;
             }
             calldata_info->processed = true;
@@ -310,7 +324,7 @@ bool tx_ctx_init(s_calldata *calldata,
     }
 
     if (cx_sha3_init_no_throw(&node->fields_hash_ctx, 256) != CX_OK) {
-        APP_MEM_FREE(node);
+        gcs_mem_free(node);
         return false;
     }
     list_push_back((list_node_t **) &g_tx_ctx_list, (list_node_t *) node);

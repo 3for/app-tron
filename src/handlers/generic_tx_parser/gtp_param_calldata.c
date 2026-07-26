@@ -122,7 +122,7 @@ static bool process_nested_calldata(const s_param_calldata *param,
             calldata_length = calldata->length - CALLDATA_SELECTOR_SIZE;
         }
 
-        if ((new_calldata = calldata_init(calldata_length, selector_buf)) == NULL) {
+        if ((new_calldata = calldata_init_nested(calldata_length, selector_buf)) == NULL) {
             return false;
         }
         if (!calldata_append(new_calldata, calldata_buf, calldata_length)) {
@@ -201,9 +201,9 @@ bool format_param_calldata(const s_param_calldata *param, const char *name) {
                            &spenders))) {
         // Set batch size and number of transactions
         if (calldatas.size > 1) {
-            if ((calldatas.size > GCS_MAX_BATCH_TRANSACTIONS) ||
+            if ((calldatas.size > GCS_MAX_BATCH_TRANSACTIONS_HARD_LIMIT) ||
                 (txContext.batch_nb_tx >
-                 (GCS_MAX_BATCH_TRANSACTIONS - calldatas.size))) {
+                 (GCS_MAX_BATCH_TRANSACTIONS_HARD_LIMIT - calldatas.size))) {
                 ret = false;
                 goto cleanup;
             }

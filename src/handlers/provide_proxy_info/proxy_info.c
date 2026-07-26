@@ -1,4 +1,5 @@
 #include "proxy_info.h"
+#include "gcs_memory.h"
 #include "utils.h"
 #include "challenge.h"
 #include "public_keys.h"
@@ -243,7 +244,8 @@ bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
             return false;
         }
     }
-    if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
+    node = gcs_mem_calloc(sizeof(*node), GCS_MEM_METADATA);
+    if (node == NULL) {
         PRINTF("Error: Not enough memory!\n");
         return false;
     }
@@ -339,7 +341,7 @@ const uint8_t *get_implem_contract(const uint64_t *chain_id,
 }
 
 static void delete_proxy_info(flist_node_t *node) {
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 void proxy_cleanup(void) {

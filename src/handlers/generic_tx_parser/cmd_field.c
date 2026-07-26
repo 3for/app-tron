@@ -8,6 +8,7 @@
 #include "tx_ctx.h"
 #include "gcs_limits.h"
 #include "gcs_signing_context.h"
+#include "gcs_memory.h"
 
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_field field = {0};
@@ -72,7 +73,8 @@ uint16_t handle_field(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload
                        payload,
                        GCS_MAX_DESCRIPTOR_SIZE,
                        &handle_tlv_payload)) {
-        return SWO_INCORRECT_DATA;
+        return gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                 : SWO_INCORRECT_DATA;
     }
     return SWO_SUCCESS;
 }

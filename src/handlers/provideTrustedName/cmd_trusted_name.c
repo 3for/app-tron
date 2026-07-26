@@ -5,6 +5,7 @@
 #include "tlv_apdu.h"
 #include "apdu_constants.h"
 #include "ui_utils.h"
+#include "gcs_memory.h"
 
 static uint16_t g_trusted_name_status;
 
@@ -43,7 +44,8 @@ uint16_t handle_trusted_name(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_
                        data,
                        TRUSTED_NAME_DESCRIPTOR_MAX_LENGTH,
                        &handle_tlv_payload_with_status)) {
-        return g_trusted_name_status;
+        return gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                 : g_trusted_name_status;
     }
     return SWO_SUCCESS;
 }

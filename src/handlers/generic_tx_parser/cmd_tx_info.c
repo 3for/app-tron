@@ -2,8 +2,7 @@
 #include "cmd_tx_info.h"
 #include "cx.h"
 #include "apdu_constants.h"
-#include "app_mem_utils.h"
-#include "mem_utils.h"
+#include "gcs_memory.h"
 #include "gtp_tx_info.h"
 #include "tlv_apdu.h"
 #include "tx_ctx.h"
@@ -18,26 +17,27 @@ static bool handle_tlv_payload(const buffer_t *buf) {
          !gcs_account_descriptor(buf->size, false))) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &ctx.tx_info, sizeof(*ctx.tx_info)) == false) {
+    ctx.tx_info = gcs_mem_calloc(sizeof(*ctx.tx_info), GCS_MEM_TX_CONTEXT);
+    if (ctx.tx_info == NULL) {
         return false;
     }
     cx_sha256_init(&ctx.struct_hash);
     if (!handle_tx_info_struct(buf, &ctx)) {
-        APP_MEM_FREE(ctx.tx_info);
+        gcs_mem_free(ctx.tx_info);
         return false;
     }
     if (!verify_tx_info_struct(&ctx)) {
-        APP_MEM_FREE(ctx.tx_info);
+        gcs_mem_free(ctx.tx_info);
         return false;
     }
     if (!find_matching_tx_ctx(ctx.tx_info->contract_addr,
                               ctx.tx_info->selector,
                               &ctx.tx_info->chain_id)) {
-        APP_MEM_FREE(ctx.tx_info);
+        gcs_mem_free(ctx.tx_info);
         return false;
     }
     if ((get_current_tx_info() != NULL) || !process_empty_txs_before()) {
-        APP_MEM_FREE(ctx.tx_info);
+        gcs_mem_free(ctx.tx_info);
         return false;
     }
     /* Once set_tx_info_into_tx_ctx() is entered, the current tx context owns
@@ -63,7 +63,8 @@ uint16_t handle_tx_info(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *paylo
                        payload,
                        GCS_MAX_DESCRIPTOR_SIZE,
                        &handle_tlv_payload)) {
-        return SWO_INCORRECT_DATA;
+        return gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                 : SWO_INCORRECT_DATA;
     }
     return SWO_SUCCESS;
 }

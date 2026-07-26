@@ -19,6 +19,7 @@
 #ifdef HAVE_GATING_SUPPORT
 
 #include "cmd_get_gating.h"
+#include "gcs_memory.h"
 #include "app_mem_utils.h"
 #include "apdu_constants.h"  // appState, APP_STATE_*
 #include "hash_bytes.h"
@@ -376,7 +377,8 @@ static bool handle_tlv_payload(const buffer_t *buf) {
     gating_t *candidate = NULL;
     gating_t *previous;
 
-    if (APP_MEM_CALLOC((void **) &candidate, sizeof(*candidate)) == false) {
+    candidate = gcs_mem_calloc(sizeof(*candidate), GCS_MEM_METADATA);
+    if (candidate == NULL) {
         PRINTF("Error: Not enough memory!\n");
         return false;
     }
@@ -386,19 +388,19 @@ static bool handle_tlv_payload(const buffer_t *buf) {
     cx_sha256_init(&ctx.hash_ctx);
 
     if (!gating_tlv_parser(buf, &ctx, &ctx.received_tags)) {
-        APP_MEM_FREE(candidate);
+        gcs_mem_free(candidate);
         return false;
     }
 
     if (!verify_fields(&ctx) || !verify_signature(&ctx)) {
-        APP_MEM_FREE(candidate);
+        gcs_mem_free(candidate);
         return false;
     }
 
     print_gating_info(&ctx);
     previous = GATING;
     GATING = candidate;
-    APP_MEM_FREE(previous);
+    gcs_mem_free(previous);
     return true;
 }
 
@@ -427,7 +429,8 @@ uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *da
                                data,
                                GATING_DESCRIPTOR_MAX_LENGTH,
                                &handle_tlv_payload)) {
-                sw = SWO_INCORRECT_DATA;
+                sw = gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                       : SWO_INCORRECT_DATA;
             } else {
                 sw = SWO_SUCCESS;
             }
@@ -446,7 +449,7 @@ uint16_t handle_gating(uint8_t p1, uint8_t p2, uint8_t length, const uint8_t *da
  *
  */
 void clear_gating(void) {
-    APP_MEM_FREE_AND_NULL((void **) &GATING);
+    gcs_mem_free_and_null((void **) &GATING);
 }
 
 /**

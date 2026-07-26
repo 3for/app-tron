@@ -401,6 +401,36 @@ def test_gcs_accepts_mainnet_trc10_trigger_values(backend: BackendInterface,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
 
+def test_gcs_accepts_maximum_incompressible_root_and_cleans_budget(
+        backend: BackendInterface):
+    """The 4096-byte root ceiling must still fit after tracked headers."""
+    client = TronClient(backend)
+    pattern = bytes(range(1, 256))
+    calldata = b"\xa9\x05\x9c\xbb" + (pattern * 17)[:4092]
+    assert len(calldata) == 4096
+    trigger = contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+        contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
+        data=calldata,
+    )
+    tx = client.packContract(tron.Transaction.Contract.TriggerSmartContract,
+                             trigger)
+
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    # No descriptors were supplied, so START_FLOW fails and must release every
+    # charged allocation before a new session is accepted.
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
 def test_gcs_rejects_empty_continuation_and_resets(backend: BackendInterface):
     client = TronClient(backend)
     tx = build_trc20_transfer_tx(client)

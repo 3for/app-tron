@@ -7,6 +7,7 @@
 #include "cmd_tx_info.h"
 #include "gcs_calldata_bridge.h"
 #include "gcs_signing_context.h"
+#include "gcs_memory.h"
 #include "tlv_apdu.h"
 #include "tron_tx_stream.h"
 #include "tx_ctx.h"
@@ -96,6 +97,7 @@ void fuzz_reset_extra_context(void) {
     gcs_bridge_abort();
     gcs_cleanup();
     gcs_signing_context_cleanup();
+    (void) gcs_budget_end();
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {

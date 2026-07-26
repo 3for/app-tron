@@ -12,6 +12,7 @@
 #include "tlv_library.h"
 #include "tlv_apdu.h"
 #include "chain_config.h"
+#include "gcs_memory.h"
 
 #define TX_INFO_TAGS(X)                                                            \
     X(0x00, TAG_VERSION, handle_version, ENFORCE_UNIQUE_TAG)                       \
@@ -373,5 +374,5 @@ const char *get_deploy_date(const s_tx_info *tx_info) {
 }
 
 void delete_tx_info(s_tx_info *node) {
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }

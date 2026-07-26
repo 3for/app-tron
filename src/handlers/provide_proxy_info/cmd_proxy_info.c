@@ -2,6 +2,7 @@
 #include "proxy_info.h"
 #include "tlv_apdu.h"
 #include "apdu_constants.h"
+#include "gcs_memory.h"
 
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_proxy_info_ctx ctx = {0};
@@ -28,7 +29,8 @@ uint16_t handle_proxy_info(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *pa
                        payload,
                        PROXY_INFO_DESCRIPTOR_MAX_LENGTH,
                        &handle_tlv_payload)) {
-        return SWO_INCORRECT_DATA;
+        return gcs_mem_take_allocation_failure() ? SWO_INSUFFICIENT_MEMORY
+                                                 : SWO_INCORRECT_DATA;
     }
     return SWO_SUCCESS;
 }

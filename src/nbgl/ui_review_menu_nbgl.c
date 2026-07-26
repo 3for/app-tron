@@ -1423,9 +1423,8 @@ bool ux_flow_display(ui_approval_state_t state, bool data_warning) {
     } else {
         // Prepare transaction infos to be displayed (field values etc.)
         if (!prepareTxInfos(state, data_warning)) {
-            // ui_pairs_init() reports and resets its own allocation failures.
-            // Failures occurring later in preparation need the same APDU
-            // completion and cleanup semantics.
+            // Complete the APDU and reset state for every allocation failure,
+            // including ui_pairs_init() and later preparation steps.
             if (appState != APP_STATE_IDLE) {
                 io_seproxyhal_send_status(SWO_INSUFFICIENT_MEMORY, 0, true, true);
             }

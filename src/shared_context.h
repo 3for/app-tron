@@ -142,7 +142,7 @@ extern strings_t strings;
 extern tmpCtx_t tmpCtx;
 extern txContent_t txContent;
 extern txContext_t txContext;
-extern uint8_t appState;
+extern app_state_t appState;
 extern uint16_t apdu_response_code;
 
 void reset_app_context(void);

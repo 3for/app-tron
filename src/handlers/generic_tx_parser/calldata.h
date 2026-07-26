@@ -17,14 +17,12 @@ typedef struct {
     flist_node_t _list;
     e_chunk_strip_dir dir : 1;
     uint8_t size : 7;
-    uint8_t *buf;
+    uint8_t data[];
 } s_calldata_chunk;
 
 typedef struct {
     size_t expected_size;
     size_t received_size;
-    size_t allocated_size;
-
     uint8_t selector[CALLDATA_SELECTOR_SIZE];
     s_calldata_chunk *chunks;
 
@@ -33,6 +31,10 @@ typedef struct {
 } s_calldata;
 
 s_calldata *calldata_init(size_t size, const uint8_t selector[CALLDATA_SELECTOR_SIZE]);
+s_calldata *calldata_init_root(size_t size,
+                               const uint8_t selector[CALLDATA_SELECTOR_SIZE]);
+s_calldata *calldata_init_nested(size_t size,
+                                 const uint8_t selector[CALLDATA_SELECTOR_SIZE]);
 bool calldata_set_selector(s_calldata *calldata, const uint8_t selector[CALLDATA_SELECTOR_SIZE]);
 bool calldata_append(s_calldata *calldata, const uint8_t *buffer, size_t size);
 void calldata_delete(s_calldata *node);

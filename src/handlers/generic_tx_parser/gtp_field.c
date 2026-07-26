@@ -9,6 +9,7 @@
 #include "tlv_library.h"
 #include "tlv_apdu.h"
 #include "gcs_limits.h"
+#include "gcs_memory.h"
 
 typedef union {
     s_param_raw_context raw_ctx;
@@ -121,15 +122,17 @@ static bool handle_param_constraint(const tlv_data_t *data, s_field_ctx *context
     }
     // Allocate new constraint node
     s_field_constraint *node = NULL;
-    if (APP_MEM_CALLOC((void **) &node, sizeof(s_field_constraint)) == false) {
+    node = gcs_mem_calloc(sizeof(*node), GCS_MEM_FIELD);
+    if (node == NULL) {
         PRINTF("Error: Failed to allocate memory for constraint node!\n");
         return false;
     }
     node->size = data->value.size;
     // Allocate value buffer
-    if (APP_MEM_CALLOC((void **) &node->value, data->value.size) == false) {
+    node->value = gcs_mem_calloc(data->value.size, GCS_MEM_FIELD);
+    if (node->value == NULL) {
         PRINTF("Error: Failed to allocate memory for constraint value!\n");
-        APP_MEM_FREE(node);
+        gcs_mem_free(node);
         return false;
     }
     memcpy(node->value, data->value.ptr, data->value.size);
@@ -294,8 +297,8 @@ bool format_field(s_field *field) {
 static void constraint_node_del(flist_node_t *node) {
     if (node != NULL) {
         s_field_constraint *constraint = (s_field_constraint *) node;
-        APP_MEM_FREE((void *) constraint->value);
-        APP_MEM_FREE((void *) constraint);
+        gcs_mem_free((void *) constraint->value);
+        gcs_mem_free((void *) constraint);
     }
 }
 

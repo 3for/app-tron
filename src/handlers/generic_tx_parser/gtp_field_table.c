@@ -1,7 +1,7 @@
 #include <string.h>
 #include "os_print.h"
 #include "gtp_field_table.h"
-#include "app_mem_utils.h"
+#include "gcs_memory.h"
 #include "lists.h"
 #include "shared_context.h"  // appState
 #include "ui_logic.h"
@@ -25,9 +25,9 @@ bool field_table_init(void) {
 
 // to be used as a \ref f_list_node_del
 static void delete_table_node(s_field_table_node *node) {
-    APP_MEM_FREE(node->field.key);
-    APP_MEM_FREE(node->field.value);
-    APP_MEM_FREE(node);
+    gcs_mem_free(node->field.key);
+    gcs_mem_free(node->field.value);
+    gcs_mem_free(node);
 }
 
 void field_table_cleanup(void) {
@@ -61,21 +61,22 @@ bool add_to_field_table(e_param_type type,
         return ui_712_set_title(key, strlen(key)) &&
                ui_712_set_value(value, strlen(value));
     }
-    if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
+    node = gcs_mem_calloc(sizeof(*node), GCS_MEM_FIELD);
+    if (node == NULL) {
         return false;
     }
     if (__builtin_add_overflow(strlen(key), 1U, &key_len) ||
         __builtin_add_overflow(strlen(value), 1U, &value_len)) {
-        APP_MEM_FREE(node);
+        gcs_mem_free(node);
         return false;
     }
-    if ((node->field.key = APP_MEM_ALLOC(key_len)) == NULL) {
-        APP_MEM_FREE(node);
+    if ((node->field.key = gcs_mem_alloc(key_len, GCS_MEM_FIELD)) == NULL) {
+        gcs_mem_free(node);
         return false;
     }
-    if ((node->field.value = APP_MEM_ALLOC(value_len)) == NULL) {
-        APP_MEM_FREE(node->field.key);
-        APP_MEM_FREE(node);
+    if ((node->field.value = gcs_mem_alloc(value_len, GCS_MEM_FIELD)) == NULL) {
+        gcs_mem_free(node->field.key);
+        gcs_mem_free(node);
         return false;
     }
     if (type == PARAM_TYPE_INTENT) {

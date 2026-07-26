@@ -54,7 +54,7 @@ bool gcs_bridge_feed_data_chunk(void *ctx,
             if (s_selector_len == CALLDATA_SELECTOR_SIZE) {
                 gcs_bridge_abort();  // drop any stale parked calldata
                 g_parked_calldata =
-                    calldata_init(total_len - CALLDATA_SELECTOR_SIZE, s_selector);
+                    calldata_init_root(total_len - CALLDATA_SELECTOR_SIZE, s_selector);
                 if (g_parked_calldata == NULL) {
                     PRINTF("[GCS] calldata_init failed\n");
                     return false;

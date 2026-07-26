@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include "buffer.h"
 #include "trusted_name.h"
+#include "gcs_memory.h"
 #include "network.h"  // chain_is_ethereum_compatible
 #include "utils.h"    // SET_BIT
 #include "challenge.h"
@@ -28,7 +29,7 @@
 static s_trusted_name *g_trusted_name_list = NULL;
 
 static void delete_trusted_name(s_trusted_name *node) {
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 void trusted_name_cleanup(void) {
@@ -790,7 +791,7 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         return SWO_INSUFFICIENT_MEMORY;
     }
 
-    if ((node = APP_MEM_ALLOC(sizeof(*node))) == NULL) {
+    if ((node = gcs_mem_alloc(sizeof(*node), GCS_MEM_METADATA)) == NULL) {
         PRINTF("Error: could not allocate trusted name struct!\n");
         return SWO_INSUFFICIENT_MEMORY;
     }

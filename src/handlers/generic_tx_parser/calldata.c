@@ -2,13 +2,10 @@
 #include "os_math.h"  // MIN
 #include "calldata.h"
 #include "os_print.h"
-#include "app_mem_utils.h"
-#include "mem_utils.h"
 #include "lists.h"
 #include "shared_context.h"
 #include "gcs_limits.h"
-
-static size_t g_calldata_allocated_bytes;
+#include "gcs_memory.h"
 
 static bool gcs_calldata_limits_apply(void) {
     return (appState == APP_STATE_SIGNING_GCS_STORE) ||
@@ -16,35 +13,40 @@ static bool gcs_calldata_limits_apply(void) {
            (appState == APP_STATE_GCS_FIELDS_AUTHENTICATED);
 }
 
-static bool reserve_calldata_bytes(size_t amount) {
-    size_t total;
-
-    if (__builtin_add_overflow(g_calldata_allocated_bytes, amount, &total)) {
-        return false;
-    }
-    if (gcs_calldata_limits_apply() && (total > GCS_MAX_SESSION_CALLDATA_BYTES)) {
-        return false;
-    }
-    g_calldata_allocated_bytes = total;
-    return true;
-}
-
-s_calldata *calldata_init(size_t size, const uint8_t selector[CALLDATA_SELECTOR_SIZE]) {
+static s_calldata *calldata_init_with_limit(
+    size_t size,
+    const uint8_t selector[CALLDATA_SELECTOR_SIZE],
+    size_t gcs_size_limit) {
     s_calldata *calldata;
 
     if ((selector == NULL) ||
-        (gcs_calldata_limits_apply() && (size > GCS_MAX_CALLDATA_SIZE)) ||
-        !reserve_calldata_bytes(sizeof(*calldata))) {
+        (gcs_calldata_limits_apply() && (size > gcs_size_limit))) {
         return NULL;
     }
-    if (APP_MEM_CALLOC((void **) &calldata, sizeof(*calldata)) == false) {
-        g_calldata_allocated_bytes -= sizeof(*calldata);
+    calldata = gcs_mem_calloc(sizeof(*calldata), GCS_MEM_CALLDATA);
+    if (calldata == NULL) {
         return NULL;
     }
-    calldata->allocated_size = sizeof(*calldata);
     calldata->expected_size = size;
     calldata_set_selector(calldata, selector);
     return calldata;
+}
+
+s_calldata *calldata_init(size_t size, const uint8_t selector[CALLDATA_SELECTOR_SIZE]) {
+    return calldata_init_with_limit(size, selector, SIZE_MAX);
+}
+
+s_calldata *calldata_init_root(size_t size,
+                               const uint8_t selector[CALLDATA_SELECTOR_SIZE]) {
+    return calldata_init_with_limit(size,
+                                    selector,
+                                    GCS_MAX_ROOT_CALLDATA_TOTAL_SIZE -
+                                        CALLDATA_SELECTOR_SIZE);
+}
+
+s_calldata *calldata_init_nested(size_t size,
+                                 const uint8_t selector[CALLDATA_SELECTOR_SIZE]) {
+    return calldata_init_with_limit(size, selector, GCS_MAX_NESTED_CALLDATA_SIZE);
 }
 
 bool calldata_set_selector(s_calldata *calldata, const uint8_t selector[CALLDATA_SELECTOR_SIZE]) {
@@ -83,26 +85,19 @@ static bool compress_chunk(s_calldata *calldata) {
         start_idx = 0;
     }
     size_t allocation_size;
-    if (__builtin_add_overflow(sizeof(*chunk), chunk_size, &allocation_size) ||
-        !reserve_calldata_bytes(allocation_size)) {
+    if (__builtin_add_overflow(sizeof(*chunk), chunk_size, &allocation_size)) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &chunk, sizeof(*chunk)) == false) {
-        g_calldata_allocated_bytes -= allocation_size;
+    chunk = gcs_mem_calloc(allocation_size, GCS_MEM_CALLDATA);
+    if (chunk == NULL) {
         return false;
     }
     chunk->dir = direction;
     chunk->size = chunk_size;
     if (chunk->size > 0) {
-        if ((chunk->buf = APP_MEM_ALLOC(chunk->size)) == NULL) {
-            APP_MEM_FREE(chunk);
-            g_calldata_allocated_bytes -= allocation_size;
-            return false;
-        }
-        memcpy(chunk->buf, calldata->chunk + start_idx, chunk->size);
+        memcpy(chunk->data, calldata->chunk + start_idx, chunk->size);
     }
     flist_push_back((flist_node_t **) &calldata->chunks, (flist_node_t *) chunk);
-    calldata->allocated_size += allocation_size;
     return true;
 }
 
@@ -113,7 +108,7 @@ static bool decompress_chunk(const s_calldata_chunk *chunk, uint8_t *out) {
         // Should never happen, but just in case
         return false;
     }
-    if ((chunk->buf == NULL) || (chunk->size == 0)) {
+    if (chunk->size == 0) {
         // nothing to decompress
         explicit_bzero(out, CALLDATA_CHUNK_SIZE);
         return true;
@@ -121,9 +116,9 @@ static bool decompress_chunk(const s_calldata_chunk *chunk, uint8_t *out) {
     diff = CALLDATA_CHUNK_SIZE - chunk->size;
     if (chunk->dir == CHUNK_STRIP_LEFT) {
         explicit_bzero(out, diff);
-        memcpy(&out[diff], chunk->buf, chunk->size);
+        memcpy(&out[diff], chunk->data, chunk->size);
     } else {
-        memcpy(out, chunk->buf, chunk->size);
+        memcpy(out, chunk->data, chunk->size);
         explicit_bzero(&out[chunk->size], diff);
     }
     return true;
@@ -178,21 +173,15 @@ bool calldata_append(s_calldata *calldata, const uint8_t *buffer, size_t size) {
 
 // to be used as a \ref f_list_node_del
 static void delete_calldata_chunk(s_calldata_chunk *node) {
-    APP_MEM_FREE(node->buf);
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 void calldata_delete(s_calldata *node) {
     if (node == NULL) {
         return;
     }
-    if (node->allocated_size <= g_calldata_allocated_bytes) {
-        g_calldata_allocated_bytes -= node->allocated_size;
-    } else {
-        g_calldata_allocated_bytes = 0U;
-    }
     flist_clear((flist_node_t **) &node->chunks, (f_list_node_del) &delete_calldata_chunk);
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 static bool has_valid_calldata(const s_calldata *calldata) {

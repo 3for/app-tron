@@ -36,6 +36,7 @@
 #include "tx_ctx.h"        // gcs_cleanup (Generic Clear Signing)
 #include "tron_tx_stream.h"  // tron_tx_stream_free
 #include "gcs_signing_context.h"
+#include "gcs_memory.h"
 #include "proxy_info.h"    // proxy_cleanup
 #include "enum_value.h"    // enum_value_cleanup
 #include "tlv_apdu.h"      // tlv_apdu_reset
@@ -100,6 +101,22 @@ void reset_app_context() {
     explicit_bzero(&txContext, sizeof(txContext));
     explicit_bzero(&txContent, sizeof(txContent));
     explicit_bzero(&tmpCtx, sizeof(tmpCtx));
+    /* This must be last: asynchronous GCS UI and metadata remain charged until
+     * every owner above has released its allocations. */
+    if (!gcs_budget_end()) {
+        PRINTF("GCS memory accounting invariant failed during cleanup: "
+               "session=%u generic=%u calldata=%u descriptor=%u tx=%u "
+               "field=%u ui=%u metadata=%u temporary=%u\n",
+               (unsigned int) gcs_mem_session_live_bytes(),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_GENERIC),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_CALLDATA),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_DESCRIPTOR),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_TX_CONTEXT),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_FIELD),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_UI),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_METADATA),
+               (unsigned int) gcs_mem_category_live_bytes(GCS_MEM_TEMPORARY));
+    }
 }
 
 static void abort_active_context(void) {

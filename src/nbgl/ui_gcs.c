@@ -23,6 +23,19 @@
 #include "trusted_name.h"
 #include "tx_ctx.h"  // get_current_tx_info, get_tx_chain_id
 #include "gcs_limits.h"
+#include "gcs_memory.h"
+
+/* Keep every allocation owned by the asynchronous GCS review in the same
+ * tracked category, including strings and nested NBGL extension objects. */
+#undef APP_MEM_CALLOC
+#undef APP_MEM_FREE
+#undef APP_MEM_FREE_AND_NULL
+#undef APP_MEM_STRDUP
+#define APP_MEM_CALLOC(buffer, size) \
+    gcs_mem_calloc_into((void **) (buffer), (size), GCS_MEM_UI)
+#define APP_MEM_FREE(ptr) gcs_mem_free((void *) (ptr))
+#define APP_MEM_FREE_AND_NULL(buffer) gcs_mem_free_and_null((void **) (buffer))
+#define APP_MEM_STRDUP(str) gcs_mem_strdup((str), GCS_MEM_UI)
 
 // TRON contract addresses are 20-byte EVM internally; displayed as Base58Check
 // (0x41 prefix + 20 bytes). This buffer holds one such "T..." string.
@@ -435,32 +448,39 @@ bool ui_gcs(void) {
     size_t pair = 0U;
     size_t tx_idx = 0U;
     size_t batch_nb_tx = 0U;
+    size_t title_len;
+    size_t finish_len;
     const size_t field_count = field_table_size();
     const s_tx_info *info_tx = get_current_tx_info();
+    const char *operation;
 
     explicit_bzero(&warning, sizeof(nbgl_warning_t));
 
-    if ((info_tx == NULL) || (get_operation_type(info_tx) == NULL) ||
+    if ((info_tx == NULL) || ((operation = get_operation_type(info_tx)) == NULL) ||
         (field_count > GCS_MAX_RENDERED_FIELDS)) {
         return false;
     }
 
-    snprintf(tmp_buf, tmp_buf_size, "Review transaction to %s", get_operation_type(info_tx));
-    if ((g_titleMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-        return false;
-    }
     // Finish (sign-confirmation) title: on wallet screens append the operation
     // ("Sign transaction to swap?"); on Nano keep the plain "Sign transaction".
     // Mirrors app-ethereum's ui_gcs() (which prefixes ui_tx_simulation_finish_str(),
     // a Web3-Checks feature TRON doesn't have, so we use a literal "Sign").
+    title_len = strlen("Review transaction to ") + strlen(operation) + 1U;
 #ifdef SCREEN_SIZE_WALLET
-    snprintf(tmp_buf, tmp_buf_size, "Sign transaction to %s?", get_operation_type(info_tx));
+    finish_len = strlen("Sign transaction to ") + strlen(operation) + strlen("?") + 1U;
 #else
-    snprintf(tmp_buf, tmp_buf_size, "Sign transaction");
+    finish_len = strlen("Sign transaction") + 1U;
 #endif
-    if ((g_finishMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
+    if ((title_len > UINT8_MAX) || (finish_len > UINT8_MAX) ||
+        !ui_buffers_init((uint8_t) title_len, 0U, (uint8_t) finish_len)) {
         return false;
     }
+    snprintf(g_titleMsg, title_len, "Review transaction to %s", operation);
+#ifdef SCREEN_SIZE_WALLET
+    snprintf(g_finishMsg, finish_len, "Sign transaction to %s?", operation);
+#else
+    snprintf(g_finishMsg, finish_len, "Sign transaction");
+#endif
 
     // Count batched sub-transactions: each nested calldata begins a new "intent",
     // so the number of start_intent fields is the number of sub-transactions.

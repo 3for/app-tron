@@ -1,4 +1,5 @@
 #include "enum_value.h"
+#include "gcs_memory.h"
 #include "public_keys.h"
 #include "utils.h"
 #include "ui_utils.h"
@@ -260,7 +261,7 @@ uint16_t verify_enum_value_struct(const s_enum_value_ctx *context) {
         return SWO_INSUFFICIENT_MEMORY;
     }
 
-    if ((entry = APP_MEM_ALLOC(sizeof(*entry))) == NULL) {
+    if ((entry = gcs_mem_alloc(sizeof(*entry), GCS_MEM_METADATA)) == NULL) {
         PRINTF("Error: Not enough memory!\n");
         return SWO_INSUFFICIENT_MEMORY;
     }
@@ -310,7 +311,7 @@ const s_enum_value_entry *get_matching_enum(const uint64_t *chain_id,
 }
 
 static void delete_enum_value(s_enum_value_entry *node) {
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 void enum_value_cleanup(void) {

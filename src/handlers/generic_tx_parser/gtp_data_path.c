@@ -10,6 +10,7 @@
 #include "tlv_library.h"
 #include "tlv_apdu.h"
 #include "gcs_limits.h"
+#include "gcs_memory.h"
 
 #define DATA_PATH_TAGS(X)                                    \
     X(0x00, TAG_VERSION, handle_version, ENFORCE_UNIQUE_TAG) \
@@ -164,7 +165,7 @@ static bool path_leaf(const s_leaf_args *leaf,
             }
             buf_shrink_expand(chunk, CALLDATA_CHUNK_SIZE, buf, sizeof(buf));
             collection->value[collection->size].size = read_u16_be(buf, 0);
-            if (collection->value[collection->size].size > GCS_MAX_CALLDATA_SIZE) {
+            if (collection->value[collection->size].size > GCS_MAX_DYNAMIC_VALUE_SIZE) {
                 return false;
             }
             *offset += 1;
@@ -185,11 +186,12 @@ static bool path_leaf(const s_leaf_args *leaf,
     if (__builtin_add_overflow(total_allocated,
                                collection->value[collection->size].size,
                                &next_total) ||
-        (next_total > GCS_MAX_CALLDATA_SIZE)) {
+        (next_total > GCS_MAX_DYNAMIC_VALUE_SIZE)) {
         return false;
     }
     if (collection->value[collection->size].length > 0) {
-        if ((leaf_buf = APP_MEM_ALLOC(collection->value[collection->size].length)) == NULL) {
+        if ((leaf_buf = gcs_mem_alloc(collection->value[collection->size].length,
+                                      GCS_MEM_CALLDATA)) == NULL) {
             return false;
         }
         for (int chunk_idx = 0;
@@ -198,7 +200,7 @@ static bool path_leaf(const s_leaf_args *leaf,
             size_t chunk_offset;
             if (__builtin_add_overflow((size_t) *offset, (size_t) chunk_idx, &chunk_offset) ||
                 (chunk = calldata_get_chunk(get_current_calldata(), chunk_offset)) == NULL) {
-                APP_MEM_FREE(leaf_buf);
+                gcs_mem_free(leaf_buf);
                 return false;
             }
             cpy_length =
@@ -374,7 +376,7 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
 void data_path_cleanup(const s_parsed_value_collection *collection) {
     for (int i = 0; i < collection->size; ++i) {
         if (collection->value[i].ptr != NULL) {
-            APP_MEM_FREE((void *) collection->value[i].ptr - collection->value[i].offset);
+            gcs_mem_free((void *) collection->value[i].ptr - collection->value[i].offset);
         }
     }
 }

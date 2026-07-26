@@ -15,13 +15,14 @@
  *  limitations under the License.
  ********************************************************************************/
 #include "tron_tx_stream.h"
-#include "app_mem_utils.h"  // APP_MEM_CALLOC, APP_MEM_FREE_AND_NULL
+#include "gcs_memory.h"
 
 static tron_stream_decoder_t *g_decoder = NULL;
 
 bool tron_tx_stream_begin(size_t total_len, tron_trigger_data_observer_t observer, void *ctx) {
     tron_tx_stream_free();
-    if (APP_MEM_CALLOC((void **) &g_decoder, sizeof(*g_decoder)) == false) {
+    g_decoder = gcs_mem_calloc(sizeof(*g_decoder), GCS_MEM_TX_CONTEXT);
+    if (g_decoder == NULL) {
         return false;
     }
     tron_stream_decoder_init_raw(g_decoder, total_len);
@@ -52,5 +53,5 @@ bool tron_tx_stream_get_result(tron_decode_result_t *out) {
 }
 
 void tron_tx_stream_free(void) {
-    APP_MEM_FREE_AND_NULL((void **) &g_decoder);
+    gcs_mem_free_and_null((void **) &g_decoder);
 }

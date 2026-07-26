@@ -109,6 +109,7 @@ set(TIP712_FUZZ_SUPPORT_SOURCES
     src/lists_mock.c
     src/ui_utils_mock.c
     ../../src/mem_utils.c
+    ../../src/gcs_memory.c
     ../../src/hash_bytes.c
     ../../src/utils.c
     ../../src/uint128.c
@@ -301,6 +302,7 @@ set(EXTERNAL_METADATA_FUZZ_SOURCES
     ../../src/handlers/cmd_provideTokenInfo.c
     ../../src/handlers/provide_nft_information/cmd_provide_nft_info.c
     ../../src/tlv_apdu.c
+    ../../src/gcs_memory.c
     ../../src/ledger_pki.c
     ../../src/mem_utils.c
     ../../src/hash_bytes.c

@@ -114,6 +114,30 @@ endif()
 
 add_test(test_transaction_trigger_decode_whitebox test_transaction_trigger_decode_whitebox)
 
+add_executable(test_gcs_memory
+               tests/gcs_memory.c
+               ../fuzzing/src/lists_mock.c
+               ../../src/gcs_memory.c
+               ../../src/handlers/generic_tx_parser/calldata.c)
+target_include_directories(test_gcs_memory
+                           PRIVATE
+                           .
+                           ../fuzzing/include
+                           ../../src
+                           ../../src/handlers
+                           ../../src/handlers/generic_tx_parser
+                           ../../src/nbgl
+                           ../../src/tron-sdk
+                           ../../proto
+                           ../../nanopb)
+target_link_libraries(test_gcs_memory PUBLIC cmocka)
+target_compile_options(test_gcs_memory
+                       PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/../fuzzing/include/fuzz_compat.h)
+if(NOT APPLE)
+    target_link_libraries(test_gcs_memory PUBLIC gcov)
+endif()
+add_test(test_gcs_memory test_gcs_memory)
+
 add_library(legacy_tx_stream_lib STATIC ../../src/handlers/legacy_tx_stream.c)
 target_include_directories(legacy_tx_stream_lib
                            PUBLIC

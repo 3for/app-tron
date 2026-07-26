@@ -1,8 +1,8 @@
 #include "nbgl_use_case.h"
 #include "app_mem_utils.h"
-#include "app_errors.h"  // APDU response codes
 #include "ui_callbacks.h"
 #include "ui_utils.h"
+#include "gcs_memory.h"
 #include "mem_utils.h"
 
 nbgl_contentTagValue_t *g_pairs = NULL;
@@ -12,23 +12,68 @@ char *g_titleMsg = NULL;
 char *g_subTitleMsg = NULL;
 char *g_finishMsg = NULL;
 
+/*
+ * ui_utils is shared by TIP-712 and GCS. Only GCS has an active session
+ * budget, so adding an eight-byte tracked-allocation header to every TIP-712
+ * UI object needlessly reduces the already tight Nano S+ review heap. Record
+ * the allocator used by each object instead: this preserves exact alloc/free
+ * symmetry even if cleanup happens after the active phase changes, while GCS
+ * allocations remain fully charged until reset_app_context() ends the budget.
+ */
+static bool g_pairs_tracked;
+static bool g_pairs_list_tracked;
+static bool g_title_tracked;
+static bool g_subtitle_tracked;
+static bool g_finish_tracked;
+
+static bool ui_mem_calloc(void **buffer, size_t size, bool *tracked) {
+    if ((buffer == NULL) || (tracked == NULL)) {
+        return false;
+    }
+    *buffer = NULL;
+    *tracked = gcs_budget_is_active();
+    if (*tracked) {
+        if (!gcs_mem_calloc_into(buffer, size, GCS_MEM_UI)) {
+            *tracked = false;
+            return false;
+        }
+        return true;
+    }
+    return APP_MEM_CALLOC(buffer, size);
+}
+
+static void ui_mem_free_and_null(void **buffer, bool *tracked) {
+    if ((buffer == NULL) || (tracked == NULL)) {
+        return;
+    }
+    if (*buffer != NULL) {
+        if (*tracked) {
+            gcs_mem_free(*buffer);
+        } else {
+            APP_MEM_FREE(*buffer);
+        }
+        *buffer = NULL;
+    }
+    *tracked = false;
+}
+
 /**
- * Internal Cleanup to free allocated memory and send an error status
+ * Internal cleanup for partially initialized UI buffers. The caller owns the
+ * APDU status and signing-state reset, avoiding duplicate asynchronous replies.
  */
 static void _cleanup(void) {
     ui_all_cleanup();
-    io_seproxyhal_send_status(SWO_INSUFFICIENT_MEMORY, 0, true, true);
 }
 
 void ui_pairs_cleanup(void) {
-    APP_MEM_FREE_AND_NULL((void **) &g_pairs);
-    APP_MEM_FREE_AND_NULL((void **) &g_pairsList);
+    ui_mem_free_and_null((void **) &g_pairs, &g_pairs_tracked);
+    ui_mem_free_and_null((void **) &g_pairsList, &g_pairs_list_tracked);
 }
 
 void ui_buffers_cleanup(void) {
-    APP_MEM_FREE_AND_NULL((void **) &g_titleMsg);
-    APP_MEM_FREE_AND_NULL((void **) &g_subTitleMsg);
-    APP_MEM_FREE_AND_NULL((void **) &g_finishMsg);
+    ui_mem_free_and_null((void **) &g_titleMsg, &g_title_tracked);
+    ui_mem_free_and_null((void **) &g_subTitleMsg, &g_subtitle_tracked);
+    ui_mem_free_and_null((void **) &g_finishMsg, &g_finish_tracked);
 }
 
 void ui_all_cleanup(void) {
@@ -44,12 +89,16 @@ void ui_all_cleanup(void) {
 bool ui_pairs_init(uint8_t nbPairs) {
     ui_pairs_cleanup();
     // Allocate the pairsList memory
-    if (!APP_MEM_CALLOC((void **) &g_pairsList, sizeof(nbgl_contentTagValueList_t))) {
+    if (!ui_mem_calloc((void **) &g_pairsList,
+                       sizeof(nbgl_contentTagValueList_t),
+                       &g_pairs_list_tracked)) {
         goto error;
     }
 
     // Allocate the pairs memory
-    if (!APP_MEM_CALLOC((void **) &g_pairs, nbPairs * sizeof(nbgl_contentTagValue_t))) {
+    if (!ui_mem_calloc((void **) &g_pairs,
+                       (size_t) nbPairs * sizeof(nbgl_contentTagValue_t),
+                       &g_pairs_tracked)) {
         goto error;
     }
     g_pairsList->nbPairs = nbPairs;
@@ -73,19 +122,21 @@ bool ui_buffers_init(uint8_t title_len, uint8_t subtitle_len, uint8_t finish_len
     ui_buffers_cleanup();
     if (title_len > 0) {
         // Allocate the Title message buffer
-        if (!APP_MEM_CALLOC((void **) &g_titleMsg, title_len)) {
+        if (!ui_mem_calloc((void **) &g_titleMsg, title_len, &g_title_tracked)) {
             goto error;
         }
     }
     if (subtitle_len > 0) {
         // Allocate the SubTitle message buffer
-        if (!APP_MEM_CALLOC((void **) &g_subTitleMsg, subtitle_len)) {
+        if (!ui_mem_calloc((void **) &g_subTitleMsg,
+                           subtitle_len,
+                           &g_subtitle_tracked)) {
             goto error;
         }
     }
     if (finish_len > 0) {
         // Allocate the Finish message buffer
-        if (!APP_MEM_CALLOC((void **) &g_finishMsg, finish_len)) {
+        if (!ui_mem_calloc((void **) &g_finishMsg, finish_len, &g_finish_tracked)) {
             goto error;
         }
     }

@@ -37,6 +37,7 @@
 #include "gtp_field_table.h"
 #include "gcs_limits.h"
 #include "gcs_signing_context.h"
+#include "gcs_memory.h"
 
 extern void reset_app_context();
 
@@ -81,7 +82,7 @@ bool gcs_account_descriptor(size_t descriptor_size, bool rendered_field) {
         __builtin_add_overflow(g_gcs.rendered_fields,
                                rendered_field ? 1U : 0U,
                                &next_fields) ||
-        (next_bytes > GCS_MAX_DESCRIPTOR_BYTES) ||
+        (next_bytes > GCS_MAX_DESCRIPTOR_THROUGHPUT_BYTES) ||
         (next_count > GCS_MAX_DESCRIPTOR_COUNT) ||
         (next_fields > GCS_MAX_RENDERED_FIELDS)) {
         return false;
@@ -297,6 +298,12 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
             return send_gcs_status(E_INCORRECT_LENGTH);
         }
 
+        /* Metadata is immutable once STORE starts. Include all tracked
+         * pre-session metadata in the 12 KiB live-memory ceiling. */
+        if (!gcs_budget_begin()) {
+            return send_gcs_status(SWO_INSUFFICIENT_MEMORY);
+        }
+
         initTx(&txContext, &txContent);
         customContractField = 0;
         gcs_bridge_reset();
@@ -348,7 +355,9 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
 
     // process buffer
     if (!tron_tx_stream_feed(workBuffer, dataLength)) {
-        return send_gcs_status(E_INCORRECT_DATA);
+        return send_gcs_status(gcs_mem_take_allocation_failure()
+                                   ? SWO_INSUFFICIENT_MEMORY
+                                   : E_INCORRECT_DATA);
     }
     g_gcs.raw_data_received += dataLength;
 
@@ -367,7 +376,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     tron_decode_result_t decoded = {0};
     if (!tron_tx_stream_get_result(&decoded) ||
         !trigger_values_match_mainnet(&decoded) ||
-        (decoded.data_len > GCS_MAX_CALLDATA_SIZE) ||
+        (decoded.data_len > GCS_MAX_ROOT_CALLDATA_TOTAL_SIZE) ||
         (decoded.has_custom_data && (g_gcs.memo_received != decoded.custom_data_len)) ||
         (decoded.has_custom_data && (decoded.custom_data_len != 0U) &&
          !N_storage.dataAllowed)) {
@@ -398,7 +407,9 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     tron_tx_stream_free();
     if (!ok) {
         gcs_bridge_abort();
-        return send_gcs_status(E_INCORRECT_DATA);
+        return send_gcs_status(gcs_mem_take_allocation_failure()
+                                   ? SWO_INSUFFICIENT_MEMORY
+                                   : E_INCORRECT_DATA);
     }
     // Finalize the transaction hash now (all tx bytes were fed into txContext.sha2
     // above). The GCS START_FLOW signs tmpCtx.transactionContext.hash, so it must be
