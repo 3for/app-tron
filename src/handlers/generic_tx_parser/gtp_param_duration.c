@@ -32,8 +32,10 @@ static bool handle_value(const tlv_data_t *data, s_param_duration_context *conte
 DEFINE_TLV_PARSER(PARAM_DURATION_TAGS, NULL, param_duration_tlv_parser)
 
 bool handle_param_duration_struct(const buffer_t *buf, s_param_duration_context *context) {
-    TLV_reception_t received_tags;
-    return param_duration_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_duration_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_VALUE) &&
+           (context->param->version == 1U);
 }
 
 bool format_param_duration(const s_param_duration *param, const char *name) {

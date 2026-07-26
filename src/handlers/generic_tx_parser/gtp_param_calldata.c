@@ -10,15 +10,16 @@
 #include "tx_ctx.h"
 #include "app_mem_utils.h"
 #include "tlv_apdu.h"
+#include "gcs_limits.h"
 
 #define PARAM_CALLDATA_TAGS(X)                                 \
     X(0x00, TAG_VERSION, handle_version, ENFORCE_UNIQUE_TAG)   \
     X(0x01, TAG_VALUE, handle_value, ENFORCE_UNIQUE_TAG)       \
     X(0x02, TAG_CALLEE, handle_callee, ENFORCE_UNIQUE_TAG)     \
-    X(0x03, TAG_CHAIN_ID, handle_chain_id, ALLOW_MULTIPLE_TAG) \
-    X(0x04, TAG_SELECTOR, handle_selector, ALLOW_MULTIPLE_TAG) \
-    X(0x05, TAG_AMOUNT, handle_amount, ALLOW_MULTIPLE_TAG)     \
-    X(0x06, TAG_SPENDER, handle_spender, ALLOW_MULTIPLE_TAG)
+    X(0x03, TAG_CHAIN_ID, handle_chain_id, ENFORCE_UNIQUE_TAG) \
+    X(0x04, TAG_SELECTOR, handle_selector, ENFORCE_UNIQUE_TAG) \
+    X(0x05, TAG_AMOUNT, handle_amount, ENFORCE_UNIQUE_TAG)     \
+    X(0x06, TAG_SPENDER, handle_spender, ENFORCE_UNIQUE_TAG)
 
 static bool handle_version(const tlv_data_t *data, s_param_calldata_context *context) {
     return tlv_get_uint8_range(data, &context->param->version, 0, UINT8_MAX);
@@ -79,8 +80,10 @@ static bool handle_spender(const tlv_data_t *data, s_param_calldata_context *con
 DEFINE_TLV_PARSER(PARAM_CALLDATA_TAGS, NULL, param_calldata_tlv_parser)
 
 bool handle_param_calldata_struct(const buffer_t *buf, s_param_calldata_context *context) {
-    TLV_reception_t received_tags;
-    return param_calldata_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_calldata_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_VALUE, TAG_CALLEE) &&
+           (context->param->version == 1U);
 }
 
 static bool process_nested_calldata(const s_param_calldata *param,
@@ -123,7 +126,7 @@ static bool process_nested_calldata(const s_param_calldata *param,
             return false;
         }
         if (!calldata_append(new_calldata, calldata_buf, calldata_length)) {
-            APP_MEM_FREE(new_calldata);
+            calldata_delete(new_calldata);
             return false;
         }
     }
@@ -198,6 +201,12 @@ bool format_param_calldata(const s_param_calldata *param, const char *name) {
                            &spenders))) {
         // Set batch size and number of transactions
         if (calldatas.size > 1) {
+            if ((calldatas.size > GCS_MAX_BATCH_TRANSACTIONS) ||
+                (txContext.batch_nb_tx >
+                 (GCS_MAX_BATCH_TRANSACTIONS - calldatas.size))) {
+                ret = false;
+                goto cleanup;
+            }
             txContext.batch_nb_tx += calldatas.size;
         }
         txContext.current_batch_size = calldatas.size;
@@ -214,6 +223,7 @@ bool format_param_calldata(const s_param_calldata *param, const char *name) {
             }
         }
     }
+cleanup:
     value_cleanup(&param->calldata, &calldatas);
     value_cleanup(&param->contract_addr, &contract_addrs);
     value_cleanup(&param->chain_id, &chain_ids);

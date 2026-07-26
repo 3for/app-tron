@@ -35,6 +35,7 @@
 #include "trusted_name.h"
 #include "tx_ctx.h"        // gcs_cleanup (Generic Clear Signing)
 #include "tron_tx_stream.h"  // tron_tx_stream_free
+#include "gcs_signing_context.h"
 #include "proxy_info.h"    // proxy_cleanup
 #include "enum_value.h"    // enum_value_cleanup
 #include "tlv_apdu.h"      // tlv_apdu_reset
@@ -78,6 +79,7 @@ void reset_app_context() {
     tip712_context_cleanup();
     // Free the shared TriggerSmartContract stream decoder (GCS / legacy signing).
     tron_tx_stream_free();
+    gcs_signing_context_cleanup();
     // Free any Generic Clear Signing state (tx contexts, field table, parked
     // calldata) so it never leaks across signing sessions.
     gcs_cleanup();

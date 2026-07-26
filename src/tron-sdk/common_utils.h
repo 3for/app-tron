@@ -42,6 +42,7 @@
 
 #define TRX_DECIMALS                  6
 #define MAX_TRC10_PRECISION           6
+#define MIN_TRC10_TOKEN_ID            1000000
 #define MAX_URL_SIZE                  256
 #define MAX_TRC10_TOKEN_ID_LENGTH     19
 #define MAX_TRC10_ASSET_NAME_LENGTH   32

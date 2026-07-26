@@ -7,6 +7,7 @@
 #include "hash_bytes.h"
 #include "tlv_apdu.h"
 #include "lcx_ecdsa.h"
+#include "lists.h"
 
 #define TYPE_PROXY_INFO 0x26
 #define STRUCT_VERSION  0x01
@@ -18,7 +19,12 @@ typedef enum {
     DELEGATION_TYPE_MAX,
 } e_delegation_type;
 
-static s_proxy_info *g_proxy_info = NULL;
+typedef struct {
+    flist_node_t node;
+    s_proxy_info info;
+} s_proxy_info_node;
+
+static s_proxy_info_node *g_proxy_info_list = NULL;
 
 /**
  * @brief Parse the STRUCT_TYPE value.
@@ -200,8 +206,7 @@ static bool verify_fields(const s_proxy_info_ctx *context) {
 
 bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
     uint8_t hash[INT256_LENGTH];
-    s_proxy_info *new_proxy_info;
-    s_proxy_info *old_proxy_info;
+    s_proxy_info_node *node;
 
     if (!verify_fields(context)) {
         PRINTF("Error: Missing mandatory proxy fields!\n");
@@ -220,23 +225,39 @@ bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
                                     context->sig_size) != true) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &new_proxy_info, sizeof(*new_proxy_info)) == false) {
+    if (flist_size((flist_node_t **) &g_proxy_info_list) >= MAX_PROXY_INFOS) {
+        PRINTF("Error: too many proxy descriptors!\n");
+        return false;
+    }
+    for (const s_proxy_info_node *current = g_proxy_info_list; current != NULL;
+         current = (const s_proxy_info_node *) current->node.next) {
+        if ((current->info.chain_id == context->proxy_info.chain_id) &&
+            (memcmp(current->info.address,
+                    context->proxy_info.address,
+                    ADDRESS_LENGTH) == 0) &&
+            (!current->info.has_selector || !context->proxy_info.has_selector ||
+             (memcmp(current->info.selector,
+                     context->proxy_info.selector,
+                     CALLDATA_SELECTOR_SIZE) == 0))) {
+            PRINTF("Error: overlapping proxy descriptor!\n");
+            return false;
+        }
+    }
+    if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
         PRINTF("Error: Not enough memory!\n");
         return false;
     }
-    memcpy(new_proxy_info, &context->proxy_info, sizeof(*new_proxy_info));
-    old_proxy_info = g_proxy_info;
-    g_proxy_info = new_proxy_info;
-    APP_MEM_FREE(old_proxy_info);
+    memcpy(&node->info, &context->proxy_info, sizeof(node->info));
+    flist_push_back((flist_node_t **) &g_proxy_info_list, (flist_node_t *) node);
 
     PRINTF("================== PROXY INFO ====================\n");
-    PRINTF("chain ID = %u\n", (uint32_t) g_proxy_info->chain_id);
-    PRINTF("address = 0x%.*h\n", sizeof(g_proxy_info->address), g_proxy_info->address);
+    PRINTF("chain ID = %u\n", (uint32_t) node->info.chain_id);
+    PRINTF("address = 0x%.*h\n", sizeof(node->info.address), node->info.address);
     PRINTF("implementation address = 0x%.*h\n",
-           sizeof(g_proxy_info->implem_address),
-           g_proxy_info->implem_address);
-    if (g_proxy_info->has_selector) {
-        PRINTF("selector = 0x%.*h\n", sizeof(g_proxy_info->selector), g_proxy_info->selector);
+           sizeof(node->info.implem_address),
+           node->info.implem_address);
+    if (node->info.has_selector) {
+        PRINTF("selector = 0x%.*h\n", sizeof(node->info.selector), node->info.selector);
     }
     PRINTF("==================================================\n");
     return true;
@@ -270,43 +291,57 @@ static bool check_proxy_params(const uint64_t *chain_id,
 const uint8_t *get_proxy_contract(const uint64_t *chain_id,
                                   const uint8_t *addr,
                                   const uint8_t *selector) {
-    if (g_proxy_info == NULL) {
+    const uint8_t *match = NULL;
+
+    if (g_proxy_info_list == NULL) {
         PRINTF("Error: Proxy info not initialized!\n");
         return NULL;
     }
-
-    if (!check_proxy_params(chain_id,
-                            addr,
-                            selector,
-                            g_proxy_info->has_selector,
-                            &g_proxy_info->chain_id,
-                            g_proxy_info->implem_address,
-                            g_proxy_info->selector)) {
-        return NULL;
+    for (const s_proxy_info_node *node = g_proxy_info_list; node != NULL;
+         node = (const s_proxy_info_node *) node->node.next) {
+        if (check_proxy_params(chain_id,
+                               addr,
+                               selector,
+                               node->info.has_selector,
+                               &node->info.chain_id,
+                               node->info.implem_address,
+                               node->info.selector)) {
+            if (match != NULL) {
+                PRINTF("Error: ambiguous proxy implementation mapping!\n");
+                return NULL;
+            }
+            match = node->info.address;
+        }
     }
-    return g_proxy_info->address;
+    return match;
 }
 
 const uint8_t *get_implem_contract(const uint64_t *chain_id,
                                    const uint8_t *addr,
                                    const uint8_t *selector) {
-    if (g_proxy_info == NULL) {
+    if (g_proxy_info_list == NULL) {
         PRINTF("Error: Proxy info not initialized!\n");
         return NULL;
     }
-
-    if (!check_proxy_params(chain_id,
-                            addr,
-                            selector,
-                            g_proxy_info->has_selector,
-                            &g_proxy_info->chain_id,
-                            g_proxy_info->address,
-                            g_proxy_info->selector)) {
-        return NULL;
+    for (const s_proxy_info_node *node = g_proxy_info_list; node != NULL;
+         node = (const s_proxy_info_node *) node->node.next) {
+        if (check_proxy_params(chain_id,
+                               addr,
+                               selector,
+                               node->info.has_selector,
+                               &node->info.chain_id,
+                               node->info.address,
+                               node->info.selector)) {
+            return node->info.implem_address;
+        }
     }
-    return g_proxy_info->implem_address;
+    return NULL;
+}
+
+static void delete_proxy_info(flist_node_t *node) {
+    APP_MEM_FREE(node);
 }
 
 void proxy_cleanup(void) {
-    APP_MEM_FREE_AND_NULL((void **) &g_proxy_info);
+    flist_clear((flist_node_t **) &g_proxy_info_list, delete_proxy_info);
 }

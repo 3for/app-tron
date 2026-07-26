@@ -49,10 +49,12 @@ typedef enum {
     APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
     APP_STATE_REVIEWING_PERSONAL_MESSAGE,
     APP_STATE_SIGNING,
+    APP_STATE_SIGNING_GCS_STORE,
     APP_STATE_SIGNING_TIP712,
     // Used while a TriggerSmartContract is being clear-signed through the
     // generic_tx_parser (GCS) module ported from app-ethereum.
     APP_STATE_SIGNING_TX,
+    APP_STATE_GCS_FIELDS_AUTHENTICATED,
     APP_STATE_REVIEWING_GCS
 } app_state_t;
 

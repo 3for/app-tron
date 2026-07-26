@@ -48,8 +48,13 @@ static bool handle_prefix(const tlv_data_t *data, s_param_unit_context *context)
 DEFINE_TLV_PARSER(PARAM_UNIT_TAGS, NULL, param_unit_tlv_parser)
 
 bool handle_param_unit_struct(const buffer_t *buf, s_param_unit_context *context) {
-    TLV_reception_t received_tags;
-    return param_unit_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_unit_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags,
+                                   TAG_VERSION,
+                                   TAG_VALUE,
+                                   TAG_BASE) &&
+           (context->param->version == 1U);
 }
 
 bool format_param_unit(const s_param_unit *param, const char *name) {

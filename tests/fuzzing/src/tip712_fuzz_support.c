@@ -66,6 +66,15 @@ static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
 static s_trusted_name g_fuzz_trusted_name;
 
 __attribute__((weak)) void fuzz_reset_extra_context(void) {}
+__attribute__((weak)) bool gcs_account_descriptor(size_t descriptor_size,
+                                                  bool rendered_field) {
+    (void) descriptor_size;
+    (void) rendered_field;
+    return true;
+}
+__attribute__((weak)) bool gcs_add_forced_fields(void) {
+    return true;
+}
 
 static void seed_default_assets(void) {
     static const uint8_t token_addrs[][ADDRESS_LENGTH] = {

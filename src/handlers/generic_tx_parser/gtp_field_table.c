@@ -6,6 +6,7 @@
 #include "shared_context.h"  // appState
 #include "ui_logic.h"
 #include "tx_ctx.h"
+#include "gcs_limits.h"
 
 typedef struct {
     flist_node_t _list;
@@ -37,12 +38,17 @@ bool add_to_field_table(e_param_type type,
                         const char *key,
                         const char *value,
                         const void *extra_data) {
-    uint8_t key_len;
-    uint16_t value_len;
+    size_t key_len;
+    size_t value_len;
     s_field_table_node *node;
 
     if ((key == NULL) || (value == NULL)) {
         PRINTF("Error: NULL key/value!\n");
+        return false;
+    }
+    if ((appState == APP_STATE_SIGNING_TX) &&
+        (field_table_size() >= GCS_MAX_RENDERED_FIELDS)) {
+        PRINTF("Error: too many rendered fields!\n");
         return false;
     }
     PRINTF(">>> \"%s\": \"%s\"\n", key, value);
@@ -58,8 +64,11 @@ bool add_to_field_table(e_param_type type,
     if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
         return false;
     }
-    key_len = strlen(key) + 1;
-    value_len = strlen(value) + 1;
+    if (__builtin_add_overflow(strlen(key), 1U, &key_len) ||
+        __builtin_add_overflow(strlen(value), 1U, &value_len)) {
+        APP_MEM_FREE(node);
+        return false;
+    }
     if ((node->field.key = APP_MEM_ALLOC(key_len)) == NULL) {
         APP_MEM_FREE(node);
         return false;
@@ -107,9 +116,13 @@ size_t field_table_size(void) {
 const s_field_table_entry *get_from_field_table(int index) {
     const s_field_table_node *node = g_table;
 
+    if (index < 0) {
+        return NULL;
+    }
+
     for (int i = 0; i < index; ++i) {
         if (node == NULL) return NULL;
         node = (s_field_table_node *) ((flist_node_t *) node)->next;
     }
-    return &node->field;
+    return (node == NULL) ? NULL : &node->field;
 }

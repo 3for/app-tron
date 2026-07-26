@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
     size_t expected_size;
     size_t received_size;
+    size_t allocated_size;
 
     uint8_t selector[CALLDATA_SELECTOR_SIZE];
     s_calldata_chunk *chunks;
@@ -36,5 +37,5 @@ bool calldata_set_selector(s_calldata *calldata, const uint8_t selector[CALLDATA
 bool calldata_append(s_calldata *calldata, const uint8_t *buffer, size_t size);
 void calldata_delete(s_calldata *node);
 const uint8_t *calldata_get_selector(const s_calldata *calldata);
-const uint8_t *calldata_get_chunk(s_calldata *calldata, int idx);
+const uint8_t *calldata_get_chunk(s_calldata *calldata, size_t idx);
 void calldata_dump(const s_calldata *calldata);

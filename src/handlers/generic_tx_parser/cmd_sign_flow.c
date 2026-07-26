@@ -36,13 +36,14 @@ int handle_gcs_start_flow(void) {
         PRINTF("GCS start flow: remnant unprocessed TX context!\n");
         return send_gcs_flow_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
+    appState = APP_STATE_GCS_FIELDS_AUTHENTICATED;
     // Build and display the review screen. ui_gcs() starts the async NBGL review
     // and signs through review_choice -> io_seproxyhal_touch_tx_ok on approval, so
     // the APDU reply is sent later, not here.
-    appState = APP_STATE_REVIEWING_GCS;
     if (!ui_gcs()) {
         PRINTF("GCS start flow: ui_gcs() failed!\n");
         return send_gcs_flow_status(E_INCORRECT_DATA);
     }
+    appState = APP_STATE_REVIEWING_GCS;
     return 0;
 }

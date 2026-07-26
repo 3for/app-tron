@@ -190,7 +190,7 @@ static void test_tron_length_action_maps_contexts(void **state) {
                      TRON_ACT_ENTER_CONTRACT);
     decoder.first_contract_seen = true;
     assert_int_equal(tron_length_action(&decoder, protocol_Transaction_raw_contract_tag, PB_WT_STRING),
-                     TRON_ACT_SKIP);
+                     TRON_ACT_ENTER_CONTRACT);
 
     set_ctx(&decoder, TRON_CTX_CONTRACT);
     assert_int_equal(
@@ -370,9 +370,14 @@ static void test_tron_start_capture_if_needed_paths(void **state) {
     set_ctx(&decoder, TRON_CTX_TRIGGER);
     decoder.pending_wire = PB_WT_STRING;
     decoder.pending_tag = protocol_TriggerSmartContract_owner_address_tag;
-    assert_true(tron_start_capture_if_needed(&decoder, 30U));
+    assert_false(tron_start_capture_if_needed(&decoder, 30U));
+
+    set_ctx(&decoder, TRON_CTX_TRIGGER);
+    decoder.pending_wire = PB_WT_STRING;
+    decoder.pending_tag = protocol_TriggerSmartContract_owner_address_tag;
+    assert_true(tron_start_capture_if_needed(&decoder, 21U));
     assert_true(decoder.result.has_owner_address);
-    assert_int_equal(decoder.result.owner_address_len, sizeof(decoder.result.owner_address));
+    assert_int_equal(decoder.result.owner_address_len, 21U);
 
     set_ctx(&decoder, TRON_CTX_TRIGGER);
     decoder.pending_wire = PB_WT_STRING;
@@ -383,10 +388,14 @@ static void test_tron_start_capture_if_needed_paths(void **state) {
     set_ctx(&decoder, TRON_CTX_TRIGGER);
     decoder.pending_wire = PB_WT_STRING;
     decoder.pending_tag = protocol_TriggerSmartContract_contract_address_tag;
-    assert_true(tron_start_capture_if_needed(&decoder, 30U));
+    assert_false(tron_start_capture_if_needed(&decoder, 30U));
+
+    set_ctx(&decoder, TRON_CTX_TRIGGER);
+    decoder.pending_wire = PB_WT_STRING;
+    decoder.pending_tag = protocol_TriggerSmartContract_contract_address_tag;
+    assert_true(tron_start_capture_if_needed(&decoder, 21U));
     assert_true(decoder.result.has_contract_address);
-    assert_int_equal(decoder.result.contract_address_len,
-                     sizeof(decoder.result.contract_address));
+    assert_int_equal(decoder.result.contract_address_len, 21U);
 
     set_ctx(&decoder, TRON_CTX_TRIGGER);
     decoder.pending_wire = PB_WT_STRING;
@@ -529,9 +538,9 @@ static void test_tron_process_length_paths(void **state) {
     decoder.pending_wire = PB_WT_STRING;
     decoder.pending_tag = protocol_TriggerSmartContract_owner_address_tag;
     decoder.mode = TRON_MODE_LENGTH;
-    assert_true(tron_process_length(&decoder, 2U));
+    assert_true(tron_process_length(&decoder, 21U));
     assert_int_equal(decoder.mode, TRON_MODE_BYTES);
-    assert_int_equal(decoder.bytes_remaining, 2U);
+    assert_int_equal(decoder.bytes_remaining, 21U);
 
     set_ctx(&decoder, TRON_CTX_RAW);
     decoder.pending_wire = PB_WT_STRING;
@@ -544,8 +553,7 @@ static void test_tron_process_length_paths(void **state) {
     decoder.pending_wire = PB_WT_STRING;
     decoder.pending_tag = protocol_TriggerSmartContract_owner_address_tag;
     decoder.mode = TRON_MODE_LENGTH;
-    assert_true(tron_process_length(&decoder, 0U));
-    assert_int_equal(decoder.mode, TRON_MODE_KEY);
+    assert_false(tron_process_length(&decoder, 0U));
 }
 
 static void test_tron_process_byte_key_mode_paths(void **state) {
@@ -555,22 +563,17 @@ static void test_tron_process_byte_key_mode_paths(void **state) {
     static const uint8_t too_large_key[] = {0x80U, 0x80U, 0x80U, 0x80U, 0x10U};
 
     prepare_process_byte(&decoder, TRON_MODE_KEY, TRON_CTX_TX, 1U);
-    assert_true(tron_process_byte(&decoder, 0x08U));
-    assert_int_equal(decoder.mode, TRON_MODE_VARINT);
+    assert_false(tron_process_byte(&decoder, 0x08U));
 
     prepare_process_byte(&decoder, TRON_MODE_KEY, TRON_CTX_TX, 1U);
     assert_true(tron_process_byte(&decoder, 0x0AU));
     assert_int_equal(decoder.mode, TRON_MODE_LENGTH);
 
     prepare_process_byte(&decoder, TRON_MODE_KEY, TRON_CTX_TX, 1U);
-    assert_true(tron_process_byte(&decoder, 0x0DU));
-    assert_int_equal(decoder.mode, TRON_MODE_BYTES);
-    assert_int_equal(decoder.bytes_remaining, 4U);
+    assert_false(tron_process_byte(&decoder, 0x0DU));
 
     prepare_process_byte(&decoder, TRON_MODE_KEY, TRON_CTX_TX, 1U);
-    assert_true(tron_process_byte(&decoder, 0x09U));
-    assert_int_equal(decoder.mode, TRON_MODE_BYTES);
-    assert_int_equal(decoder.bytes_remaining, 8U);
+    assert_false(tron_process_byte(&decoder, 0x09U));
 
     prepare_process_byte(&decoder, TRON_MODE_KEY, TRON_CTX_TX, 1U);
     assert_false(tron_process_byte(&decoder, 0x00U));
@@ -721,6 +724,20 @@ static void test_public_decoder_api_paths(void **state) {
     assert_false(tron_stream_decoder_get_result(&decoder, NULL));
 
     decoder.done = true;
+    decoder.first_contract_seen = true;
+    decoder.parameter_seen = true;
+    decoder.type_url_seen = true;
+    decoder.any_value_seen = true;
+    decoder.result.has_contract_type = true;
+    decoder.result.contract_type =
+        protocol_Transaction_Contract_ContractType_TriggerSmartContract;
+    decoder.result.has_owner_address = true;
+    decoder.result.owner_address_len = 21U;
+    decoder.result.owner_address[0] = 0x41U;
+    decoder.result.has_contract_address = true;
+    decoder.result.contract_address_len = 21U;
+    decoder.result.contract_address[0] = 0x41U;
+    decoder.result.has_data = true;
     decoder.result.has_fee_limit = true;
     decoder.result.fee_limit = 42;
     assert_true(tron_stream_decoder_get_result(&decoder, &result));

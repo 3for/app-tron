@@ -6,13 +6,17 @@
 #include "cmd_tx_info.h"
 #include "gtp_tx_info.h"
 #include "tx_ctx.h"
-
-#define GTP_FIELD_DESCRIPTOR_MAX_LENGTH 4096
+#include "gcs_limits.h"
+#include "gcs_signing_context.h"
 
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_field field = {0};
     s_field_ctx ctx = {0};
 
+    if ((appState == APP_STATE_SIGNING_TX) &&
+        !gcs_account_descriptor(buf->size, true)) {
+        return false;
+    }
     ctx.field = &field;
     if (!handle_field_struct(buf, &ctx)) {
         PRINTF("Error: could not handle the field struct!\n");
@@ -66,7 +70,7 @@ uint16_t handle_field(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload
                        p1 == P1_FIRST_CHUNK,
                        lc,
                        payload,
-                       GTP_FIELD_DESCRIPTOR_MAX_LENGTH,
+                       GCS_MAX_DESCRIPTOR_SIZE,
                        &handle_tlv_payload)) {
         return SWO_INCORRECT_DATA;
     }

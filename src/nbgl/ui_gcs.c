@@ -22,6 +22,7 @@
 #include "proxy_info.h"
 #include "trusted_name.h"
 #include "tx_ctx.h"  // get_current_tx_info, get_tx_chain_id
+#include "gcs_limits.h"
 
 // TRON contract addresses are 20-byte EVM internally; displayed as Base58Check
 // (0x41 prefix + 20 bytes). This buffer holds one such "T..." string.
@@ -430,13 +431,19 @@ bool ui_gcs(void) {
     bool show_network;
     nbgl_contentValueExt_t *ext = NULL;
     nbgl_contentInfoList_t *infolist = NULL;
-    uint8_t nbPairs = 0;
-    uint8_t pair = 0;
-    uint8_t tx_idx = 0;
-    uint8_t batch_nb_tx = 0;
+    size_t nb_pairs = 0U;
+    size_t pair = 0U;
+    size_t tx_idx = 0U;
+    size_t batch_nb_tx = 0U;
+    const size_t field_count = field_table_size();
     const s_tx_info *info_tx = get_current_tx_info();
 
     explicit_bzero(&warning, sizeof(nbgl_warning_t));
+
+    if ((info_tx == NULL) || (get_operation_type(info_tx) == NULL) ||
+        (field_count > GCS_MAX_RENDERED_FIELDS)) {
+        return false;
+    }
 
     snprintf(tmp_buf, tmp_buf_size, "Review transaction to %s", get_operation_type(info_tx));
     if ((g_titleMsg = APP_MEM_STRDUP(tmp_buf)) == NULL) {
@@ -457,28 +464,29 @@ bool ui_gcs(void) {
 
     // Count batched sub-transactions: each nested calldata begins a new "intent",
     // so the number of start_intent fields is the number of sub-transactions.
-    for (int i = 0; i < (int) field_table_size(); ++i) {
-        const s_field_table_entry *f = get_from_field_table(i);
+    for (size_t i = 0; i < field_count; ++i) {
+        const s_field_table_entry *f = get_from_field_table((int) i);
         if ((f != NULL) && f->start_intent) {
             batch_nb_tx++;
         }
     }
 
     // Contract info (1) + optional batch separators + TX fields + optional Network (1).
-    nbPairs += 1;
+    nb_pairs = 1U;
     if (batch_nb_tx > 1) {
-        nbPairs += batch_nb_tx;  // one "n of m" separator page per sub-transaction
+        if (__builtin_add_overflow(nb_pairs, batch_nb_tx, &nb_pairs)) return false;
     }
-    nbPairs += field_table_size();
-    show_network = get_tx_chain_id() != chainConfig->chainId;
-    if (show_network) {
-        nbPairs += 1;
-    }
+    if (__builtin_add_overflow(nb_pairs, field_count, &nb_pairs)) return false;
+    // TRON raw_data carries no chain id. Always show the firmware's explicit
+    // mainnet policy instead of implying that the transaction proves a network.
+    show_network = true;
+    if (__builtin_add_overflow(nb_pairs, 1U, &nb_pairs) ||
+        (nb_pairs > GCS_MAX_UI_PAIRS) || (nb_pairs > UINT8_MAX)) return false;
 
-    if (!ui_pairs_init(nbPairs)) {
+    if (!ui_pairs_init((uint8_t) nb_pairs)) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &index_allocated, nbPairs) == false) {
+    if (APP_MEM_CALLOC((void **) &index_allocated, nb_pairs) == false) {
         return false;
     }
 
@@ -513,15 +521,19 @@ bool ui_gcs(void) {
     pair++;
 
     // TX fields
-    for (int i = 0; i < (int) field_table_size(); ++i) {
-        if ((field = get_from_field_table(i)) == NULL) {
+    for (size_t i = 0; i < field_count; ++i) {
+        if ((field = get_from_field_table((int) i)) == NULL || (pair >= nb_pairs)) {
             return false;
         }
         // Batch intermediate page: a centered "Review transaction / n of m" before
         // each sub-transaction's first field (mirrors app-ethereum's ui_gcs).
         if (field->start_intent && (batch_nb_tx > 1)) {
             tx_idx++;
-            snprintf(tmp_buf, tmp_buf_size, "%d of %d", tx_idx, batch_nb_tx);
+            snprintf(tmp_buf,
+                     tmp_buf_size,
+                     "%u of %u",
+                     (unsigned int) tx_idx,
+                     (unsigned int) batch_nb_tx);
             g_pairs[pair].item = APP_MEM_STRDUP("Review transaction");
             g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf);
             index_allocated[pair] = true;
@@ -537,12 +549,13 @@ bool ui_gcs(void) {
         }
         pair++;
         // End of a sub-transaction: force the next pair onto a fresh page.
-        if (field->end_intent && (batch_nb_tx > 1) && (pair < nbPairs)) {
+        if (field->end_intent && (batch_nb_tx > 1) && (pair < nb_pairs)) {
             g_pairs[pair].forcePageStart = true;
         }
     }
 
     if (show_network) {
+        if (pair >= nb_pairs) return false;
         g_pairs[pair].item = APP_MEM_STRDUP("Network");
         if (get_network_as_string(tmp_buf, tmp_buf_size) != true) {
             return false;
@@ -550,6 +563,10 @@ bool ui_gcs(void) {
         g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf);
         index_allocated[pair] = true;
         pair++;
+    }
+
+    if (pair != nb_pairs) {
+        return false;
     }
 
 #ifndef FUZZ

@@ -13,15 +13,15 @@
     X(0x03, TAG_END, handle_end, ENFORCE_UNIQUE_TAG)
 
 static bool handle_weight(const tlv_data_t *data, s_path_array_context *context) {
-    if (data->value.size < sizeof(context->args->weight)) {
+    if (data->value.size != sizeof(context->args->weight)) {
         return false;
     }
     context->args->weight = data->value.ptr[0];
-    return true;
+    return context->args->weight != 0U;
 }
 
 static bool handle_start(const tlv_data_t *data, s_path_array_context *context) {
-    if (data->value.size < sizeof(context->args->start)) {
+    if (data->value.size != sizeof(context->args->start)) {
         return false;
     }
     context->args->start = read_u16_be(data->value.ptr, 0);
@@ -30,7 +30,7 @@ static bool handle_start(const tlv_data_t *data, s_path_array_context *context) 
 }
 
 static bool handle_end(const tlv_data_t *data, s_path_array_context *context) {
-    if (data->value.size < sizeof(context->args->end)) {
+    if (data->value.size != sizeof(context->args->end)) {
         return false;
     }
     context->args->end = read_u16_be(data->value.ptr, 0);
@@ -42,6 +42,7 @@ static bool handle_end(const tlv_data_t *data, s_path_array_context *context) {
 DEFINE_TLV_PARSER(ARRAY_TAGS, NULL, array_tlv_parser)
 
 bool handle_array_struct(const buffer_t *buf, s_path_array_context *context) {
-    TLV_reception_t received_tags;
-    return array_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return array_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_WEIGHT);
 }

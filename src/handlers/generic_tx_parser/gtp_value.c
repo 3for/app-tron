@@ -23,7 +23,10 @@ static bool handle_version(const tlv_data_t *data, s_value_context *context) {
 }
 
 static bool handle_type_family(const tlv_data_t *data, s_value_context *context) {
-    return tlv_get_uint8_range(data, (uint8_t *) &context->value->type_family, 0, UINT8_MAX);
+    return tlv_get_uint8_range(data,
+                               (uint8_t *) &context->value->type_family,
+                               TF_UINT,
+                               TF_TRC_TOKEN);
 }
 
 static bool handle_type_size(const tlv_data_t *data, s_value_context *context) {
@@ -43,7 +46,10 @@ static bool handle_data_path(const tlv_data_t *data, s_value_context *context) {
 }
 
 static bool handle_container_path(const tlv_data_t *data, s_value_context *context) {
-    if (!tlv_get_uint8_range(data, (uint8_t *) &context->value->container_path, 0, UINT8_MAX)) {
+    if (!tlv_get_uint8_range(data,
+                             (uint8_t *) &context->value->container_path,
+                             CP_FROM,
+                             CP_CHAIN_ID)) {
         return false;
     }
     context->value->source = SOURCE_RLP;
@@ -63,8 +69,36 @@ static bool handle_constant(const tlv_data_t *data, s_value_context *context) {
 DEFINE_TLV_PARSER(VALUE_TAGS, NULL, value_tlv_parser)
 
 bool handle_value_struct(const buffer_t *buf, s_value_context *context) {
-    TLV_reception_t received_tags;
-    return value_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    unsigned int source_count = 0U;
+
+    if ((context == NULL) || (context->value == NULL) ||
+        !value_tlv_parser(buf, context, &received_tags) ||
+        !TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_TYPE_FAMILY) ||
+        (context->value->version != 1U)) {
+        return false;
+    }
+    source_count += TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_DATA_PATH) ? 1U : 0U;
+    source_count += TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_CONTAINER_PATH) ? 1U : 0U;
+    source_count += TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_CONSTANT) ? 1U : 0U;
+    if (source_count != 1U) {
+        return false;
+    }
+    switch (context->value->type_family) {
+        case TF_INT:
+        case TF_UFIXED:
+        case TF_FIXED:
+            return TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_TYPE_SIZE);
+        case TF_UINT:
+        case TF_ADDRESS:
+        case TF_BOOL:
+        case TF_BYTES:
+        case TF_STRING:
+        case TF_TRC_TOKEN:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool value_get(const s_value *value, s_parsed_value_collection *collection) {

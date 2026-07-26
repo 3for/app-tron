@@ -44,8 +44,10 @@ static bool handle_native_currency(const tlv_data_t *data, s_param_token_context
 DEFINE_TLV_PARSER(PARAM_TOKEN_TAGS, NULL, param_token_tlv_parser)
 
 bool handle_param_token_struct(const buffer_t *buf, s_param_token_context *context) {
-    TLV_reception_t received_tags;
-    return param_token_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_token_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_ADDRESS) &&
+           (context->param->version == 1U);
 }
 
 static bool match_native(const uint8_t *addr, const s_param_token *param) {

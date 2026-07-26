@@ -33,8 +33,10 @@ static bool handle_value(const tlv_data_t *data, s_param_enum_context *context) 
 DEFINE_TLV_PARSER(PARAM_ENUM_TAGS, NULL, param_enum_tlv_parser)
 
 bool handle_param_enum_struct(const buffer_t *buf, s_param_enum_context *context) {
-    TLV_reception_t received_tags;
-    return param_enum_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_enum_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_ID, TAG_VALUE) &&
+           (context->param->version == 1U);
 }
 
 bool format_param_enum(const s_param_enum *param, const char *name) {

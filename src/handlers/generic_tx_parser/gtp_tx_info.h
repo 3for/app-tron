@@ -14,7 +14,7 @@
 #define OPERATION_TYPE_SIZE     31
 #define CREATOR_NAME_SIZE       23
 #define CREATOR_LEGAL_NAME_SIZE 31
-#define CREATOR_URL_SIZE        27
+#define CREATOR_URL_SIZE        64
 #define CONTRACT_NAME_SIZE      31
 #define DEPLOY_DATE_SIZE        11  // "YYYY-MM-DD\0" -> 4 + 1 + 2 + 1 + 2 + 1
 
@@ -41,6 +41,7 @@ typedef struct {
 } s_tx_info_ctx;
 
 bool handle_tx_info_struct(const buffer_t *buf, s_tx_info_ctx *context);
+bool verify_tx_info_authenticity(const buffer_t *buf);
 bool verify_tx_info_struct(const s_tx_info_ctx *context);
 
 const char *get_operation_type(const s_tx_info *tx_info);

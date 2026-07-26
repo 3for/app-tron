@@ -11,7 +11,7 @@
 #define PARAM_TOKEN_AMOUNT_TAGS(X)                                           \
     X(0x00, TAG_VERSION, handle_version, ENFORCE_UNIQUE_TAG)                 \
     X(0x01, TAG_VALUE, handle_value, ENFORCE_UNIQUE_TAG)                     \
-    X(0x02, TAG_TOKEN, handle_token, ALLOW_MULTIPLE_TAG)                     \
+    X(0x02, TAG_TOKEN, handle_token, ENFORCE_UNIQUE_TAG)                     \
     X(0x03, TAG_NATIVE_CURRENCY, handle_native_currency, ALLOW_MULTIPLE_TAG) \
     X(0x04, TAG_THRESHOLD, handle_threshold, ENFORCE_UNIQUE_TAG)             \
     X(0x05, TAG_ABOVE_THRESHOLD_MSG, handle_above_threshold_msg, ENFORCE_UNIQUE_TAG)
@@ -73,8 +73,10 @@ static bool handle_above_threshold_msg(const tlv_data_t *data,
 DEFINE_TLV_PARSER(PARAM_TOKEN_AMOUNT_TAGS, NULL, param_token_amount_tlv_parser)
 
 bool handle_param_token_amount_struct(const buffer_t *buf, s_param_token_amount_context *context) {
-    TLV_reception_t received_tags;
-    return param_token_amount_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_token_amount_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_VALUE) &&
+           (context->param->version == 1U);
 }
 
 static bool match_native(const uint8_t *addr, const s_param_token_amount *param) {

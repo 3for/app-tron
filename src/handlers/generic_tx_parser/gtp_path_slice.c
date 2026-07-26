@@ -9,7 +9,7 @@
     X(0x02, TAG_END, handle_end, ENFORCE_UNIQUE_TAG)
 
 static bool handle_start(const tlv_data_t *data, s_path_slice_context *context) {
-    if (data->value.size < sizeof(context->args->start)) {
+    if (data->value.size != sizeof(context->args->start)) {
         return false;
     }
     uint16_t value = read_u16_be(data->value.ptr, 0);
@@ -19,7 +19,7 @@ static bool handle_start(const tlv_data_t *data, s_path_slice_context *context) 
 }
 
 static bool handle_end(const tlv_data_t *data, s_path_slice_context *context) {
-    if (data->value.size < sizeof(context->args->end)) {
+    if (data->value.size != sizeof(context->args->end)) {
         return false;
     }
     uint16_t value = read_u16_be(data->value.ptr, 0);

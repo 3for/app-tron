@@ -51,6 +51,7 @@ from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 from client.status_word import StatusWord
+from settings import SettingID, settings_toggle
 from tron import TRON_MAINNET_ADDRESS_PREFIX, TronClient
 from utils import (check_tx_signature, get_challenge, get_selector_from_data,
                    to_sun, to_units)
@@ -338,6 +339,112 @@ def test_gcs_invalid_tx_info_resets_state(backend: BackendInterface):
     assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
 
+@pytest.mark.parametrize("case", [
+    "oversized_calldata",
+    "negative_call_value",
+    "negative_token_value",
+    "negative_token_id",
+    "token_value_without_id",
+    "reserved_token_id",
+    "minimum_reserved_token_id",
+    "negative_fee_limit",
+])
+def test_gcs_rejects_invalid_trigger_values(backend: BackendInterface,
+                                            case: str):
+    client = TronClient(backend)
+    trigger = contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+        contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
+        data=(b"\xa9\x05\x9c\xbb" + b"\x00" * 4093)
+        if case == "oversized_calldata" else TRC20_TRANSFER_CALLDATA,
+    )
+    fee_limit = None
+    if case == "negative_call_value":
+        trigger.call_value = -1
+    elif case == "negative_token_value":
+        trigger.call_token_value = -1
+        trigger.token_id = 1_000_001
+    elif case == "negative_token_id":
+        trigger.token_id = -1
+    elif case == "token_value_without_id":
+        trigger.call_token_value = 1
+    elif case == "reserved_token_id":
+        trigger.token_id = 1
+    elif case == "minimum_reserved_token_id":
+        trigger.token_id = 1_000_000
+    elif case == "negative_fee_limit":
+        fee_limit = -1
+    tx = client.packContract(tron.Transaction.Contract.TriggerSmartContract,
+                             trigger,
+                             fee_limit=fee_limit)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        gcs_store_calldata(client, backend, client.getAccount(0)["path"], tx)
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+@pytest.mark.parametrize("call_token_value", [0, 1])
+def test_gcs_accepts_mainnet_trc10_trigger_values(backend: BackendInterface,
+                                                  call_token_value: int):
+    client = TronClient(backend)
+    trigger = contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+        contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
+        data=TRC20_TRANSFER_CALLDATA,
+        call_token_value=call_token_value,
+        token_id=1_000_001,
+    )
+    tx = client.packContract(tron.Transaction.Contract.TriggerSmartContract,
+                             trigger)
+
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+
+def test_gcs_rejects_empty_continuation_and_resets(backend: BackendInterface):
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    payload = (pack_derivation_path(client.getAccount(0)["path"])
+               + pack(">I", len(tx)) + tx)
+
+    assert backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                            P2_GCS_STORE, payload).status == StatusWord.OK
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_MORE,
+                         P2_GCS_STORE, b"")
+    assert error.value.status == StatusWord.INCORRECT_LENGTH
+
+    # The rejected continuation must have torn down the old stream completely.
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+
+def test_gcs_memo_respects_data_allowed(backend: BackendInterface,
+                                        device,
+                                        navigator,
+                                        configuration):
+    del configuration
+    client = TronClient(backend)
+    tx = client.packContract(
+        tron.Transaction.Contract.TriggerSmartContract,
+        contract.TriggerSmartContract(
+            owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+            contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
+            data=TRC20_TRANSFER_CALLDATA),
+        data=b"GCS memo")
+
+    # The default test-app setting is enabled; turn it off and preserve the
+    # precise status word expected by the legacy INS_SIGN path.
+    settings_toggle(device, navigator, [SettingID.DATA_ALLOWED])
+    with pytest.raises(ExceptionRAPDU) as error:
+        gcs_store_calldata(client, backend, client.getAccount(0)["path"], tx)
+    assert error.value.status == StatusWord.MISSING_SETTING_DATA_ALLOWED
+
+    settings_toggle(device, navigator, [SettingID.DATA_ALLOWED])
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+
 # --- Descriptor builders -----------------------------------------------------
 # Keep the host-side GCS serialization in client.gcs, matching app-ethereum.
 
@@ -581,6 +688,39 @@ def test_gcs_trctoken(scenario_navigator: NavigateWithScenario):
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
+def test_gcs_trigger_trc10_transfer(scenario_navigator: NavigateWithScenario):
+    """A mainnet-valid TriggerSmartContract may transfer a native TRC-10 asset.
+
+    The outer call_token_value/token_id pair is independent of calldata descriptors,
+    so both values must be appended by the firmware as forced review fields.
+    """
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    trigger = contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+        contract_address=bytes([TRON_MAINNET_ADDRESS_PREFIX]) + contract_addr20,
+        data=TRC20_TRANSFER_CALLDATA,
+        call_token_value=2_200,
+        token_id=1_000_001,
+    )
+    tx = client.packContract(tron.Transaction.Contract.TriggerSmartContract,
+                             trigger)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    amount_field = build_field_raw("Amount", 32,
+                                   data_path=build_data_path_static(1))
+    fields = [amount_field]
+    tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
+                            "transfer")
+    client.provide_transaction_info(tx_info)
+    client.provide_transaction_field_desc(amount_field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+
+
 def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
     """Over-long (~1 KB) calldata streamed through 0xC4/STORE then clear-signed via GCS.
 
@@ -605,12 +745,12 @@ def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
     # Guard the premise: the calldata alone overflows a single APDU, so STORE must
     # stream it in multiple chunks (otherwise the test wouldn't exercise streaming).
     assert len(MINT_CALLDATA) > MAX_APDU_LEN
-    assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
     # Token metadata for the contract itself (the tx TO) so the amount renders as
     # "<rawValue> JST", like test_long_mint.py's provide_trc20_token_information.
     client.provide_token_metadata("JST", eth_to_tron_base58(contract_addr20), 18, TRON_MAINNET_CHAINID)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
     # `rawValue` (arg 0, static) shown as a token amount; the token is the TO address.
     # Plus the trigger tx's owner ("From") address, resolved from the parked tx.
@@ -686,10 +826,9 @@ def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
                                          SHIELDED_BURN_CALLDATA)
 
     assert len(SHIELDED_BURN_CALLDATA) > MAX_APDU_LEN
+    client.provide_token_metadata("JST", eth_to_tron_base58(contract_addr20), 18, TRON_MAINNET_CHAINID)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
-
-    client.provide_token_metadata("JST", eth_to_tron_base58(contract_addr20), 18, TRON_MAINNET_CHAINID)
 
     # `rawValue` (word 12) as a token amount, `payTo` (word 15) as an address, and the
     # trigger tx's owner ("From") address resolved from the parked tx.
@@ -820,9 +959,6 @@ def test_gcs_nft(scenario_navigator: NavigateWithScenario):
         "495f947276749ce646f68ac8c248420045cb7b5e")
     tx = build_trigger_smart_contract_tx(client, collection_addr20,
                                          bytes.fromhex(data[2:]))
-    assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == StatusWord.OK
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/erc1155.json",
                                 "safeBatchTransferFrom")
     fields = [
@@ -918,7 +1054,6 @@ def test_gcs_nft(scenario_navigator: NavigateWithScenario):
         "batch transfer NFTs",
     )
 
-    client.provide_transaction_info(tx_info.serialize())
     device_addr20 = bytes.fromhex(client.getAccount(0)["addressHex"])[1:]
     client.provide_trusted_name(
         TrustedName(2,
@@ -930,6 +1065,9 @@ def test_gcs_nft(scenario_navigator: NavigateWithScenario):
                     challenge=get_challenge(client)))
     client.provide_nft_metadata("OpenSea Shared Storefront", eth_to_tron_base58(collection_addr20),
                                 TRON_MAINNET_CHAINID)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(tx_info.serialize())
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -1303,6 +1441,11 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
     contract_addr20 = bytes.fromhex("111111125421cA6dc452d289314280a0f8842A65")
     tx = build_trigger_smart_contract_tx(client, contract_addr20,
                                          bytes.fromhex(data[2:]))
+    client.provide_token_metadata(
+        "USDC",
+        eth_to_tron_base58(bytes.fromhex("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")),
+        6,
+        TRON_MAINNET_CHAINID)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
@@ -1368,9 +1511,6 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
                creator_url="1inch.io",
                contract_name="Aggregation Router V6",
                deploy_date=1707724800).serialize())
-    client.provide_token_metadata(
-        "USDC", eth_to_tron_base58(bytes.fromhex("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")), 6,
-        TRON_MAINNET_CHAINID)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
@@ -1394,8 +1534,6 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
     impl_addr20 = PROXY_IMPL_ADDR20
     tx = build_trigger_smart_contract_tx(client, proxy_addr20,
                                          bytes.fromhex(data[2:]))
-    assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/proxy_implem.abi.json",
                                 "transferOwnership")
@@ -1432,7 +1570,6 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
                   tx_info.chain_id,
                   tx_info.contract_addr,
                   selector=tx_info.selector).serialize())
-    client.provide_transaction_info(tx_info.serialize())
 
     impl_contract = bytes.fromhex("1111111111111111111111111111111111111111")
     client.provide_proxy_info(
@@ -1447,18 +1584,12 @@ def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
                     chain_id=TRON_MAINNET_CHAINID,
                     challenge=get_challenge(client)))
 
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(tx_info.serialize())
+
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    # test_gcs_proxy provides a second proxy_info to resolve the displayed trusted
-    # name. The firmware stores one proxy_info at a time, so restore the tx proxy
-    # descriptor before the gated-signing match.
-    if gating_params is not None:
-        client.provide_proxy_info(
-            ProxyInfo(get_challenge(client),
-                      eth_to_tron_base58(proxy_addr20),
-                      tx_info.chain_id,
-                      tx_info.contract_addr,
-                      selector=tx_info.selector).serialize())
     _provide_gating(client, gating_params)
     _start_gcs_flow_and_assert(scenario_navigator,
                                client,
@@ -1483,8 +1614,6 @@ def test_gcs_4226(scenario_navigator: NavigateWithScenario):
     contract_addr20 = bytes.fromhex("358d94b5b2F147D741088803d932Acb566acB7B6")
     tx = build_trigger_smart_contract_tx(client, contract_addr20,
                                          bytes.fromhex(data[2:]))
-    assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
     swell_token_addr = bytes.fromhex("0a6e7ba5042b38349e437ec6db6214aec7b35676")
     param_paths = get_all_paths(f"{ABIS_FOLDER}/rSWELL.abi.json", "deposit")
@@ -1521,6 +1650,12 @@ def test_gcs_4226(scenario_navigator: NavigateWithScenario):
         ),
     ]
 
+    client.provide_token_metadata("rSWELL", eth_to_tron_base58(contract_addr20), 18,
+                                  TRON_MAINNET_CHAINID)
+    client.provide_token_metadata("SWELL", eth_to_tron_base58(swell_token_addr), 18,
+                                  TRON_MAINNET_CHAINID)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
     client.provide_transaction_info(
         TxInfo(1,
                TRON_MAINNET_CHAINID,
@@ -1533,10 +1668,6 @@ def test_gcs_4226(scenario_navigator: NavigateWithScenario):
                creator_url="www.swellnetwork.io",
                contract_name="rSWELL Token",
                deploy_date=1726817291).serialize())
-    client.provide_token_metadata("rSWELL", eth_to_tron_base58(contract_addr20), 18,
-                                  TRON_MAINNET_CHAINID)
-    client.provide_token_metadata("SWELL", eth_to_tron_base58(swell_token_addr), 18,
-                                  TRON_MAINNET_CHAINID)
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
@@ -1864,8 +1995,6 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
             "f30e1518e999b348a5f011446931b8bd9fbb152cdc00d945b7cd030c"
             "14e48c7826d31f9c09a1376f694de1b"),
     ])
-    tx = _store_contract_call(client, backend, contract_addr, data)
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/safe_1.4.1.abi.json",
                                 "execTransaction")
     fields = [
@@ -1991,8 +2120,6 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
         creator_legal_name="Safe Ecosystem Foundation",
         creator_url="safe.global",
     )
-    client.provide_transaction_info(tx_info.serialize())
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/safe_1.4.1.abi.json",
                                 "addOwnerWithThreshold")
     sub_fields = [
@@ -2034,6 +2161,9 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
                       tx_info.selector, 0, enum_val[0],
                       enum_val[1]).serialize())
 
+    tx = _store_contract_call(client, backend, contract_addr, data)
+    client.provide_transaction_info(tx_info.serialize())
+
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
         if field.param.type == ParamType.CALLDATA:
@@ -2072,8 +2202,6 @@ def test_gcs_nested_execTransaction_changeThreshold(
             "f1dc137e51e7a184e255fd0ed065911ad684bd97ee43892013b4ee"
             "bdaec528020ed657b92b90562f4df5a18540e4b91b"),
     ])
-    tx = _store_contract_call(client, backend, contract_addr, data)
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/safe_1.4.1.abi.json",
                                 "execTransaction")
     fields = [
@@ -2200,8 +2328,6 @@ def test_gcs_nested_execTransaction_changeThreshold(
         creator_legal_name="Safe Ecosystem Foundation",
         creator_url="safe.global",
     )
-    client.provide_transaction_info(tx_info.serialize())
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/safe_1.4.1.abi.json",
                                 "changeThreshold")
     sub_fields = [
@@ -2233,6 +2359,9 @@ def test_gcs_nested_execTransaction_changeThreshold(
                     challenge=get_challenge(client),
                     owner=wallet_addr,
                     owner_deriv_path=derivation_path))
+
+    tx = _store_contract_call(client, backend, contract_addr, data)
+    client.provide_transaction_info(tx_info.serialize())
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
@@ -2380,8 +2509,6 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
         bytes(),
     ])
     contract_addr20 = bytes.fromhex("111111125421cA6dc452d289314280a0f8842A65")
-    tx = _store_contract_call(client, backend, contract_addr20, data)
-
     param_paths = get_all_tuple_paths(f"{ABIS_FOLDER}/1inch.abi.json", "swap",
                                       "desc")
     fields = [
@@ -2424,9 +2551,7 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
         contract_name="Aggregation Router V6",
         deploy_date=1707724800,
     )
-    client.provide_transaction_info(tx_info.serialize())
-
-    for i, field in enumerate(fields):
+    for i in range(len(fields)):
         client.provide_trusted_name(
             TrustedName(2,
                         eth_to_tron_base58(tokens[i]["address"]),
@@ -2435,6 +2560,10 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
                         tn_source=TrustedNameSource.CAL,
                         chain_id=TRON_MAINNET_CHAINID,
                         challenge=get_challenge(client)))
+
+    tx = _store_contract_call(client, backend, contract_addr20, data)
+    client.provide_transaction_info(tx_info.serialize())
+    for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
@@ -2474,8 +2603,6 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
         (tokens[0]["address"], to_sun(0), data0),
         (tokens[1]["address"], to_sun(0), data1),
     ]])
-    tx = _store_contract_call(client, backend, tokens[1]["address"], data)
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/erc20.json", "transfer")
     sub_fields = [
         Field(
@@ -2534,8 +2661,6 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
         creator_legal_name="Wrapped Ether",
         creator_url="weth.io",
     )
-    client.provide_transaction_info(tx_info.serialize())
-
     sub_inst_hash = compute_inst_hash(sub_fields)
     sub_tx_info = [
         TxInfo(
@@ -2556,13 +2681,16 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
         ),
     ]
 
+    for token in tokens:
+        client.provide_token_metadata(token["ticker"],
+                                      eth_to_tron_base58(token["address"]),
+                                      token["decimals"], TRON_MAINNET_CHAINID)
+
+    tx = _store_contract_call(client, backend, tokens[1]["address"], data)
+    client.provide_transaction_info(tx_info.serialize())
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-        for idx, sub_info in enumerate(sub_tx_info):
-            client.provide_token_metadata(tokens[idx]["ticker"],
-                                          eth_to_tron_base58(tokens[idx]["address"]),
-                                          tokens[idx]["decimals"],
-                                          TRON_MAINNET_CHAINID)
+        for sub_info in sub_tx_info:
             client.provide_transaction_info(sub_info.serialize())
             for sub_field in sub_fields:
                 client.provide_transaction_field_desc(sub_field.serialize())
@@ -2627,7 +2755,6 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
     ])
 
     tx_to = bytes.fromhex("19a4d6928cd3b32Fa4Eb3962bfF1Abca91EB7C52")
-    tx = _store_contract_call(client, backend, tx_to, exec_tx_data)
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/safe_1.4.1.abi.json",
                                 "execTransaction")
@@ -2809,6 +2936,12 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
     client.provide_proxy_info(
         ProxyInfo(get_challenge(client), eth_to_tron_base58(tx_to), l0_tx_info.chain_id,
                   l0_tx_info.contract_addr).serialize())
+    for token in tokens:
+        client.provide_token_metadata(token["ticker"],
+                                      eth_to_tron_base58(token["address"]),
+                                      token["decimals"], TRON_MAINNET_CHAINID)
+
+    tx = _store_contract_call(client, backend, tx_to, exec_tx_data)
     client.provide_transaction_info(l0_tx_info.serialize())
 
     for f0 in l0_fields:
@@ -2819,12 +2952,8 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
                 for f1 in l1_fields:
                     client.provide_transaction_field_desc(f1.serialize())
 
-                for idx, i2 in enumerate(l2_tx_info):
+                for i2 in l2_tx_info:
                     client.provide_transaction_info(i2.serialize())
-                    client.provide_token_metadata(tokens[idx]["ticker"],
-                                                  eth_to_tron_base58(tokens[idx]["address"]),
-                                                  tokens[idx]["decimals"],
-                                                  TRON_MAINNET_CHAINID)
                     for f2 in l2_fields:
                         client.provide_transaction_field_desc(f2.serialize())
 
@@ -2871,8 +3000,6 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
         (bytes.fromhex("4444444444444444444444444444444444444444"),
          to_sun("4.4"), b""),
     ]])
-    tx = _store_contract_call(client, backend, BATCH_CONTRACT20, data)
-
     param_paths = get_all_paths(f"{ABIS_FOLDER}/erc20.json", "transfer")
     sub_fields = [
         Field(
@@ -2930,8 +3057,6 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
         creator_name="Ledger Multisig",
         creator_legal_name="Ledger",
     )
-    client.provide_transaction_info(tx_info.serialize())
-
     client.provide_trusted_name(
         TrustedName(2,
                     eth_to_tron_base58(b"\x00" * 20),
@@ -2954,6 +3079,14 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
                     owner=wallet_addr,
                     owner_deriv_path=derivation_path))
 
+    for token in tokens:
+        client.provide_token_metadata(token["ticker"],
+                                      eth_to_tron_base58(token["address"]),
+                                      token["decimals"], TRON_MAINNET_CHAINID)
+
+    tx = _store_contract_call(client, backend, BATCH_CONTRACT20, data)
+    client.provide_transaction_info(tx_info.serialize())
+
     sub_inst_hash = compute_inst_hash(sub_fields)
     sub_tx_info = [
         TxInfo(1, TRON_MAINNET_CHAINID, eth_to_tron_base58(tokens[0]["address"]),
@@ -2964,11 +3097,7 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-        for idx, sub_info in enumerate(sub_tx_info):
-            client.provide_token_metadata(tokens[idx]["ticker"],
-                                          eth_to_tron_base58(tokens[idx]["address"]),
-                                          tokens[idx]["decimals"],
-                                          TRON_MAINNET_CHAINID)
+        for sub_info in sub_tx_info:
             client.provide_transaction_info(sub_info.serialize())
             for sub_field in sub_fields:
                 client.provide_transaction_field_desc(sub_field.serialize())
@@ -2979,17 +3108,16 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
                          fields: list[Field],
                          provision=None) -> bytes:
-    """STORE -> [provision] -> 0x26 -> 0x28(xN); returns the parked tx.
+    """[provision] -> STORE -> 0x26 -> 0x28(xN); returns the parked tx.
 
-    `provision` (optional) runs after the calldata is parked but before the
-    fields are streamed, so token/trusted-name metadata is in place by the time
-    each FIELD's formatter (format_field) looks it up at 0x28 time.
+    GCS freezes external metadata when STORE begins, so optional signed metadata
+    is provisioned first and is already in place when FIELD formatting starts.
     """
     tx = build_trc20_transfer_tx(client)
-    assert gcs_store_calldata(client, backend,
-                              client.getAccount(0)["path"], tx) == StatusWord.OK
     if provision is not None:
         provision()
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")

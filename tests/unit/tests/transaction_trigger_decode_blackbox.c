@@ -141,6 +141,9 @@ static void init_decode_fixture(decode_fixture_t *fixture,
 
     fill_sequence(fixture->owner, owner_len, 0x41U);
     fill_sequence(fixture->contract_address, contract_address_len, 0x61U);
+    if (contract_address_len != 0U) {
+        fixture->contract_address[0] = 0x41U;
+    }
     fill_sequence(fixture->trigger_data, trigger_data_len, 0x10U);
     fill_sequence(fixture->custom_data, custom_data_len, 0x80U);
 }
@@ -325,11 +328,13 @@ static bool observer_collect(void *ctx,
 
     assert_non_null(observer);
     assert_non_null(chunk);
-    assert_int_equal(chunk_len, 1);
-    assert_true(chunk_offset < total_len);
+    assert_true(chunk_len > 0U);
+    assert_true(chunk_offset <= total_len);
+    assert_true(chunk_len <= (total_len - chunk_offset));
 
     observer->calls++;
-    if (chunk_offset == observer->fail_at_offset) {
+    if ((observer->fail_at_offset >= chunk_offset) &&
+        (observer->fail_at_offset - chunk_offset < chunk_len)) {
         return false;
     }
 
@@ -396,9 +401,32 @@ static void test_decode_transaction_in_chunks(void **state) {
     assert_true(tron_stream_decoder_get_result(&decoder, &result));
     assert_result_matches_fixture(&result, &fixture);
 
-    assert_int_equal(observer.calls, fixture.trigger_data_len);
+    assert_true(observer.calls > 0U);
+    assert_true(observer.calls <= fixture.trigger_data_len);
     assert_int_equal(observer.observed_len, fixture.trigger_data_len);
     assert_memory_equal(observer.observed, fixture.trigger_data, fixture.trigger_data_len);
+}
+
+static void test_custom_data_observer_receives_full_memo(void **state) {
+    (void) state;
+
+    decode_fixture_t fixture;
+    test_message_t message;
+    observer_ctx_t observer = {.fail_at_offset = SIZE_MAX};
+    tron_stream_decoder_t decoder;
+    tron_decode_result_t result;
+
+    init_decode_fixture(&fixture, 21U, 21U, 80U, 40U);
+    build_standard_message(&fixture, &message);
+    tron_stream_decoder_init(&decoder, message.tx.len);
+    tron_stream_decoder_set_custom_data_observer(&decoder, observer_collect, &observer);
+
+    feed_in_small_chunks(&decoder, message.tx.bytes, message.tx.len);
+
+    assert_true(tron_stream_decoder_get_result(&decoder, &result));
+    assert_true(observer.calls > 0U);
+    assert_int_equal(observer.observed_len, fixture.custom_data_len);
+    assert_memory_equal(observer.observed, fixture.custom_data, fixture.custom_data_len);
 }
 
 static void test_decode_raw_message_in_single_buffer(void **state) {
@@ -427,23 +455,14 @@ static void test_decode_raw_message_in_single_buffer(void **state) {
     assert_result_matches_fixture(&result, &fixture);
 }
 
-static void test_truncates_oversized_address_fields(void **state) {
+static void test_rejects_oversized_address_fields(void **state) {
     (void) state;
 
     decode_fixture_t fixture;
     test_message_t message;
-    tron_stream_decoder_t decoder;
-    tron_decode_result_t result;
-
     init_decode_fixture(&fixture, 30U, 28U, 6U, 2U);
     build_standard_message(&fixture, &message);
-
-    tron_stream_decoder_init_raw(&decoder, message.raw.len);
-
-    assert_true(tron_stream_decoder_feed(&decoder, message.raw.bytes, message.raw.len));
-    assert_true(tron_stream_decoder_is_done(&decoder));
-    assert_true(tron_stream_decoder_get_result(&decoder, &result));
-    assert_result_matches_fixture(&result, &fixture);
+    assert_invalid_decode(true, message.raw.bytes, message.raw.len);
 }
 
 static void test_observer_failure_marks_decoder_invalid(void **state) {
@@ -451,11 +470,11 @@ static void test_observer_failure_marks_decoder_invalid(void **state) {
 
     decode_fixture_t fixture;
     test_message_t message;
-    observer_ctx_t observer = {.fail_at_offset = 1U};
+    observer_ctx_t observer = {.fail_at_offset = 0U};
     tron_stream_decoder_t decoder;
     tron_decode_result_t result;
 
-    init_decode_fixture(&fixture, 21U, 21U, 3U, 1U);
+    init_decode_fixture(&fixture, 21U, 21U, 4U, 1U);
     fixture.call_value = 7U;
     fixture.call_token_value = 0U;
     fixture.token_id = 0U;
@@ -470,9 +489,8 @@ static void test_observer_failure_marks_decoder_invalid(void **state) {
     assert_false(tron_stream_decoder_is_done(&decoder));
     assert_false(tron_stream_decoder_get_result(&decoder, &result));
     assert_false(tron_stream_decoder_feed(&decoder, message.tx.bytes, 1U));
-    assert_int_equal(observer.calls, 2);
-    assert_int_equal(observer.observed_len, 1);
-    assert_memory_equal(observer.observed, fixture.trigger_data, 1U);
+    assert_int_equal(observer.calls, 1);
+    assert_int_equal(observer.observed_len, 0);
 }
 
 static void test_rejects_extra_bytes_after_declared_total(void **state) {
@@ -484,7 +502,7 @@ static void test_rejects_extra_bytes_after_declared_total(void **state) {
     tron_stream_decoder_t decoder;
     tron_decode_result_t result;
 
-    init_decode_fixture(&fixture, 21U, 21U, 2U, 2U);
+    init_decode_fixture(&fixture, 21U, 21U, 4U, 2U);
     fixture.call_value = 1U;
     fixture.call_token_value = 2U;
     fixture.token_id = 3U;
@@ -503,7 +521,7 @@ static void test_rejects_extra_bytes_after_declared_total(void **state) {
     assert_result_matches_fixture(&result, &fixture);
 }
 
-static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
+static void test_rejects_unknown_fields_and_wrong_wire_types(void **state) {
     (void) state;
 
     const uint8_t top_level_signature[] = {0xAA, 0xBB};
@@ -513,7 +531,6 @@ static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
     decode_fixture_t fixture;
     test_message_t message = {0};
     tron_stream_decoder_t decoder;
-    tron_decode_result_t result;
 
     init_decode_fixture(&fixture, 21U, 21U, 4U, 2U);
     fixture.call_value = 42U;
@@ -570,15 +587,66 @@ static void test_skips_unknown_fields_and_fixed_width_wire_types(void **state) {
                                    0U);
     test_buffer_append_message_field(&message.tx, protocol_Transaction_raw_data_tag, &message.raw);
 
-    tron_stream_decoder_init(&decoder, message.tx.len);
-
-    assert_true(tron_stream_decoder_feed(&decoder, message.tx.bytes, message.tx.len));
-    assert_true(tron_stream_decoder_is_done(&decoder));
-    assert_true(tron_stream_decoder_get_result(&decoder, &result));
-    assert_result_matches_fixture(&result, &fixture);
+    (void) decoder;
+    assert_invalid_decode(false, message.tx.bytes, message.tx.len);
 }
 
-static void test_handles_zero_length_fields_and_zero_length_decoder(void **state) {
+static void test_rejects_hidden_fee_bearing_fields(void **state) {
+    (void) state;
+
+    static const uint32_t raw_forbidden_tags[] = {9U, 12U};
+    static const uint32_t contract_forbidden_tags[] = {
+        protocol_Transaction_Contract_provider_tag,
+        protocol_Transaction_Contract_ContractName_tag,
+    };
+    static const uint8_t forbidden_value[] = {0xAAU};
+    decode_fixture_t fixture;
+
+    init_decode_fixture(&fixture, 21U, 21U, 4U, 0U);
+    for (size_t i = 0U; i < sizeof(raw_forbidden_tags) / sizeof(raw_forbidden_tags[0]); i++) {
+        test_message_t message = {0};
+
+        message.trigger = build_trigger_message(&fixture);
+        message.any = build_any_message(&message.trigger);
+        message.contract = build_contract_message(
+            &message.any,
+            protocol_Transaction_Contract_ContractType_TriggerSmartContract,
+            fixture.permission_id,
+            false);
+        test_buffer_append_bytes_field(&message.raw,
+                                       raw_forbidden_tags[i],
+                                       forbidden_value,
+                                       sizeof(forbidden_value));
+        test_buffer_append_message_field(&message.raw,
+                                         protocol_Transaction_raw_contract_tag,
+                                         &message.contract);
+        assert_invalid_decode(true, message.raw.bytes, message.raw.len);
+    }
+
+    for (size_t i = 0U;
+         i < sizeof(contract_forbidden_tags) / sizeof(contract_forbidden_tags[0]);
+         i++) {
+        test_message_t message = {0};
+
+        message.trigger = build_trigger_message(&fixture);
+        message.any = build_any_message(&message.trigger);
+        test_buffer_append_varint_field(
+            &message.contract,
+            protocol_Transaction_Contract_type_tag,
+            protocol_Transaction_Contract_ContractType_TriggerSmartContract);
+        test_buffer_append_bytes_field(&message.contract,
+                                       contract_forbidden_tags[i],
+                                       forbidden_value,
+                                       sizeof(forbidden_value));
+        test_buffer_append_message_field(&message.contract,
+                                         protocol_Transaction_Contract_parameter_tag,
+                                         &message.any);
+        message.raw = build_raw_message(&message.contract, &fixture);
+        assert_invalid_decode(true, message.raw.bytes, message.raw.len);
+    }
+}
+
+static void test_handles_zero_length_memo_and_zero_length_decoder(void **state) {
     (void) state;
 
     decode_fixture_t fixture;
@@ -589,7 +657,7 @@ static void test_handles_zero_length_fields_and_zero_length_decoder(void **state
     tron_stream_decoder_t empty_raw_decoder;
     tron_decode_result_t result;
 
-    init_decode_fixture(&fixture, 21U, 21U, 0U, 0U);
+    init_decode_fixture(&fixture, 21U, 21U, 4U, 0U);
     fixture.call_value = 0U;
     fixture.call_token_value = 0U;
     fixture.token_id = 0U;
@@ -604,13 +672,12 @@ static void test_handles_zero_length_fields_and_zero_length_decoder(void **state
 
     tron_stream_decoder_init(&empty_decoder, 0U);
     assert_true(tron_stream_decoder_is_done(&empty_decoder));
-    assert_true(tron_stream_decoder_get_result(&empty_decoder, &result));
-    assert_false(result.has_data);
+    assert_false(tron_stream_decoder_get_result(&empty_decoder, &result));
     assert_false(tron_stream_decoder_feed(&empty_decoder, &byte, 0U));
 
     tron_stream_decoder_init_raw(&empty_raw_decoder, 0U);
     assert_true(tron_stream_decoder_is_done(&empty_raw_decoder));
-    assert_true(tron_stream_decoder_get_result(&empty_raw_decoder, &result));
+    assert_false(tron_stream_decoder_get_result(&empty_raw_decoder, &result));
 }
 
 static void test_zero_length_feed_is_noop_before_completion(void **state) {
@@ -621,7 +688,7 @@ static void test_zero_length_feed_is_noop_before_completion(void **state) {
     tron_stream_decoder_t decoder;
     tron_decode_result_t result;
 
-    init_decode_fixture(&fixture, 21U, 21U, 3U, 1U);
+    init_decode_fixture(&fixture, 21U, 21U, 4U, 1U);
     build_standard_message(&fixture, &message);
 
     tron_stream_decoder_init_raw(&decoder, message.raw.len);
@@ -718,7 +785,7 @@ static void test_rejects_trigger_parameter_before_contract_type(void **state) {
     assert_invalid_decode(true, message.raw.bytes, message.raw.len);
 }
 
-static void test_keeps_only_first_contract(void **state) {
+static void test_rejects_multiple_contracts(void **state) {
     (void) state;
 
     decode_fixture_t fixture1;
@@ -726,8 +793,6 @@ static void test_keeps_only_first_contract(void **state) {
     test_message_t message1;
     test_message_t message2;
     test_pb_buffer_t raw = {0};
-    tron_stream_decoder_t decoder;
-    tron_decode_result_t result;
 
     init_decode_fixture(&fixture1, 21U, 21U, 4U, 1U);
     fixture1.call_value = 100U;
@@ -753,13 +818,7 @@ static void test_keeps_only_first_contract(void **state) {
     test_buffer_append_message_field(&raw, protocol_Transaction_raw_contract_tag, &message2.contract);
     test_buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 999U);
 
-    fixture1.fee_limit = 999U;
-    tron_stream_decoder_init_raw(&decoder, raw.len);
-
-    assert_true(tron_stream_decoder_feed(&decoder, raw.bytes, raw.len));
-    assert_true(tron_stream_decoder_is_done(&decoder));
-    assert_true(tron_stream_decoder_get_result(&decoder, &result));
-    assert_result_matches_fixture(&result, &fixture1);
+    assert_invalid_decode(true, raw.bytes, raw.len);
 }
 
 static void test_rejects_data_before_addresses(void **state) {
@@ -1126,18 +1185,20 @@ static void test_rejects_out_of_range_numeric_fields(void **state) {
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_decode_transaction_in_chunks),
+        cmocka_unit_test(test_custom_data_observer_receives_full_memo),
         cmocka_unit_test(test_decode_raw_message_in_single_buffer),
-        cmocka_unit_test(test_truncates_oversized_address_fields),
+        cmocka_unit_test(test_rejects_oversized_address_fields),
         cmocka_unit_test(test_observer_failure_marks_decoder_invalid),
         cmocka_unit_test(test_rejects_extra_bytes_after_declared_total),
-        cmocka_unit_test(test_skips_unknown_fields_and_fixed_width_wire_types),
-        cmocka_unit_test(test_handles_zero_length_fields_and_zero_length_decoder),
+        cmocka_unit_test(test_rejects_unknown_fields_and_wrong_wire_types),
+        cmocka_unit_test(test_rejects_hidden_fee_bearing_fields),
+        cmocka_unit_test(test_handles_zero_length_memo_and_zero_length_decoder),
         cmocka_unit_test(test_zero_length_feed_is_noop_before_completion),
         cmocka_unit_test(test_api_argument_guards),
         cmocka_unit_test(test_rejects_invalid_wire_type_and_overlong_varints),
         cmocka_unit_test(test_rejects_non_trigger_contract_type),
         cmocka_unit_test(test_rejects_trigger_parameter_before_contract_type),
-        cmocka_unit_test(test_keeps_only_first_contract),
+        cmocka_unit_test(test_rejects_multiple_contracts),
         cmocka_unit_test(test_rejects_data_before_addresses),
         cmocka_unit_test(test_rejects_duplicate_contract_parameter),
         cmocka_unit_test(test_rejects_duplicate_any_value),

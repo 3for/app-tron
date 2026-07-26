@@ -60,7 +60,7 @@ static bool handle_sources(const tlv_data_t *data, s_param_trusted_name_context 
 }
 
 static bool handle_sender_addr(const tlv_data_t *data, s_param_trusted_name_context *context) {
-    if ((data->value.size > sizeof(context->param->sender_addr)) ||
+    if ((data->value.size > ADDRESS_LENGTH) ||
         (context->param->sender_addr_count == ARRAYLEN(context->param->sender_addr))) {
         return false;
     }
@@ -83,7 +83,8 @@ bool handle_param_trusted_name_struct(const buffer_t *buf, s_param_trusted_name_
                                    TAG_VERSION,
                                    TAG_VALUE,
                                    TAG_TYPES,
-                                   TAG_SOURCES);
+                                   TAG_SOURCES) &&
+           (context->param->version == 1U);
 }
 
 /**

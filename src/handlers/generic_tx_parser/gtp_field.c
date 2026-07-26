@@ -8,6 +8,7 @@
 #include "lists.h"
 #include "tlv_library.h"
 #include "tlv_apdu.h"
+#include "gcs_limits.h"
 
 typedef union {
     s_param_raw_context raw_ctx;
@@ -49,10 +50,14 @@ static bool handle_version(const tlv_data_t *data, s_field_ctx *context) {
 }
 
 static bool handle_name(const tlv_data_t *data, s_field_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->field->name,
-                           sizeof(context->field->name));
+    if ((data->value.ptr == NULL) || (data->value.size == 0U) ||
+        (data->value.size >= sizeof(context->field->name)) ||
+        (memchr(data->value.ptr, '\0', data->value.size) != NULL) ||
+        !is_printable((const char *) data->value.ptr, data->value.size)) {
+        return false;
+    }
+    memcpy(context->field->name, data->value.ptr, data->value.size);
+    context->field->name[data->value.size] = '\0';
     return true;
 }
 
@@ -107,7 +112,10 @@ static bool handle_param_constraint(const tlv_data_t *data, s_field_ctx *context
         PRINTF("Error: CONSTRAINT present but VISIBLE is not MUST_BE or IF_NOT_IN!\n");
         return false;
     }
-    if (data->value.size == 0 || data->value.ptr == NULL) {
+    if ((data->value.size == 0U) || (data->value.ptr == NULL) ||
+        (data->value.size > GCS_MAX_CONSTRAINT_VALUE_SIZE) ||
+        (flist_size((flist_node_t **) &context->field->constraints) >=
+         GCS_MAX_CONSTRAINTS_PER_FIELD)) {
         PRINTF("Error: Empty constraint value!\n");
         return false;
     }

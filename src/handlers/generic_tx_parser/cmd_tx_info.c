@@ -7,12 +7,17 @@
 #include "gtp_tx_info.h"
 #include "tlv_apdu.h"
 #include "tx_ctx.h"
-
-#define GTP_TX_INFO_DESCRIPTOR_MAX_LENGTH 4096
+#include "gcs_limits.h"
+#include "gcs_signing_context.h"
 
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_tx_info_ctx ctx = {0};
 
+    if (!verify_tx_info_authenticity(buf) ||
+        ((appState == APP_STATE_SIGNING_TX) &&
+         !gcs_account_descriptor(buf->size, false))) {
+        return false;
+    }
     if (APP_MEM_CALLOC((void **) &ctx.tx_info, sizeof(*ctx.tx_info)) == false) {
         return false;
     }
@@ -31,7 +36,13 @@ static bool handle_tlv_payload(const buffer_t *buf) {
         APP_MEM_FREE(ctx.tx_info);
         return false;
     }
-    return process_empty_txs_before() && set_tx_info_into_tx_ctx(ctx.tx_info);
+    if ((get_current_tx_info() != NULL) || !process_empty_txs_before()) {
+        APP_MEM_FREE(ctx.tx_info);
+        return false;
+    }
+    /* Once set_tx_info_into_tx_ctx() is entered, the current tx context owns
+     * ctx.tx_info even if adding a forced field later fails. */
+    return set_tx_info_into_tx_ctx(ctx.tx_info);
 }
 
 uint16_t handle_tx_info(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload) {
@@ -50,7 +61,7 @@ uint16_t handle_tx_info(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *paylo
                        p1 == P1_FIRST_CHUNK,
                        lc,
                        payload,
-                       GTP_TX_INFO_DESCRIPTOR_MAX_LENGTH,
+                       GCS_MAX_DESCRIPTOR_SIZE,
                        &handle_tlv_payload)) {
         return SWO_INCORRECT_DATA;
     }

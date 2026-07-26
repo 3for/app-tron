@@ -1220,8 +1220,6 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
     return true;
 }
 
-#define MIN_TRC10_TOKEN_ID 1000000
-
 static bool validate_create_smart_contract(
     const protocol_CreateSmartContract *contract) {
     const protocol_SmartContract *new_contract = &contract->new_contract;

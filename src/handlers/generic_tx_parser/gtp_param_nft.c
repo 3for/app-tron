@@ -33,8 +33,10 @@ static bool handle_collection(const tlv_data_t *data, s_param_nft_context *conte
 DEFINE_TLV_PARSER(PARAM_NFT_TAGS, NULL, param_nft_tlv_parser)
 
 bool handle_param_nft_struct(const buffer_t *buf, s_param_nft_context *context) {
-    TLV_reception_t received_tags;
-    return param_nft_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_nft_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_ID, TAG_COLLECTION) &&
+           (context->param->version == 1U);
 }
 
 bool format_param_nft(const s_param_nft *param, const char *name) {

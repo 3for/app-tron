@@ -35,6 +35,7 @@
 #include "cmd_proxy_info.h"
 #include "cmd_enum_value.h"
 #include "tlv_apdu.h"
+#include "gcs_signing_context.h"
 
 #ifdef HAVE_GATING_SUPPORT
 #include "cmd_get_gating.h"
@@ -58,7 +59,11 @@ int apdu_dispatcher(const command_t *cmd) {
     if (tlv_apdu_in_progress() &&
         ((cmd->cla != CLA) || !tlv_apdu_owner_matches(cmd->ins, cmd->p2))) {
         PRINTF("Aborted metadata stream on mismatched APDU\n");
-        tlv_apdu_reset();
+        if (appState != APP_STATE_IDLE) {
+            reset_app_context();
+        } else {
+            tlv_apdu_reset();
+        }
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
     if (cmd->cla != CLA) {
@@ -82,6 +87,26 @@ int apdu_dispatcher(const command_t *cmd) {
     if (gcs_review_in_progress()) {
         PRINTF("Refused APDU while GCS review is active\n");
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+    if (gcs_signing_in_progress()) {
+        bool allowed = false;
+
+        if (appState == APP_STATE_SIGNING_GCS_STORE) {
+            allowed = (cmd->ins == INS_SIGN_GCS) && (cmd->p2 == P2_GCS_STORE);
+        } else if (appState == APP_STATE_SIGNING_TX) {
+            allowed = (cmd->ins == INS_GTP_TRANSACTION_INFO) ||
+                      (cmd->ins == INS_GTP_FIELD) ||
+                      ((cmd->ins == INS_SIGN_GCS) &&
+                       (cmd->p2 == P2_GCS_START_FLOW));
+#ifdef HAVE_GATING_SUPPORT
+            allowed = allowed || (cmd->ins == INS_PROVIDE_GATING);
+#endif
+        }
+        if (!allowed) {
+            PRINTF("Refused APDU outside the active GCS phase\n");
+            reset_app_context();
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
     }
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {

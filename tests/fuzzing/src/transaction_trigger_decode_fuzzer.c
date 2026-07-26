@@ -144,7 +144,9 @@ static decode_snapshot_t run_decoder(tron_stream_decoder_t *decoder,
 
     snapshot.done = tron_stream_decoder_is_done(decoder);
     snapshot.has_result = tron_stream_decoder_get_result(decoder, &snapshot.result);
-    fuzz_assert(snapshot.done == snapshot.has_result);
+    /* Wire parsing may complete for a semantically incomplete Trigger contract;
+     * get_result() intentionally applies the stricter policy validation. */
+    fuzz_assert(!snapshot.has_result || snapshot.done);
     if (snapshot.has_result) {
         tron_decode_result_t before_extra = snapshot.result;
         validate_result(&snapshot.result);

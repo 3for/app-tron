@@ -33,7 +33,10 @@ generate_one() {
         fuzz_external_metadata)
             generator="generate_external_metadata_corpus.py"
             ;;
-        fuzz_gcs|fuzz_common_utils_address|fuzz_common_utils_numbers)
+        fuzz_gcs)
+            generator="generate_gcs_corpus.py"
+            ;;
+        fuzz_common_utils_address|fuzz_common_utils_numbers)
             ;;
         *)
             echo "Unknown fuzz target: ${fuzz_target}" >&2
@@ -65,10 +68,10 @@ Generated baseline corpora:
   fuzz_tip712
   fuzz_handle_sign
   fuzz_personal_message
+  fuzz_gcs
   fuzz_external_metadata
 
 Targets that intentionally start from an empty or fuzzer-populated corpus:
-  fuzz_gcs
   fuzz_common_utils_address
   fuzz_common_utils_numbers
 

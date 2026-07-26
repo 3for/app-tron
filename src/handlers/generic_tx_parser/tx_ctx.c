@@ -9,6 +9,8 @@
 #include "ui_logic.h"  // s_eip712_calldata_info, get_current_calldata_info (TIP712 nested-calldata)
 #include "network.h"
 #include "hash_bytes.h"
+#include "gcs_signing_context.h"
+#include "gcs_limits.h"
 
 static s_tx_ctx *g_tx_ctx_list = NULL;
 static s_tx_ctx *g_tx_ctx_current = NULL;
@@ -227,11 +229,18 @@ bool set_tx_info_into_tx_ctx(s_tx_info *tx_info) {
     cx_sha3_t ctx;
     uint8_t hash[INT256_LENGTH];
 
-    if (g_tx_ctx_current == NULL) return false;
+    if ((g_tx_ctx_current == NULL) ||
+        (g_tx_ctx_current->tx_info != NULL) ||
+        (tx_info == NULL)) {
+        return false;
+    }
     g_tx_ctx_current->tx_info = tx_info;
     if (tx_ctx_is_root()) {
         if (appState == APP_STATE_SIGNING_EIP712) {
             if (!set_intent_field(tx_info->operation_type)) return false;
+        }
+        if ((appState == APP_STATE_SIGNING_TX) && !gcs_add_forced_fields()) {
+            return false;
         }
     } else {
         if (!set_intent_field(tx_info->operation_type)) return false;
@@ -259,6 +268,9 @@ bool tx_ctx_init(s_calldata *calldata,
     s_tx_ctx *node;
     s_eip712_calldata_info *calldata_info;
 
+    if (get_tx_ctx_count() >= GCS_MAX_TX_CONTEXTS) {
+        return false;
+    }
     if (APP_MEM_CALLOC((void **) &node, sizeof(*node)) == false) {
         return false;
     }

@@ -44,8 +44,10 @@ static bool handle_type(const tlv_data_t *data, s_param_datetime_context *contex
 DEFINE_TLV_PARSER(PARAM_DATETIME_TAGS, NULL, param_datetime_tlv_parser)
 
 bool handle_param_datetime_struct(const buffer_t *buf, s_param_datetime_context *context) {
-    TLV_reception_t received_tags;
-    return param_datetime_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return param_datetime_tlv_parser(buf, context, &received_tags) &&
+           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION, TAG_VALUE, TAG_TYPE) &&
+           (context->param->version == 1U);
 }
 
 bool format_param_datetime(const s_param_datetime *param, const char *name) {

@@ -29,6 +29,9 @@
 // decoder is freed first. Returns false on allocation failure.
 bool tron_tx_stream_begin(size_t total_len, tron_trigger_data_observer_t observer, void *ctx);
 
+// Install an observer for Transaction.raw.custom_data (memo).
+void tron_tx_stream_set_custom_data_observer(tron_trigger_data_observer_t observer, void *ctx);
+
 // Feed one chunk of streamed data. Returns false if the decoder is inactive or the
 // chunk fails to decode.
 bool tron_tx_stream_feed(const uint8_t *data, size_t len);
@@ -38,6 +41,9 @@ bool tron_tx_stream_is_done(void);
 
 // The (possibly partial) decode result, or NULL when no stream is active.
 const tron_decode_result_t *tron_tx_stream_result(void);
+
+// Copy a complete, policy-valid TriggerSmartContract result.
+bool tron_tx_stream_get_result(tron_decode_result_t *out);
 
 // Free the decoder (no-op when inactive).
 void tron_tx_stream_free(void);

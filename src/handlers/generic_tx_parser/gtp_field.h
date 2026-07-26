@@ -45,7 +45,7 @@ typedef enum {
 
 typedef struct s_field_constraint {
     flist_node_t node;
-    uint8_t size;
+    uint16_t size;
     uint8_t *value;
 } s_field_constraint;
 

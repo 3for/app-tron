@@ -8,6 +8,7 @@
 #include "calldata.h"      // CALLDATA_SELECTOR_SIZE
 
 #define PROXY_INFO_DESCRIPTOR_MAX_LENGTH 256
+#define MAX_PROXY_INFOS                  8
 
 typedef struct {
     uint64_t chain_id;

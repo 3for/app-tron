@@ -29,6 +29,12 @@ bool tron_tx_stream_begin(size_t total_len, tron_trigger_data_observer_t observe
     return true;
 }
 
+void tron_tx_stream_set_custom_data_observer(tron_trigger_data_observer_t observer, void *ctx) {
+    if (g_decoder != NULL) {
+        tron_stream_decoder_set_custom_data_observer(g_decoder, observer, ctx);
+    }
+}
+
 bool tron_tx_stream_feed(const uint8_t *data, size_t len) {
     return (g_decoder != NULL) && tron_stream_decoder_feed(g_decoder, data, len);
 }
@@ -39,6 +45,10 @@ bool tron_tx_stream_is_done(void) {
 
 const tron_decode_result_t *tron_tx_stream_result(void) {
     return (g_decoder != NULL) ? &g_decoder->result : NULL;
+}
+
+bool tron_tx_stream_get_result(tron_decode_result_t *out) {
+    return (g_decoder != NULL) && tron_stream_decoder_get_result(g_decoder, out);
 }
 
 void tron_tx_stream_free(void) {

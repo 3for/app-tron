@@ -11,6 +11,7 @@
 #include "tx_ctx.h"
 #include "tlv_library.h"
 #include "tlv_apdu.h"
+#include "chain_config.h"
 
 #define TX_INFO_TAGS(X)                                                            \
     X(0x00, TAG_VERSION, handle_version, ENFORCE_UNIQUE_TAG)                       \
@@ -19,11 +20,11 @@
     X(0x03, TAG_SELECTOR, handle_selector, ENFORCE_UNIQUE_TAG)                     \
     X(0x04, TAG_FIELDS_HASH, handle_fields_hash, ENFORCE_UNIQUE_TAG)               \
     X(0x05, TAG_OPERATION_TYPE, handle_operation_type, ENFORCE_UNIQUE_TAG)         \
-    X(0x06, TAG_CREATOR_NAME, handle_creator_name, ALLOW_MULTIPLE_TAG)             \
-    X(0x07, TAG_CREATOR_LEGAL_NAME, handle_creator_legal_name, ALLOW_MULTIPLE_TAG) \
-    X(0x08, TAG_CREATOR_URL, handle_creator_url, ALLOW_MULTIPLE_TAG)               \
-    X(0x09, TAG_CONTRACT_NAME, handle_contract_name, ALLOW_MULTIPLE_TAG)           \
-    X(0x0a, TAG_DEPLOY_DATE, handle_deploy_date, ALLOW_MULTIPLE_TAG)               \
+    X(0x06, TAG_CREATOR_NAME, handle_creator_name, ENFORCE_UNIQUE_TAG)              \
+    X(0x07, TAG_CREATOR_LEGAL_NAME, handle_creator_legal_name, ENFORCE_UNIQUE_TAG)  \
+    X(0x08, TAG_CREATOR_URL, handle_creator_url, ENFORCE_UNIQUE_TAG)                \
+    X(0x09, TAG_CONTRACT_NAME, handle_contract_name, ENFORCE_UNIQUE_TAG)            \
+    X(0x0a, TAG_DEPLOY_DATE, handle_deploy_date, ENFORCE_UNIQUE_TAG)                \
     X(0xff, TAG_SIGNATURE, handle_signature, ENFORCE_UNIQUE_TAG)
 
 static bool handle_version(const tlv_data_t *data, s_tx_info_ctx *context) {
@@ -31,7 +32,8 @@ static bool handle_version(const tlv_data_t *data, s_tx_info_ctx *context) {
 }
 
 static bool handle_chain_id(const tlv_data_t *data, s_tx_info_ctx *context) {
-    return tlv_get_chain_id(data, &context->tx_info->chain_id);
+    return tlv_get_chain_id(data, &context->tx_info->chain_id) &&
+           (context->tx_info->chain_id == TRON_MAINNET_CHAINID);
 }
 
 static bool handle_contract_addr(const tlv_data_t *data, s_tx_info_ctx *context) {
@@ -42,7 +44,8 @@ static bool handle_selector(const tlv_data_t *data, s_tx_info_ctx *context) {
     uint8_t buf[CALLDATA_SELECTOR_SIZE];
     const uint8_t *selector;
 
-    if (tlv_get_hash(data, buf, sizeof(buf)) != true) {
+    if ((data->value.size != sizeof(buf)) ||
+        (tlv_get_hash(data, buf, sizeof(buf)) != true)) {
         return false;
     }
     if (get_tx_ctx_count() == 0) {
@@ -59,7 +62,7 @@ static bool handle_selector(const tlv_data_t *data, s_tx_info_ctx *context) {
 }
 
 static bool handle_fields_hash(const tlv_data_t *data, s_tx_info_ctx *context) {
-    if (data->value.size > sizeof(context->tx_info->fields_hash)) {
+    if (data->value.size != sizeof(context->tx_info->fields_hash)) {
         return false;
     }
     buf_shrink_expand(data->value.ptr,
@@ -69,44 +72,46 @@ static bool handle_fields_hash(const tlv_data_t *data, s_tx_info_ctx *context) {
     return true;
 }
 
-static bool handle_operation_type(const tlv_data_t *data, s_tx_info_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->tx_info->operation_type,
-                           sizeof(context->tx_info->operation_type));
+static bool copy_descriptor_string(const tlv_data_t *data, char *out, size_t out_size) {
+    if ((data == NULL) || (data->value.ptr == NULL) || (data->value.size == 0U) ||
+        (data->value.size >= out_size) ||
+        (memchr(data->value.ptr, '\0', data->value.size) != NULL) ||
+        !is_printable((const char *) data->value.ptr, data->value.size)) {
+        return false;
+    }
+    memcpy(out, data->value.ptr, data->value.size);
+    out[data->value.size] = '\0';
     return true;
+}
+
+static bool handle_operation_type(const tlv_data_t *data, s_tx_info_ctx *context) {
+    return copy_descriptor_string(data,
+                                  context->tx_info->operation_type,
+                                  sizeof(context->tx_info->operation_type));
 }
 
 static bool handle_creator_name(const tlv_data_t *data, s_tx_info_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->tx_info->creator_name,
-                           sizeof(context->tx_info->creator_name));
-    return true;
+    return copy_descriptor_string(data,
+                                  context->tx_info->creator_name,
+                                  sizeof(context->tx_info->creator_name));
 }
 
 static bool handle_creator_legal_name(const tlv_data_t *data, s_tx_info_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->tx_info->creator_legal_name,
-                           sizeof(context->tx_info->creator_legal_name));
-    return true;
+    return copy_descriptor_string(data,
+                                  context->tx_info->creator_legal_name,
+                                  sizeof(context->tx_info->creator_legal_name));
 }
 
 static bool handle_creator_url(const tlv_data_t *data, s_tx_info_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->tx_info->creator_url,
-                           sizeof(context->tx_info->creator_url));
-    return true;
+    return copy_descriptor_string(data,
+                                  context->tx_info->creator_url,
+                                  sizeof(context->tx_info->creator_url));
 }
 
 static bool handle_contract_name(const tlv_data_t *data, s_tx_info_ctx *context) {
-    str_cpy_explicit_trunc((const char *) data->value.ptr,
-                           data->value.size,
-                           context->tx_info->contract_name,
-                           sizeof(context->tx_info->contract_name));
-    return true;
+    return copy_descriptor_string(data,
+                                  context->tx_info->contract_name,
+                                  sizeof(context->tx_info->contract_name));
 }
 
 static bool handle_deploy_date(const tlv_data_t *data, s_tx_info_ctx *context) {
@@ -138,6 +143,127 @@ static bool handle_signature(const tlv_data_t *data, s_tx_info_ctx *context) {
 static bool tx_info_common_handler(const tlv_data_t *data, s_tx_info_ctx *context);
 
 DEFINE_TLV_PARSER(TX_INFO_TAGS, &tx_info_common_handler, tx_info_tlv_parser)
+
+static bool read_canonical_der_uint32(const buffer_t *buf,
+                                      size_t *offset,
+                                      uint32_t *value) {
+    uint8_t first;
+    uint8_t byte_count;
+
+    if ((buf == NULL) || (buf->ptr == NULL) || (offset == NULL) ||
+        (value == NULL) || (*offset >= buf->size)) {
+        return false;
+    }
+    first = buf->ptr[(*offset)++];
+    if ((first & 0x80U) == 0U) {
+        *value = first;
+        return true;
+    }
+    byte_count = first & 0x7fU;
+    if ((byte_count == 0U) || (byte_count > sizeof(*value)) ||
+        (byte_count > (buf->size - *offset)) || (buf->ptr[*offset] == 0U)) {
+        return false;
+    }
+    *value = 0U;
+    for (uint8_t i = 0U; i < byte_count; i++) {
+        *value = (*value << 8U) | buf->ptr[*offset + i];
+    }
+    *offset += byte_count;
+    return *value >= 0x80U;
+}
+
+static int tx_info_tag_index(uint32_t tag) {
+    switch (tag) {
+        case TAG_VERSION:
+            return 0;
+        case TAG_CHAIN_ID:
+            return 1;
+        case TAG_CONTRACT_ADDR:
+            return 2;
+        case TAG_SELECTOR:
+            return 3;
+        case TAG_FIELDS_HASH:
+            return 4;
+        case TAG_OPERATION_TYPE:
+            return 5;
+        case TAG_CREATOR_NAME:
+            return 6;
+        case TAG_CREATOR_LEGAL_NAME:
+            return 7;
+        case TAG_CREATOR_URL:
+            return 8;
+        case TAG_CONTRACT_NAME:
+            return 9;
+        case TAG_DEPLOY_DATE:
+            return 10;
+        case TAG_SIGNATURE:
+            return 11;
+        default:
+            return -1;
+    }
+}
+
+bool verify_tx_info_authenticity(const buffer_t *buf) {
+    cx_sha256_t hash_ctx;
+    uint8_t hash[INT256_LENGTH];
+    uint8_t signature[CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH];
+    size_t signature_len = 0U;
+    size_t offset = 0U;
+    uint16_t seen = 0U;
+
+    if ((buf == NULL) || (buf->ptr == NULL) || (buf->offset != 0U) ||
+        (buf->size == 0U)) {
+        return false;
+    }
+    cx_sha256_init(&hash_ctx);
+    while (offset < buf->size) {
+        const size_t raw_start = offset;
+        uint32_t tag;
+        uint32_t length;
+        int tag_index;
+        size_t end;
+
+        if (!read_canonical_der_uint32(buf, &offset, &tag) ||
+            !read_canonical_der_uint32(buf, &offset, &length) ||
+            __builtin_add_overflow(offset, (size_t) length, &end) ||
+            (end > buf->size) || ((tag_index = tx_info_tag_index(tag)) < 0) ||
+            ((seen & ((uint16_t) 1U << tag_index)) != 0U)) {
+            return false;
+        }
+        seen |= (uint16_t) 1U << tag_index;
+        if (tag == TAG_SIGNATURE) {
+            if ((length == 0U) || (length > sizeof(signature))) {
+                return false;
+            }
+            memcpy(signature, &buf->ptr[offset], length);
+            signature_len = length;
+        } else if (cx_hash_no_throw((cx_hash_t *) &hash_ctx,
+                                    0,
+                                    &buf->ptr[raw_start],
+                                    end - raw_start,
+                                    NULL,
+                                    0) != CX_OK) {
+            return false;
+        }
+        offset = end;
+    }
+    if (signature_len == 0U ||
+        (cx_hash_no_throw((cx_hash_t *) &hash_ctx,
+                          CX_LAST,
+                          NULL,
+                          0,
+                          hash,
+                          sizeof(hash)) != CX_OK)) {
+        return false;
+    }
+    return check_signature_with_pubkey(hash,
+                                       sizeof(hash),
+                                       NULL,
+                                       0,
+                                       CERTIFICATE_PUBLIC_KEY_USAGE_CALLDATA,
+                                       signature,
+                                       signature_len);
+}
 
 // Common handler to hash all tags except signature
 static bool tx_info_common_handler(const tlv_data_t *data, s_tx_info_ctx *context) {

@@ -9,7 +9,7 @@ Everything under `tests/fuzzing/corpus/` is generated or produced by a fuzzer
 and is intentionally ignored by Git. Do not commit generated `.bin`, `.pb`, or
 libFuzzer corpus files.
 
-Five targets have deterministic Python seed generators:
+Six targets have deterministic Python seed generators:
 
 | Target | Generator |
 | --- | --- |
@@ -18,11 +18,11 @@ Five targets have deterministic Python seed generators:
 | `fuzz_handle_sign` | `generate_handle_sign_corpus.py` |
 | `fuzz_personal_message` | `generate_personal_message_corpus.py` |
 | `fuzz_external_metadata` | `generate_external_metadata_corpus.py` |
+| `fuzz_gcs` | `generate_gcs_corpus.py` |
 
 The remaining targets intentionally start with an empty corpus, or reuse inputs
 previously discovered by libFuzzer:
 
-- `fuzz_gcs`
 - `fuzz_common_utils_address`
 - `fuzz_common_utils_numbers`
 
@@ -254,10 +254,11 @@ fuzz_tip712_seed_corpus.zip
 fuzz_handle_sign_seed_corpus.zip
 fuzz_personal_message_seed_corpus.zip
 fuzz_external_metadata_seed_corpus.zip
+fuzz_gcs_seed_corpus.zip
 ```
 
-`fuzz_gcs` and the two common-utility targets have no baseline archive because
-they can start from an empty corpus.
+The two common-utility targets have no baseline archive because they can start
+from an empty corpus.
 
 ### Running every target with Docker
 
