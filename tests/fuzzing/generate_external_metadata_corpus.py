@@ -70,7 +70,7 @@ def trusted_name_v1(challenge: int = 0, key_id: int = 7) -> bytes:
 def trusted_name_v2_cal(
     chain_id: int = TRON_MAINNET_CHAIN_ID,
     key_id: int = 9,
-    name: str = "Test Token",
+    name: str | bytes = "Test Token",
 ) -> bytes:
     return b"".join(
         [
@@ -372,6 +372,18 @@ def main() -> None:
         0,
         record(INS_PROVIDE_NFT, 1, nft_metadata(), p2=1),
     )
+    for index, name in enumerate(
+        [b"", b"\x00", b"Safe name\x00hidden suffix", b" Leading", b"Trailing "],
+        start=33,
+    ):
+        write_seed(
+            f"{index:02d}-trusted-name-ambiguous-name.bin",
+            0x80,
+            single_chunk(
+                INS_TRUSTED_NAME,
+                trusted_name_v2_cal(name=name),
+            ),
+        )
 
 
 if __name__ == "__main__":

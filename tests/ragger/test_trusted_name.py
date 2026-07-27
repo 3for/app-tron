@@ -445,6 +445,26 @@ def test_trusted_name_v2_expired(backend: BackendInterface):
     assert e.value.status == StatusWord.INVALID_DATA
 
 
+@pytest.mark.parametrize("name", [
+    "",
+    "\0",
+    "Safe name\0hidden suffix",
+    " Leading",
+    "Trailing ",
+])
+def test_trusted_name_v2_rejects_ambiguous_names(
+        backend: BackendInterface, name: str):
+    app_client = TronClient(backend)
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR_B58, name,
+                        tn_type=TrustedNameType.TOKEN,
+                        tn_source=TrustedNameSource.CAL,
+                        chain_id=CHAIN_ID))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
 def test_trusted_name_v2_mab_account_name(backend: BackendInterface):
     app_client = TronClient(backend)
     cmd_builder = CommandBuilder()

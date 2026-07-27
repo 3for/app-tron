@@ -252,6 +252,13 @@ static bool handle_signer_algo(const tlv_data_t *data, s_trusted_name_ctx *conte
  * @return whether it was successful
  */
 static bool handle_trusted_name(const tlv_data_t *data, s_trusted_name_ctx *context) {
+    if ((data == NULL) || (context == NULL) || (data->value.ptr == NULL) ||
+        (data->value.size == 0U) ||
+        (data->value.size > TRUSTED_NAME_MAX_LENGTH) ||
+        (memchr(data->value.ptr, '\0', data->value.size) != NULL)) {
+        PRINTF("TRUSTED_NAME: empty name or embedded NUL\n");
+        return false;
+    }
     if (!get_string_from_tlv_data(data,
                                   context->trusted_name.name,
                                   1,
@@ -664,6 +671,41 @@ static bool check_trusted_name(const char *name, bool (*check_func)(char)) {
     return true;
 }
 
+static bool check_generic_trusted_name(const char *name, size_t name_length) {
+    if ((name == NULL) || (name_length == 0U) ||
+        (name[0] == ' ') || (name[name_length - 1U] == ' ')) {
+        PRINTF("Error: trusted name must not start or end with a space\n");
+        return false;
+    }
+    return check_trusted_name(name, &generic_trusted_name_charset);
+}
+
+static bool verify_mab_owner(const s_trusted_name_ctx *context) {
+    uint8_t raw_pubkey[CX_SECP256_PUB_KEY_SIZE];
+    uint8_t wallet_addr[ADDRESS_LENGTH];
+
+    if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
+                                    context->owner_deriv_path.indices,
+                                    context->owner_deriv_path.length,
+                                    raw_pubkey,
+                                    NULL,
+                                    CX_SHA512) != CX_OK) {
+        PRINTF("Error: could not derive pubkey!\n");
+        return false;
+    }
+    getEthAddressFromRawKey(raw_pubkey, wallet_addr);
+
+    if (memcmp(context->owner, wallet_addr, sizeof(wallet_addr)) != 0) {
+        PRINTF("Error: mismatching owner received (0x%.*h vs 0x%.*h) !\n",
+               sizeof(context->owner),
+               context->owner,
+               sizeof(wallet_addr),
+               wallet_addr);
+        return false;
+    }
+    return true;
+}
+
 /**
  * Verify the validity of the received trusted struct
  *
@@ -719,31 +761,6 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             default:
                 return SWO_INCORRECT_DATA;
         }
-        // MAB source requires OWNER
-        if (context->trusted_name.name_source == TN_SOURCE_MAB) {
-            uint8_t raw_pubkey[CX_SECP256_PUB_KEY_SIZE];
-            uint8_t wallet_addr[ADDRESS_LENGTH];
-
-            if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
-                                            context->owner_deriv_path.indices,
-                                            context->owner_deriv_path.length,
-                                            raw_pubkey,
-                                            NULL,
-                                            CX_SHA512) != CX_OK) {
-                PRINTF("Error: could not derive pubkey!\n");
-                return SWO_INCORRECT_DATA;
-            }
-            getEthAddressFromRawKey(raw_pubkey, wallet_addr);
-
-            if (memcmp(context->owner, wallet_addr, sizeof(wallet_addr)) != 0) {
-                PRINTF("Error: mismatching owner received (0x%.*h vs 0x%.*h) !\n",
-                       sizeof(context->owner),
-                       context->owner,
-                       sizeof(wallet_addr),
-                       wallet_addr);
-                return SWO_INCORRECT_DATA;
-            }
-        }
     }
 
     e_tn_key_id expected_key_id =
@@ -753,6 +770,12 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             : TN_KEY_ID_DOMAIN_SVC;
     if (context->key_id != expected_key_id) {
         PRINTF("Error: trusted-name signer key ID does not match its source\n");
+        return SWO_INCORRECT_DATA;
+    }
+
+    /* Authenticate the descriptor before performing name normalization or
+     * MAB-controlled secure-element key derivation. */
+    if (!verify_signature(context)) {
         return SWO_INCORRECT_DATA;
     }
 
@@ -769,12 +792,14 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
             return SWO_INCORRECT_DATA;
         }
     } else {
-        if (!check_trusted_name(context->trusted_name.name, &generic_trusted_name_charset)) {
+        if (!check_generic_trusted_name(context->trusted_name.name, name_length)) {
             return SWO_INCORRECT_DATA;
         }
     }
 
-    if (!verify_signature(context)) {
+    if ((context->trusted_name.struct_version == STRUCT_VERSION_2) &&
+        (context->trusted_name.name_source == TN_SOURCE_MAB) &&
+        !verify_mab_owner(context)) {
         return SWO_INCORRECT_DATA;
     }
 
