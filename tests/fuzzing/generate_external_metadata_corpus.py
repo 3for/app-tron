@@ -108,7 +108,7 @@ def trusted_name_v2_mab(path: bytes) -> bytes:
     )
 
 
-def proxy_info(challenge: int = 0) -> bytes:
+def proxy_info(challenge: int = 0, selector: bytes = b"\xa9\x05\x9c\xbb") -> bytes:
     return b"".join(
         [
             tlv(0x01, 0x26),
@@ -116,7 +116,7 @@ def proxy_info(challenge: int = 0) -> bytes:
             tlv(0x12, challenge),
             tlv(0x22, TRON_ADDRESS),
             tlv(0x23, TRON_MAINNET_CHAIN_ID),
-            tlv(0x41, b"\xa9\x05\x9c\xbb"),
+            tlv(0x41, selector),
             tlv(0x42, TRON_ADDRESS_2),
             tlv(0x43, 0),
             tlv(0x15, DUMMY_DER_SIGNATURE),
@@ -124,13 +124,17 @@ def proxy_info(challenge: int = 0) -> bytes:
     )
 
 
-def enum_value(value: int = 2, name: str = "approved") -> bytes:
+def enum_value(
+    value: int = 2,
+    name: str | bytes = "approved",
+    selector: bytes = b"\xa9\x05\x9c\xbb",
+) -> bytes:
     return b"".join(
         [
             tlv(0x00, 1),
             tlv(0x01, TRON_MAINNET_CHAIN_ID),
             tlv(0x02, TRON_ADDRESS),
-            tlv(0x03, b"\xa9\x05\x9c\xbb"),
+            tlv(0x03, selector),
             tlv(0x04, 1),
             tlv(0x05, value),
             tlv(0x06, name),
@@ -140,14 +144,15 @@ def enum_value(value: int = 2, name: str = "approved") -> bytes:
 
 
 def trc20_metadata(
-    ticker: str = "TOK",
+    ticker: str | bytes = "TOK",
     decimals: int = 6,
     chain_id: int = TRON_MAINNET_CHAIN_ID,
 ) -> bytes:
+    ticker_bytes = ticker.encode() if isinstance(ticker, str) else ticker
     return b"".join(
         [
-            bytes([len(ticker)]),
-            ticker.encode(),
+            bytes([len(ticker_bytes)]),
+            ticker_bytes,
             TRON_ADDRESS,
             decimals.to_bytes(4, "big"),
             chain_id.to_bytes(4, "big"),
@@ -157,16 +162,17 @@ def trc20_metadata(
 
 
 def nft_metadata(
-    name: str = "Collection",
+    name: str | bytes = "Collection",
     chain_id: int = TRON_MAINNET_CHAIN_ID,
     key_id: int = 1,
     trailing: bytes = b"",
 ) -> bytes:
+    name_bytes = name.encode() if isinstance(name, str) else name
     signed_payload = b"".join(
         [
             b"\x01\x01",
-            bytes([len(name)]),
-            name.encode(),
+            bytes([len(name_bytes)]),
+            name_bytes,
             TRON_ADDRESS,
             chain_id.to_bytes(8, "big"),
             bytes([key_id, 1]),
@@ -384,6 +390,71 @@ def main() -> None:
                 trusted_name_v2_cal(name=name),
             ),
         )
+    write_seed(
+        "38-proxy-cal-certificate.bin",
+        0x80,
+        single_chunk(INS_PROXY_INFO, proxy),
+    )
+    for index, selector in enumerate(
+        [b"\x01\x02\x03", b"\x01\x02\x03\x04\x05"],
+        start=39,
+    ):
+        write_seed(
+            f"{index:02d}-proxy-noncanonical-selector.bin",
+            0,
+            single_chunk(INS_PROXY_INFO, proxy_info(selector=selector)),
+        )
+    for index, selector in enumerate(
+        [b"\x01\x02\x03", b"\x01\x02\x03\x04\x05"],
+        start=41,
+    ):
+        write_seed(
+            f"{index:02d}-enum-noncanonical-selector.bin",
+            0,
+            single_chunk(INS_ENUM_VALUE, enum_value(selector=selector)),
+        )
+    for index, name in enumerate(
+        [b"", b"Safe\x00hidden", b"line\nbreak", b"\x80", b"\xff"],
+        start=43,
+    ):
+        write_seed(
+            f"{index:02d}-enum-ambiguous-name.bin",
+            0,
+            single_chunk(INS_ENUM_VALUE, enum_value(name=name)),
+        )
+    write_seed(
+        "48-enum-max-name.bin",
+        0,
+        single_chunk(INS_ENUM_VALUE, enum_value(name="A" * 20)),
+    )
+    for index, ticker in enumerate(
+        [b"", b"USD\x00T", b"USD\nT", b"\x80", b"\xff"],
+        start=49,
+    ):
+        write_seed(
+            f"{index:02d}-trc20-ambiguous-ticker.bin",
+            0,
+            record(INS_PROVIDE_TRC20, 0, trc20_metadata(ticker=ticker)),
+        )
+    for index, name in enumerate(
+        [b"", b"Safe\x00hidden", b"line\nbreak", b"\x80", b"\xff"],
+        start=54,
+    ):
+        write_seed(
+            f"{index:02d}-nft-ambiguous-name.bin",
+            0,
+            record(INS_PROVIDE_NFT, 0, nft_metadata(name=name)),
+        )
+    write_seed(
+        "59-trc20-max-ticker.bin",
+        0,
+        record(INS_PROVIDE_TRC20, 0, trc20_metadata(ticker="T" * 50)),
+    )
+    write_seed(
+        "60-nft-max-collection.bin",
+        0,
+        record(INS_PROVIDE_NFT, 0, nft_metadata(name="N" * 70)),
+    )
 
 
 if __name__ == "__main__":

@@ -371,6 +371,10 @@ bool check_signature_with_pubkey(uint8_t *buffer,
     return g_fuzz_signature_valid;
 }
 
+bool check_loaded_pki_certificate_name(const char *expected_name) {
+    return (expected_name != NULL) && (strcmp(expected_name, "Trusted_Name") == 0);
+}
+
 const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const e_name_type *types,
                                        uint8_t source_count,

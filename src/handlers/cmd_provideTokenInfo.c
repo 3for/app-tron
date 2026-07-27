@@ -8,6 +8,7 @@
 #include "app_errors.h"
 #include "os_pki.h"
 #include "parse.h"
+#include "utils.h"
 
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
@@ -36,6 +37,11 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
         return io_send_sw(E_INCORRECT_DATA);
     }
     if (dataLength < tickerLength + TRON_BASE58CHECK_ADDRESS_SIZE + 4 + 4) {
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    if ((tickerLength == 0U) ||
+        !is_printable((const char *) (workBuffer + offset), tickerLength)) {
+        PRINTF("Invalid token ticker\n");
         return io_send_sw(E_INCORRECT_DATA);
     }
 

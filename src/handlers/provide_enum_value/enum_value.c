@@ -56,6 +56,10 @@ static bool handle_contract_addr(const tlv_data_t *data, s_enum_value_ctx *conte
  * @return whether the handling was successful
  */
 static bool handle_selector(const tlv_data_t *data, s_enum_value_ctx *context) {
+    if ((data == NULL) || (data->value.size != SELECTOR_SIZE)) {
+        PRINTF("SELECTOR: invalid size\n");
+        return false;
+    }
     return tlv_get_hash(data, context->entry.selector, sizeof(context->entry.selector));
 }
 
@@ -97,10 +101,10 @@ static bool handle_value(const tlv_data_t *data, s_enum_value_ctx *context) {
  * @return whether the handling was successful
  */
 static bool handle_name(const tlv_data_t *data, s_enum_value_ctx *context) {
-    if (!get_string_from_tlv_data(data,
+    if (!tlv_get_printable_string(data,
                                   (char *) context->entry.name,
                                   1,
-                                  sizeof(context->entry.name) - 1)) {
+                                  sizeof(context->entry.name))) {
         PRINTF("NAME: failed to extract\n");
         return false;
     }

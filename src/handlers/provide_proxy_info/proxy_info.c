@@ -12,6 +12,7 @@
 
 #define TYPE_PROXY_INFO 0x26
 #define STRUCT_VERSION  0x01
+#define PROXY_CERTIFICATE_NAME "Trusted_Name"
 
 typedef enum {
     DELEGATION_TYPE_PROXY = 0,
@@ -93,6 +94,10 @@ static bool handle_chain_id(const tlv_data_t *data, s_proxy_info_ctx *context) {
  * @return whether the handling was successful
  */
 static bool handle_selector(const tlv_data_t *data, s_proxy_info_ctx *context) {
+    if ((data == NULL) || (data->value.size != CALLDATA_SELECTOR_SIZE)) {
+        PRINTF("SELECTOR: invalid size\n");
+        return false;
+    }
     if (!tlv_get_hash(data, context->proxy_info.selector, sizeof(context->proxy_info.selector))) {
         PRINTF("SELECTOR: error\n");
         return false;
@@ -224,6 +229,10 @@ bool verify_proxy_info_struct(const s_proxy_info_ctx *context) {
                                     CERTIFICATE_PUBLIC_KEY_USAGE_TRUSTED_NAME,
                                     (uint8_t *) context->sig,
                                     context->sig_size) != true) {
+        return false;
+    }
+    if (!check_loaded_pki_certificate_name(PROXY_CERTIFICATE_NAME)) {
+        PRINTF("Error: unexpected certificate identity for proxy descriptor!\n");
         return false;
     }
     if (flist_size((flist_node_t **) &g_proxy_info_list) >= MAX_PROXY_INFOS) {

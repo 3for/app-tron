@@ -173,7 +173,7 @@ static bool parse_chain_id(const tlv_data_t *data, s_gating_ctx *context) {
 static bool parse_intro_msg(const tlv_data_t *data, s_gating_ctx *context) {
     if (!tlv_get_printable_string(data,
                                   context->gating->intro_msg,
-                                  0,
+                                  1,
                                   sizeof(context->gating->intro_msg))) {
         PRINTF("INTRO_MSG: error\n");
         return false;
@@ -191,7 +191,7 @@ static bool parse_intro_msg(const tlv_data_t *data, s_gating_ctx *context) {
 static bool parse_tiny_url(const tlv_data_t *data, s_gating_ctx *context) {
     if (!tlv_get_printable_string(data,
                                   context->gating->tiny_url,
-                                  0,
+                                  1,
                                   sizeof(context->gating->tiny_url))) {
         PRINTF("TINY_URL: error\n");
         return false;
@@ -374,32 +374,34 @@ static void print_gating_info(s_gating_ctx *context) {
  */
 static bool handle_tlv_payload(const buffer_t *buf) {
     s_gating_ctx ctx = {0};
-    gating_t *candidate = NULL;
+    gating_t candidate = {0};
+    gating_t *committed = NULL;
     gating_t *previous;
 
-    candidate = gcs_mem_calloc(sizeof(*candidate), GCS_MEM_METADATA);
-    if (candidate == NULL) {
-        PRINTF("Error: Not enough memory!\n");
-        return false;
-    }
-    ctx.gating = candidate;
+    /* Parse and authenticate into stack storage. If a CX operation throws,
+     * there is no uncommitted heap allocation to leak. */
+    ctx.gating = &candidate;
 
     // Initialize the hash context
     cx_sha256_init(&ctx.hash_ctx);
 
     if (!gating_tlv_parser(buf, &ctx, &ctx.received_tags)) {
-        gcs_mem_free(candidate);
         return false;
     }
 
     if (!verify_fields(&ctx) || !verify_signature(&ctx)) {
-        gcs_mem_free(candidate);
         return false;
     }
 
     print_gating_info(&ctx);
+    committed = gcs_mem_alloc(sizeof(*committed), GCS_MEM_METADATA);
+    if (committed == NULL) {
+        PRINTF("Error: Not enough memory!\n");
+        return false;
+    }
+    memcpy(committed, &candidate, sizeof(*committed));
     previous = GATING;
-    GATING = candidate;
+    GATING = committed;
     gcs_mem_free(previous);
     return true;
 }

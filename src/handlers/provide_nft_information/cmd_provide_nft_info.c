@@ -9,6 +9,7 @@
 #include "app_errors.h"
 #include "os_pki.h"
 #include "ui_globals.h"
+#include "utils.h"
 
 #define TYPE_SIZE        1
 #define VERSION_SIZE     1
@@ -102,10 +103,14 @@ int handleProvideNFTInformation(uint8_t p1,
         return io_send_sw(E_INCORRECT_DATA);
     }
 
-    if (collectionNameLength > COLLECTION_NAME_MAX_LEN) {
+    if ((collectionNameLength == 0U) || (collectionNameLength > COLLECTION_NAME_MAX_LEN)) {
         PRINTF("CollectionName too big: expected max %d, got %d\n",
                COLLECTION_NAME_MAX_LEN,
                collectionNameLength);
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+    if (!is_printable((const char *) (workBuffer + offset), collectionNameLength)) {
+        PRINTF("CollectionName contains non-printable bytes\n");
         return io_send_sw(E_INCORRECT_DATA);
     }
 

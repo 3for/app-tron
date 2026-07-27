@@ -271,7 +271,7 @@ bool tlv_get_printable_string(const tlv_data_t *data,
                               char *out,
                               uint32_t min_len,
                               uint32_t max_len) {
-    if (!out) {
+    if ((data == NULL) || (data->value.ptr == NULL) || (out == NULL)) {
         PRINTF("STRING: null pointer provided\n");
         return false;
     }
@@ -279,16 +279,17 @@ bool tlv_get_printable_string(const tlv_data_t *data,
         PRINTF("STRING: Invalid limits provided\n");
         return false;
     }
+    /* Validate the complete signed wire value before converting it to a C string.
+     * Otherwise an embedded NUL would hide an authenticated suffix from the UI. */
+    if ((memchr(data->value.ptr, '\0', data->value.size) != NULL) ||
+        !is_printable((const char *) data->value.ptr, data->value.size)) {
+        PRINTF("STRING contains NUL or non-printable bytes!\n");
+        return false;
+    }
     // Extract the string (with null terminator added by get_string_from_tlv_data)
     // max_len is the buffer capacity including the null terminator
     if (!get_string_from_tlv_data(data, out, min_len, max_len)) {
         PRINTF("STRING: failed to extract\n");
-        return false;
-    }
-    // Check if the name is printable
-    // ('\0' is set by get_string_from_tlv_data, so we can use strlen safely)
-    if (!is_printable((const char *) out, strlen((const char *) out))) {
-        PRINTF("STRING is not printable!\n");
         return false;
     }
     return true;
