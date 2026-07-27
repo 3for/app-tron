@@ -1,4 +1,5 @@
 from typing import Optional
+import pytest
 from Crypto.Hash import keccak
 from pathlib import Path
 from eth_keys import keys
@@ -6,10 +7,33 @@ from ragger.error import ExceptionRAPDU
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from client.status_word import StatusWord
+from client.command_builder import CommandBuilder
 from tron import TronClient
 import response_parser as ResponseParser
 
 BIP32_PATH = "m/44'/195'/0'/0/0"
+
+
+@pytest.mark.parametrize("full_display", [False, True])
+def test_personal_message_reception_rejects_cross_ins(backend, full_display):
+    builder = CommandBuilder()
+    message = b"A" * 300
+    chunks = (builder.personal_sign_full_display(BIP32_PATH, message)
+              if full_display else builder.personal_sign(BIP32_PATH, message))
+    assert len(chunks) > 1
+
+    response = backend.exchange_raw(chunks[0])
+    assert response.status == StatusWord.OK
+
+    get_public_key = builder.get_public_addr(False, False, BIP32_PATH, None)
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange_raw(get_public_key)
+    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+    # The rejected command aborts the interrupted session without executing
+    # GET_PUBLIC_KEY; after reset, the same command must work normally.
+    response = backend.exchange_raw(get_public_key)
+    assert response.status == StatusWord.OK
 
 
 def common(scenario_navigator: NavigateWithScenario, test_name: str,

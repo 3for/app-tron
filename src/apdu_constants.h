@@ -110,6 +110,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint8_t p2,
                                          uint8_t *workBuffer,
                                          uint16_t dataLength);
+int personal_message_format_for_display(char *buffer, size_t raw_length, size_t capacity);
 void message_cleanup(void);
 void personal_message_legacy_cleanup(void);
 bool personal_message_review_in_progress(void);

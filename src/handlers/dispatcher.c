@@ -66,6 +66,28 @@ int apdu_dispatcher(const command_t *cmd) {
         }
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
+
+    // Personal-message reception owns tmpCtx.transactionContext until the
+    // message hash is finalized. In particular, GET_PUBLIC_KEY uses another
+    // member of the same union, so allowing any unrelated command here could
+    // replace the path/hash that will later be signed. Fail closed and discard
+    // the interrupted session; only its exact continuation is valid.
+    if ((appState == APP_STATE_SIGNING_MESSAGE) ||
+        (appState == APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY)) {
+        const uint8_t expected_ins =
+            (appState == APP_STATE_SIGNING_MESSAGE)
+                ? INS_SIGN_PERSONAL_MESSAGE
+                : INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY;
+        const bool allowed = (cmd->cla == CLA) &&
+                             (cmd->ins == expected_ins) &&
+                             (cmd->p1 == P1_MORE) &&
+                             (cmd->p2 == 0);
+        if (!allowed) {
+            PRINTF("Refused APDU while personal-message reception is active\n");
+            reset_app_context();
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+    }
     if (cmd->cla != CLA) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
@@ -137,10 +159,20 @@ int apdu_dispatcher(const command_t *cmd) {
             return handleECDHSecret(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_PERSONAL_MESSAGE_FULL_DISPLAY:
-            forget_known_assets();
+            // Personal-message signing consumes no cached transaction
+            // metadata. Clear it before the first allocation so the advertised
+            // maximum message size has deterministic heap capacity.
+            if (((cmd->p1 == P1_FIRST) || (cmd->p1 == P1_SIGN)) &&
+                (appState == APP_STATE_IDLE)) {
+                reset_app_context();
+            }
             return handleSignPersonalMessageFullDisplay(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_PERSONAL_MESSAGE:
+            if (((cmd->p1 == P1_FIRST) || (cmd->p1 == P1_SIGN)) &&
+                (appState == APP_STATE_IDLE)) {
+                reset_app_context();
+            }
             return handleSignPersonalMessage(cmd->p1, cmd->p2, cmd->data, cmd->lc);
 
         case INS_SIGN_TIP_712_MESSAGE: {

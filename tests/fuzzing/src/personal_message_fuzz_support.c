@@ -22,6 +22,32 @@ static bool g_fail_public_key_init;
 static volatile uint32_t g_display_checksum;
 static const char *g_review_message;
 
+static void assert_distinct_personal_message_displays(void) {
+    char tab_message[32] = "pay\tAlice";
+    char space_message[32] = "pay Alice";
+    char newline_message[32] = "line1\nline2";
+    char escaped_message[32] = "line1\\nline2";
+    char binary_message[16] = {(char) 0xff};
+    char ascii_hex_message[16] = "0xff";
+
+    if ((personal_message_format_for_display(tab_message, 9U, sizeof(tab_message)) < 0) ||
+        (personal_message_format_for_display(space_message, 9U, sizeof(space_message)) < 0) ||
+        (personal_message_format_for_display(newline_message, 11U, sizeof(newline_message)) < 0) ||
+        (personal_message_format_for_display(escaped_message, 12U, sizeof(escaped_message)) < 0) ||
+        (personal_message_format_for_display(binary_message, 1U, sizeof(binary_message)) < 0) ||
+        (personal_message_format_for_display(ascii_hex_message, 4U, sizeof(ascii_hex_message)) < 0) ||
+        (strcmp(tab_message, space_message) == 0) ||
+        (strcmp(newline_message, escaped_message) == 0) ||
+        (strcmp(binary_message, ascii_hex_message) == 0) ||
+        (strcmp(tab_message, "pay\\tAlice") != 0) ||
+        (strcmp(newline_message, "line1\\nline2") != 0) ||
+        (strcmp(escaped_message, "line1\\\\nline2") != 0) ||
+        (strcmp(ascii_hex_message, "0xff") != 0) ||
+        (strcmp(binary_message, "\\hex:0xff") != 0)) {
+        __builtin_trap();
+    }
+}
+
 void reset_app_context(void) {
     message_cleanup();
     personal_message_legacy_cleanup();
@@ -36,6 +62,7 @@ void reset_app_context(void) {
 
 void fuzz_personal_message_init(uint8_t control) {
     reset_app_context();
+    assert_distinct_personal_message_displays();
     g_fail_public_key_init = (control & 1U) != 0U;
     g_display_checksum = 0U;
 }
