@@ -35,6 +35,9 @@
 // The standard length of an Ethereum address
 #define ADDRESS_LENGTH 20
 
+// Prefix of a 21-byte TRON mainnet address.
+#define TRON_MAINNET_ADDRESS_PREFIX 0x41U
+
 // The standard length of an TRON Ethereum-format address
 #define TRON_ADDRESS_SIZE 21
 // The standard length of a TRON Base58Check address string (without '\0')

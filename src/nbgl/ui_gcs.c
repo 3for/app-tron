@@ -49,7 +49,7 @@ static bool *index_allocated = NULL;
 static bool format_contract_address(const uint8_t *addr20, char *out, size_t out_len) {
     uint8_t addr21[ADDRESS_SIZE];
 
-    if (out_len < TRON_ADDR_STR_SIZE) {
+    if ((addr20 == NULL) || (out == NULL) || (out_len < TRON_ADDR_STR_SIZE)) {
         return false;
     }
     addr21[0] = ADD_PRE_FIX_BYTE_MAINNET;
@@ -74,8 +74,15 @@ static void review_choice(bool confirm) {
 
 static void free_pair_extension_infolist_elem(const struct nbgl_contentInfoList_s *infolist,
                                               int idx) {
-    APP_MEM_FREE((void *) infolist->infoTypes[idx]);
-    APP_MEM_FREE((void *) infolist->infoContents[idx]);
+    if ((infolist == NULL) || (idx < 0) || (idx >= infolist->nbInfos)) {
+        return;
+    }
+    if (infolist->infoTypes != NULL) {
+        APP_MEM_FREE((void *) infolist->infoTypes[idx]);
+    }
+    if (infolist->infoContents != NULL) {
+        APP_MEM_FREE((void *) infolist->infoContents[idx]);
+    }
     if (infolist->infoExtensions != NULL) {
         APP_MEM_FREE((void *) infolist->infoExtensions[idx].title);
         APP_MEM_FREE((void *) infolist->infoExtensions[idx].explanation);
@@ -84,6 +91,9 @@ static void free_pair_extension_infolist_elem(const struct nbgl_contentInfoList_
 }
 
 static void free_pair_extension(const nbgl_contentValueExt_t *ext) {
+    if (ext == NULL) {
+        return;
+    }
     APP_MEM_FREE((void *) ext->backText);
     APP_MEM_FREE((void *) ext->fullValue);
     if (ext->infolist != NULL) {
@@ -99,6 +109,10 @@ static void free_pair_extension(const nbgl_contentValueExt_t *ext) {
 }
 
 static void free_pair(const nbgl_contentTagValueList_t *pair_list, int idx) {
+    if ((pair_list == NULL) || (pair_list->pairs == NULL) || (idx < 0) ||
+        (idx >= pair_list->nbPairs)) {
+        return;
+    }
     // Only a few pairs are created from the UI, and need to be freed :
     // - the first one, that leads to the contract infos
     // - the second to last one, that shows the Network (optional)
@@ -117,6 +131,36 @@ static void free_pair(const nbgl_contentTagValueList_t *pair_list, int idx) {
 #else
 #define MAX_INFO_COUNT 4
 #endif
+
+static bool append_info(nbgl_contentInfoList_t *infos,
+                        const char **types,
+                        const char **contents,
+                        uint8_t *count,
+                        uint8_t capacity,
+                        const char *key,
+                        const char *value) {
+    char *key_copy;
+    char *value_copy;
+
+    if ((infos == NULL) || (types == NULL) || (contents == NULL) ||
+        (count == NULL) || (*count >= capacity) ||
+        (key == NULL) || (value == NULL)) {
+        return false;
+    }
+    if ((key_copy = APP_MEM_STRDUP(key)) == NULL) {
+        return false;
+    }
+    if ((value_copy = APP_MEM_STRDUP(value)) == NULL) {
+        APP_MEM_FREE(key_copy);
+        return false;
+    }
+    types[*count] = key_copy;
+    contents[*count] = value_copy;
+    *count += 1U;
+    /* Publish only entries for which both strings are fully owned. */
+    infos->nbInfos = *count;
+    return true;
+}
 
 /**
  * Fill the "smart contract information" info list (creator, contract name,
@@ -138,7 +182,7 @@ static bool prepare_infos(nbgl_contentInfoList_t *infos) {
     int contract_idx = -1;
 #endif
 
-    infos->nbInfos = MAX_INFO_COUNT;
+    infos->nbInfos = 0;
     if (APP_MEM_CALLOC((void **) &keys, sizeof(*keys) * MAX_INFO_COUNT) == false) return false;
     infos->infoTypes = keys;
 
@@ -146,73 +190,58 @@ static bool prepare_infos(nbgl_contentInfoList_t *infos) {
     infos->infoContents = values;
 
     if ((value = get_creator_legal_name(get_current_tx_info())) != NULL) {
-        snprintf(tmp_buf,
-                 tmp_buf_size,
 #ifdef SCREEN_SIZE_WALLET
-                 "Smart contract owner"
+        const char *key = "Smart contract owner";
 #else
-                 "Contract owner"
+        const char *key = "Contract owner";
 #endif
-        );
-        if ((keys[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-            return false;
-        }
         snprintf(tmp_buf, tmp_buf_size, "%s", value);
         if ((value = get_creator_url(get_current_tx_info())) != NULL) {
             off = strlen(tmp_buf);
             snprintf(tmp_buf + off, tmp_buf_size - off, "\n%s", value);
         }
-        if ((values[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-            return false;
-        }
-        count += 1;
+        if (!append_info(infos, keys, values, &count, MAX_INFO_COUNT, key, tmp_buf)) return false;
     }
 
     if ((value = get_contract_name(get_current_tx_info())) != NULL) {
-        snprintf(tmp_buf,
-                 tmp_buf_size,
 #ifdef SCREEN_SIZE_WALLET
-                 "Smart contract"
+        const char *key = "Smart contract";
 #else
-                 "Contract"
+        const char *key = "Contract";
 #endif
-        );
-        if ((keys[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-            return false;
-        }
         snprintf(tmp_buf, tmp_buf_size, "%s", value);
-        if ((values[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-            return false;
-        }
 #ifdef SCREEN_SIZE_WALLET
         contract_idx = count;
 #endif
-        count += 1;
+        if (!append_info(infos, keys, values, &count, MAX_INFO_COUNT, key, tmp_buf)) return false;
     }
 
 #ifndef SCREEN_SIZE_WALLET
     if (!format_contract_address(get_contract_addr(get_current_tx_info()), tmp_buf, tmp_buf_size)) {
         return false;
     }
-    if ((keys[count] = APP_MEM_STRDUP("Contract address")) == NULL) {
+    if (!append_info(infos,
+                     keys,
+                     values,
+                     &count,
+                     MAX_INFO_COUNT,
+                     "Contract address",
+                     tmp_buf)) {
         return false;
     }
-    if ((values[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-        return false;
-    }
-    count += 1;
 #endif
 
     if ((value = get_deploy_date(get_current_tx_info())) != NULL) {
-        snprintf(tmp_buf, tmp_buf_size, "Deployed on");
-        if ((keys[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
-            return false;
-        }
         snprintf(tmp_buf, tmp_buf_size, "%s", value);
-        if ((values[count] = APP_MEM_STRDUP(tmp_buf)) == NULL) {
+        if (!append_info(infos,
+                         keys,
+                         values,
+                         &count,
+                         MAX_INFO_COUNT,
+                         "Deployed on",
+                         tmp_buf)) {
             return false;
         }
-        count += 1;
     }
 
 #ifdef SCREEN_SIZE_WALLET
@@ -260,8 +289,8 @@ void ui_gcs_cleanup(void) {
         for (int i = 0; i < g_pairsList->nbPairs; ++i) {
             free_pair(g_pairsList, i);
         }
-        APP_MEM_FREE_AND_NULL((void *) &index_allocated);
     }
+    APP_MEM_FREE_AND_NULL((void *) &index_allocated);
     ui_all_cleanup();
     proxy_cleanup();
 }
@@ -272,9 +301,12 @@ static nbgl_contentValueExt_t *get_infolist_extension(const char *title,
                                                       const char **values) {
     nbgl_contentValueExt_t *ext;
     nbgl_contentInfoList_t *list;
-    char **tmp;
+    char **types;
+    char **contents;
 
-    if (APP_MEM_CALLOC((void **) &ext, sizeof(*ext)) == false) {
+    if ((title == NULL) || (keys == NULL) || (values == NULL) ||
+        (count == 0U) || (count > UINT8_MAX) ||
+        (APP_MEM_CALLOC((void **) &ext, sizeof(*ext)) == false)) {
         return NULL;
     }
     if ((ext->backText = APP_MEM_STRDUP(title)) == NULL) {
@@ -288,30 +320,32 @@ static nbgl_contentValueExt_t *get_infolist_extension(const char *title,
         return NULL;
     }
     ext->infolist = list;
-    list->nbInfos = count;
+    list->nbInfos = 0;
 
-    if (APP_MEM_CALLOC((void **) &tmp, sizeof(*tmp) * count) == false) {
+    if (APP_MEM_CALLOC((void **) &types, sizeof(*types) * count) == false) {
         free_pair_extension(ext);
         return NULL;
     }
-    list->infoTypes = (const char **) tmp;
-    for (int idx = 0; (size_t) idx < count; ++idx) {
-        if ((tmp[idx] = APP_MEM_STRDUP(keys[idx])) == NULL) {
-            free_pair_extension(ext);
-            return NULL;
-        }
-    }
+    list->infoTypes = (const char **) types;
 
-    if (APP_MEM_CALLOC((void **) &tmp, sizeof(*tmp) * count) == false) {
+    if (APP_MEM_CALLOC((void **) &contents, sizeof(*contents) * count) == false) {
         free_pair_extension(ext);
         return NULL;
     }
-    list->infoContents = (const char **) tmp;
-    for (int idx = 0; (size_t) idx < count; ++idx) {
-        if ((tmp[idx] = APP_MEM_STRDUP(PIC(values[idx]))) == NULL) {
+    list->infoContents = (const char **) contents;
+    for (size_t idx = 0; idx < count; ++idx) {
+        if ((keys[idx] == NULL) || (values[idx] == NULL) ||
+            ((types[idx] = APP_MEM_STRDUP(keys[idx])) == NULL)) {
             free_pair_extension(ext);
             return NULL;
         }
+        if ((contents[idx] = APP_MEM_STRDUP(PIC(values[idx]))) == NULL) {
+            APP_MEM_FREE(types[idx]);
+            types[idx] = NULL;
+            free_pair_extension(ext);
+            return NULL;
+        }
+        list->nbInfos = (uint8_t) (idx + 1U);
     }
     return ext;
 }
@@ -512,13 +546,18 @@ bool ui_gcs(void) {
 
     // First pair: contract info, with an info-list alias.
     index_allocated[pair] = true;
-    g_pairs[pair].item = APP_MEM_STRDUP("Interaction with");
+    if ((g_pairs[pair].item = APP_MEM_STRDUP("Interaction with")) == NULL) {
+        return false;
+    }
     g_pairs[pair].value = get_creator_name(info_tx);
     if (g_pairs[pair].value == NULL) {
         // not great, but this cannot be NULL
         g_pairs[pair].value = APP_MEM_STRDUP("a smart contract");
     } else {
         g_pairs[pair].value = APP_MEM_STRDUP(g_pairs[pair].value);
+    }
+    if (g_pairs[pair].value == NULL) {
+        return false;
     }
     if (APP_MEM_CALLOC((void **) &ext, sizeof(*ext)) == false) {
         return false;
@@ -537,6 +576,9 @@ bool ui_gcs(void) {
     } else {
         ext->backText = APP_MEM_STRDUP(ext->backText);
     }
+    if (ext->backText == NULL) {
+        return false;
+    }
     g_pairs[pair].aliasValue = true;
     pair++;
 
@@ -554,12 +596,15 @@ bool ui_gcs(void) {
                      "%u of %u",
                      (unsigned int) tx_idx,
                      (unsigned int) batch_nb_tx);
-            g_pairs[pair].item = APP_MEM_STRDUP("Review transaction");
-            g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf);
             index_allocated[pair] = true;
+            if (((g_pairs[pair].item = APP_MEM_STRDUP("Review transaction")) == NULL) ||
+                ((g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf)) == NULL)) {
+                return false;
+            }
             g_pairs[pair].centeredInfo = true;
             pair++;
         }
+        if (pair >= nb_pairs) return false;
         g_pairs[pair].item = field->key;
         g_pairs[pair].value = field->value;
         if (field->extra_data != NULL) {
@@ -576,12 +621,16 @@ bool ui_gcs(void) {
 
     if (show_network) {
         if (pair >= nb_pairs) return false;
-        g_pairs[pair].item = APP_MEM_STRDUP("Network");
+        index_allocated[pair] = true;
+        if ((g_pairs[pair].item = APP_MEM_STRDUP("Network")) == NULL) {
+            return false;
+        }
         if (get_network_as_string(tmp_buf, tmp_buf_size) != true) {
             return false;
         }
-        g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf);
-        index_allocated[pair] = true;
+        if ((g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf)) == NULL) {
+            return false;
+        }
         pair++;
     }
 

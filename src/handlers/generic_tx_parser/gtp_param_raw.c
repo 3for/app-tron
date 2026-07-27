@@ -94,6 +94,30 @@ static bool check_uint_constraint(const s_field *field, const uint256_t *value25
     return false;
 }
 
+static bool validate_unsigned_encoding(const s_value *def, const s_parsed_value *value) {
+    size_t ignored_prefix;
+    size_t type_size;
+
+    if ((def == NULL) || (value == NULL) || (value->ptr == NULL) ||
+        (value->length == 0U) || (value->length > INT256_LENGTH) ||
+        (def->type_size > INT256_LENGTH)) {
+        return false;
+    }
+    /* type_size is optional for UINT/TRC_TOKEN descriptors. In that case the
+     * Solidity/TVM ABI width is the full uint256 word. */
+    type_size = (def->type_size == 0U) ? INT256_LENGTH : def->type_size;
+    if (value->length <= type_size) {
+        return true;
+    }
+    ignored_prefix = value->length - type_size;
+    for (size_t i = 0U; i < ignored_prefix; ++i) {
+        if (value->ptr[i] != 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool format_uint(const s_field *field,
                  bool *to_be_displayed,
                  s_parsed_value *value,
@@ -101,6 +125,11 @@ bool format_uint(const s_field *field,
                  size_t buf_size) {
     uint256_t value256 = {0};
 
+    if ((field == NULL) || (to_be_displayed == NULL) ||
+        (buf == NULL) || (buf_size == 0U) ||
+        !validate_unsigned_encoding(&field->param_raw.value, value)) {
+        return false;
+    }
     convertUint256BE(value->ptr, value->length, &value256);
 
     if (!apply_visibility_constraint(field,
@@ -113,8 +142,13 @@ bool format_uint(const s_field *field,
 }
 
 bool format_int(const s_value *def, const s_parsed_value *value, char *buf, size_t buf_size) {
-    uint8_t tmp[INT256_LENGTH];
+    uint8_t tmp[INT256_LENGTH] = {0};
+    const uint8_t *encoded;
+    size_t encoded_length;
+    size_t ignored_prefix = 0U;
+    uint8_t padding;
     bool ret;
+    int written;
     union {
         uint256_t value256;
         uint128_t value128;
@@ -124,7 +158,27 @@ bool format_int(const s_value *def, const s_parsed_value *value, char *buf, size
         int8_t value8;
     } uv;
 
-    buf_shrink_expand(value->ptr, value->length, tmp, def->type_size);
+    if ((def == NULL) || (value == NULL) || (value->ptr == NULL) ||
+        (value->length == 0U) || (value->length > INT256_LENGTH) ||
+        (def->type_size == 0U) || (def->type_size > INT256_LENGTH) ||
+        (buf == NULL) || (buf_size == 0U)) {
+        return false;
+    }
+    encoded = value->ptr;
+    encoded_length = value->length;
+    if (encoded_length > def->type_size) {
+        ignored_prefix = encoded_length - def->type_size;
+        encoded += ignored_prefix;
+        encoded_length = def->type_size;
+    }
+    padding = (encoded[0] & 0x80U) ? 0xffU : 0x00U;
+    for (size_t i = 0U; i < ignored_prefix; ++i) {
+        if (value->ptr[i] != padding) {
+            return false;
+        }
+    }
+    memset(tmp, padding, def->type_size);
+    memcpy(tmp + def->type_size - encoded_length, encoded, encoded_length);
     switch (def->type_size * 8) {
         case 256:
             convertUint256BE(tmp, def->type_size, &uv.value256);
@@ -135,20 +189,24 @@ bool format_int(const s_value *def, const s_parsed_value *value, char *buf, size
             ret = tostring128_signed(&uv.value128, 10, buf, buf_size);
             break;
         case 64:
-            uv.value64 = read_u64_be(tmp, 0);
-            ret = snprintf(buf, buf_size, "%" PRId64, uv.value64) > 0;
+            uv.value64 = (int64_t) read_u64_be(tmp, 0);
+            written = snprintf(buf, buf_size, "%" PRId64, uv.value64);
+            ret = (written >= 0) && ((size_t) written < buf_size);
             break;
         case 32:
-            uv.value32 = read_u32_be(tmp, 0);
-            ret = snprintf(buf, buf_size, "%" PRId32, uv.value32) > 0;
+            uv.value32 = (int32_t) read_u32_be(tmp, 0);
+            written = snprintf(buf, buf_size, "%" PRId32, uv.value32);
+            ret = (written >= 0) && ((size_t) written < buf_size);
             break;
         case 16:
-            uv.value16 = read_u16_be(tmp, 0);
-            ret = snprintf(buf, buf_size, "%u" PRId16, uv.value16) > 0;
+            uv.value16 = (int16_t) read_u16_be(tmp, 0);
+            written = snprintf(buf, buf_size, "%" PRId16, uv.value16);
+            ret = (written >= 0) && ((size_t) written < buf_size);
             break;
         case 8:
-            uv.value8 = value->ptr[0];
-            ret = snprintf(buf, buf_size, "%u" PRId8, uv.value8) > 0;
+            uv.value8 = (int8_t) tmp[0];
+            written = snprintf(buf, buf_size, "%" PRId8, uv.value8);
+            ret = (written >= 0) && ((size_t) written < buf_size);
             break;
         default:
             ret = false;
@@ -183,8 +241,44 @@ static bool format_addr(const s_field *field,
                         char *buf,
                         size_t buf_size) {
     uint8_t tmp[ADDRESS_LENGTH] = {0};
+    const uint8_t *addr;
 
-    buf_shrink_expand(value->ptr, value->length, tmp, sizeof(tmp));
+    if ((field == NULL) || (to_be_displayed == NULL) ||
+        (value == NULL) || (value->ptr == NULL) ||
+        (buf == NULL) || (buf_size == 0U) ||
+        ((value->length != ADDRESS_LENGTH) &&
+         (value->length != TRON_ADDRESS_SIZE) &&
+         (value->length != INT256_LENGTH))) {
+        return false;
+    }
+
+    addr = value->ptr;
+    if (value->length == TRON_ADDRESS_SIZE) {
+        if (value->ptr[0] != TRON_MAINNET_ADDRESS_PREFIX) {
+            return false;
+        }
+        addr++;
+    } else if (value->length == INT256_LENGTH) {
+        const size_t tron_prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
+        const size_t address_index = INT256_LENGTH - ADDRESS_LENGTH;
+
+        /* java-tron represents an ABI address as 21 bytes (0x41 + the
+         * EVM-style 20-byte address), right-aligned in the 32-byte word.
+         * Also accept the standard Solidity form with twelve zero padding
+         * bytes. In both cases only the final 20 bytes identify the address
+         * used by GCS constraints and the Base58 renderer. */
+        for (size_t i = 0U; i < tron_prefix_index; ++i) {
+            if (value->ptr[i] != 0U) {
+                return false;
+            }
+        }
+        if ((value->ptr[tron_prefix_index] != 0U) &&
+            (value->ptr[tron_prefix_index] != TRON_MAINNET_ADDRESS_PREFIX)) {
+            return false;
+        }
+        addr = value->ptr + address_index;
+    }
+    memcpy(tmp, addr, sizeof(tmp));
 
     if (!apply_visibility_constraint(field,
                                      to_be_displayed,
@@ -200,12 +294,27 @@ static bool format_bool(const s_value *def,
                         const s_parsed_value *value,
                         char *buf,
                         size_t buf_size) {
-    uint8_t tmp;
+    uint8_t tmp = 0U;
 
     (void) def;
-    buf_shrink_expand(value->ptr, value->length, &tmp, 1);
-    snprintf(buf, buf_size, "%s", tmp ? "true" : "false");
-    return true;
+    if ((value == NULL) || (value->ptr == NULL) || (buf == NULL) ||
+        (buf_size == 0U) ||
+        ((value->length != 1U) && (value->length != INT256_LENGTH))) {
+        return false;
+    }
+    if (value->length == INT256_LENGTH) {
+        for (size_t i = 0U; i < (INT256_LENGTH - 1U); ++i) {
+            if (value->ptr[i] != 0U) {
+                return false;
+            }
+        }
+    }
+    tmp = value->ptr[value->length - 1U];
+    if (tmp > 1U) {
+        return false;
+    }
+    int written = snprintf(buf, buf_size, "%s", tmp ? "true" : "false");
+    return (written >= 0) && ((size_t) written < buf_size);
 }
 
 /**
@@ -217,22 +326,13 @@ static bool format_bool(const s_value *def,
  * @return true if value matches a constraint, false otherwise
  */
 static bool check_bytes_constraint(const s_field *field,
-                                   const s_parsed_value *value,
-                                   const char *formatted_buf) {
-    char constraint[sizeof(strings.tmp.tmp)] = {0};
-
+                                   const s_parsed_value *value) {
     for (s_field_constraint *c_node = field->constraints; c_node != NULL;
          c_node = (s_field_constraint *) c_node->node.next) {
-        if (c_node->size > value->length) {
-            PRINTF("Warning: RAW BYTES constraint wrong size!\n");
-            continue;
-        }
-        memset(constraint, 0, sizeof(constraint));
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat"
-        snprintf(constraint, sizeof(constraint), "0x%.*h", c_node->size, c_node->value);
-#pragma GCC diagnostic pop
-        if (strcmp(formatted_buf, constraint) == 0) {
+        /* Compare the complete signed value, not two potentially truncated
+         * display strings that happen to share the same prefix. */
+        if ((c_node->size == value->length) &&
+            (memcmp(c_node->value, value->ptr, value->length) == 0)) {
             return true;
         }
     }
@@ -244,7 +344,16 @@ static bool format_bytes(const s_field *field,
                          const s_parsed_value *value,
                          char *buf,
                          size_t buf_size) {
+    size_t rendered_size;
+
     LEDGER_ASSERT(sizeof(strings.tmp.tmp) == buf_size, "Buffer too small for bytes formatting");
+    if ((field == NULL) || (to_be_displayed == NULL) ||
+        (value == NULL) || ((value->length != 0U) && (value->ptr == NULL)) ||
+        (buf == NULL) || (buf_size == 0U) ||
+        __builtin_mul_overflow((size_t) value->length, 2U, &rendered_size) ||
+        __builtin_add_overflow(rendered_size, 3U, &rendered_size)) {
+        return false;
+    }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
@@ -253,7 +362,7 @@ static bool format_bytes(const s_field *field,
 
     if (!apply_visibility_constraint(field,
                                      to_be_displayed,
-                                     check_bytes_constraint(field, value, buf))) {
+                                     check_bytes_constraint(field, value))) {
         return false;
     }
 
@@ -262,7 +371,7 @@ static bool format_bytes(const s_field *field,
     }
 
     // Truncate if needed for display
-    if ((2 + (value->length * 2) + 1) > (int) buf_size) {
+    if (rendered_size > buf_size) {
         memmove(&buf[buf_size - 1 - 3], "...", 3);
     }
     return true;
@@ -273,7 +382,16 @@ static bool format_string(const s_value *def,
                           char *buf,
                           size_t buf_size) {
     (void) def;
-    str_cpy_explicit_trunc((char *) value->ptr, value->length, buf, buf_size);
+    if ((value == NULL) || (buf == NULL) || (buf_size == 0U) ||
+        (value->length >= buf_size) ||
+        ((value->length != 0U) && (value->ptr == NULL)) ||
+        !is_printable((const char *) value->ptr, value->length)) {
+        return false;
+    }
+    if (value->length != 0U) {
+        memcpy(buf, value->ptr, value->length);
+    }
+    buf[value->length] = '\0';
     return true;
 }
 

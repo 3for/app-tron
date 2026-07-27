@@ -39,6 +39,7 @@ DEFINE_TLV_PARSER(SLICE_TAGS, NULL, slice_tlv_parser)
  * @return whether parsing was successful
  */
 bool handle_slice_struct(const buffer_t *buf, s_path_slice_context *context) {
-    TLV_reception_t received_tags;
-    return slice_tlv_parser(buf, context, &received_tags);
+    TLV_reception_t received_tags = {0};
+    return (buf != NULL) && (context != NULL) && (context->args != NULL) &&
+           slice_tlv_parser(buf, context, &received_tags);
 }

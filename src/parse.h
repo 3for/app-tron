@@ -22,7 +22,7 @@
 
 #define TRC20_DATA_FIELD_SIZE 68
 
-#define ADD_PRE_FIX_BYTE_MAINNET 0x41
+#define ADD_PRE_FIX_BYTE_MAINNET TRON_MAINNET_ADDRESS_PREFIX
 
 typedef union {
     protocol_AccountCreateContract account_create_contract;

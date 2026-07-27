@@ -40,7 +40,8 @@ from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmoun
                         ParamCalldata, ParamDatetime, ParamEnum, ParamRaw,
                         ParamNetwork, ParamNFT, ParamToken, ParamTokenAmount,
                         ParamTrustedName, ParamType, PathLeaf, PathLeafType,
-                        PathTuple, TxInfo, TypeFamily, Value, VisibleType)
+                        PathRef, PathTuple, TxInfo, TypeFamily, Value,
+                        VisibleType)
 from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from client.tlv import eth_to_tron_base58
 from fields_utils import (get_all_paths, get_all_tuple_array_paths,
@@ -595,6 +596,167 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
     tron_client.provide_transaction_info(tx_info)
     for field in fields:
         tron_client.provide_transaction_field_desc(field.serialize())
+
+
+def _abi_dynamic_calldata(selector: bytes, value: bytes,
+                          corrupt_offset: bool = False,
+                          corrupt_length: bool = False) -> bytes:
+    offset_word = bytearray((32).to_bytes(32, "big"))
+    length_word = bytearray(len(value).to_bytes(32, "big"))
+    if corrupt_offset:
+        offset_word[0] = 1
+    if corrupt_length:
+        length_word[0] = 1
+    padding = bytes((-len(value)) % 32)
+    return selector + bytes(offset_word) + bytes(length_word) + value + padding
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "string_nul",
+        "string_control",
+        "string_not_fully_displayable",
+        "offset_high_bits",
+        "length_high_bits",
+        "bool_not_canonical",
+        "address_high_bits",
+        "address_wrong_tron_prefix",
+        "uint8_high_bits",
+        "bytes_constraint_hidden_suffix",
+    ],
+)
+def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
+        backend: BackendInterface, case: str):
+    """A clear-sign field must describe every signed calldata bit exactly."""
+    client = TronClient(backend)
+    selector = bytes.fromhex("12345678")
+    contract_addr20 = TRC20_CONTRACT_ADDR20
+    visibility = VisibleType.ALWAYS
+    constraints = None
+
+    if case == "bytes_constraint_hidden_suffix":
+        raw_value = b"A" * 127 + b"B"
+        calldata = _abi_dynamic_calldata(selector, raw_value)
+        value = Value(
+            1,
+            TypeFamily.BYTES,
+            data_path=DataPath(
+                1,
+                [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
+            ),
+        )
+        visibility = VisibleType.MUST_BE
+        constraints = [b"A" * 127 + b"C"]
+    elif case in {
+            "string_nul",
+            "string_control",
+            "string_not_fully_displayable",
+            "offset_high_bits",
+            "length_high_bits",
+    }:
+        values = {
+            "string_nul": b"pay Alice\0pay Mallory",
+            "string_control": b"line1\nline2",
+            "string_not_fully_displayable": b"A" * 256,
+            "offset_high_bits": b"safe",
+            "length_high_bits": b"safe",
+        }
+        calldata = _abi_dynamic_calldata(
+            selector,
+            values[case],
+            corrupt_offset=case == "offset_high_bits",
+            corrupt_length=case == "length_high_bits",
+        )
+        value = Value(
+            1,
+            TypeFamily.STRING,
+            data_path=DataPath(
+                1,
+                [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
+            ),
+        )
+    else:
+        word = bytearray(32)
+        if case == "bool_not_canonical":
+            word[-1] = 2
+            family = TypeFamily.BOOL
+            type_size = None
+        elif case == "address_high_bits":
+            word[0] = 1
+            word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+            family = TypeFamily.ADDRESS
+            type_size = None
+        elif case == "address_wrong_tron_prefix":
+            word[-21] = 0x42
+            word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+            family = TypeFamily.ADDRESS
+            type_size = None
+        else:
+            word[0] = 1
+            word[-1] = 7
+            family = TypeFamily.UINT
+            type_size = 1
+        calldata = selector + bytes(word)
+        value = Value(
+            1,
+            family,
+            type_size=type_size,
+            data_path=build_data_path_static(0),
+        )
+
+    tx = build_trigger_smart_contract_tx(client, contract_addr20, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    field = Field(1, "Value", ParamRaw(1, value), visibility, constraints)
+    client.provide_transaction_info(
+        build_tx_info(contract_addr20, selector, [field], "guarded call"))
+    with pytest.raises((ExceptionRAPDU, AssertionError)):
+        client.provide_transaction_field_desc(field.serialize())
+
+    # The rejected descriptor must not poison the next GCS session.
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+def test_gcs_ui_partial_oom_cleans_and_allows_reentry(
+        backend: BackendInterface):
+    """Exhaust the tracked budget while ui_gcs() owns a partial NBGL tree."""
+    client = TronClient(backend)
+    selector = bytes.fromhex("12345678")
+    string_value = b"A" * 128
+    calldata = _abi_dynamic_calldata(selector, string_value)
+    value = Value(
+        1,
+        TypeFamily.STRING,
+        data_path=DataPath(
+            1,
+            [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
+        ),
+    )
+    fields = [
+        Field(1, f"F{idx}", ParamRaw(1, value))
+        for idx in range(50)
+    ]
+    tx = build_trigger_smart_contract_tx(client, TRC20_CONTRACT_ADDR20,
+                                         calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, selector, fields, "budget guard"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INSUFFICIENT_MEMORY
+
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
 
 
 def _client_from_scenario(scenario_navigator: NavigateWithScenario) -> TronClient:

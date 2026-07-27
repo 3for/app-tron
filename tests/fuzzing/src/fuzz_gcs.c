@@ -8,6 +8,9 @@
 #include "gcs_calldata_bridge.h"
 #include "gcs_signing_context.h"
 #include "gcs_memory.h"
+#include "gtp_field.h"
+#include "gtp_param_raw.h"
+#include "gtp_path_slice.h"
 #include "tlv_apdu.h"
 #include "tron_tx_stream.h"
 #include "tx_ctx.h"
@@ -17,6 +20,110 @@
 void init_tip712_fuzz_environment(void);
 void fuzz_set_settings(uint8_t value);
 void reset_app_context(void);
+
+static void assert_gcs_parser_guards(void) {
+    s_field field = {0};
+    s_parsed_value parsed = {0};
+    s_value signed_def = {.type_family = TF_INT, .type_size = 1U};
+    s_value signed16_def = {.type_family = TF_INT, .type_size = 2U};
+    uint8_t signed16_encoded[] = {0xffU, 0xfeU};
+    uint8_t encoded[INT256_LENGTH] = {0};
+    char formatted[80] = {0};
+    bool displayed = false;
+
+    field.param_type = PARAM_TYPE_RAW;
+    field.visibility = PARAM_VISIBILITY_ALWAYS;
+    memcpy(field.name, "guard", sizeof("guard"));
+    field.param_raw.value.source = SOURCE_CONSTANT;
+
+    /* A C-string renderer must never accept a value whose signed calldata
+     * suffix would be hidden after an embedded NUL or layout control byte. */
+    field.param_raw.value.type_family = TF_STRING;
+    memcpy(field.param_raw.value.constant.buf, "pay Alice\0pay Mallory", 21U);
+    field.param_raw.value.constant.size = 21U;
+    if (format_param_raw(&field)) {
+        __builtin_trap();
+    }
+    memcpy(field.param_raw.value.constant.buf, "line1\nline2", 11U);
+    field.param_raw.value.constant.size = 11U;
+    if (format_param_raw(&field)) {
+        __builtin_trap();
+    }
+
+    field.param_raw.value.type_family = TF_BOOL;
+    field.param_raw.value.constant.buf[0] = 2U;
+    field.param_raw.value.constant.size = 1U;
+    if (format_param_raw(&field)) {
+        __builtin_trap();
+    }
+
+    /* A full ABI address word may only discard its canonical zero padding. */
+    memset(field.param_raw.value.constant.buf, 0, sizeof(field.param_raw.value.constant.buf));
+    field.param_raw.value.type_family = TF_ADDRESS;
+    field.param_raw.value.constant.buf[0] = 1U;
+    field.param_raw.value.constant.size = INT256_LENGTH;
+    if (format_param_raw(&field)) {
+        __builtin_trap();
+    }
+
+    /* Narrow unsigned values reject non-zero discarded bytes. The optional
+     * width still defaults to uint256 for existing descriptors. */
+    encoded[0] = 1U;
+    encoded[INT256_LENGTH - 1U] = 7U;
+    field.param_raw.value.type_family = TF_UINT;
+    field.param_raw.value.type_size = 1U;
+    parsed.ptr = encoded;
+    parsed.length = sizeof(encoded);
+    if (format_uint(&field, &displayed, &parsed, formatted, sizeof(formatted))) {
+        __builtin_trap();
+    }
+    field.param_raw.value.type_size = 0U;
+    if (!format_uint(&field, &displayed, &parsed, formatted, sizeof(formatted))) {
+        __builtin_trap();
+    }
+
+    /* Signed narrow integers require canonical sign extension and must retain
+     * their sign in the rendered decimal string. */
+    memset(encoded, 0xff, sizeof(encoded));
+    if (!format_int(&signed_def, &parsed, formatted, sizeof(formatted)) ||
+        (strcmp(formatted, "-1") != 0)) {
+        __builtin_trap();
+    }
+    memset(encoded, 0, sizeof(encoded));
+    encoded[INT256_LENGTH - 1U] = 0xffU;
+    if (format_int(&signed_def, &parsed, formatted, sizeof(formatted))) {
+        __builtin_trap();
+    }
+    parsed.ptr = signed16_encoded;
+    parsed.length = sizeof(signed16_encoded);
+    if (!format_int(&signed16_def, &parsed, formatted, sizeof(formatted)) ||
+        (strcmp(formatted, "-2") != 0)) {
+        __builtin_trap();
+    }
+
+    /* Repeated calls must have deterministic duplicate-tag state. */
+    {
+        static uint8_t valid_slice[] = {0x01, 0x02, 0x00, 0x01,
+                                        0x02, 0x02, 0x00, 0x03};
+        static uint8_t duplicate_start[] = {0x01, 0x02, 0x00, 0x01,
+                                            0x01, 0x02, 0x00, 0x02};
+        buffer_t valid = {.ptr = valid_slice, .size = sizeof(valid_slice), .offset = 0U};
+        buffer_t duplicate = {.ptr = duplicate_start,
+                              .size = sizeof(duplicate_start),
+                              .offset = 0U};
+        s_slice_args args = {0};
+        s_path_slice_context context = {.args = &args};
+
+        if (!handle_slice_struct(&valid, &context) || !args.has_start ||
+            !args.has_end || (args.start != 1) || (args.end != 3)) {
+            __builtin_trap();
+        }
+        memset(&args, 0, sizeof(args));
+        if (handle_slice_struct(&duplicate, &context)) {
+            __builtin_trap();
+        }
+    }
+}
 
 static void assert_asset_type_isolation(void) {
 #ifndef TARGET_NANOS
@@ -102,6 +209,7 @@ void fuzz_reset_extra_context(void) {
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     init_tip712_fuzz_environment();
+    assert_gcs_parser_guards();
     assert_asset_type_isolation();
     if (size != 0U) {
         fuzz_set_settings(*data++);

@@ -1,4 +1,3 @@
-#include <ctype.h>
 #include <string.h>
 #include "utils.h"
 
@@ -70,8 +69,13 @@ void str_cpy_explicit_trunc(const char *src, size_t src_size, char *dst, size_t 
  * @param[in] len The length of the string to be checked
  */
 bool is_printable(const char *str, size_t len) {
+    if ((str == NULL) && (len != 0U)) {
+        return false;
+    }
     for (size_t i = 0; i < len; i++) {
-        if (isprint((int) str[i]) == 0) {
+        const unsigned char value = (unsigned char) str[i];
+        /* Keep clear-sign text deterministic across libc locales and devices. */
+        if ((value < 0x20U) || (value > 0x7eU)) {
             return false;
         }
     }

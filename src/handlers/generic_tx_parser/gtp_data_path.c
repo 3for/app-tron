@@ -122,16 +122,32 @@ static bool path_tuple(const s_tuple_args *tuple, uint32_t *offset, uint32_t *re
     return !__builtin_add_overflow(*offset, tuple->value, offset);
 }
 
+static bool abi_word_to_u16(const uint8_t *word, uint16_t *value) {
+    if ((word == NULL) || (value == NULL)) {
+        return false;
+    }
+    /* ABI offsets and lengths are uint256 values. This implementation supports
+     * the low 16-bit range, so reject rather than silently truncate any high
+     * byte that would change the decoded value. */
+    for (size_t i = 0U; i < (CALLDATA_CHUNK_SIZE - sizeof(*value)); ++i) {
+        if (word[i] != 0U) {
+            return false;
+        }
+    }
+    *value = read_u16_be(word, CALLDATA_CHUNK_SIZE - sizeof(*value));
+    return true;
+}
+
 static bool path_ref(uint32_t *offset, uint32_t *ref_offset) {
-    uint8_t buf[sizeof(uint16_t)];
     uint16_t raw_offset;
     const uint8_t *chunk;
 
     if ((chunk = calldata_get_chunk(get_current_calldata(), (size_t) *offset)) == NULL) {
         return false;
     }
-    buf_shrink_expand(chunk, CALLDATA_CHUNK_SIZE, buf, sizeof(buf));
-    raw_offset = read_u16_be(buf, 0);
+    if (!abi_word_to_u16(chunk, &raw_offset)) {
+        return false;
+    }
     if ((raw_offset % CALLDATA_CHUNK_SIZE) != 0) {
         // reject unaligned offsets
         return false;
@@ -143,7 +159,6 @@ static bool path_ref(uint32_t *offset, uint32_t *ref_offset) {
 static bool path_leaf(const s_leaf_args *leaf,
                       uint32_t *offset,
                       s_parsed_value_collection *collection) {
-    uint8_t buf[sizeof(uint16_t)];
     const uint8_t *chunk;
     uint8_t *leaf_buf = NULL;
     uint8_t cpy_length;
@@ -163,12 +178,15 @@ static bool path_leaf(const s_leaf_args *leaf,
             if ((chunk = calldata_get_chunk(get_current_calldata(), (size_t) *offset)) == NULL) {
                 return false;
             }
-            buf_shrink_expand(chunk, CALLDATA_CHUNK_SIZE, buf, sizeof(buf));
-            collection->value[collection->size].size = read_u16_be(buf, 0);
+            if (!abi_word_to_u16(chunk, &collection->value[collection->size].size)) {
+                return false;
+            }
             if (collection->value[collection->size].size > GCS_MAX_DYNAMIC_VALUE_SIZE) {
                 return false;
             }
-            *offset += 1;
+            if (__builtin_add_overflow(*offset, 1U, offset)) {
+                return false;
+            }
             break;
 
         default:
@@ -259,7 +277,6 @@ static bool path_array(const s_array_args *array,
                        uint32_t *offset,
                        uint32_t *ref_offset,
                        s_arrays_info *arrays_info) {
-    uint8_t buf[sizeof(uint16_t)];
     uint16_t array_size;
     uint16_t idx;
     int32_t start;
@@ -274,8 +291,9 @@ static bool path_array(const s_array_args *array,
     if ((chunk = calldata_get_chunk(get_current_calldata(), (size_t) *offset)) == NULL) {
         return false;
     }
-    buf_shrink_expand(chunk, CALLDATA_CHUNK_SIZE, buf, sizeof(buf));
-    array_size = read_u16_be(buf, 0);
+    if (!abi_word_to_u16(chunk, &array_size)) {
+        return false;
+    }
 
     if (array->has_start) {
         start = (array->start < 0) ? ((int32_t) array_size + array->start) : array->start;
@@ -298,7 +316,9 @@ static bool path_array(const s_array_args *array,
         return false;
     }
 
-    *offset += 1;
+    if (__builtin_add_overflow(*offset, 1U, offset)) {
+        return false;
+    }
     if (arrays_info->index == arrays_info->depth) {
         // new depth
         uint16_t combinations;

@@ -371,7 +371,7 @@ bool tronBase58FromBinary(const uint8_t *eth20, char *out58, size_t out58_len) {
     }
     out58[0] = '\0';
 
-    tronAddr[0] = 0x41;
+    tronAddr[0] = TRON_MAINNET_ADDRESS_PREFIX;
     memcpy(tronAddr + 1, eth20, ADDRESS_LENGTH);
 
     cx_hash_sha256(tronAddr, sizeof(tronAddr), sha256, sizeof(sha256));
