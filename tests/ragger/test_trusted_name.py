@@ -26,8 +26,6 @@ ADDR = bytes.fromhex("0011223344556677889900112233445566778899")
 # CAL descriptors sign the address as a TRON Base58Check string. The transaction side
 # keeps using the 20-byte ADDR; the firmware decodes ADDR_B58 back to ADDR to match.
 ADDR_B58 = eth_to_tron_base58(ADDR)
-KEY_ID = 1
-ALGO_ID = 1
 NONCE = 21
 GAS_PRICE = 13
 GAS_LIMIT = 21000
@@ -36,8 +34,9 @@ GAS_LIMIT = 21000
 GAS_PRICE_SUN = to_sun(GAS_PRICE)
 # TRX, decimal 10^6
 AMOUNT = 1_220_000
-# ETH in slip-44
-COIN_TYPE_ETH = 0x3c
+# V1-only Ethereum coin type, retained solely to assert that legacy descriptors
+# are rejected by the V2-only Tron implementation.
+LEGACY_COIN_TYPE_ETH = 0x3c
 
 
 NANO_TRANSACTION_SIGN_PATTERN = r"(?is)^sign( transaction.*)?$"
@@ -94,241 +93,15 @@ def sign_trusted_name(scenario_navigator: NavigateWithScenario,
             custom_screen_text=custom_screen_text)
 
 
-def test_trusted_name_v1(scenario_navigator: NavigateWithScenario,
-                         test_name: str):
-    backend = scenario_navigator.backend
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    app_client.provide_trusted_name(
-        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
-                    coin_type=COIN_TYPE_ETH))
-
-    sign_trusted_name(
-        scenario_navigator, app_client, {
-            "nonce": NONCE,
-            "gasPrice": GAS_PRICE_SUN,
-            "gas": GAS_LIMIT,
-            "to": ADDR,
-            "value": AMOUNT,
-            "chainId": CHAIN_ID
-        }, test_name)
-
-
-def test_trusted_name_v1_verbose(navigator: Navigator,
-                                 scenario_navigator: NavigateWithScenario,
-                                 default_screenshot_path: Path,
-                                 test_name: str):
-    """Reveal the address behind the recipient trusted name (ENS alias) during review.
-
-    Mirrors app-ethereum's test_trusted_name_v1_verbose: provide a v1 trusted name,
-    then on the transaction review open the "To" field's ENS alias to show the
-    underlying address (part1 snapshots), and finally approve (part2). Relies on the
-    ENS alias affordance added to the transfer review (ui_review_menu_nbgl.c).
-
-    The navigation moves below are device/layout specific (TRON shows Amount / To /
-    From); they mirror app-ethereum and are validated/refreshed by the golden run.
-    """
-    backend = scenario_navigator.backend
-    device = backend.device
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    app_client.provide_trusted_name(
-        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
-                    coin_type=COIN_TYPE_ETH))
-
-    tx_params = {
-        "nonce": NONCE,
-        "gasPrice": GAS_PRICE_SUN,
-        "gas": GAS_LIMIT,
-        "to": ADDR,
-        "value": AMOUNT,
-        "chainId": CHAIN_ID,
-    }
-
-    moves = []
-    if device.is_nano:
-        # Walk to the "To" field (intro -> From -> Amount -> To), open its alias to
-        # view the address, then step back. Matches app-ethereum's From/Amount/To
-        # layout (RIGHT_CLICK * 3 to reach the aliased "To" field).
-        moves += [NavInsID.RIGHT_CLICK] * 3
-        moves += [NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
-    else:
-        # Swipe to the fields page, tap the alias ">" on the "To" row, then close it.
-        moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
-        ENS_POSITIONS = {
-            DeviceType.FLEX: (428, 350),
-            DeviceType.STAX: (360, 324),
-            DeviceType.APEX_P: (272, 230),
-        }
-        moves += [NavIns(NavInsID.TOUCH, ENS_POSITIONS[device.type])]
-        moves += [NavInsID.LEFT_HEADER_TAP]
-
-    with app_client.sign_async(app_client.getAccount(0)['path'],
-                               trusted_name_tx(app_client, tx_params)):
-        navigator.navigate_and_compare(default_screenshot_path,
-                                       f"{test_name}/part1",
-                                       moves,
-                                       screen_change_after_last_instruction=False)
-        custom_screen_text = (
-            NANO_TRANSACTION_SIGN_PATTERN
-            if scenario_navigator.device.is_nano
-            else None)
-        scenario_navigator.review_approve(
-            test_name=f"{test_name}/part2",
-            custom_screen_text=custom_screen_text)
-
-
-def test_trusted_name_v1_wrong_challenge(backend: BackendInterface):
+def test_trusted_name_rejects_v1(backend: BackendInterface):
     app_client = TronClient(backend)
     cmd_builder = CommandBuilder()
     challenge = common(app_client, cmd_builder)
 
     with pytest.raises(ExceptionRAPDU) as e:
         app_client.provide_trusted_name(
-            TrustedName(1, ADDR_B58,NAME, challenge=~challenge & 0xffffffff,
-                        coin_type=COIN_TYPE_ETH))
-    assert e.value.status == StatusWord.INVALID_DATA
-
-
-def test_trusted_name_v1_wrong_addr(
-                                    scenario_navigator: NavigateWithScenario,
-                                    test_name: str):
-    backend = scenario_navigator.backend
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    app_client.provide_trusted_name(
-        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
-                    coin_type=COIN_TYPE_ETH))
-
-    addr = bytearray(ADDR)
-    addr.reverse()
-
-    sign_trusted_name(
-        scenario_navigator, app_client, {
-            "nonce": NONCE,
-            "gasPrice": GAS_PRICE_SUN,
-            "gas": GAS_LIMIT,
-            "to": bytes(addr),
-            "value": AMOUNT,
-            "chainId": CHAIN_ID
-        }, test_name)
-
-
-def test_trusted_name_v1_non_mainnet(
-                                     scenario_navigator: NavigateWithScenario,
-                                     test_name: str):
-    """v1 (chain-agnostic) trusted name on a non-mainnet chainId.
-
-    Mirrors app-ethereum's test_trusted_name_v1_non_mainnet, but TRON is a
-    single-chain app: a TransferContract carries no per-tx chainId, so the firmware
-    always resolves trusted names against TRON mainnet (network.c get_tx_chain_id).
-    The `chainId` below is therefore informational only -- the v1 name still applies
-    (review shows "ledger.eth"), and there is no per-network "Network" row like
-    app-ethereum's "Goerli" one (TRON has no per-transfer network/gas display).
-    """
-    backend = scenario_navigator.backend
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    app_client.provide_trusted_name(
-        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
-                    coin_type=COIN_TYPE_ETH))
-
-    sign_trusted_name(
-        scenario_navigator, app_client, {
-            "nonce": NONCE,
-            "gasPrice": GAS_PRICE_SUN,
-            "gas": GAS_LIMIT,
-            "to": ADDR,
-            "value": AMOUNT,
-            "chainId": 5
-        }, test_name)
-
-
-def test_trusted_name_v1_unknown_chain(
-        scenario_navigator: NavigateWithScenario, test_name: str):
-    """v1 (chain-agnostic) trusted name with an unknown chainId.
-
-    Mirrors app-ethereum's test_trusted_name_v1_unknown_chain. There, the unknown
-    chainId is not Ethereum-compatible so the v1 name is rejected and the raw address
-    is shown. On TRON this cannot happen: the firmware always resolves trusted names
-    against TRON mainnet (a single, Ethereum-compatible chain; see network.c
-    get_tx_chain_id / chain_is_ethereum_compatible), so the `chainId` below is ignored
-    and the v1 name still applies (review shows "ledger.eth"). Kept for parity with
-    app-ethereum's test matrix.
-    """
-    backend = scenario_navigator.backend
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    app_client.provide_trusted_name(
-        TrustedName(1, ADDR_B58,NAME, challenge=challenge,
-                    coin_type=COIN_TYPE_ETH))
-
-    sign_trusted_name(
-        scenario_navigator, app_client, {
-            "nonce": NONCE,
-            "gasPrice": GAS_PRICE_SUN,
-            "gas": GAS_LIMIT,
-            "to": ADDR,
-            "value": AMOUNT,
-            "chainId": 9
-        }, test_name)
-
-
-def test_trusted_name_v1_name_too_long(backend: BackendInterface):
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    with pytest.raises(ExceptionRAPDU) as e:
-        app_client.provide_trusted_name(
-            TrustedName(1, ADDR_B58,"ledger" + "0" * 25 + ".eth",
-                        challenge=challenge, coin_type=COIN_TYPE_ETH))
-    assert e.value.status == StatusWord.INVALID_DATA
-
-
-def test_trusted_name_v1_name_invalid_character(backend: BackendInterface):
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    with pytest.raises(ExceptionRAPDU) as e:
-        app_client.provide_trusted_name(
-            TrustedName(1, ADDR_B58,"l\xe8dger.eth", challenge=challenge,
-                        coin_type=COIN_TYPE_ETH))
-    assert e.value.status == StatusWord.INVALID_DATA
-
-
-def test_trusted_name_v1_uppercase(backend: BackendInterface):
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    with pytest.raises(ExceptionRAPDU) as e:
-        app_client.provide_trusted_name(
-            TrustedName(1, ADDR_B58,NAME.upper(), challenge=challenge,
-                        coin_type=COIN_TYPE_ETH))
-    assert e.value.status == StatusWord.INVALID_DATA
-
-
-def test_trusted_name_v1_name_non_ens(backend: BackendInterface):
-    app_client = TronClient(backend)
-    cmd_builder = CommandBuilder()
-    challenge = common(app_client, cmd_builder)
-
-    with pytest.raises(ExceptionRAPDU) as e:
-        app_client.provide_trusted_name(
-            TrustedName(1, ADDR_B58,"ledger.hte", challenge=challenge,
-                        coin_type=COIN_TYPE_ETH))
+            TrustedName(1, ADDR_B58,NAME, challenge=challenge,
+                        coin_type=LEGACY_COIN_TYPE_ETH))
     assert e.value.status == StatusWord.INVALID_DATA
 
 
@@ -354,6 +127,116 @@ def test_trusted_name_v2(scenario_navigator: NavigateWithScenario,
             "to": ADDR,
             "value": AMOUNT,
             "chainId": CHAIN_ID
+        }, test_name)
+
+
+def test_trusted_name_v2_verbose(navigator: Navigator,
+                                 scenario_navigator: NavigateWithScenario,
+                                 default_screenshot_path: Path,
+                                 test_name: str):
+    """Reveal the address behind a V2 ENS alias during transaction review."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+
+    app_client.provide_trusted_name(
+        TrustedName(2, ADDR_B58,NAME,
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge))
+
+    tx_params = {
+        "nonce": NONCE,
+        "gasPrice": GAS_PRICE_SUN,
+        "gas": GAS_LIMIT,
+        "to": ADDR,
+        "value": AMOUNT,
+        "chainId": CHAIN_ID,
+    }
+
+    moves = []
+    if device.is_nano:
+        moves += [NavInsID.RIGHT_CLICK] * 3
+        moves += [NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+    else:
+        moves += [NavInsID.SWIPE_CENTER_TO_LEFT]
+        ens_positions = {
+            DeviceType.FLEX: (428, 350),
+            DeviceType.STAX: (360, 324),
+            DeviceType.APEX_P: (272, 230),
+        }
+        moves += [NavIns(NavInsID.TOUCH, ens_positions[device.type])]
+        moves += [NavInsID.LEFT_HEADER_TAP]
+
+    with app_client.sign_async(app_client.getAccount(0)['path'],
+                               trusted_name_tx(app_client, tx_params)):
+        navigator.navigate_and_compare(default_screenshot_path,
+                                       f"{test_name}/part1",
+                                       moves,
+                                       screen_change_after_last_instruction=False)
+        custom_screen_text = (
+            NANO_TRANSACTION_SIGN_PATTERN
+            if scenario_navigator.device.is_nano
+            else None)
+        scenario_navigator.review_approve(
+            test_name=f"{test_name}/part2",
+            custom_screen_text=custom_screen_text)
+
+
+def test_trusted_name_v2_wrong_challenge(backend: BackendInterface):
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR_B58,NAME,
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=CHAIN_ID,
+                        challenge=~challenge & 0xffffffff))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_rejects_legacy_coin_type(backend: BackendInterface):
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR_B58,NAME,
+                        coin_type=LEGACY_COIN_TYPE_ETH,
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+def test_trusted_name_v2_wrong_addr(
+        scenario_navigator: NavigateWithScenario, test_name: str):
+    backend = scenario_navigator.backend
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+
+    app_client.provide_trusted_name(
+        TrustedName(2, ADDR_B58,NAME,
+                    tn_type=TrustedNameType.ACCOUNT,
+                    tn_source=TrustedNameSource.ENS,
+                    chain_id=CHAIN_ID,
+                    challenge=challenge))
+
+    addr = bytearray(ADDR)
+    addr.reverse()
+    sign_trusted_name(
+        scenario_navigator, app_client, {
+            "nonce": NONCE,
+            "gasPrice": GAS_PRICE_SUN,
+            "gas": GAS_LIMIT,
+            "to": bytes(addr),
+            "value": AMOUNT,
+            "chainId": CHAIN_ID,
         }, test_name)
 
 
@@ -442,6 +325,27 @@ def test_trusted_name_v2_expired(backend: BackendInterface):
                         chain_id=CHAIN_ID,
                         challenge=challenge,
                         not_valid_after=(0, 1, 2)))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
+@pytest.mark.parametrize("name", [
+    "ledger" + "0" * 25 + ".eth",
+    "l\xe8dger.eth",
+    NAME.upper(),
+    "ledger.hte",
+])
+def test_trusted_name_v2_rejects_invalid_ens_name(
+        backend: BackendInterface, name: str):
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR_B58, name,
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.ENS,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge))
     assert e.value.status == StatusWord.INVALID_DATA
 
 

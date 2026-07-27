@@ -51,7 +51,7 @@ def fragmented(ins: int, descriptor: bytes, split: int) -> bytes:
     )
 
 
-def trusted_name_v1(challenge: int = 0, key_id: int = 7) -> bytes:
+def legacy_trusted_name_v1(challenge: int = 0, key_id: int = 7) -> bytes:
     return b"".join(
         [
             tlv(0x01, 0x03),
@@ -59,6 +59,24 @@ def trusted_name_v1(challenge: int = 0, key_id: int = 7) -> bytes:
             tlv(0x21, 60),
             tlv(0x20, "ledger.eth"),
             tlv(0x22, TRON_ADDRESS),
+            tlv(0x12, challenge),
+            tlv(0x13, key_id),
+            tlv(0x14, 1),
+            tlv(0x15, DUMMY_DER_SIGNATURE),
+        ]
+    )
+
+
+def trusted_name_v2_ens(challenge: int = 0, key_id: int = 7) -> bytes:
+    return b"".join(
+        [
+            tlv(0x01, 0x03),
+            tlv(0x02, 0x02),
+            tlv(0x70, 0x01),
+            tlv(0x71, 0x02),
+            tlv(0x20, "ledger.eth"),
+            tlv(0x22, TRON_ADDRESS),
+            tlv(0x23, TRON_MAINNET_CHAIN_ID),
             tlv(0x12, challenge),
             tlv(0x13, key_id),
             tlv(0x14, 1),
@@ -193,11 +211,12 @@ def write_seed(name: str, certificate_status: int, stream: bytes) -> None:
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    trusted = trusted_name_v1()
+    trusted = trusted_name_v2_ens()
+    legacy_trusted = legacy_trusted_name_v1()
     proxy = proxy_info()
     enum = enum_value()
 
-    write_seed("00-trusted-name-v1.bin", 0, single_chunk(INS_TRUSTED_NAME, trusted))
+    write_seed("00-trusted-name-v2-ens.bin", 0, single_chunk(INS_TRUSTED_NAME, trusted))
     write_seed("01-proxy-info.bin", 0, single_chunk(INS_PROXY_INFO, proxy))
     write_seed("02-enum-value.bin", 0, single_chunk(INS_ENUM_VALUE, enum))
     write_seed("03-proxy-info-fragmented.bin", 0, fragmented(INS_PROXY_INFO, proxy, 37))
@@ -454,6 +473,11 @@ def main() -> None:
         "60-nft-max-collection.bin",
         0,
         record(INS_PROVIDE_NFT, 0, nft_metadata(name="N" * 70)),
+    )
+    write_seed(
+        "61-trusted-name-v1-rejected.bin",
+        0,
+        single_chunk(INS_TRUSTED_NAME, legacy_trusted),
     )
 
 

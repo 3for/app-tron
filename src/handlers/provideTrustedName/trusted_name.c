@@ -2,7 +2,6 @@
 #include "buffer.h"
 #include "trusted_name.h"
 #include "gcs_memory.h"
-#include "network.h"  // chain_is_ethereum_compatible
 #include "utils.h"    // SET_BIT
 #include "challenge.h"
 #include "hash_bytes.h"
@@ -17,12 +16,10 @@
 #include "ox_ec.h"
 #include "app_errors.h"
 
-#define STRUCT_VERSION_1 0x01
 #define STRUCT_VERSION_2 0x02
 
 #define STRUCT_TYPE_TRUSTED_NAME 0x03
 #define SIG_ALGO_SECP256K1       0x01
-#define SLIP_44_ETHEREUM         60
 #define DOMAIN_CERTIFICATE_NAME  "Trusted_Name"
 #define CAL_CERTIFICATE_NAME     "Trusted_Name_CAL"
 
@@ -66,33 +63,18 @@ static bool matching_trusted_name(const s_trusted_name *trusted_name,
                                   const uint8_t *addr) {
     const uint8_t *tmp;
 
-    switch (trusted_name->struct_version) {
-        case STRUCT_VERSION_1:
-            if (!matching_type(TN_TYPE_ACCOUNT, type_count, types)) {
-                return false;
-            }
-            if (!chain_is_ethereum_compatible(chain_id)) {
-                return false;
-            }
-            break;
-        case STRUCT_VERSION_2:
-            if (!matching_type(trusted_name->name_type, type_count, types)) {
-                return false;
-            }
-            if (!matching_source(trusted_name->name_source, source_count, sources)) {
-                return false;
-            }
-            if (*chain_id != trusted_name->chain_id) {
-                return false;
-            }
+    if ((trusted_name->struct_version != STRUCT_VERSION_2) ||
+        !matching_type(trusted_name->name_type, type_count, types) ||
+        !matching_source(trusted_name->name_source, source_count, sources) ||
+        (*chain_id != trusted_name->chain_id)) {
+        return false;
+    }
 
-            if ((trusted_name->name_type == TN_TYPE_CONTRACT) ||
-                (trusted_name->name_type == TN_TYPE_TOKEN)) {
-                if ((tmp = get_implem_contract(chain_id, addr, NULL)) != NULL) {
-                    addr = tmp;
-                }
-            }
-            break;
+    if ((trusted_name->name_type == TN_TYPE_CONTRACT) ||
+        (trusted_name->name_type == TN_TYPE_TOKEN)) {
+        if ((tmp = get_implem_contract(chain_id, addr, NULL)) != NULL) {
+            addr = tmp;
+        }
     }
     return memcmp(addr, trusted_name->addr, ADDRESS_LENGTH) == 0;
 }
@@ -146,13 +128,9 @@ static bool handle_struct_version(const tlv_data_t *data, s_trusted_name_ctx *co
         PRINTF("STRUCTURE_VERSION: failed to extract\n");
         return false;
     }
-    switch (value) {
-        case STRUCT_VERSION_1:
-        case STRUCT_VERSION_2:
-            break;
-        default:
-            PRINTF("Unsupported STRUCTURE_VERSION: %u\n", value);
-            return false;
+    if (value != STRUCT_VERSION_2) {
+        PRINTF("Unsupported STRUCTURE_VERSION: %u\n", value);
+        return false;
     }
     context->trusted_name.struct_version = value;
     return true;
@@ -264,22 +242,6 @@ static bool handle_trusted_name(const tlv_data_t *data, s_trusted_name_ctx *cont
                                   1,
                                   sizeof(context->trusted_name.name))) {
         PRINTF("TRUSTED_NAME: failed to extract\n");
-        return false;
-    }
-    return true;
-}
-
-/**
- * Handler for tag COIN_TYPE
- *
- * @param[in] data the tlv data
- * @param[out] context the trusted name context
- * @return whether it was successful
- */
-static bool handle_coin_type(const tlv_data_t *data, s_trusted_name_ctx *context) {
-    UNUSED(context);
-    if (!tlv_check_uint8(data, SLIP_44_ETHEREUM)) {
-        PRINTF("COIN_TYPE: error\n");
         return false;
     }
     return true;
@@ -470,7 +432,6 @@ static bool handle_signature(const tlv_data_t *data, s_trusted_name_ctx *context
     X(0x13, TAG_SIGNER_KEY_ID, handle_signer_key_id, ENFORCE_UNIQUE_TAG)             \
     X(0x14, TAG_SIGNER_ALGO, handle_signer_algo, ENFORCE_UNIQUE_TAG)                 \
     X(0x20, TAG_TRUSTED_NAME, handle_trusted_name, ENFORCE_UNIQUE_TAG)               \
-    X(0x21, TAG_COIN_TYPE, handle_coin_type, ENFORCE_UNIQUE_TAG)                     \
     X(0x22, TAG_ADDRESS, handle_address, ENFORCE_UNIQUE_TAG)                         \
     X(0x23, TAG_CHAIN_ID, handle_chain_id, ENFORCE_UNIQUE_TAG)                       \
     X(0x70, TAG_TRUSTED_NAME_TYPE, handle_trusted_name_type, ENFORCE_UNIQUE_TAG)     \
@@ -564,41 +525,26 @@ static bool verify_fields(const s_trusted_name_ctx *context) {
         return false;
     }
 
-    switch (context->trusted_name.struct_version) {
-        case STRUCT_VERSION_1:
-            // Version 1 requires: CHALLENGE and COIN_TYPE
-            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE, TAG_COIN_TYPE)) {
-                return false;
-            }
-            break;
-
-        case STRUCT_VERSION_2:
-            // Version 2 requires: CHAIN_ID, NAME_TYPE, NAME_SOURCE
-            if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
-                                         TAG_CHAIN_ID,
-                                         TAG_TRUSTED_NAME_TYPE,
-                                         TAG_TRUSTED_NAME_SOURCE)) {
-                return false;
-            }
-            // Account names require CHALLENGE
-            if ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
-                (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE))) {
-                PRINTF("Error: trusted account name requires a challenge!\n");
-                return false;
-            }
-            // MAB source requires OWNER
-            if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
-                (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
-                                          TAG_OWNER,
-                                          TAG_OWNER_DERIV_PATH))) {
-                PRINTF("Error: did not receive owner and/or deriv path for MAB source!\n");
-                return false;
-            }
-            break;
-        default:
-            PRINTF("Error: unsupported trusted name struct version (%u) !\n",
-                   context->trusted_name.struct_version);
-            return false;
+    // Version 2 requires: CHAIN_ID, NAME_TYPE, NAME_SOURCE
+    if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
+                                 TAG_CHAIN_ID,
+                                 TAG_TRUSTED_NAME_TYPE,
+                                 TAG_TRUSTED_NAME_SOURCE)) {
+        return false;
+    }
+    // Account names require CHALLENGE
+    if ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
+        (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_CHALLENGE))) {
+        PRINTF("Error: trusted account name requires a challenge!\n");
+        return false;
+    }
+    // MAB source requires OWNER
+    if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
+        (!TLV_CHECK_RECEIVED_TAGS(context->received_tags,
+                                  TAG_OWNER,
+                                  TAG_OWNER_DERIV_PATH))) {
+        PRINTF("Error: did not receive owner and/or deriv path for MAB source!\n");
+        return false;
     }
     return true;
 }
@@ -713,14 +659,10 @@ static bool verify_mab_owner(const s_trusted_name_ctx *context) {
  * @return whether the struct is valid
  */
 static bool trusted_name_key_matches(const s_trusted_name *left, const s_trusted_name *right) {
-    if ((left->struct_version != right->struct_version) ||
-        (memcmp(left->addr, right->addr, sizeof(left->addr)) != 0)) {
-        return false;
-    }
-    if (left->struct_version == STRUCT_VERSION_1) {
-        return true;
-    }
-    return (left->name_type == right->name_type) &&
+    return (left->struct_version == STRUCT_VERSION_2) &&
+           (right->struct_version == STRUCT_VERSION_2) &&
+           (memcmp(left->addr, right->addr, sizeof(left->addr)) == 0) &&
+           (left->name_type == right->name_type) &&
            (left->name_source == right->name_source) &&
            (left->chain_id == right->chain_id);
 }
@@ -742,32 +684,28 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         return SWO_INCORRECT_DATA;
     }
 
-    if (context->trusted_name.struct_version == STRUCT_VERSION_2) {
-        switch (context->trusted_name.name_type) {
-            case TN_TYPE_ACCOUNT:
-                if (context->trusted_name.name_source == TN_SOURCE_CAL) {
-                    PRINTF("Error: cannot accept an account name from the CAL!\n");
-                    return SWO_INCORRECT_DATA;
-                }
-                break;
-            case TN_TYPE_CONTRACT:
-            case TN_TYPE_TOKEN:
-                if (context->trusted_name.name_source != TN_SOURCE_CAL) {
-                    PRINTF("Error: cannot accept a contract name from given source (%u)!\n",
-                           context->trusted_name.name_source);
-                    return SWO_INCORRECT_DATA;
-                }
-                break;
-            default:
+    switch (context->trusted_name.name_type) {
+        case TN_TYPE_ACCOUNT:
+            if (context->trusted_name.name_source == TN_SOURCE_CAL) {
+                PRINTF("Error: cannot accept an account name from the CAL!\n");
                 return SWO_INCORRECT_DATA;
-        }
+            }
+            break;
+        case TN_TYPE_CONTRACT:
+        case TN_TYPE_TOKEN:
+            if (context->trusted_name.name_source != TN_SOURCE_CAL) {
+                PRINTF("Error: cannot accept a contract name from given source (%u)!\n",
+                       context->trusted_name.name_source);
+                return SWO_INCORRECT_DATA;
+            }
+            break;
+        default:
+            return SWO_INCORRECT_DATA;
     }
 
-    e_tn_key_id expected_key_id =
-        ((context->trusted_name.struct_version == STRUCT_VERSION_2) &&
-         (context->trusted_name.name_source == TN_SOURCE_CAL))
-            ? TN_KEY_ID_CAL
-            : TN_KEY_ID_DOMAIN_SVC;
+    e_tn_key_id expected_key_id = (context->trusted_name.name_source == TN_SOURCE_CAL)
+                                        ? TN_KEY_ID_CAL
+                                        : TN_KEY_ID_DOMAIN_SVC;
     if (context->key_id != expected_key_id) {
         PRINTF("Error: trusted-name signer key ID does not match its source\n");
         return SWO_INCORRECT_DATA;
@@ -780,9 +718,8 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
     }
 
     size_t name_length = strnlen(context->trusted_name.name, sizeof(context->trusted_name.name));
-    if ((context->trusted_name.struct_version == STRUCT_VERSION_1) ||
-        ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
-         (context->trusted_name.name_source == TN_SOURCE_ENS))) {
+    if ((context->trusted_name.name_type == TN_TYPE_ACCOUNT) &&
+        (context->trusted_name.name_source == TN_SOURCE_ENS)) {
         if ((name_length < 5) ||
             (strncmp(".eth", (char *) &context->trusted_name.name[name_length - 4], 4) != 0)) {
             PRINTF("Unexpected TLD!\n");
@@ -797,8 +734,7 @@ uint16_t verify_trusted_name_struct(const s_trusted_name_ctx *context) {
         }
     }
 
-    if ((context->trusted_name.struct_version == STRUCT_VERSION_2) &&
-        (context->trusted_name.name_source == TN_SOURCE_MAB) &&
+    if ((context->trusted_name.name_source == TN_SOURCE_MAB) &&
         !verify_mab_owner(context)) {
         return SWO_INCORRECT_DATA;
     }
