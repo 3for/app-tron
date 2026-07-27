@@ -18,6 +18,7 @@
 #include "ui_review_menu.h"
 #include "common_712.h"  // e_tip712_filtering_mode, ui_712_start prototype
 #include "tip712_fuzz_support.h"
+#include "gcs_memory.h"
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -159,6 +160,7 @@ void reset_app_context(void) {
     memset(&g_fuzz_trusted_name, 0, sizeof(g_fuzz_trusted_name));
     appState = APP_STATE_IDLE;
     seed_default_assets();
+    (void) gcs_budget_end();
 }
 
 void init_tip712_fuzz_environment(void) {

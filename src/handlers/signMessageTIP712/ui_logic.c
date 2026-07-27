@@ -21,8 +21,11 @@
 #include "tx_ctx.h"      // g_parked_calldata, validate_instruction_hash
 #include "read.h"        // read_u64_be
 #include "parse.h"       // asset_slot_is_kind
+#include "tip712_limits.h"
+#include "gcs_memory.h"
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #define N_OF_M_LENGTH 10  // enough to hold "nn of mm"
 
@@ -82,6 +85,7 @@ typedef struct {
     uint16_t ui_pairs_dup_count;  // TRON: length of the current identical-page run
     uint16_t dynamic_value_remaining;
     uint16_t dynamic_value_written;
+    size_t dynamic_display_bytes;
     s_eip712_calldata_info *calldata_info;
     uint8_t calldata_index;
 } t_ui_context;
@@ -90,15 +94,15 @@ static t_ui_context *ui_ctx = NULL;
 
 // to be used as a \ref f_list_node_del
 static void delete_filter_crc(s_filter_crc *fcrc) {
-    APP_MEM_FREE(fcrc);
+    gcs_mem_free(fcrc);
 }
 
 // to be used as a \ref f_list_node_del
 static void delete_ui_pair(s_ui_712_pair *pair) {
-    APP_MEM_FREE(pair->key);
-    APP_MEM_FREE(pair->raw_key);
-    APP_MEM_FREE(pair->value);
-    APP_MEM_FREE(pair);
+    gcs_mem_free(pair->key);
+    gcs_mem_free(pair->raw_key);
+    gcs_mem_free(pair->value);
+    gcs_mem_free(pair);
 }
 
 /**
@@ -115,7 +119,7 @@ static char *ui_712_alloc_numbered_key(const char *key, uint16_t suffix) {
     char *dst;
 
     if (suffix == 0) {
-        if ((dst = APP_MEM_ALLOC(key_len + 1)) == NULL) {
+        if ((dst = gcs_mem_alloc(key_len + 1U, GCS_MEM_UI)) == NULL) {
             return NULL;
         }
         memcpy(dst, key, key_len + 1);
@@ -125,7 +129,8 @@ static char *ui_712_alloc_numbered_key(const char *key, uint16_t suffix) {
     if ((suffix_len <= 0) || ((size_t) suffix_len >= sizeof(suffix_buf))) {
         return NULL;
     }
-    if ((dst = APP_MEM_ALLOC(key_len + (size_t) suffix_len + 1)) == NULL) {
+    if ((dst = gcs_mem_alloc(key_len + (size_t) suffix_len + 1U,
+                             GCS_MEM_UI)) == NULL) {
         return NULL;
     }
     memcpy(dst, key, key_len);
@@ -151,20 +156,20 @@ static void ui_712_number_duplicate_pair(s_ui_712_pair *prev, s_ui_712_pair *cur
     if (ui_ctx->ui_pairs_dup_count == 1) {
         // Start of a run: retroactively number the previous page "<key>-1"
         if ((renamed = ui_712_alloc_numbered_key(prev->raw_key, 1)) != NULL) {
-            APP_MEM_FREE(prev->key);
+            gcs_mem_free(prev->key);
             prev->key = renamed;
         }
     }
     ui_ctx->ui_pairs_dup_count += 1;
     if ((renamed = ui_712_alloc_numbered_key(cur->raw_key, ui_ctx->ui_pairs_dup_count)) != NULL) {
-        APP_MEM_FREE(cur->key);
+        gcs_mem_free(cur->key);
         cur->key = renamed;
     }
 }
 
 // to be used as a \ref f_list_node_del
 static void delete_amount_join(s_amount_join *join) {
-    APP_MEM_FREE(join);
+    gcs_mem_free(join);
 }
 
 static bool ui_712_current_pair(s_ui_712_pair **prev, s_ui_712_pair **cur) {
@@ -183,6 +188,27 @@ static bool ui_712_current_pair(s_ui_712_pair **prev, s_ui_712_pair **cur) {
         tmp = (s_ui_712_pair *) ((flist_node_t *) tmp)->next;
     }
     *cur = tmp;
+    return true;
+}
+
+static bool ui_712_can_add_pair(void) {
+    if ((ui_ctx == NULL) ||
+        (flist_size((flist_node_t **) &ui_ctx->ui_pairs) >=
+         TIP712_MAX_UI_PAIRS)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    return true;
+}
+
+static bool ui_712_reserve_dynamic_display(size_t bytes) {
+    if ((ui_ctx == NULL) || (bytes > TIP712_MAX_DYNAMIC_DISPLAY_BYTES) ||
+        (ui_ctx->dynamic_display_bytes >
+         (TIP712_MAX_DYNAMIC_DISPLAY_BYTES - bytes))) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    ui_ctx->dynamic_display_bytes += bytes;
     return true;
 }
 
@@ -266,21 +292,24 @@ bool ui_712_set_intent(void) {
     const char *title = "Review transaction";
     size_t title_length = strlen(title);
 
-    if (ui_ctx == NULL) {
+    if (!ui_712_can_add_pair()) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     // Allocate memory for the new pair
-    if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
+    new_pair = gcs_mem_calloc(sizeof(*new_pair), GCS_MEM_UI);
+    if (new_pair == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     // Allocate and copy the title
-    if (APP_MEM_CALLOC((void **) &new_pair->key, title_length + 1) == false) goto error;
+    new_pair->key = gcs_mem_calloc(title_length + 1U, GCS_MEM_UI);
+    if (new_pair->key == NULL) goto error;
     memcpy(new_pair->key, title, title_length);
 
     // Allocate and clear the intent buffer
-    if (APP_MEM_CALLOC((void **) &new_pair->value, N_OF_M_LENGTH) == false) goto error;
+    new_pair->value = gcs_mem_calloc(N_OF_M_LENGTH, GCS_MEM_UI);
+    if (new_pair->value == NULL) goto error;
 
     // Mark it as an intent
     new_pair->start_intent = true;
@@ -301,18 +330,21 @@ error:
 bool ui_712_set_title(const char *str, size_t length) {
     s_ui_712_pair *new_pair = NULL;
 
-    if ((ui_ctx == NULL) || (str == NULL)) {
+    if ((str == NULL) || !ui_712_can_add_pair()) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &new_pair, sizeof(*new_pair)) == false) {
+    new_pair = gcs_mem_calloc(sizeof(*new_pair), GCS_MEM_UI);
+    if (new_pair == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &new_pair->key, length + 1) == false) goto error;
+    new_pair->key = gcs_mem_calloc(length + 1U, GCS_MEM_UI);
+    if (new_pair->key == NULL) goto error;
     memcpy(new_pair->key, str, length);
     // TRON: keep an un-numbered copy of the key for duplicate-run detection
-    if (APP_MEM_CALLOC((void **) &new_pair->raw_key, length + 1) == false) goto error;
+    new_pair->raw_key = gcs_mem_calloc(length + 1U, GCS_MEM_UI);
+    if (new_pair->raw_key == NULL) goto error;
     memcpy(new_pair->raw_key, str, length);
     flist_push_back((flist_node_t **) &ui_ctx->ui_pairs, (flist_node_t *) new_pair);
     return true;
@@ -346,14 +378,15 @@ bool ui_712_set_value(const char *str, size_t length) {
     }
     if ((str != NULL) && (length > 0)) {
         // buffer is directly provided with parameters
-        if (APP_MEM_CALLOC((void **) &tmp->value, length + 1) == false) {
+        tmp->value = gcs_mem_calloc(length + 1U, GCS_MEM_UI);
+        if (tmp->value == NULL) {
             apdu_response_code = SWO_INSUFFICIENT_MEMORY;
             return false;
         }
         memcpy(tmp->value, str, length);
     } else {
         // Add the value from the global variable strings.tmp.tmp
-        if ((tmp->value = APP_MEM_STRDUP(strings.tmp.tmp)) == NULL) {
+        if ((tmp->value = gcs_mem_strdup(strings.tmp.tmp, GCS_MEM_UI)) == NULL) {
             apdu_response_code = SWO_INSUFFICIENT_MEMORY;
             return false;
         }
@@ -472,11 +505,17 @@ static bool ui_712_append_str(const uint8_t *data,
     }
 
     if (complete_length != NULL) {
+        const size_t allocation_size = ((size_t) *complete_length) + 1U;
         if (pair->value != NULL) {
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
-        if (APP_MEM_CALLOC((void **) &pair->value, ((size_t) *complete_length) + 1) == false) {
+        if (!ui_712_reserve_dynamic_display(allocation_size)) {
+            return false;
+        }
+        pair->value = gcs_mem_calloc(allocation_size, GCS_MEM_UI);
+        if (pair->value == NULL) {
+            ui_ctx->dynamic_display_bytes -= allocation_size;
             apdu_response_code = SWO_INSUFFICIENT_MEMORY;
             return false;
         }
@@ -561,7 +600,7 @@ static bool ui_712_format_bool(const uint8_t *data, uint8_t length, bool first) 
     if (!first) {
         return false;
     }
-    if (length != 1) {
+    if ((length != 1) || (data[0] > 1U)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
@@ -599,13 +638,18 @@ static bool ui_712_format_bytes(const uint8_t *data,
     }
 
     if (complete_length != NULL) {
+        const size_t allocation_size = 2U + ((size_t) *complete_length) * 2U + 1U;
         // First chunk: allocate "0x" + 2 hex chars per byte + '\0'.
         if (pair->value != NULL) {
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
-        if (APP_MEM_CALLOC((void **) &pair->value,
-                           2U + ((size_t) *complete_length) * 2U + 1U) == false) {
+        if (!ui_712_reserve_dynamic_display(allocation_size)) {
+            return false;
+        }
+        pair->value = gcs_mem_calloc(allocation_size, GCS_MEM_UI);
+        if (pair->value == NULL) {
+            ui_ctx->dynamic_display_bytes -= allocation_size;
             apdu_response_code = SWO_INSUFFICIENT_MEMORY;
             return false;
         }
@@ -747,7 +791,8 @@ static s_amount_join *get_amount_join(uint8_t token_idx) {
     if (tmp != NULL) return tmp;
 
     // does not exist, create it
-    if (APP_MEM_CALLOC((void **) &new, sizeof(*new)) == false) {
+    new = gcs_mem_calloc(sizeof(*new), GCS_MEM_UI);
+    if (new == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return NULL;
     }
@@ -890,6 +935,23 @@ static bool ui_712_format_trusted_name(const uint8_t *data, uint8_t length) {
     return true;
 }
 
+bool tip712_u64_from_zero_extended(const uint8_t *data,
+                                   size_t length,
+                                   uint64_t *value) {
+    if ((data == NULL) || (value == NULL) || (length == 0U)) {
+        return false;
+    }
+    while ((length > 1U) && (*data == 0U)) {
+        data++;
+        length--;
+    }
+    if (length > sizeof(*value)) {
+        return false;
+    }
+    *value = u64_from_BE(data, length);
+    return true;
+}
+
 /**
  * Format given data as a human-readable date/time representation
  *
@@ -900,14 +962,36 @@ static bool ui_712_format_trusted_name(const uint8_t *data, uint8_t length) {
  */
 static bool ui_712_format_datetime(const uint8_t *data,
                                    uint8_t length,
-                                   const s_struct_712_field *field_ptr) {
+                                   const s_struct_712_field *field_ptr,
+                                   bool first,
+                                   bool last,
+                                   const uint16_t *complete_length) {
+    uint64_t timestamp_u64;
     time_t timestamp;
 
+    if ((data == NULL) || (length == 0U) || !first || !last ||
+        (complete_length == NULL) || (*complete_length != length)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if ((length >= field_ptr->type_size) && ismaxint((uint8_t *) data, length)) {
         snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "Unlimited");
         return true;
     }
-    timestamp = u64_from_BE(data, length);
+
+    /* Standard uint256 timestamps are left-padded to 32 bytes. u64_from_BE()
+     * reads from the start of its input, so strip only zero extension and reject
+     * a value whose significant part cannot be represented by the UI metadata
+     * type. */
+    if (!tip712_u64_from_zero_extended(data, length, &timestamp_u64)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    if (timestamp_u64 > (uint64_t) INT64_MAX) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    timestamp = (time_t) timestamp_u64;
     return time_format_to_utc(&timestamp, strings.tmp.tmp, sizeof(strings.tmp.tmp));
 }
 
@@ -1022,12 +1106,17 @@ static bool update_calldata_chain_id(const uint8_t *data,
                                      uint8_t length,
                                      bool last,
                                      s_eip712_calldata_info *calldata_info) {
-    uint8_t chain_id_buf[sizeof(uint64_t)];
-
     if (calldata_info->chain_id_state != CALLDATA_INFO_PARAM_UNSET) return false;
-    if (!last) return false;
-    buf_shrink_expand(data, length, chain_id_buf, sizeof(chain_id_buf));
-    calldata_info->chain_id = read_u64_be(chain_id_buf, 0);
+    if (!last || (data == NULL) || (length == 0U)) return false;
+
+    /* Accept legacy 8/24/32-byte zero-extended values, but never silently use
+     * the low 64 bits when the signed chainId has non-zero high bits. */
+    if (!tip712_u64_from_zero_extended(data,
+                                       length,
+                                       &calldata_info->chain_id)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     calldata_info->chain_id_state = CALLDATA_INFO_PARAM_SET;
     return true;
 }
@@ -1203,7 +1292,12 @@ bool ui_712_feed_to_display(const s_struct_712_field *field_ptr,
     }
 
     if (ui_ctx->field_flags & UI_712_DATETIME) {
-        if (!ui_712_format_datetime(data, length, field_ptr)) {
+        if (!ui_712_format_datetime(data,
+                                    length,
+                                    field_ptr,
+                                    first,
+                                    last,
+                                    complete_length)) {
             return false;
         }
     }
@@ -1268,7 +1362,8 @@ bool ui_712_init(void) {
         return false;
     }
 
-    if (APP_MEM_CALLOC((void **) &ui_ctx, sizeof(*ui_ctx)) == false) {
+    ui_ctx = gcs_mem_calloc(sizeof(*ui_ctx), GCS_MEM_UI);
+    if (ui_ctx == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
     } else {
         ui_712_set_filtering_mode(TIP712_FILTERING_BASIC);
@@ -1278,7 +1373,7 @@ bool ui_712_init(void) {
 }
 
 static void delete_calldata_info(s_eip712_calldata_info *node) {
-    APP_MEM_FREE(node);
+    gcs_mem_free(node);
 }
 
 /**
@@ -1303,7 +1398,7 @@ void ui_712_deinit(void) {
             gcs_cleanup();
         }
         ui_712_clear_discarded_path();
-        APP_MEM_FREE_AND_NULL((void **) &ui_ctx);
+        gcs_mem_free_and_null((void **) &ui_ctx);
     }
 }
 
@@ -1491,7 +1586,8 @@ bool ui_712_push_new_filter_path(uint32_t path_crc) {
         return false;
     }
     // allocate it
-    if (APP_MEM_CALLOC((void **) &new_crc, sizeof(*new_crc)) == false) {
+    new_crc = gcs_mem_calloc(sizeof(*new_crc), GCS_MEM_GENERIC);
+    if (new_crc == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -1514,7 +1610,8 @@ bool ui_712_set_discarded_path(const char *path, uint8_t length) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    if ((ui_ctx->discarded_path = APP_MEM_ALLOC(length + 1)) == NULL) {
+    if ((ui_ctx->discarded_path = gcs_mem_alloc(length + 1U,
+                                                GCS_MEM_GENERIC)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -1533,7 +1630,7 @@ const char *ui_712_get_discarded_path(void) {
 }
 
 void ui_712_clear_discarded_path(void) {
-    APP_MEM_FREE_AND_NULL((void **) &ui_ctx->discarded_path);
+    gcs_mem_free_and_null((void **) &ui_ctx->discarded_path);
 }
 
 void ui_712_set_trusted_name_requirements(uint8_t type_count,
@@ -1568,7 +1665,8 @@ bool ui_712_push_pairs(void) {
         // hash" / displayHash setting). Mirrors app-ethereum's ui_712_push_pairs.
         pair_count += 2;
     }
-    if ((pair_count == 0) || (pair_count > UINT8_MAX)) {
+    if ((pair_count == 0) || (pair_count > TIP712_MAX_UI_PAIRS) ||
+        (pair_count > UINT8_MAX)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
@@ -1621,6 +1719,12 @@ bool ui_712_push_pairs(void) {
 
 void add_calldata_info(s_eip712_calldata_info *node) {
     flist_push_back((flist_node_t **) &ui_ctx->calldata_info, (flist_node_t *) node);
+}
+
+size_t ui_712_calldata_info_count(void) {
+    return (ui_ctx == NULL)
+               ? 0U
+               : flist_size((flist_node_t **) &ui_ctx->calldata_info);
 }
 
 s_eip712_calldata_info *get_calldata_info(uint8_t index) {

@@ -9,6 +9,7 @@
 #include "typed_data.h"
 #include "ui_globals.h"
 #include "lists.h"
+#include "gcs_memory.h"
 
 /**
  * Encode & hash the given structure field
@@ -119,7 +120,8 @@ static bool get_struct_dependencies(s_struct_dep **first_dep, const s_struct_712
             // If it is not present, append it. The outer loop walks this list
             // iteratively, avoiding host-controlled recursion depth.
             if (tmp == NULL) {
-                if (APP_MEM_CALLOC((void **) &new_dep, sizeof(*new_dep)) == false) {
+                new_dep = gcs_mem_calloc(sizeof(*new_dep), GCS_MEM_TEMPORARY);
+                if (new_dep == NULL) {
                     apdu_response_code = SWO_INSUFFICIENT_MEMORY;
                     return false;
                 }
@@ -156,7 +158,7 @@ static bool compare_struct_deps(const s_struct_dep *a, const s_struct_dep *b) {
 
 // to be used as a \ref f_list_node_del
 static void delete_struct_dep(s_struct_dep *sdep) {
-    APP_MEM_FREE(sdep);
+    gcs_mem_free(sdep);
 }
 
 /**

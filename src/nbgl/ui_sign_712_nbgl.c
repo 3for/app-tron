@@ -53,7 +53,9 @@ static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
     }
     snprintf(g_finishMsg, finish_len, "%s", sign_label);
 
-    tip712_mark_reviewing();
+    if (!tip712_mark_reviewing()) {
+        return false;
+    }
 #ifndef FUZZ
     nbgl_useCaseAdvancedReview(operation_type,
                                g_pairsList,

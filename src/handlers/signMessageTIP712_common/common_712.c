@@ -30,6 +30,7 @@
 #include "ui_logic.h"       // e_tip712_filtering_mode, ui_sign_712
 #include "ui_nbgl.h"        // warning
 #include "utils.h"          // SET_BIT
+#include "context_712.h"
 
 // TIP-712 (EIP-191 0x19 / version 0x01) signing prefix.
 static const uint8_t TIP_712_MAGIC[] = {0x19, 0x01};
@@ -218,8 +219,13 @@ void tip712_format_hash(uint8_t index, const char **item, const char **value) {
  * @return status code indicating success or failure
  */
 uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
-    if (appState != APP_STATE_IDLE) {
-        reset_app_context();
+    /* This is called from inside the full TIP-712 parser. Resetting here would
+     * free that parser's own context and let its caller continue on stale
+     * pointers. Conflicts are rejected and cleaned by the outer handler. */
+    if (!tip712_full_session_in_progress() ||
+        ((appState != APP_STATE_IDLE) &&
+         (appState != APP_STATE_SIGNING_TIP712))) {
+        return SWO_CONDITIONS_NOT_SATISFIED;
     }
     appState = APP_STATE_SIGNING_TIP712;
     explicit_bzero(&strings, sizeof(strings));

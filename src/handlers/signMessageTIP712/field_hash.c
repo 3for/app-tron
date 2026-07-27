@@ -13,6 +13,7 @@
 #include "app_errors.h"
 #include "parse.h"
 #include "ui_globals.h"
+#include "gcs_memory.h"
 
 static s_field_hashing *fh = NULL;
 
@@ -27,7 +28,8 @@ bool field_hash_init(void) {
         return false;
     }
 
-    if (APP_MEM_CALLOC((void **) &fh, sizeof(*fh)) == false) {
+    fh = gcs_mem_calloc(sizeof(*fh), GCS_MEM_GENERIC);
+    if (fh == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -39,7 +41,7 @@ bool field_hash_init(void) {
  * Deinitialize the field hash context
  */
 void field_hash_deinit(void) {
-    APP_MEM_FREE_AND_NULL((void **) &fh);
+    gcs_mem_free_and_null((void **) &fh);
 }
 
 /**
@@ -117,13 +119,14 @@ static const uint8_t *field_hash_finalize_static(const s_struct_712_field *field
 static uint8_t *field_hash_finalize_dynamic(void) {
     uint8_t *value;
 
-    if ((value = APP_MEM_ALLOC(KECCAK256_HASH_BYTESIZE)) == NULL) {
+    if ((value = gcs_mem_alloc(KECCAK256_HASH_BYTESIZE,
+                               GCS_MEM_TEMPORARY)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return NULL;
     }
     // copy hash into memory
     if (finalize_hash((cx_hash_t *) &global_sha3, value, KECCAK256_HASH_BYTESIZE) != true) {
-        APP_MEM_FREE(value);
+        gcs_mem_free(value);
         return NULL;
     }
     return value;
@@ -152,7 +155,7 @@ static void field_hash_feed_parent(e_type field_type, const uint8_t *hash) {
         hash_nbytes(hash, len, (cx_hash_t *) &hash_ctx->hash);
     }
     // deallocate it
-    APP_MEM_FREE((void *) hash);
+    gcs_mem_free((void *) hash);
 }
 
 /**

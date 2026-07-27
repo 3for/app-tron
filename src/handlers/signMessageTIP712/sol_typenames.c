@@ -6,6 +6,7 @@
 #include "parse.h"       // apdu_response_code
 #include "typed_data.h"
 #include "common_utils.h"  // ARRAY_SIZE
+#include "gcs_memory.h"
 
 typedef struct {
     char *name;
@@ -26,7 +27,8 @@ bool sol_typenames_init(void) {
         sol_typenames_deinit();
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &g_sol_types, sizeof(*g_sol_types) * count) == false) {
+    g_sol_types = gcs_mem_calloc(sizeof(*g_sol_types) * count, GCS_MEM_GENERIC);
+    if (g_sol_types == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -34,26 +36,26 @@ bool sol_typenames_init(void) {
         g_sol_types[i].value = i + 1;
         switch (g_sol_types[i].value) {
             case TYPE_SOL_INT:
-                g_sol_types[i].name = APP_MEM_STRDUP("int");
+                g_sol_types[i].name = gcs_mem_strdup("int", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_UINT:
-                g_sol_types[i].name = APP_MEM_STRDUP("uint");
+                g_sol_types[i].name = gcs_mem_strdup("uint", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_ADDRESS:
-                g_sol_types[i].name = APP_MEM_STRDUP("address");
+                g_sol_types[i].name = gcs_mem_strdup("address", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_BOOL:
-                g_sol_types[i].name = APP_MEM_STRDUP("bool");
+                g_sol_types[i].name = gcs_mem_strdup("bool", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_STRING:
-                g_sol_types[i].name = APP_MEM_STRDUP("string");
+                g_sol_types[i].name = gcs_mem_strdup("string", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_BYTES_FIX:
             case TYPE_SOL_BYTES_DYN:
-                g_sol_types[i].name = APP_MEM_STRDUP("bytes");
+                g_sol_types[i].name = gcs_mem_strdup("bytes", GCS_MEM_GENERIC);
                 break;
             case TYPE_SOL_TRCTOKEN:
-                g_sol_types[i].name = APP_MEM_STRDUP("trcToken");
+                g_sol_types[i].name = gcs_mem_strdup("trcToken", GCS_MEM_GENERIC);
                 break;
             default:
                 apdu_response_code = SWO_INCORRECT_DATA;
@@ -72,9 +74,9 @@ bool sol_typenames_init(void) {
 void sol_typenames_deinit(void) {
     if (g_sol_types != NULL) {
         for (int i = 0; i < (TYPES_COUNT - 1); ++i) {
-            APP_MEM_FREE(g_sol_types[i].name);
+            gcs_mem_free(g_sol_types[i].name);
         }
-        APP_MEM_FREE_AND_NULL((void **) &g_sol_types);
+        gcs_mem_free_and_null((void **) &g_sol_types);
     }
 }
 

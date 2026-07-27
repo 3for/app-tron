@@ -1,10 +1,14 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "commands_712.h"
 #include "context_712.h"
 #include "settings.h"
 #include "app_errors.h"
+#include "ui_logic.h"
+#include "shared_context.h"
+#include "gcs_memory.h"
 
 void init_tip712_fuzz_environment(void);
 
@@ -16,6 +20,55 @@ enum {
     OP_RESET = 4,
     OP_SET_SETTINGS = 5,
 };
+
+static void check_zero_extended_u64_boundaries(void) {
+    const uint64_t expected = UINT64_C(0x0102030405060708);
+    uint8_t value8[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t value24[24] = {0};
+    uint8_t value32[32] = {0};
+    uint64_t parsed = 0;
+
+    memcpy(value24 + sizeof(value24) - sizeof(value8), value8, sizeof(value8));
+    memcpy(value32 + sizeof(value32) - sizeof(value8), value8, sizeof(value8));
+    if (!tip712_u64_from_zero_extended(value8, sizeof(value8), &parsed) ||
+        (parsed != expected) ||
+        !tip712_u64_from_zero_extended(value24, sizeof(value24), &parsed) ||
+        (parsed != expected) ||
+        !tip712_u64_from_zero_extended(value32, sizeof(value32), &parsed) ||
+        (parsed != expected)) {
+        __builtin_trap();
+    }
+    value32[0] = 1U;
+    if (tip712_u64_from_zero_extended(value32, sizeof(value32), &parsed)) {
+        __builtin_trap();
+    }
+}
+
+static void check_tip712_phase_boundaries(void) {
+    appState = APP_STATE_SIGNING;
+    if (tip712_context_init() || (tip712_context != NULL) ||
+        (tip712_get_phase() != TIP712_PHASE_NONE)) {
+        __builtin_trap();
+    }
+
+    appState = APP_STATE_IDLE;
+    if (!tip712_mark_legacy_reviewing() || !tip712_review_in_progress() ||
+        tip712_context_init()) {
+        __builtin_trap();
+    }
+    tip712_context_cleanup();
+
+    if (!tip712_context_init() || !tip712_full_session_in_progress() ||
+        tip712_mark_legacy_reviewing()) {
+        __builtin_trap();
+    }
+    tip712_context_deinit();
+    if (gcs_budget_is_active() || (gcs_mem_session_live_bytes() != 0U) ||
+        gcs_mem_invariant_failed()) {
+        __builtin_trap();
+    }
+    appState = APP_STATE_IDLE;
+}
 
 static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
     while (size > 0U) {
@@ -83,7 +136,13 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    check_zero_extended_u64_boundaries();
+    check_tip712_phase_boundaries();
     init_tip712_fuzz_environment();
     fuzz_tip712_apdu_stream(data, size);
+    if (gcs_budget_is_active() || (gcs_mem_session_live_bytes() != 0U) ||
+        gcs_mem_invariant_failed()) {
+        __builtin_trap();
+    }
     return 0;
 }

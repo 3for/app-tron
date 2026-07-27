@@ -120,7 +120,8 @@ void reset_app_context() {
 }
 
 static void abort_active_context(void) {
-    if (appState == APP_STATE_IDLE) {
+    if ((appState == APP_STATE_IDLE) && (tip712_context == NULL) &&
+        (tip712_get_phase() == TIP712_PHASE_NONE)) {
         // Metadata provisioning intentionally runs without entering a signing
         // app state. A malformed APDU or exception must still discard an
         // unfinished shared TLV reassembly, while preserving already verified

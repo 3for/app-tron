@@ -13,16 +13,25 @@ typedef struct {
     bool chain_id_seen;
     bool chain_id_fits_u64;
     bool schema_locked;
-    bool review_in_progress;
 } s_tip712_context;
 
 extern s_tip712_context *tip712_context;
 
+typedef enum {
+    TIP712_PHASE_NONE = 0,
+    TIP712_PHASE_FULL_BUILDING,
+    TIP712_PHASE_FULL_REVIEW,
+    TIP712_PHASE_LEGACY_REVIEW,
+} tip712_phase_t;
+
 bool tip712_context_init(void);
 void tip712_context_cleanup(void);
 void tip712_context_deinit(void);
+tip712_phase_t tip712_get_phase(void);
+bool tip712_full_session_in_progress(void);
 bool tip712_review_in_progress(void);
-void tip712_mark_reviewing(void);
+bool tip712_mark_reviewing(void);
+bool tip712_mark_legacy_reviewing(void);
 
 typedef enum { NOT_INITIALIZED, INITIALIZED, DEFINED } e_struct_init;
 extern e_struct_init struct_state;

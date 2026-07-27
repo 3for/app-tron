@@ -14,7 +14,7 @@
 
 // APDUs P1
 #define P1_COMPLETE  0x00
-#define P1_PARTIAL   0xFF
+#define P1_PARTIAL   0x01
 #define P1_DISCARDED 0x01
 
 // APDUs P2
@@ -96,7 +96,8 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
     if (tip712_context == NULL) {
         ret = tip712_context_init();
     }
-    if ((struct_state == DEFINED) ||
+    if ((tip712_get_phase() != TIP712_PHASE_FULL_BUILDING) ||
+        (struct_state == DEFINED) ||
         ((tip712_context != NULL) && tip712_context->schema_locked)) {
         apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         ret = false;
@@ -137,7 +138,8 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
     bool ret = false;
     bool reply_apdu = true;
 
-    if (tip712_context == NULL) {
+    if ((tip712_context == NULL) ||
+        (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING)) {
         apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
     } else {
         switch (p2) {
@@ -205,7 +207,8 @@ uint16_t handleTIP712Filtering(uint8_t p1,
     bool reply_apdu = true;
     uint32_t path_crc = 0;
 
-    if (tip712_context == NULL) {
+    if ((tip712_context == NULL) ||
+        (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING)) {
         apdu_reply(false);
         return SWO_CONDITIONS_NOT_SATISFIED;
     }
@@ -306,7 +309,8 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
     uint8_t current_schema_hash[CX_SHA224_SIZE];
     volatile uint8_t schema_diff = 0;
 
-    if (tip712_context == NULL) {
+    if ((tip712_context == NULL) ||
+        (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING)) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
     }
     // if the final hashes are still zero or if there are some unimplemented fields

@@ -1,4 +1,5 @@
 #include "filtering.h"
+#include "tip712_limits.h"
 #include "hash_bytes.h"
 #include "app_errors.h"  // APDU return codes
 #include "public_keys.h"
@@ -16,6 +17,8 @@
 #include "app_mem_utils.h"
 #include "get_public_key.h"
 #include "proxy_info.h"  // get_implem_contract
+#include "utils.h"
+#include "gcs_memory.h"
 
 #define FILT_MAGIC_MESSAGE_INFO      183
 #define FILT_MAGIC_CALLDATA_INFO     55
@@ -210,6 +213,10 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
         apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         return false;
     }
+    if (ui_712_message_info_received()) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        return false;
+    }
     // Parsing
     if ((offset + sizeof(name_len)) > length) {
         return false;
@@ -220,6 +227,11 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     }
     name = (char *) &payload[offset];
     offset += name_len;
+    if ((name_len == 0U) || (name_len > TIP712_MAX_IDENTIFIER_LENGTH) ||
+        !is_printable(name, name_len)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if ((offset + sizeof(filters_count)) > length) {
         return false;
     }
@@ -328,7 +340,7 @@ bool filtering_discarded_path(const uint8_t *payload, uint8_t length) {
         return false;
     }
     path_len = payload[offset++];
-    if ((offset + path_len) > length) {
+    if ((offset + path_len) != length) {
         return false;
     }
     path = (char *) &payload[offset];
@@ -718,6 +730,11 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
         return false;
     }
     index = payload[offset++];
+    if ((get_calldata_info(index) != NULL) ||
+        (ui_712_calldata_info_count() >= TIP712_MAX_CALLDATA_INFOS)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
 
     if ((offset + sizeof(value_flag)) > length) {
         return false;
@@ -788,7 +805,8 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &calldata_info, sizeof(*calldata_info)) == false) {
+    calldata_info = gcs_mem_calloc(sizeof(*calldata_info), GCS_MEM_TX_CONTEXT);
+    if (calldata_info == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }

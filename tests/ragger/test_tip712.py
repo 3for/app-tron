@@ -21,6 +21,7 @@ from utils import (check_hash_signature, get_challenge, get_selector_from_data,
                    recover_message, to_sun, to_units)
 
 from ragger.backend import BackendInterface
+from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
@@ -1450,6 +1451,48 @@ def test_tip712_filtering_rejects_chain_id_above_u64(
     data["domain"]["chainId"] = 1 << 64
     with pytest.raises(ExceptionRAPDU):
         InputData.process_data(client, data, filters)
+
+
+def test_tip712_legacy_review_rejects_existing_full_context(
+        scenario_navigator: NavigateWithScenario):
+    """A hash-only review must never inherit a partially built full context."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+
+    with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        pass
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        with client.tip712_sign_legacy(client.getAccount(0)['path'],
+                                       bytes(32), bytes(32)):
+            pass
+    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+    # The rejected cross-mode command aborts the old session cleanly, so a new
+    # full definition must be accepted without rebooting the app.
+    with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        pass
+
+
+def test_tip712_definition_rejected_during_personal_message_reception(
+        scenario_navigator: NavigateWithScenario):
+    """TIP-712 cannot take ownership of tmpCtx during another chunked sign."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    path = pack_derivation_path(client.getAccount(0)['path'])
+    first_chunk = (bytes([0xE0, 0x08, 0x00, 0x00, len(path) + 5]) +
+                   path + (2).to_bytes(4, "big") + b"A")
+    response = client.exchange_raw(first_chunk)
+    assert response.status == StatusWord.OK
+
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+            pass
+    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+    with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        pass
 
 
 def test_tip712_skip():

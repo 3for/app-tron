@@ -5,8 +5,34 @@
 #include "app_mem_utils.h"
 #include "app_errors.h"  // APDU response codes
 #include "parse.h"       // apdu_response_code
+#include "tip712_limits.h"
+#include "gcs_memory.h"
 
 static s_struct_712 *g_structs = NULL;
+static size_t g_struct_count;
+static size_t g_field_count;
+static size_t g_array_level_count;
+
+static bool is_solidity_identifier(const uint8_t *name, size_t length) {
+    if ((name == NULL) || (length == 0U) ||
+        (length > TIP712_MAX_IDENTIFIER_LENGTH)) {
+        return false;
+    }
+    if (!(((name[0] >= 'A') && (name[0] <= 'Z')) ||
+          ((name[0] >= 'a') && (name[0] <= 'z')) || (name[0] == '_') ||
+          (name[0] == '$'))) {
+        return false;
+    }
+    for (size_t i = 1U; i < length; i++) {
+        if (!(((name[i] >= 'A') && (name[i] <= 'Z')) ||
+              ((name[i] >= 'a') && (name[i] <= 'z')) ||
+              ((name[i] >= '0') && (name[i] <= '9')) || (name[i] == '_') ||
+              (name[i] == '$'))) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /**
  * Initialize the typed data context
@@ -23,21 +49,24 @@ bool typed_data_init(void) {
 
 // to be used as a \ref f_list_node_del
 static void delete_field(s_struct_712_field *f) {
-    APP_MEM_FREE(f->type_name);
-    APP_MEM_FREE(f->array_levels);
-    APP_MEM_FREE(f->key_name);
-    APP_MEM_FREE(f);
+    gcs_mem_free(f->type_name);
+    gcs_mem_free(f->array_levels);
+    gcs_mem_free(f->key_name);
+    gcs_mem_free(f);
 }
 
 // to be used as a \ref f_list_node_del
 static void delete_struct(s_struct_712 *s) {
-    APP_MEM_FREE(s->name);
+    gcs_mem_free(s->name);
     flist_clear((flist_node_t **) &s->fields, (f_list_node_del) &delete_field);
-    APP_MEM_FREE(s);
+    gcs_mem_free(s);
 }
 
 void typed_data_deinit(void) {
     flist_clear((flist_node_t **) &g_structs, (f_list_node_del) &delete_struct);
+    g_struct_count = 0U;
+    g_field_count = 0U;
+    g_array_level_count = 0U;
 }
 
 /**
@@ -97,19 +126,29 @@ const s_struct_712 *get_structn(const char *name, uint8_t length) {
 bool set_struct_name(uint8_t length, const uint8_t *name) {
     s_struct_712 *new_struct;
 
-    if (name == NULL) {
+    if (!is_solidity_identifier(name, length) ||
+        (g_struct_count >= TIP712_MAX_STRUCTS)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
+    for (const s_struct_712 *cur = g_structs; cur != NULL;
+         cur = (const s_struct_712 *) ((const flist_node_t *) cur)->next) {
+        if ((strlen(cur->name) == length) &&
+            (memcmp(cur->name, name, length) == 0)) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+    }
 
-    if (APP_MEM_CALLOC((void **) &new_struct, sizeof(*new_struct)) == false) {
+    new_struct = gcs_mem_calloc(sizeof(*new_struct), GCS_MEM_GENERIC);
+    if (new_struct == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
-    if ((new_struct->name = APP_MEM_ALLOC(length + 1)) == NULL) {
+    if ((new_struct->name = gcs_mem_alloc(length + 1U, GCS_MEM_GENERIC)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        APP_MEM_FREE(new_struct);
+        gcs_mem_free(new_struct);
         return false;
     }
     new_struct->name[length] = '\0';
@@ -117,6 +156,7 @@ bool set_struct_name(uint8_t length, const uint8_t *name) {
     struct_state = INITIALIZED;
 
     flist_push_back((flist_node_t **) &g_structs, (flist_node_t *) new_struct);
+    g_struct_count++;
     return true;
 }
 
@@ -173,7 +213,11 @@ static bool set_struct_field_custom_typename(s_struct_712_field *field,
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    if ((field->type_name = APP_MEM_ALLOC(typename_len + 1)) == NULL) {
+    if (!is_solidity_identifier(&data[*data_idx], typename_len)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    if ((field->type_name = gcs_mem_alloc(typename_len + 1U, GCS_MEM_GENERIC)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -201,12 +245,16 @@ static bool set_struct_field_array(s_struct_712_field *field,
         return false;
     }
     field->array_level_count = data[(*data_idx)++];
-    if (field->array_level_count == 0) {
+    if ((field->array_level_count == 0) ||
+        (field->array_level_count > TIP712_MAX_ARRAY_LEVELS_PER_FIELD) ||
+        (g_array_level_count >
+         (TIP712_MAX_ARRAY_LEVELS - field->array_level_count))) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     if ((field->array_levels =
-             APP_MEM_ALLOC(sizeof(*field->array_levels) * field->array_level_count)) == NULL) {
+             gcs_mem_alloc(sizeof(*field->array_levels) * field->array_level_count,
+                           GCS_MEM_GENERIC)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -228,6 +276,10 @@ static bool set_struct_field_array(s_struct_712_field *field,
                     return false;
                 }
                 field->array_levels[idx].size = data[(*data_idx)++];
+                if (field->array_levels[idx].size == 0U) {
+                    apdu_response_code = SWO_INCORRECT_DATA;
+                    return false;
+                }
                 break;
             default:
                 // should not be in here :^)
@@ -256,6 +308,10 @@ static bool set_struct_field_typesize(s_struct_712_field *field,
         return false;
     }
     field->type_size = data[(*data_idx)++];
+    if ((field->type_size == 0U) || (field->type_size > INT256_LENGTH)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     return true;
 }
 
@@ -286,8 +342,12 @@ static bool set_struct_field_keyname(s_struct_712_field *field,
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
+    if (!is_solidity_identifier(&data[*data_idx], keyname_len)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
 
-    if ((field->key_name = APP_MEM_ALLOC(keyname_len + 1)) == NULL) {
+    if ((field->key_name = gcs_mem_alloc(keyname_len + 1U, GCS_MEM_GENERIC)) == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
@@ -315,18 +375,24 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
         return false;
     }
 
-    if (struct_state == NOT_INITIALIZED) {
+    if ((struct_state == NOT_INITIALIZED) ||
+        (g_field_count >= TIP712_MAX_FIELDS)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
     s_struct_712_field *new_field = NULL;
-    if (APP_MEM_CALLOC((void **) &new_field, sizeof(*new_field)) == false) {
+    new_field = gcs_mem_calloc(sizeof(*new_field), GCS_MEM_GENERIC);
+    if (new_field == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
     if (!set_struct_field_typedesc(new_field, data, &data_idx, length)) {
+        goto cleanup;
+    }
+    if (new_field->type >= TYPES_COUNT) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         goto cleanup;
     }
 
@@ -346,6 +412,20 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
         if (set_struct_field_custom_typename(new_field, data, &data_idx, length) == false) {
             goto cleanup;
         }
+    }
+
+    /* Enforce canonical Solidity type-size combinations. Bare int/uint are
+     * valid aliases for 256-bit values; fixed bytes always need bytes1..32. */
+    if (new_field->type_has_size) {
+        if ((new_field->type != TYPE_SOL_INT) &&
+            (new_field->type != TYPE_SOL_UINT) &&
+            (new_field->type != TYPE_SOL_BYTES_FIX)) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            goto cleanup;
+        }
+    } else if (new_field->type == TYPE_SOL_BYTES_FIX) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        goto cleanup;
     }
     if (new_field->type_is_array) {
         if (set_struct_field_array(new_field, data, &data_idx, length) == false) {
@@ -369,14 +449,24 @@ bool set_struct_field(uint8_t length, const uint8_t *data) {
         s = (s_struct_712 *) ((flist_node_t *) s)->next;
     }
 
+    for (const s_struct_712_field *cur = s->fields; cur != NULL;
+         cur = (const s_struct_712_field *) ((const flist_node_t *) cur)->next) {
+        if (strcmp(cur->key_name, new_field->key_name) == 0) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            goto cleanup;
+        }
+    }
+
     flist_push_back((flist_node_t **) &s->fields, (flist_node_t *) new_field);
+    g_field_count++;
+    g_array_level_count += new_field->array_level_count;
     return true;
 cleanup:
     if (new_field != NULL) {
-        APP_MEM_FREE(new_field->key_name);
-        APP_MEM_FREE(new_field->array_levels);
-        APP_MEM_FREE(new_field->type_name);
-        APP_MEM_FREE(new_field);
+        gcs_mem_free(new_field->key_name);
+        gcs_mem_free(new_field->array_levels);
+        gcs_mem_free(new_field->type_name);
+        gcs_mem_free(new_field);
     }
     return false;
 }

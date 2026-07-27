@@ -4,6 +4,7 @@
 #include "encode_field.h"
 #include "parse.h"
 #include "app_errors.h"
+#include "gcs_memory.h"
 
 typedef enum { MSB, LSB } e_padding_type;
 
@@ -28,7 +29,8 @@ static void *field_encode(const uint8_t *value,
         apdu_response_code = SWO_INCORRECT_DATA;
         return NULL;
     }
-    if ((padded_value = APP_MEM_ALLOC(TIP_712_ENCODED_FIELD_LENGTH)) != NULL) {
+    if ((padded_value = gcs_mem_alloc(TIP_712_ENCODED_FIELD_LENGTH,
+                                      GCS_MEM_TEMPORARY)) != NULL) {
         switch (ptype) {
             case MSB:
                 memset(padded_value, pval, TIP_712_ENCODED_FIELD_LENGTH - length);
@@ -107,7 +109,7 @@ void *encode_bytes(const uint8_t *value, uint8_t length) {
  * @return the encoded value
  */
 void *encode_boolean(const bool *value, uint8_t length) {
-    if (length != 1)  // sanity check
+    if ((length != 1) || (((const uint8_t *) value)[0] > 1U))  // canonical ABI bool
     {
         apdu_response_code = SWO_INCORRECT_DATA;
         return NULL;

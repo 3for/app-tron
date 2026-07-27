@@ -1,5 +1,6 @@
 #include <string.h>
 #include "path.h"
+#include "gcs_memory.h"
 #include "app_mem_utils.h"
 #include "context_712.h"
 #include "commands_712.h"
@@ -177,7 +178,7 @@ static s_hash_ctx *get_previous_hash_ctx(s_hash_ctx *hash_ctx) {
 
 // to be used as a \ref f_list_node_del
 static void delete_hash_ctx(s_hash_ctx *ctx) {
-    APP_MEM_FREE(ctx);
+    gcs_mem_free(ctx);
 }
 
 static void remove_last_hash_ctx(void) {
@@ -248,13 +249,14 @@ static bool push_new_hash_depth(bool init) {
     }
 
     // allocate new hash context
-    if (APP_MEM_CALLOC((void **) &hash_ctx, sizeof(*hash_ctx)) == false) {
+    hash_ctx = gcs_mem_calloc(sizeof(*hash_ctx), GCS_MEM_GENERIC);
+    if (hash_ctx == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
     if (init) {
         if (cx_keccak_init_no_throw(&hash_ctx->hash, 256) != CX_OK) {
-            APP_MEM_FREE(hash_ctx);
+            gcs_mem_free(hash_ctx);
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
@@ -931,13 +933,15 @@ bool path_init(void) {
         path_deinit();
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &path_struct, sizeof(*path_struct)) == false) {
+    path_struct = gcs_mem_calloc(sizeof(*path_struct), GCS_MEM_GENERIC);
+    if (path_struct == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &path_backup, sizeof(*path_backup)) == false) {
+    path_backup = gcs_mem_calloc(sizeof(*path_backup), GCS_MEM_GENERIC);
+    if (path_backup == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        APP_MEM_FREE_AND_NULL((void **) &path_struct);
+        gcs_mem_free_and_null((void **) &path_struct);
         return false;
     }
     return true;
@@ -947,8 +951,8 @@ bool path_init(void) {
  * De-initialize the path context
  */
 void path_deinit(void) {
-    APP_MEM_FREE_AND_NULL((void **) &path_struct);
-    APP_MEM_FREE_AND_NULL((void **) &path_backup);
+    gcs_mem_free_and_null((void **) &path_struct);
+    gcs_mem_free_and_null((void **) &path_backup);
     list_clear((list_node_t **) &g_hash_ctxs, (f_list_node_del) &delete_hash_ctx);
     g_hash_ctx_count = 0;
 }

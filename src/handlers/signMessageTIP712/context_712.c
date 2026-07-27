@@ -9,9 +9,11 @@
 #include "app_errors.h"      // APDU response codes
 #include "shared_context.h"  // reset_app_context
 #include "common_ui.h"       // ui_idle
+#include "gcs_memory.h"
 
 e_struct_init struct_state = NOT_INITIALIZED;
 s_tip712_context *tip712_context = NULL;
+static tip712_phase_t tip712_phase = TIP712_PHASE_NONE;
 
 /**
  * Initialize the TIP712 context
@@ -19,15 +21,24 @@ s_tip712_context *tip712_context = NULL;
  * @return a boolean indicating if the initialization was successful or not
  */
 bool tip712_context_init(void) {
-    if (tip712_context != NULL) {
-        tip712_context_deinit();
+    /* A full TIP-712 definition is itself a signing session, even before its
+     * first UI page changes appState. Never create it on top of another owner
+     * of tmpCtx/UI memory, and never replace an existing definition in place. */
+    if ((tip712_context != NULL) || (tip712_phase != TIP712_PHASE_NONE) ||
+        (appState != APP_STATE_IDLE)) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        return false;
+    }
+    if (!gcs_budget_begin()) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
         return false;
     }
 
     // init global variables
-    if (APP_MEM_CALLOC((void **) &tip712_context, sizeof(*tip712_context)) == false) {
+    tip712_context = gcs_mem_calloc(sizeof(*tip712_context), GCS_MEM_GENERIC);
+    if (tip712_context == NULL) {
         apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return false;
+        goto error;
     }
 
     if (sol_typenames_init() == false) {
@@ -57,10 +68,12 @@ bool tip712_context_init(void) {
     tip712_context->chain_id_fits_u64 = true;
 
     struct_state = NOT_INITIALIZED;
+    tip712_phase = TIP712_PHASE_FULL_BUILDING;
 
     return true;
 error:
     tip712_context_cleanup();
+    (void) gcs_budget_end();
     return false;
 }
 
@@ -68,15 +81,18 @@ error:
  * De-initialize the TIP712 context
  */
 void tip712_context_cleanup(void) {
-    if (tip712_context == NULL) {
-        return;
+    /* The legacy hash-only flow has no heap-backed context. Its phase must
+     * still be cleared by the common reset path. */
+    tip712_phase = TIP712_PHASE_NONE;
+    struct_state = NOT_INITIALIZED;
+    if (tip712_context != NULL) {
+        typed_data_deinit();
+        path_deinit();
+        field_hash_deinit();
+        ui_712_deinit();
+        sol_typenames_deinit();
+        gcs_mem_free_and_null((void **) &tip712_context);
     }
-    typed_data_deinit();
-    path_deinit();
-    field_hash_deinit();
-    ui_712_deinit();
-    sol_typenames_deinit();
-    APP_MEM_FREE_AND_NULL((void **) &tip712_context);
 }
 
 void tip712_context_deinit(void) {
@@ -84,17 +100,34 @@ void tip712_context_deinit(void) {
     reset_app_context();
 }
 
-bool tip712_review_in_progress(void) {
-    if (tip712_context != NULL) {
-        return tip712_context->review_in_progress;
-    }
-    // The legacy TIP-712 command has no heap-backed TIP-712 context, but its
-    // review is asynchronous and still owns tmpCtx until the callback fires.
-    return appState == APP_STATE_SIGNING_TIP712;
+tip712_phase_t tip712_get_phase(void) {
+    return tip712_phase;
 }
 
-void tip712_mark_reviewing(void) {
-    if (tip712_context != NULL) {
-        tip712_context->review_in_progress = true;
+bool tip712_full_session_in_progress(void) {
+    return (tip712_phase == TIP712_PHASE_FULL_BUILDING) ||
+           (tip712_phase == TIP712_PHASE_FULL_REVIEW);
+}
+
+bool tip712_review_in_progress(void) {
+    return (tip712_phase == TIP712_PHASE_FULL_REVIEW) ||
+           (tip712_phase == TIP712_PHASE_LEGACY_REVIEW);
+}
+
+bool tip712_mark_reviewing(void) {
+    if ((tip712_context != NULL) &&
+        (tip712_phase == TIP712_PHASE_FULL_BUILDING)) {
+        tip712_phase = TIP712_PHASE_FULL_REVIEW;
+        return true;
     }
+    return false;
+}
+
+bool tip712_mark_legacy_reviewing(void) {
+    if ((tip712_context != NULL) || (tip712_phase != TIP712_PHASE_NONE) ||
+        (appState != APP_STATE_IDLE)) {
+        return false;
+    }
+    tip712_phase = TIP712_PHASE_LEGACY_REVIEW;
+    return true;
 }

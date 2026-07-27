@@ -54,6 +54,64 @@ static int send_gtp_status(uint16_t sw) {
     return io_send_sw(sw);
 }
 
+static bool tip712_build_command_allowed(const command_t *cmd) {
+    switch (cmd->ins) {
+        case INS_TIP712_STRUCT_DEF:
+        case INS_TIP712_STRUCT_IMPL:
+        case INS_TIP712_FILTERING:
+        case INS_PROVIDE_TRC20_TOKEN_INFORMATION:
+        case INS_PROVIDE_NFT_INFORMATION:
+        case INS_GET_CHALLENGE:
+        case INS_PROVIDE_TRUSTED_NAME:
+        case INS_PROVIDE_ENUM_VALUE:
+        case INS_GTP_TRANSACTION_INFO:
+        case INS_GTP_FIELD:
+        case INS_PROVIDE_PROXY_INFO:
+#ifdef HAVE_GATING_SUPPORT
+        case INS_PROVIDE_GATING:
+#endif
+            return true;
+        case INS_SIGN_TIP_712_MESSAGE:
+            return cmd->p2 == P2_TIP712_FULL_IMPLEM;
+        default:
+            return false;
+    }
+}
+
+static bool tip712_struct_impl_p1_valid(uint8_t p1, uint8_t p2) {
+    switch (p2) {
+        case 0x00: /* struct name */
+        case 0x0F: /* array size */
+            return p1 == 0x00;
+        case 0xFF: /* field value: complete or partial */
+            return (p1 == 0x00) || (p1 == 0x01);
+        default:
+            return true; /* the handler returns WRONG_P1_P2 for unknown P2 */
+    }
+}
+
+static bool tip712_filtering_p1_valid(uint8_t p1, uint8_t p2) {
+    switch (p2) {
+        case 0x00: /* activate */
+        case 0x01: /* discarded path */
+        case 0x0F: /* message info */
+        case 0xFA: /* calldata info */
+            return p1 == 0x00;
+        default:
+            /* Field filters use P1=1 only for a path discarded because an
+             * enclosing array was empty. */
+            return (p1 == 0x00) || (p1 == 0x01);
+    }
+}
+
+static int reject_tip712_command(uint16_t sw) {
+    if ((tip712_get_phase() != TIP712_PHASE_NONE) ||
+        (appState != APP_STATE_IDLE)) {
+        reset_app_context();
+    }
+    return io_send_sw(sw);
+}
+
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
     if (tlv_apdu_in_progress() &&
@@ -108,6 +166,15 @@ int apdu_dispatcher(const command_t *cmd) {
     }
     if (gcs_review_in_progress()) {
         PRINTF("Refused APDU while GCS review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+    /* Full TIP-712 owns its type tree, tmpCtx and accumulated UI fields from
+     * the first struct definition, while appState may still be IDLE. Only the
+     * commands needed to finish that exact session may run in between. */
+    if ((tip712_get_phase() == TIP712_PHASE_FULL_BUILDING) &&
+        !tip712_build_command_allowed(cmd)) {
+        PRINTF("Refused APDU outside the active TIP-712 build phase\n");
+        reset_app_context();
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
     if (gcs_signing_in_progress()) {
@@ -181,11 +248,17 @@ int apdu_dispatcher(const command_t *cmd) {
 
             switch (cmd->p2) {
                 case P2_TIP712_LEGACY_IMPLEM:
+                    if (cmd->p1 != 0x00) {
+                        return reject_tip712_command(E_INCORRECT_P1_P2);
+                    }
                     forget_known_assets();
                     sw = handleSignTIP712Message(cmd->p1, cmd->data, cmd->lc);
                     break;
 
                 case P2_TIP712_FULL_IMPLEM:
+                    if (cmd->p1 != 0x00) {
+                        return reject_tip712_command(E_INCORRECT_P1_P2);
+                    }
                     sw = handleTIP712Sign(cmd->data, cmd->lc, &flags);
                     break;
 
@@ -200,9 +273,15 @@ int apdu_dispatcher(const command_t *cmd) {
         }
 
         case INS_TIP712_STRUCT_DEF:
+            if (cmd->p1 != 0x00) {
+                return reject_tip712_command(E_INCORRECT_P1_P2);
+            }
             return io_send_sw(handleTIP712StructDef(cmd->p2, cmd->data, cmd->lc));
 
         case INS_TIP712_STRUCT_IMPL: {
+            if (!tip712_struct_impl_p1_valid(cmd->p1, cmd->p2)) {
+                return reject_tip712_command(E_INCORRECT_P1_P2);
+            }
             uint32_t flags = 0;
             uint16_t sw = handleTIP712StructImpl(cmd->p1, cmd->p2, cmd->data, cmd->lc, &flags);
             if (sw == APDU_NO_RESPONSE) {
@@ -212,6 +291,9 @@ int apdu_dispatcher(const command_t *cmd) {
         }
 
         case INS_TIP712_FILTERING: {
+            if (!tip712_filtering_p1_valid(cmd->p1, cmd->p2)) {
+                return reject_tip712_command(E_INCORRECT_P1_P2);
+            }
             uint32_t flags = 0;
             uint16_t sw = handleTIP712Filtering(cmd->p1, cmd->p2, cmd->data, cmd->lc, &flags);
             if (sw == APDU_NO_RESPONSE) {
