@@ -35,7 +35,7 @@
 #define HASH_SIZE                32
 #define MAX_RAW_SIGNATURE        65
 
-#define SHARED_CTX_FIELD_1_SIZE 256
+#define SHARED_CTX_FIELD_1_SIZE 380
 #define SHARED_CTX_FIELD_2_SIZE 40
 
 #define MAX_ASSETS 5

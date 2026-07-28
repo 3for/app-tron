@@ -684,7 +684,7 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
         values = {
             "string_nul": b"pay Alice\0pay Mallory",
             "string_control": b"line1\nline2",
-            "string_not_fully_displayable": b"A" * 256,
+            "string_not_fully_displayable": b"A" * 380,
             "offset_high_bits": b"safe",
             "length_high_bits": b"safe",
         }
