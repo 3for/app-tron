@@ -37,8 +37,8 @@ from client.enum_value import EnumValue
 from client.gating import Gating
 from client.proxy_info import ProxyInfo
 from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmount,
-                        ParamCalldata, ParamDatetime, ParamEnum, ParamRaw,
-                        ParamNetwork, ParamNFT, ParamToken, ParamTokenAmount,
+                        ParamCalldata, ParamDatetime, ParamDuration, ParamEnum,
+                        ParamNetwork, ParamNFT, ParamRaw, ParamToken, ParamTokenAmount,
                         ParamTrustedName, ParamType, PathLeaf, PathLeafType,
                         PathRef, PathTuple, TxInfo, TypeFamily, Value,
                         VisibleType)
@@ -239,13 +239,14 @@ def tron_client_fixture(backend: BackendInterface) -> TronClient:
     return TronClient(backend)
 
 
-def build_trc20_transfer_tx(client: TronClient) -> bytes:
+def build_trc20_transfer_tx(client: TronClient,
+                            calldata: bytes = TRC20_TRANSFER_CALLDATA) -> bytes:
     return client.packContract(
         tron.Transaction.Contract.TriggerSmartContract,
         contract.TriggerSmartContract(
             owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
             contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
-            data=TRC20_TRANSFER_CALLDATA))
+            data=calldata))
 
 
 def build_trigger_smart_contract_tx(client: TronClient,
@@ -402,13 +403,13 @@ def test_gcs_accepts_mainnet_trc10_trigger_values(backend: BackendInterface,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
 
-def test_gcs_accepts_maximum_incompressible_root_and_cleans_budget(
+def test_gcs_accepts_largest_abi_aligned_incompressible_root_and_cleans_budget(
         backend: BackendInterface):
-    """The 4096-byte root ceiling must still fit after tracked headers."""
+    """The largest ABI-aligned root below 4096 bytes fits the tracked budget."""
     client = TronClient(backend)
     pattern = bytes(range(1, 256))
-    calldata = b"\xa9\x05\x9c\xbb" + (pattern * 17)[:4092]
-    assert len(calldata) == 4096
+    calldata = b"\xa9\x05\x9c\xbb" + (pattern * 16)[:127 * 32]
+    assert len(calldata) == 4 + (127 * 32) == 4068
     trigger = contract.TriggerSmartContract(
         owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
         contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
@@ -427,6 +428,31 @@ def test_gcs_accepts_maximum_incompressible_root_and_cleans_budget(
                          P2_GCS_START_FLOW, b"")
     assert error.value.status == StatusWord.INVALID_DATA
 
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+def test_gcs_rejects_non_abi_aligned_maximum_root(backend: BackendInterface):
+    """A 4096-byte root has a 4092-byte, non-word-aligned ABI argument tail."""
+    client = TronClient(backend)
+    pattern = bytes(range(1, 256))
+    calldata = b"\xa9\x05\x9c\xbb" + (pattern * 17)[:4092]
+    assert len(calldata) == 4096
+    trigger = contract.TriggerSmartContract(
+        owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+        contract_address=bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58)),
+        data=calldata,
+    )
+    tx = client.packContract(tron.Transaction.Contract.TriggerSmartContract,
+                             trigger)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        gcs_store_calldata(client, backend,
+                           client.getAccount(0)["path"], tx)
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    # Rejection must release the stream and its tracked allocations.
     normal_tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], normal_tx) == StatusWord.OK
@@ -3299,13 +3325,14 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
 
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
                          fields: list[Field],
-                         provision=None) -> bytes:
+                         provision=None,
+                         calldata: bytes = TRC20_TRANSFER_CALLDATA) -> bytes:
     """[provision] -> STORE -> 0x26 -> 0x28(xN); returns the parked tx.
 
     GCS freezes external metadata when STORE begins, so optional signed metadata
     is provisioned first and is already in place when FIELD formatting starts.
     """
-    tx = build_trc20_transfer_tx(client)
+    tx = build_trc20_transfer_tx(client, calldata)
     if provision is not None:
         provision()
     assert gcs_store_calldata(client, backend,
@@ -3409,7 +3436,7 @@ def test_gcs_trusted_name(scenario_navigator: NavigateWithScenario):
 def test_gcs_enum(scenario_navigator: NavigateWithScenario):
     """ENUM field resolves a calldata byte via provide_enum_value (INS 0x24).
 
-    arg1's low byte is 0x40 (0xf4240 & 0xff); an enum descriptor maps
+    arg1 is canonically encoded as 0x40; an enum descriptor maps
     (contract, selector, id=0, value=0x40) -> "Deposit", which the ENUM field
     then renders in the snapshot instead of the raw value.
     """
@@ -3418,12 +3445,50 @@ def test_gcs_enum(scenario_navigator: NavigateWithScenario):
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
     field = build_field_enum("Action", enum_id=0,
                              value_path=build_data_path_static(1))
+    calldata = TRC20_TRANSFER_CALLDATA[:-32] + (0x40).to_bytes(32, "big")
 
     def provision() -> None:
         enum_desc = build_enum_value(contract_addr20, TRC20_TRANSFER_SELECTOR,
                                      enum_id=0, value=0x40, name="Deposit")
         client.provide_enum_value(enum_desc)
 
-    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], provision=provision,
+                              calldata=calldata)
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+
+
+@pytest.mark.parametrize(
+    "case, value",
+    [
+        ("datetime_high_uint64", (1 << 64) + 1_000_000),
+        ("datetime_time_t_overflow", 1 << 63),
+        ("duration_high_uint64", (1 << 64) + 1_000_000),
+    ],
+)
+def test_gcs_rejects_noncanonical_time_values(
+        backend: BackendInterface, case: str, value: int):
+    """Time formatters must not display a truncated signed calldata value."""
+    client = TronClient(backend)
+    calldata = TRC20_TRANSFER_CALLDATA[:-32] + value.to_bytes(32, "big")
+    value_path = build_data_path_static(1)
+    if case.startswith("datetime"):
+        field = build_field_datetime("Deadline", 32, value_path)
+    else:
+        field = Field(1, "Duration",
+                      ParamDuration(1, _uint_value(32, value_path)))
+
+    tx = build_trc20_transfer_tx(client, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, TRC20_TRANSFER_SELECTOR,
+                      [field], "guarded time"))
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_field_desc(field.serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    # The failed pre-authentication formatter must leave GCS re-entrant.
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK

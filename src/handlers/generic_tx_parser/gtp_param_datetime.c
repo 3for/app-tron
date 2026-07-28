@@ -50,13 +50,45 @@ bool handle_param_datetime_struct(const buffer_t *buf, s_param_datetime_context 
            (context->param->version == 1U);
 }
 
+static bool is_unlimited_timestamp(const s_value *definition,
+                                   const s_parsed_value *value) {
+    uint8_t normalized[INT256_LENGTH] = {0};
+    size_t width;
+
+    if ((definition == NULL) || (value == NULL) ||
+        (definition->type_size == 0U) ||
+        (definition->type_size > sizeof(normalized))) {
+        return false;
+    }
+    width = definition->type_size;
+    return parsed_value_to_uint_be(value, normalized, width) &&
+           ismaxint(normalized, width);
+}
+
+static bool uint64_to_time_t(uint64_t value, time_t *timestamp) {
+    time_t converted;
+
+    if (timestamp == NULL) {
+        return false;
+    }
+    converted = (time_t) value;
+    /* time_t is signed on Ledger targets. Keep the round-trip check as well
+     * so this remains safe on hosts where it is narrower than uint64_t. */
+    if ((converted < (time_t) 0) || ((uint64_t) converted != value)) {
+        return false;
+    }
+    *timestamp = converted;
+    return true;
+}
+
 bool format_param_datetime(const s_param_datetime *param, const char *name) {
     bool ret;
     s_parsed_value_collection collec = {0};
     char *buf = strings.tmp.tmp;
     size_t buf_size = sizeof(strings.tmp.tmp);
-    uint8_t time_buf[sizeof(time_t)] = {0};
+    uint8_t time_buf[sizeof(uint64_t)] = {0};
     time_t timestamp;
+    uint64_t timestamp_value;
     uint256_t block_height = {0};
     uint8_t block_buf[INT256_LENGTH] = {0};
 
@@ -72,8 +104,7 @@ bool format_param_datetime(const s_param_datetime *param, const char *name) {
                 break;
             }
             if (param->type == DT_UNIX) {
-                if ((collec.value[i].length >= param->value.type_size) &&
-                    ismaxint((uint8_t *) collec.value[i].ptr, collec.value[i].length)) {
+                if (is_unlimited_timestamp(&param->value, &collec.value[i])) {
                     snprintf(buf, buf_size, "Unlimited");
                 } else {
                     if (!parsed_value_to_uint_be(&collec.value[i],
@@ -82,7 +113,11 @@ bool format_param_datetime(const s_param_datetime *param, const char *name) {
                         ret = false;
                         break;
                     }
-                    timestamp = read_u64_be(time_buf, 0);
+                    timestamp_value = read_u64_be(time_buf, 0);
+                    if (!uint64_to_time_t(timestamp_value, &timestamp)) {
+                        ret = false;
+                        break;
+                    }
                     if (!(ret = time_format_to_utc(&timestamp, buf, buf_size))) {
                         break;
                     }
