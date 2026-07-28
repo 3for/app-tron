@@ -29,6 +29,7 @@
 #include "ui_globals.h"
 #include "app_mem_utils.h"
 #include "create_smart_contract_stream.h"
+#include "utils.h"
 
 static pb_size_t decoded_proposal_parameters_count;
 static protocol_ProposalCreateContract_ParametersEntry *decoded_proposal_parameters;
@@ -529,6 +530,15 @@ void initTx(txContext_t *context, txContent_t *content) {
 
 #define COPY_ADDRESS(a, b) memcpy((a), (b), ADDRESS_SIZE)
 
+static bool is_mainnet_address(const uint8_t address[static ADDRESS_SIZE]) {
+    return address[0] == ADD_PRE_FIX_BYTE_MAINNET;
+}
+
+static bool is_optional_mainnet_address(
+    const uint8_t address[static ADDRESS_SIZE]) {
+    return allzeroes(address, ADDRESS_SIZE) || is_mainnet_address(address);
+}
+
 contract_t msg;
 
 static bool account_create_contract(txContent_t *content, pb_istream_t *stream) {
@@ -692,7 +702,9 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
         return false;
     }
-    if (msg.transfer_contract.amount <= 0) {
+    if ((msg.transfer_contract.amount <= 0) ||
+        !is_mainnet_address(msg.transfer_contract.owner_address) ||
+        !is_mainnet_address(msg.transfer_contract.to_address)) {
         return false;
     }
 
@@ -710,7 +722,9 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     if (!pb_decode(stream, protocol_TransferAssetContract_fields, &msg.transfer_asset_contract)) {
         return false;
     }
-    if (msg.transfer_asset_contract.amount <= 0) {
+    if ((msg.transfer_asset_contract.amount <= 0) ||
+        !is_mainnet_address(msg.transfer_asset_contract.owner_address) ||
+        !is_mainnet_address(msg.transfer_asset_contract.to_address)) {
         return false;
     }
     content->amount[0] = (uint64_t) msg.transfer_asset_contract.amount;
@@ -732,6 +746,16 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
 static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_VoteWitnessContract_fields, &msg.vote_witness_contract)) {
         return false;
+    }
+
+    if (!is_mainnet_address(msg.vote_witness_contract.owner_address)) {
+        return false;
+    }
+    for (pb_size_t i = 0; i < msg.vote_witness_contract.votes_count; i++) {
+        if (!is_mainnet_address(msg.vote_witness_contract.votes[i].vote_address) ||
+            (msg.vote_witness_contract.votes[i].vote_count <= 0)) {
+            return false;
+        }
     }
 
     COPY_ADDRESS(content->account, &msg.vote_witness_contract.owner_address);
@@ -785,6 +809,9 @@ bool pb_decode_witness_url(pb_istream_t *stream,
 
     // consume all left as url
     if (!pb_read(stream, buf, left_url_size)) {
+        return false;
+    }
+    if (!is_printable((const char *) buf, left_url_size)) {
         return false;
     }
     memmove(content->url, buf, left_url_size);
@@ -844,7 +871,9 @@ static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) 
     }
     /* Tron only accepts 3 days freezing */
     if ((msg.freeze_balance_contract.frozen_duration != 3) ||
-        (msg.freeze_balance_contract.frozen_balance < 1000000)) {
+        (msg.freeze_balance_contract.frozen_balance < 1000000) ||
+        !is_mainnet_address(msg.freeze_balance_contract.owner_address) ||
+        !is_optional_mainnet_address(msg.freeze_balance_contract.receiver_address)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.freeze_balance_contract.owner_address);
@@ -858,6 +887,10 @@ static bool unfreeze_balance_contract(txContent_t *content, pb_istream_t *stream
     if (!pb_decode(stream,
                    protocol_UnfreezeBalanceContract_fields,
                    &msg.unfreeze_balance_contract)) {
+        return false;
+    }
+    if (!is_mainnet_address(msg.unfreeze_balance_contract.owner_address) ||
+        !is_optional_mainnet_address(msg.unfreeze_balance_contract.receiver_address)) {
         return false;
     }
     content->resource = msg.unfreeze_balance_contract.resource;
@@ -921,6 +954,9 @@ static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t
                    &msg.withdraw_expire_unfreeze_contract)) {
         return false;
     }
+    if (!is_mainnet_address(msg.withdraw_expire_unfreeze_contract.owner_address)) {
+        return false;
+    }
     COPY_ADDRESS(content->account, &msg.withdraw_expire_unfreeze_contract.owner_address);
     return true;
 }
@@ -969,7 +1005,9 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
                    &msg.delegate_resource_contract)) {
         return false;
     }
-    if (msg.delegate_resource_contract.balance < 1000000) {
+    if ((msg.delegate_resource_contract.balance < 1000000) ||
+        !is_mainnet_address(msg.delegate_resource_contract.owner_address) ||
+        !is_mainnet_address(msg.delegate_resource_contract.receiver_address)) {
         return false;
     }
     content->resource = msg.delegate_resource_contract.resource;
@@ -988,7 +1026,9 @@ static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *str
                    &msg.undelegate_resource_contract)) {
         return false;
     }
-    if (msg.undelegate_resource_contract.balance <= 0) {
+    if ((msg.undelegate_resource_contract.balance <= 0) ||
+        !is_mainnet_address(msg.undelegate_resource_contract.owner_address) ||
+        !is_mainnet_address(msg.undelegate_resource_contract.receiver_address)) {
         return false;
     }
     content->resource = msg.undelegate_resource_contract.resource;
@@ -1003,6 +1043,9 @@ static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream
     if (!pb_decode(stream,
                    protocol_WithdrawBalanceContract_fields,
                    &msg.withdraw_balance_contract)) {
+        return false;
+    }
+    if (!is_mainnet_address(msg.withdraw_balance_contract.owner_address)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.withdraw_balance_contract.owner_address);
@@ -1207,6 +1250,12 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
     if (!pb_read(stream, buf, 32)) {
         return false;
     }
+    /* A canonical ABI address word is twelve zero bytes followed by the
+     * twenty-byte EVM address. Silently discarding non-zero high bytes would
+     * make the reviewed address differ from the signed calldata. */
+    if (!allzeroes(buf, 12U)) {
+        return false;
+    }
     memcpy(content->destination, buf + (32 - 21), ADDRESS_SIZE);
     // fix address prefix 0x41: mainnet
     content->destination[0] = ADD_PRE_FIX_BYTE_MAINNET;
@@ -1250,13 +1299,24 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TriggerSmartContract_fields, &msg.trigger_smart_contract)) {
         return false;
     }
-    if (msg.trigger_smart_contract.call_value < 0) {
+    const int64_t call_value = msg.trigger_smart_contract.call_value;
+    const int64_t token_value = msg.trigger_smart_contract.call_token_value;
+    const int64_t token_id = msg.trigger_smart_contract.token_id;
+
+    /* Mainnet currently has allowTvmTransferTrc10=1 and allowMultiSign=1.
+     * Mirror VMActuator.checkTokenValueAndId() before deciding whether this
+     * call can be clear-signed as a simple TRC20 operation. */
+    if ((call_value < 0) || (token_value < 0) || (token_id < 0) ||
+        ((token_id != 0) && (token_id <= MIN_TRC10_TOKEN_ID)) ||
+        ((token_value > 0) && (token_id == 0)) ||
+        !is_mainnet_address(msg.trigger_smart_contract.owner_address) ||
+        !is_mainnet_address(msg.trigger_smart_contract.contract_address)) {
         return false;
     }
 
     COPY_ADDRESS(content->account, &msg.trigger_smart_contract.owner_address);
     COPY_ADDRESS(content->contractAddress, &msg.trigger_smart_contract.contract_address);
-    content->amount[0] = (uint64_t) msg.trigger_smart_contract.call_value;
+    content->amount[0] = (uint64_t) call_value;
 
     tokenDefinition_t *trc20 = getKnownToken(content);
 
@@ -1264,6 +1324,15 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
         // treat unknown TRC20 token as arbitrary contract
         content->TRC20Method = 0;
         return true;
+    }
+
+    /* The legacy TRC20 review has a single Amount field for the calldata
+     * transfer/approval. Until attached assets have dedicated review fields,
+     * fail closed instead of hiding extra TRX/TRC10 value behind that page.
+     * Reject token_id by itself too: the reviewed wire form must be canonical
+     * for this clear-sign route. */
+    if ((call_value != 0) || (token_value != 0) || (token_id != 0)) {
+        return false;
     }
 
     content->decimals[0] = trc20->decimals;
@@ -1334,7 +1403,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!pb_decode(stream, protocol_ExchangeCreateContract_fields, &msg.exchange_create_contract)) {
         return false;
     }
-    if ((msg.exchange_create_contract.first_token_balance <= 0) ||
+    if (!is_mainnet_address(msg.exchange_create_contract.owner_address) ||
+        (msg.exchange_create_contract.first_token_balance <= 0) ||
         (msg.exchange_create_contract.second_token_balance <= 0)) {
         return false;
     }
@@ -1368,7 +1438,8 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     if (!pb_decode(stream, protocol_ExchangeInjectContract_fields, &msg.exchange_inject_contract)) {
         return false;
     }
-    if ((msg.exchange_inject_contract.exchange_id < 0) ||
+    if (!is_mainnet_address(msg.exchange_inject_contract.owner_address) ||
+        (msg.exchange_inject_contract.exchange_id < 0) ||
         (msg.exchange_inject_contract.quant <= 0)) {
         return false;
     }
@@ -1394,7 +1465,8 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
                    &msg.exchange_withdraw_contract)) {
         return false;
     }
-    if ((msg.exchange_withdraw_contract.exchange_id < 0) ||
+    if (!is_mainnet_address(msg.exchange_withdraw_contract.owner_address) ||
+        (msg.exchange_withdraw_contract.exchange_id < 0) ||
         (msg.exchange_withdraw_contract.quant <= 0)) {
         return false;
     }
@@ -1420,7 +1492,8 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
                    &msg.exchange_transaction_contract)) {
         return false;
     }
-    if ((msg.exchange_transaction_contract.exchange_id < 0) ||
+    if (!is_mainnet_address(msg.exchange_transaction_contract.owner_address) ||
+        (msg.exchange_transaction_contract.exchange_id < 0) ||
         (msg.exchange_transaction_contract.quant <= 0) ||
         (msg.exchange_transaction_contract.expected <= 0)) {
         return false;
@@ -1439,6 +1512,75 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
 
     content->amount[0] = (uint64_t) msg.exchange_transaction_contract.quant;
     content->amount[1] = (uint64_t) msg.exchange_transaction_contract.expected;
+    return true;
+}
+
+static bool permission_name_wire_is_safe(pb_istream_t *stream) {
+    bool name_seen = false;
+
+    while (stream->bytes_left > 0U) {
+        pb_wire_type_t wire_type;
+        uint32_t tag;
+        bool eof = false;
+
+        if (!pb_decode_tag(stream, &wire_type, &tag, &eof) || eof) {
+            return false;
+        }
+        if (tag != protocol_Permission_permission_name_tag) {
+            if (!pb_skip_field(stream, wire_type)) {
+                return false;
+            }
+            continue;
+        }
+        if (name_seen || (wire_type != PB_WT_STRING)) {
+            return false;
+        }
+        name_seen = true;
+
+        pb_istream_t name_stream;
+        if (!pb_make_string_substream(stream, &name_stream)) {
+            return false;
+        }
+        const size_t name_len = name_stream.bytes_left;
+        uint8_t name[32];
+        if ((name_len > sizeof(name)) ||
+            !pb_read(&name_stream, name, name_len) ||
+            !is_printable((const char *) name, name_len) ||
+            !pb_close_string_substream(stream, &name_stream)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool permission_names_wire_are_safe(pb_istream_t stream) {
+    while (stream.bytes_left > 0U) {
+        pb_wire_type_t wire_type;
+        uint32_t tag;
+        bool eof = false;
+
+        if (!pb_decode_tag(&stream, &wire_type, &tag, &eof) || eof) {
+            return false;
+        }
+        if ((tag != protocol_AccountPermissionUpdateContract_owner_tag) &&
+            (tag != protocol_AccountPermissionUpdateContract_witness_tag) &&
+            (tag != protocol_AccountPermissionUpdateContract_actives_tag)) {
+            if (!pb_skip_field(&stream, wire_type)) {
+                return false;
+            }
+            continue;
+        }
+        if (wire_type != PB_WT_STRING) {
+            return false;
+        }
+
+        pb_istream_t permission_stream;
+        if (!pb_make_string_substream(&stream, &permission_stream) ||
+            !permission_name_wire_is_safe(&permission_stream) ||
+            !pb_close_string_substream(&stream, &permission_stream)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -1505,6 +1647,12 @@ static bool check_permission(const protocol_Permission *perm,
 static bool account_permission_update_contract(txContent_t *content, pb_istream_t *stream) {
     protocol_AccountPermissionUpdateContract *c = &msg.account_permission_update_contract;
 
+    /* Static nanopb strings do not retain their encoded length, so validate
+     * the nested permission_name fields on a copy of the wire stream before
+     * decoding them into NUL-terminated UI strings. */
+    if (!permission_names_wire_are_safe(*stream)) {
+        return false;
+    }
     memset(c, 0, sizeof(*c));
     if (!pb_decode(stream, protocol_AccountPermissionUpdateContract_fields, c)) {
         return false;

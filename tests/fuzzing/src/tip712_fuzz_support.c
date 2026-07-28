@@ -67,6 +67,12 @@ static chain_config_t fuzz_chain_config = {.chainId = 0x44U};
 static s_trusted_name g_fuzz_trusted_name;
 
 __attribute__((weak)) void fuzz_reset_extra_context(void) {}
+/* Some consumers of this shared support file (notably fuzz_handle_sign) do
+ * not link the GCS/TIP-712 tracked allocator. The real implementation
+ * overrides this weak no-op in targets that exercise the budget. */
+__attribute__((weak)) bool gcs_budget_end(void) {
+    return true;
+}
 __attribute__((weak)) bool gcs_account_descriptor(size_t descriptor_size,
                                                   bool rendered_field) {
     (void) descriptor_size;

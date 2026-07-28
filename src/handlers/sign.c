@@ -227,17 +227,6 @@ static bool operations_have_unknown_bits(const protocol_Permission_operations_t 
     return false;
 }
 
-static uint8_t count_known_operations(const protocol_Permission_operations_t *operations) {
-    uint8_t count = 0;
-
-    for (size_t i = 0; i < sizeof(permission_operations) / sizeof(permission_operations[0]); i++) {
-        if (operation_enabled(operations, permission_operations[i].id)) {
-            count++;
-        }
-    }
-    return count;
-}
-
 static bool operations_match_common_default(const protocol_Permission_operations_t *operations) {
     static const uint8_t default_operations[32] = {
         0x7f, 0xff, 0x1f, 0xc0, 0x03, 0x7e, 0x00, 0x00,
@@ -263,8 +252,7 @@ static void format_operations(const protocol_Permission_operations_t *operations
         strlcpy(out, "All operations", outlen);
         return;
     }
-    if (operations_match_common_default(operations) ||
-        (!operations_have_unknown_bits(operations) && (count_known_operations(operations) > 20))) {
+    if (operations_match_common_default(operations)) {
         strlcpy(out, "All supported operations", outlen);
         return;
     }
@@ -656,18 +644,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     }
 
 #ifdef HAVE_SWAP
-    if (G_called_from_swap) {
-        if (G_swap_response_ready) {
-            // Safety against trying to make the app sign multiple TX
-            // This code should never be triggered as the app is supposed to exit after
-            // sending the signed transaction
-            PRINTF("Safety against double signing triggered\n");
-            os_sched_exit(-1);
-        } else {
-            // We will quit the app after this transaction, whether it succeeds or fails
-            PRINTF("Swap response is ready, the app will quit after the next send\n");
-            G_swap_response_ready = true;
-        }
+    if (G_called_from_swap && G_swap_response_ready) {
+        // Safety against trying to make the app sign multiple TX. The flag is
+        // only raised after the final raw-data chunk has parsed successfully,
+        // so continuation chunks from the same transaction remain valid.
+        PRINTF("Safety against double signing triggered\n");
+        os_sched_exit(-1);
     }
 #endif
 
@@ -750,6 +732,11 @@ handle_parser_result:
             PRINTF("Refused data warning when in SWAP mode\n");
             finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
         }
+
+        // We will quit after the response to this fully parsed and validated
+        // transaction, whether the later swap/UI checks succeed or fail.
+        PRINTF("Swap response is ready, the app will quit after the next send\n");
+        G_swap_response_ready = true;
     }
 #endif  // HAVE_SWAP
 
@@ -1070,7 +1057,7 @@ handle_parser_result:
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
             }
-            if (strlen((const char *) txContent.destination) > 0) {
+            if (!allzeroes(txContent.destination, ADDRESS_SIZE)) {
                 getBase58FromAddress(txContent.destination, strings.common.toAddress);
             } else {
                 getBase58FromAddress(txContent.account, strings.common.toAddress);
@@ -1085,7 +1072,7 @@ handle_parser_result:
             else
                 strcpy(strings.common.fullContract, "Energy");
 
-            if (strlen((const char *) txContent.destination) > 0) {
+            if (!allzeroes(txContent.destination, ADDRESS_SIZE)) {
                 getBase58FromAddress(txContent.destination, strings.common.toAddress);
             } else {
                 getBase58FromAddress(txContent.account, strings.common.toAddress);

@@ -593,6 +593,18 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    @pytest.mark.parametrize("url", [b"http://safe\x00hidden", b"http://safe\nnext"])
+    def test_trx_witness_rejects_ambiguous_url(self, backend, url):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(
+                owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+                url=url))
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)["path"], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
     def test_trx_vote_witness(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -1527,6 +1539,8 @@ class TestTRX():
         "owner_has_operations",
         "duplicate_active_key",
         "threshold_too_high",
+        "embedded_nul_permission_name",
+        "control_permission_name",
     ])
     def test_trx_account_permission_update_rejects_invalid_permissions(
             self, backend, case):
@@ -1570,6 +1584,10 @@ class TestTRX():
             active.keys[1].address = active.keys[0].address
         elif case == "threshold_too_high":
             active.threshold = 3
+        elif case == "embedded_nul_permission_name":
+            owner.permission_name = "owner\x00hidden"
+        elif case == "control_permission_name":
+            owner.permission_name = "owner\nadmin"
 
         tx = client.packContract(
             tron.Transaction.Contract.AccountPermissionUpdateContract,
@@ -1596,6 +1614,47 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize("attached", ["trx", "trc10", "token_id_only"])
+    def test_trx_trc20_rejects_hidden_attached_assets(self, backend, attached):
+        client = TronClient(backend)
+        values = {
+            "owner_address": bytes.fromhex(client.getAccount(0)["addressHex"]),
+            "contract_address": bytes.fromhex(
+                client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+            "data": build_trc20_calldata(
+                "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000)),
+        }
+        if attached == "trx":
+            values["call_value"] = 1
+        elif attached == "trc10":
+            values["call_token_value"] = 1
+            values["token_id"] = 1_000_001
+        else:
+            values["token_id"] = 1_000_001
+
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(**values))
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)["path"], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_trc20_rejects_noncanonical_abi_address(self, backend):
+        client = TronClient(backend)
+        calldata = bytearray(build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000)))
+        calldata[4] = 1  # non-zero byte in the address word's 12-byte high padding
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=bytes(calldata)))
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)["path"], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     def test_trx_trc20_send_zero_amount(self, backend, device):
         client = TronClient(backend)

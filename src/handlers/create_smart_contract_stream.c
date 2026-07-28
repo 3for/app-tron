@@ -23,6 +23,15 @@
 // the signing-time nanopb schema and treated as opaque metadata here.
 #define JAVA_TRON_SMART_CONTRACT_ABI_TAG 3U
 
+static bool create_name_is_printable(const uint8_t *data, size_t len) {
+    for (size_t i = 0U; i < len; i++) {
+        if ((data[i] < 0x20U) || (data[i] > 0x7eU)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static create_smart_contract_context_t current_context(
     const create_smart_contract_stream_t *stream) {
     return stream->frames[stream->depth - 1U].context;
@@ -437,6 +446,12 @@ static bool process_bytes_chunk(create_smart_contract_stream_t *stream,
         case CREATE_SC_BYTES_NAME:
             if (len > sizeof(contract->name) - 1U -
                           stream->capture_offset) {
+                return false;
+            }
+            /* This field is later consumed through C-string UI APIs. Reject
+             * embedded terminators and control bytes so the reviewed name is
+             * a one-to-one representation of the signed protobuf bytes. */
+            if (!create_name_is_printable(data, len)) {
                 return false;
             }
             memcpy(contract->name + stream->capture_offset, data, len);

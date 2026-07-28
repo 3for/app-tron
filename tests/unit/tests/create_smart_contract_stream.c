@@ -93,10 +93,12 @@ static void buffer_append_fill_field(test_buffer_t *buffer,
     buffer_append_fill(buffer, value, len);
 }
 
-static test_buffer_t build_create(size_t bytecode_len,
-                                  bool include_bytecode,
-                                  size_t abi_len,
-                                  bool include_new_contract_twice) {
+static test_buffer_t build_create_with_name(size_t bytecode_len,
+                                            bool include_bytecode,
+                                            size_t abi_len,
+                                            bool include_new_contract_twice,
+                                            const uint8_t *name,
+                                            size_t name_len) {
     test_buffer_t inner = {0};
     test_buffer_t outer = {0};
     uint8_t owner[21];
@@ -125,8 +127,8 @@ static test_buffer_t build_create(size_t bytecode_len,
         30U);
     buffer_append_bytes_field(&inner,
                               protocol_SmartContract_name_tag,
-                              (const uint8_t *) "LedgerContract",
-                              strlen("LedgerContract"));
+                              name,
+                              name_len);
     buffer_append_varint_field(
         &inner,
         protocol_SmartContract_origin_energy_limit_tag,
@@ -155,6 +157,20 @@ static test_buffer_t build_create(size_t bytecode_len,
                                1000001U);
     buffer_free(&inner);
     return outer;
+}
+
+static test_buffer_t build_create(size_t bytecode_len,
+                                  bool include_bytecode,
+                                  size_t abi_len,
+                                  bool include_new_contract_twice) {
+    static const uint8_t name[] = "LedgerContract";
+
+    return build_create_with_name(bytecode_len,
+                                  include_bytecode,
+                                  abi_len,
+                                  include_new_contract_twice,
+                                  name,
+                                  sizeof(name) - 1U);
 }
 
 static bool feed_in_chunks(create_smart_contract_stream_t *stream,
@@ -281,6 +297,33 @@ static void test_rejects_truncation(void **state) {
     buffer_free(&parameter);
 }
 
+static void test_rejects_ambiguous_contract_names(void **state) {
+    (void) state;
+    static const uint8_t embedded_nul[] = {'S', 'a', 'f', 'e', 0, 'H', 'i', 'd', 'd', 'e', 'n'};
+    static const uint8_t control_char[] = {'S', 'a', 'f', 'e', '\n', 'H', 'i', 'd', 'd', 'e', 'n'};
+    const struct {
+        const uint8_t *name;
+        size_t len;
+    } cases[] = {
+        {embedded_nul, sizeof(embedded_nul)},
+        {control_char, sizeof(control_char)},
+    };
+
+    for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        test_buffer_t parameter = build_create_with_name(10U,
+                                                         true,
+                                                         0U,
+                                                         false,
+                                                         cases[i].name,
+                                                         cases[i].len);
+        create_smart_contract_stream_t stream;
+
+        create_smart_contract_stream_init(&stream, parameter.len);
+        assert_false(feed_in_chunks(&stream, &parameter, 3U));
+        buffer_free(&parameter);
+    }
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_small_create_and_hash),
@@ -288,6 +331,7 @@ int main(void) {
         cmocka_unit_test(test_absent_and_empty_bytecode_match),
         cmocka_unit_test(test_rejects_duplicate_new_contract),
         cmocka_unit_test(test_rejects_truncation),
+        cmocka_unit_test(test_rejects_ambiguous_contract_names),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
