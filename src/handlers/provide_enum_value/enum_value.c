@@ -300,6 +300,9 @@ const s_enum_value_entry *get_matching_enum(const uint64_t *chain_id,
                                             const uint8_t *selector,
                                             uint8_t id,
                                             uint8_t value) {
+    if ((chain_id == NULL) || (contract_addr == NULL) || (selector == NULL)) {
+        return NULL;
+    }
     for (const flist_node_t *tmp = (flist_node_t *) g_enum_value_list; tmp != NULL;
          tmp = tmp->next) {
         if (is_matching_enum((s_enum_value_entry *) tmp,

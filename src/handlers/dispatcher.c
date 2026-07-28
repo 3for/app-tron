@@ -170,6 +170,14 @@ int apdu_dispatcher(const command_t *cmd) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
 
+    // GET_PUBLIC_KEY/P1_CONFIRM also owns an asynchronous NBGL page. Reject
+    // every subsequent command without resetting tmpCtx or the active page;
+    // only the address approval/rejection callback may finish this APDU.
+    if (appState == APP_STATE_REVIEWING_ADDRESS) {
+        PRINTF("Refused APDU while address review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
     // INS_SIGN review is asynchronous. Reject every subsequent command without
     // resetting the signing/UI allocations that the current NBGL page owns.
     if (sign_review_in_progress()) {

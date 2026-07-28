@@ -68,8 +68,14 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         }
 #endif  // HAVE_SWAP
 
-        // prepare for a UI based reply
-        ux_flow_display(APPROVAL_VERIFY_ADDRESS, false);
+        // The address review is asynchronous. Mark ownership before starting
+        // NBGL so the dispatcher cannot run another command that replies to a
+        // different APDU or replaces tmpCtx while this page is active.
+        appState = APP_STATE_REVIEWING_ADDRESS;
+        if (!ux_flow_display(APPROVAL_VERIFY_ADDRESS, false)) {
+            reset_app_context();
+            return io_send_sw(SWO_INSUFFICIENT_MEMORY);
+        }
         return 0;
     }
 }

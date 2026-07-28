@@ -94,6 +94,11 @@ const s_trusted_name *get_trusted_name(uint8_t type_count,
                                        const e_name_source *sources,
                                        const uint64_t *chain_id,
                                        const uint8_t *addr) {
+    if (((type_count != 0U) && (types == NULL)) ||
+        ((source_count != 0U) && (sources == NULL)) ||
+        (chain_id == NULL) || (addr == NULL)) {
+        return NULL;
+    }
     for (s_trusted_name *tmp = g_trusted_name_list; tmp != NULL;
          tmp = (s_trusted_name *) ((flist_node_t *) tmp)->next) {
         if (matching_trusted_name(tmp, type_count, types, source_count, sources, chain_id, addr)) {

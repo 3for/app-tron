@@ -3,6 +3,7 @@ from ragger.backend.interface import RaisePolicy
 from ragger.bip import calculate_public_key_and_chaincode, CurveChoice
 
 from client.status_word import StatusWord
+from client.command_builder import CommandBuilder
 from tron import TronClient
 from conftest import MNEMONIC
 
@@ -86,3 +87,37 @@ class Test_GET_PUBLIC_KEY():
             rapdu = client.response()
             assert rapdu.status == StatusWord.CONDITION_NOT_SATISFIED
             assert len(rapdu.data) == 0
+
+    def test_get_public_key_confirm_rejects_interleaved_provide(
+            self, scenario_navigator):
+        backend = scenario_navigator.backend
+        client = TronClient(backend)
+        builder = CommandBuilder()
+
+        # The metadata payload is deliberately incomplete: the dispatcher must
+        # reject it because the address page owns the pending APDU, before the
+        # PROVIDE handler gets a chance to parse it.
+        provide = builder.provide_trc20_token_information(
+            "", b"", 0, 0, b"")
+
+        with client.get_public_addr(display=True,
+                                    chaincode=True,
+                                    bip32_path=TRX_PATH):
+            previous_policy = backend.raise_policy
+            backend.raise_policy = RaisePolicy.RAISE_NOTHING
+            try:
+                response = backend.exchange_raw(provide)
+            finally:
+                backend.raise_policy = previous_policy
+            assert response.status == StatusWord.CONDITION_NOT_SATISFIED
+
+            # Rejection must not reset or replace the active address page.
+            scenario_navigator.address_review_approve(
+                test_name=None, do_comparison=False)
+
+        response = client.response()
+        assert response.status == StatusWord.OK
+        public_key, _, chaincode = client.parse_get_public_key_response(
+            response.data, True)
+        check_get_public_key_resp(
+            backend, TRX_PATH, public_key, chaincode)

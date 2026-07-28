@@ -109,13 +109,35 @@ static void reset_external_metadata_context(void) {
     fuzz_external_metadata_reset_assets();
 }
 
+static void assert_metadata_lookup_null_guards(void) {
+    static const uint64_t chain_id = 1U;
+    static const uint8_t address[ADDRESS_LENGTH] = {0};
+    static const uint8_t selector[4] = {0};
+    static const e_name_type type = TN_TYPE_ACCOUNT;
+    static const e_name_source source = TN_SOURCE_ENS;
+
+    if ((get_matching_enum(NULL, address, selector, 0, 0) != NULL) ||
+        (get_matching_enum(&chain_id, NULL, selector, 0, 0) != NULL) ||
+        (get_matching_enum(&chain_id, address, NULL, 0, 0) != NULL) ||
+        (get_trusted_name(1, NULL, 1, &source, &chain_id, address) != NULL) ||
+        (get_trusted_name(1, &type, 1, NULL, &chain_id, address) != NULL) ||
+        (get_trusted_name(1, &type, 1, &source, NULL, address) != NULL) ||
+        (get_trusted_name(1, &type, 1, &source, &chain_id, NULL) != NULL)) {
+        __builtin_trap();
+    }
+}
+
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     reset_external_metadata_context();
+    assert_metadata_lookup_null_guards();
     if (size != 0U) {
         fuzz_external_metadata_set_certificate_status(*data++);
         size--;
         fuzz_external_metadata_apdu_stream(data, size);
     }
+    /* Valid corpus entries leave populated enum/trusted-name lists here, so
+     * repeat the checks after parsing to exercise the guards before iteration. */
+    assert_metadata_lookup_null_guards();
     reset_external_metadata_context();
     return 0;
 }
