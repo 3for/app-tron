@@ -17,6 +17,9 @@ UPDATE_ASSET_TYPE_URL = b"type.googleapis.com/protocol.UpdateAssetContract"
 CREATE_SMART_CONTRACT_TYPE_URL = (
     b"type.googleapis.com/protocol.CreateSmartContract"
 )
+TRIGGER_SMART_CONTRACT_TYPE_URL = (
+    b"type.googleapis.com/protocol.TriggerSmartContract"
+)
 EXCHANGE_CREATE_TYPE_URL = (
     b"type.googleapis.com/protocol.ExchangeCreateContract"
 )
@@ -134,6 +137,14 @@ def create_smart_contract() -> bytes:
             + bytes_field(2, smart_contract)
             + uint_field(3, 123)
             + uint_field(4, 1_000_001))
+
+
+def trigger_smart_contract() -> bytes:
+    owner = bytes.fromhex("41" + "11" * 20)
+    destination = bytes.fromhex("41" + "22" * 20)
+    return (bytes_field(1, owner)
+            + bytes_field(2, destination)
+            + bytes_field(4, b"\x12\x34\x56\x78"))
 
 
 def exchange_create(first_token_id: bytes, second_token_id: bytes) -> bytes:
@@ -256,6 +267,14 @@ def chunked_large_memo_seed() -> bytes:
     return b"\x01" + bytes(records)
 
 
+def empty_continuation_seed(p1: int) -> bytes:
+    raw = raw_transaction(None)
+    first_payload = derivation_path() + (raw if p1 == 0x90 else raw[:1])
+    return (b"\x01"
+            + apdu_record(0x00, first_payload)
+            + apdu_record(p1, b""))
+
+
 def vote_signing_seed(votes_count: int) -> bytes:
     payload = derivation_path() + raw_vote_transaction(votes_count)
     record = bytes([0x10, 0x00]) + len(payload).to_bytes(2, "little") + payload
@@ -361,6 +380,20 @@ def main() -> None:
     )
     (OUT_DIR / "14-transfer-negative.bin").write_bytes(
         asset_contract_signing_seed(1, TRANSFER_TYPE_URL, transfer(-1))
+    )
+    (OUT_DIR / "15-trigger-negative-fee-limit.bin").write_bytes(
+        asset_contract_signing_seed(
+            31,
+            TRIGGER_SMART_CONTRACT_TYPE_URL,
+            trigger_smart_contract(),
+            fee_limit=-1,
+        )
+    )
+    (OUT_DIR / "16-empty-more.bin").write_bytes(
+        empty_continuation_seed(0x80)
+    )
+    (OUT_DIR / "17-empty-last.bin").write_bytes(
+        empty_continuation_seed(0x90)
     )
 
 

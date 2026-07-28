@@ -146,6 +146,22 @@ int apdu_dispatcher(const command_t *cmd) {
             return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
     }
+
+    // Legacy INS_SIGN owns tmpCtx.transactionContext and its streamed hash from
+    // the first raw-data chunk until parsing reaches review. Other handlers
+    // reuse members of the same tmpCtx union, so an interleaved command could
+    // otherwise replace the signing path/hash while leaving the stream valid.
+    // Metadata for this protocol is carried by INS_SIGN itself (P1=0xA*).
+    if (sign_reception_in_progress()) {
+        const bool allowed = (cmd->cla == CLA) &&
+                             (cmd->ins == INS_SIGN) &&
+                             sign_reception_command_allowed(cmd->p1, cmd->p2);
+        if (!allowed) {
+            PRINTF("Refused APDU while INS_SIGN reception is active\n");
+            reset_app_context();
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+    }
     if (cmd->cla != CLA) {
         if (tip712_get_phase() == TIP712_PHASE_FULL_BUILDING) {
             return reject_tip712_command(E_CLA_NOT_SUPPORTED);

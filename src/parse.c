@@ -82,10 +82,15 @@ static bool pb_decode_proposal_parameter(pb_istream_t *stream,
     return true;
 }
 
-static bool is_supported_v2_resource(protocol_ResourceCode resource) {
+static bool is_stake_resource(protocol_ResourceCode resource) {
     return (resource == protocol_ResourceCode_BANDWIDTH) ||
            (resource == protocol_ResourceCode_ENERGY) ||
            (resource == protocol_ResourceCode_TRON_POWER);
+}
+
+static bool is_delegatable_resource(protocol_ResourceCode resource) {
+    return (resource == protocol_ResourceCode_BANDWIDTH) ||
+           (resource == protocol_ResourceCode_ENERGY);
 }
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
@@ -870,10 +875,18 @@ static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) 
         return false;
     }
     /* Tron only accepts 3 days freezing */
+    const bool has_receiver =
+        !allzeroes(msg.freeze_balance_contract.receiver_address, ADDRESS_SIZE);
     if ((msg.freeze_balance_contract.frozen_duration != 3) ||
         (msg.freeze_balance_contract.frozen_balance < 1000000) ||
         !is_mainnet_address(msg.freeze_balance_contract.owner_address) ||
-        !is_optional_mainnet_address(msg.freeze_balance_contract.receiver_address)) {
+        !is_optional_mainnet_address(msg.freeze_balance_contract.receiver_address) ||
+        !is_stake_resource(msg.freeze_balance_contract.resource) ||
+        (has_receiver &&
+         ((msg.freeze_balance_contract.resource == protocol_ResourceCode_TRON_POWER) ||
+          (memcmp(msg.freeze_balance_contract.owner_address,
+                  msg.freeze_balance_contract.receiver_address,
+                  ADDRESS_SIZE) == 0)))) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.freeze_balance_contract.owner_address);
@@ -889,8 +902,16 @@ static bool unfreeze_balance_contract(txContent_t *content, pb_istream_t *stream
                    &msg.unfreeze_balance_contract)) {
         return false;
     }
+    const bool has_receiver =
+        !allzeroes(msg.unfreeze_balance_contract.receiver_address, ADDRESS_SIZE);
     if (!is_mainnet_address(msg.unfreeze_balance_contract.owner_address) ||
-        !is_optional_mainnet_address(msg.unfreeze_balance_contract.receiver_address)) {
+        !is_optional_mainnet_address(msg.unfreeze_balance_contract.receiver_address) ||
+        !is_stake_resource(msg.unfreeze_balance_contract.resource) ||
+        (has_receiver &&
+         ((msg.unfreeze_balance_contract.resource == protocol_ResourceCode_TRON_POWER) ||
+          (memcmp(msg.unfreeze_balance_contract.owner_address,
+                  msg.unfreeze_balance_contract.receiver_address,
+                  ADDRESS_SIZE) == 0)))) {
         return false;
     }
     content->resource = msg.unfreeze_balance_contract.resource;
@@ -913,7 +934,7 @@ static bool freeze_balance_v2_contract(txContent_t *content, pb_istream_t *strea
     if (msg.freeze_balance_v2_contract.frozen_balance < 1000000) {
         return false;
     }
-    if (!is_supported_v2_resource(msg.freeze_balance_v2_contract.resource)) {
+    if (!is_stake_resource(msg.freeze_balance_v2_contract.resource)) {
         return false;
     }
 
@@ -936,7 +957,7 @@ static bool unfreeze_balance_v2_contract(txContent_t *content, pb_istream_t *str
     if (msg.unfreeze_balance_v2_contract.unfreeze_balance <= 0) {
         return false;
     }
-    if (!is_supported_v2_resource(msg.unfreeze_balance_v2_contract.resource)) {
+    if (!is_stake_resource(msg.unfreeze_balance_v2_contract.resource)) {
         return false;
     }
 
@@ -1007,7 +1028,11 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
     }
     if ((msg.delegate_resource_contract.balance < 1000000) ||
         !is_mainnet_address(msg.delegate_resource_contract.owner_address) ||
-        !is_mainnet_address(msg.delegate_resource_contract.receiver_address)) {
+        !is_mainnet_address(msg.delegate_resource_contract.receiver_address) ||
+        !is_delegatable_resource(msg.delegate_resource_contract.resource) ||
+        (memcmp(msg.delegate_resource_contract.owner_address,
+                msg.delegate_resource_contract.receiver_address,
+                ADDRESS_SIZE) == 0)) {
         return false;
     }
     content->resource = msg.delegate_resource_contract.resource;
@@ -1028,7 +1053,11 @@ static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *str
     }
     if ((msg.undelegate_resource_contract.balance <= 0) ||
         !is_mainnet_address(msg.undelegate_resource_contract.owner_address) ||
-        !is_mainnet_address(msg.undelegate_resource_contract.receiver_address)) {
+        !is_mainnet_address(msg.undelegate_resource_contract.receiver_address) ||
+        !is_delegatable_resource(msg.undelegate_resource_contract.resource) ||
+        (memcmp(msg.undelegate_resource_contract.owner_address,
+                msg.undelegate_resource_contract.receiver_address,
+                ADDRESS_SIZE) == 0)) {
         return false;
     }
     content->resource = msg.undelegate_resource_contract.resource;
@@ -1715,8 +1744,9 @@ static parserStatus_e prepare_contract_context(
     if (content == NULL || permission_id < 0 || permission_id > UINT8_MAX) {
         return USTREAM_FAULT;
     }
-    if (type == protocol_Transaction_Contract_ContractType_CreateSmartContract &&
-        fee_limit < 0) {
+    if (((type == protocol_Transaction_Contract_ContractType_CreateSmartContract) ||
+         (type == protocol_Transaction_Contract_ContractType_TriggerSmartContract)) &&
+        (fee_limit < 0)) {
         return USTREAM_FAULT;
     }
 

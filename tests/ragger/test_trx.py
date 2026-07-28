@@ -687,6 +687,19 @@ class TestTRX():
 
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_freeze_balance_tron_power(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.FreezeBalanceContract,
+            contract.FreezeBalanceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                frozen_balance=10000000000,
+                frozen_duration=3,
+                resource=contract.TRON_POWER))
+
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
     def test_trx_freeze_balance_delegate_energy(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -714,6 +727,67 @@ class TestTRX():
             ))
 
         self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_unfreeze_balance_tron_power(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.UnfreezeBalanceContract,
+            contract.UnfreezeBalanceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                resource=contract.TRON_POWER,
+            ))
+
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize("contract_kind", ["freeze", "unfreeze"])
+    def test_trx_legacy_stake_rejects_invalid_resource(self, backend,
+                                                       contract_kind):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        if contract_kind == "freeze":
+            contract_type = tron.Transaction.Contract.FreezeBalanceContract
+            message = contract.FreezeBalanceContract(
+                owner_address=owner,
+                frozen_balance=10000000000,
+                frozen_duration=3,
+                resource=3)
+        else:
+            contract_type = tron.Transaction.Contract.UnfreezeBalanceContract
+            message = contract.UnfreezeBalanceContract(
+                owner_address=owner,
+                resource=3)
+
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
+    @pytest.mark.parametrize("contract_kind", ["freeze", "unfreeze"])
+    def test_trx_legacy_tron_power_rejects_receiver(self, backend,
+                                                    contract_kind):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        receiver = bytes.fromhex(client.getAccount(1)['addressHex'])
+        if contract_kind == "freeze":
+            contract_type = tron.Transaction.Contract.FreezeBalanceContract
+            message = contract.FreezeBalanceContract(
+                owner_address=owner,
+                frozen_balance=10000000000,
+                frozen_duration=3,
+                resource=contract.TRON_POWER,
+                receiver_address=receiver)
+        else:
+            contract_type = tron.Transaction.Contract.UnfreezeBalanceContract
+            message = contract.UnfreezeBalanceContract(
+                owner_address=owner,
+                resource=contract.TRON_POWER,
+                receiver_address=receiver)
+
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     def test_trx_unfreeze_balance_delegate_energy(self, backend, device):
         client = TronClient(backend)
@@ -1656,6 +1730,24 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)["path"], tx)
         assert error.value.status == StatusWord.INVALID_DATA
 
+    def test_trx_trigger_rejects_negative_fee_limit(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)["addressHex"]),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=build_trc20_calldata(
+                    "364b03e0815687edaf90b81ff58e496dea7383d7",
+                    Decimal(1))),
+            fee_limit=-1)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)["path"], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
     def test_trx_trc20_send_zero_amount(self, backend, device):
         client = TronClient(backend)
         tx_calldata = build_trc20_calldata(
@@ -2284,6 +2376,102 @@ class TestTRX():
             backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
         assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
+    @pytest.mark.parametrize(
+        ("interleaved_ins", "interleaved_p1", "interleaved_p2", "payload_kind"),
+        [
+            (InsType.GET_PUBLIC_KEY, 0x00, 0x00, "path"),
+            (InsType.SIGN_TXN_HASH, 0x00, 0x00, "hash"),
+            (InsType.GET_ECDH_SECRET, 0x00, 0x01, "ecdh"),
+            (InsType.PROVIDE_TRC20_TOKEN_INFORMATION, 0x00, 0x00, "metadata"),
+        ])
+    def test_trx_sign_reception_rejects_cross_ins(
+            self, backend, interleaved_ins, interleaved_p1, interleaved_p2,
+            payload_kind):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=owner,
+                to_address=bytes.fromhex(client.getAccount(1)['addressHex']),
+                amount=1000000))
+        path = pack_derivation_path(client.getAccount(0)['path'])
+
+        response = backend.exchange(
+            CLA, InsType.SIGN, P1Type.FIRST, 0x00, path + tx[:1])
+        assert response.status == StatusWord.OK
+
+        payloads = {
+            "path": path,
+            "hash": path + b"\x11" * 32,
+            "ecdh": path + b"\x04" + b"\x22" * 64,
+            "metadata": b"",
+        }
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA,
+                             interleaved_ins,
+                             interleaved_p1,
+                             interleaved_p2,
+                             payloads[payload_kind])
+        assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+        # The rejected command must discard the old stream and make a fresh
+        # P1_SIGN reach parsing, rather than leave the session non-reentrant.
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA,
+                             InsType.SIGN,
+                             P1Type.SIGN,
+                             0x00,
+                             path + b"\x00")
+        assert error.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_sign_rejects_empty_more_and_resets(self, backend):
+        client = TronClient(backend)
+        path = pack_derivation_path(client.getAccount(0)['path'])
+
+        response = backend.exchange(
+            CLA, InsType.SIGN, P1Type.FIRST, 0x00, path + b"\x0a")
+        assert response.status == StatusWord.OK
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"")
+        assert error.value.status == StatusWord.INCORRECT_LENGTH
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA,
+                             InsType.SIGN,
+                             P1Type.SIGN,
+                             0x00,
+                             path + b"\x00")
+        assert error.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_sign_allows_empty_last_finalize(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(client.getAccount(1)['addressHex']),
+                amount=1000000))
+        path = pack_derivation_path(client.getAccount(0)['path'])
+        assert len(path + tx) <= MAX_APDU_LEN
+
+        response = backend.exchange(
+            CLA, InsType.SIGN, P1Type.FIRST, 0x00, path + tx)
+        assert response.status == StatusWord.OK
+        with backend.exchange_async(
+                CLA, InsType.SIGN, P1Type.LAST, 0x00, b""):
+            self.review_approve(
+                currentframe().f_code.co_name,
+                custom_screen_text=self.NANO_TRANSACTION_SIGN_PATTERN
+                if device.is_nano else None,
+                do_comparison=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx,
+                                  response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     def test_trx_freezeV2_balance_invalid_owner_address(self, backend):
         client = TronClient(backend)
         owner_address = bytearray.fromhex(client.getAccount(0)['addressHex'])
@@ -2452,6 +2640,37 @@ class TestTRX():
                 receiver_address=bytes.fromhex(
                     client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP"))))
         self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize("contract_kind", ["delegate", "undelegate"])
+    @pytest.mark.parametrize("invalid_kind", ["tron_power", "self"])
+    def test_trx_delegate_resource_rejects_invalid_semantics(
+            self, backend, contract_kind, invalid_kind):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        receiver = owner if invalid_kind == "self" else bytes.fromhex(
+            client.getAccount(1)['addressHex'])
+        resource = (contract.TRON_POWER
+                    if invalid_kind == "tron_power" else contract.ENERGY)
+
+        if contract_kind == "delegate":
+            contract_type = tron.Transaction.Contract.DelegateResourceContract
+            message = contract.DelegateResourceContract(
+                owner_address=owner,
+                resource=resource,
+                balance=100000000,
+                receiver_address=receiver)
+        else:
+            contract_type = tron.Transaction.Contract.UnDelegateResourceContract
+            message = contract.UnDelegateResourceContract(
+                owner_address=owner,
+                resource=resource,
+                balance=100000000,
+                receiver_address=receiver)
+
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     def test_trx_withdraw_unfreeze(self, backend, device):
         client = TronClient(backend)

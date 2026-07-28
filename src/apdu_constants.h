@@ -121,6 +121,8 @@ void personal_message_legacy_cleanup(void);
 bool personal_message_review_in_progress(void);
 void sign_cleanup(void);
 bool sign_review_in_progress(void);
+bool sign_reception_in_progress(void);
+bool sign_reception_command_allowed(uint8_t p1, uint8_t p2);
 int handleProvideTrc20TokenInformation(uint8_t p1,
                                        uint8_t p2,
                                        const uint8_t *workBuffer,

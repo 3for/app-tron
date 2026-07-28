@@ -94,20 +94,22 @@ static bool fillVoteCombinedSlot(char *destination,
 }
 #endif
 
-static void setV2ResourceName(protocol_ResourceCode resource) {
+static bool setResourceName(protocol_ResourceCode resource, bool allow_tron_power) {
     switch (resource) {
         case protocol_ResourceCode_BANDWIDTH:
             strcpy(strings.common.fullContract, "Bandwidth");
-            break;
+            return true;
         case protocol_ResourceCode_ENERGY:
             strcpy(strings.common.fullContract, "Energy");
-            break;
+            return true;
         case protocol_ResourceCode_TRON_POWER:
+            if (!allow_tron_power) {
+                return false;
+            }
             strcpy(strings.common.fullContract, "Tron Power");
-            break;
+            return true;
         default:
-            strcpy(strings.common.fullContract, "Unknown");
-            break;
+            return false;
     }
 }
 
@@ -418,6 +420,24 @@ bool sign_review_in_progress(void) {
     return sign_phase == SIGN_PHASE_REVIEW;
 }
 
+bool sign_reception_in_progress(void) {
+    return (appState == APP_STATE_SIGNING) &&
+           ((sign_phase == SIGN_PHASE_RAW_DATA) ||
+            (sign_phase == SIGN_PHASE_METADATA));
+}
+
+bool sign_reception_command_allowed(uint8_t p1, uint8_t p2) {
+    if (!sign_reception_in_progress() || (p2 != 0x00)) {
+        return false;
+    }
+
+    const bool metadata_apdu = ((p1 & 0xF0) == P1_TRC10_NAME);
+    if (sign_phase == SIGN_PHASE_METADATA) {
+        return metadata_apdu;
+    }
+    return metadata_apdu || (p1 == P1_MORE) || (p1 == P1_LAST);
+}
+
 static bool start_sign_review(ui_approval_state_t state, bool data_warning) {
     // Mark the session non-resumable before handing control to asynchronous UI.
     // A preparation failure sends an error and resets this phase via
@@ -615,6 +635,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         (appState != APP_STATE_SIGNING || sign_phase != SIGN_PHASE_RAW_DATA)) {
         PRINTF("Signature not initialized\n");
         return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
+    // A zero-length MORE chunk cannot advance either the envelope parser or
+    // the signing hash and would let an untrusted host pin this session
+    // indefinitely. Keep an empty LAST valid as an explicit finalize command.
+    if ((p1 == P1_MORE) && (dataLength == 0U)) {
+        return send_sign_status(E_INCORRECT_LENGTH);
     }
 
     // Context must be initialized first
@@ -1049,10 +1076,9 @@ handle_parser_result:
 
         } break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            if (!setResourceName(txContent.resource, true)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
@@ -1067,10 +1093,9 @@ handle_parser_result:
 
             break;
         case UNFREEZEBALANCECONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            if (!setResourceName(txContent.resource, true)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!allzeroes(txContent.destination, ADDRESS_SIZE)) {
                 getBase58FromAddress(txContent.destination, strings.common.toAddress);
@@ -1082,7 +1107,9 @@ handle_parser_result:
 
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
-            setV2ResourceName(txContent.resource);
+            if (!setResourceName(txContent.resource, true)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
@@ -1092,7 +1119,9 @@ handle_parser_result:
             start_sign_review(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
-            setV2ResourceName(txContent.resource);
+            if (!setResourceName(txContent.resource, true)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
@@ -1103,10 +1132,9 @@ handle_parser_result:
 
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            if (!setResourceName(txContent.resource, false)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!txContent.lock) {
                 strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
@@ -1123,10 +1151,9 @@ handle_parser_result:
 
             break;
         case UNDELEGATERESOURCECONTRACT:  // Undelegate resource
-            if (txContent.resource == 0)
-                strcpy(strings.common.fullContract, "Bandwidth");
-            else
-                strcpy(strings.common.fullContract, "Energy");
+            if (!setResourceName(txContent.resource, false)) {
+                return send_sign_status(E_INCORRECT_DATA);
+            }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
                 return send_sign_status(E_INCORRECT_LENGTH);
