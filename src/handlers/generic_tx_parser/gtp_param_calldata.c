@@ -104,7 +104,10 @@ static bool process_nested_calldata(const s_param_calldata *param,
     uint8_t chain_id_buf[sizeof(chain_id_value)];
 
     if (param->has_chain_id) {
-        if (!parsed_value_to_uint_be(chain_id, chain_id_buf, sizeof(chain_id_buf))) {
+        if (!parsed_value_to_typed_uint_be(&param->chain_id,
+                                           chain_id,
+                                           chain_id_buf,
+                                           sizeof(chain_id_buf))) {
             return false;
         }
         chain_id_value = read_u64_be(chain_id_buf, 0);
@@ -146,7 +149,10 @@ static bool process_nested_calldata(const s_param_calldata *param,
         return false;
     }
     if (param->has_amount) {
-        if (!parsed_value_to_uint_be(amount, amount_buf, sizeof(amount_buf))) {
+        if (!parsed_value_to_typed_uint_be(&param->amount,
+                                           amount,
+                                           amount_buf,
+                                           sizeof(amount_buf))) {
             if (new_calldata != NULL) calldata_delete(new_calldata);
             return false;
         }

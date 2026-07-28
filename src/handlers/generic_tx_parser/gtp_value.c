@@ -203,6 +203,38 @@ bool parsed_value_to_uint_be(const s_parsed_value *value, uint8_t *out, size_t o
     return true;
 }
 
+bool parsed_value_to_typed_uint_be(const s_value *definition,
+                                   const s_parsed_value *value,
+                                   uint8_t *out,
+                                   size_t out_size) {
+    size_t type_size;
+    size_t discarded;
+
+    if ((definition == NULL) ||
+        ((definition->type_family != TF_UINT) &&
+         (definition->type_family != TF_TRC_TOKEN)) ||
+        (definition->type_size > INT256_LENGTH) ||
+        (value == NULL) || (value->ptr == NULL) ||
+        (value->length == 0U) || (value->length > INT256_LENGTH)) {
+        return false;
+    }
+
+    /* type_size is optional for legacy uint256 descriptors. If a narrower
+     * Solidity/TVM width is declared, an ABI word may be wider only through
+     * canonical zero extension. Never silently interpret discarded high bits. */
+    type_size = (definition->type_size == 0U) ? INT256_LENGTH
+                                              : definition->type_size;
+    if (value->length > type_size) {
+        discarded = value->length - type_size;
+        for (size_t i = 0U; i < discarded; ++i) {
+            if (value->ptr[i] != 0U) {
+                return false;
+            }
+        }
+    }
+    return parsed_value_to_uint_be(value, out, out_size);
+}
+
 bool parsed_value_to_address(const s_parsed_value *value, uint8_t out[static ADDRESS_LENGTH]) {
     const uint8_t *addr;
 

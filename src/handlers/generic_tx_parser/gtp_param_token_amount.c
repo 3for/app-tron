@@ -100,6 +100,7 @@ static bool process_token_amount(const s_param_token_amount *param,
     uint64_t chain_id;
     const char *ticker = g_unknown_ticker;
     uint8_t decimals = 0;
+    int written;
 
     if (get_current_tx_info() == NULL) return false;
     chain_id = get_current_tx_info()->chain_id;
@@ -120,15 +121,21 @@ static bool process_token_amount(const s_param_token_amount *param,
         }
     }
 
-    if (!parsed_value_to_uint_be(value, value_buf, sizeof(value_buf))) {
+    if (!parsed_value_to_typed_uint_be(&param->value,
+                                       value,
+                                       value_buf,
+                                       sizeof(value_buf))) {
         return false;
     }
     convertUint256BE(value_buf, sizeof(value_buf), &val256);
     if (!equal256(&param->threshold, &zero256) && gte256(&val256, &param->threshold)) {
         if (param->above_threshold_msg[0] != '\0') {
-            snprintf(buf, buf_size, "%s %s", param->above_threshold_msg, ticker);
+            written = snprintf(buf, buf_size, "%s %s", param->above_threshold_msg, ticker);
         } else {
-            snprintf(buf, buf_size, "Unlimited %s", ticker);
+            written = snprintf(buf, buf_size, "Unlimited %s", ticker);
+        }
+        if ((written < 0) || ((size_t) written >= buf_size)) {
+            return false;
         }
     } else {
         if (!amountToString(value_buf, sizeof(value_buf), decimals, ticker, buf, buf_size)) {

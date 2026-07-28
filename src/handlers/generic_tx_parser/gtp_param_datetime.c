@@ -61,7 +61,7 @@ static bool is_unlimited_timestamp(const s_value *definition,
         return false;
     }
     width = definition->type_size;
-    return parsed_value_to_uint_be(value, normalized, width) &&
+    return parsed_value_to_typed_uint_be(definition, value, normalized, width) &&
            ismaxint(normalized, width);
 }
 
@@ -107,9 +107,10 @@ bool format_param_datetime(const s_param_datetime *param, const char *name) {
                 if (is_unlimited_timestamp(&param->value, &collec.value[i])) {
                     snprintf(buf, buf_size, "Unlimited");
                 } else {
-                    if (!parsed_value_to_uint_be(&collec.value[i],
-                                                 time_buf,
-                                                 sizeof(time_buf))) {
+                    if (!parsed_value_to_typed_uint_be(&param->value,
+                                                       &collec.value[i],
+                                                       time_buf,
+                                                       sizeof(time_buf))) {
                         ret = false;
                         break;
                     }
@@ -123,9 +124,10 @@ bool format_param_datetime(const s_param_datetime *param, const char *name) {
                     }
                 }
             } else if (param->type == DT_BLOCKHEIGHT) {
-                if (!parsed_value_to_uint_be(&collec.value[i],
-                                             block_buf,
-                                             sizeof(block_buf))) {
+                if (!parsed_value_to_typed_uint_be(&param->value,
+                                                   &collec.value[i],
+                                                   block_buf,
+                                                   sizeof(block_buf))) {
                     ret = false;
                     break;
                 }

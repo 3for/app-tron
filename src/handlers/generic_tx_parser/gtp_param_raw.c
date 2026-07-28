@@ -96,43 +96,23 @@ static bool check_uint_constraint(const s_field *field, const uint256_t *value25
     return false;
 }
 
-static bool validate_unsigned_encoding(const s_value *def, const s_parsed_value *value) {
-    size_t ignored_prefix;
-    size_t type_size;
-
-    if ((def == NULL) || (value == NULL) || (value->ptr == NULL) ||
-        (value->length == 0U) || (value->length > INT256_LENGTH) ||
-        (def->type_size > INT256_LENGTH)) {
-        return false;
-    }
-    /* type_size is optional for UINT/TRC_TOKEN descriptors. In that case the
-     * Solidity/TVM ABI width is the full uint256 word. */
-    type_size = (def->type_size == 0U) ? INT256_LENGTH : def->type_size;
-    if (value->length <= type_size) {
-        return true;
-    }
-    ignored_prefix = value->length - type_size;
-    for (size_t i = 0U; i < ignored_prefix; ++i) {
-        if (value->ptr[i] != 0U) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool format_uint(const s_field *field,
                  bool *to_be_displayed,
                  s_parsed_value *value,
                  char *buf,
                  size_t buf_size) {
     uint256_t value256 = {0};
+    uint8_t encoded[INT256_LENGTH] = {0};
 
     if ((field == NULL) || (to_be_displayed == NULL) ||
         (buf == NULL) || (buf_size == 0U) ||
-        !validate_unsigned_encoding(&field->param_raw.value, value)) {
+        !parsed_value_to_typed_uint_be(&field->param_raw.value,
+                                       value,
+                                       encoded,
+                                       sizeof(encoded))) {
         return false;
     }
-    convertUint256BE(value->ptr, value->length, &value256);
+    convertUint256BE(encoded, sizeof(encoded), &value256);
 
     if (!apply_visibility_constraint(field,
                                      to_be_displayed,

@@ -57,8 +57,14 @@ bool format_param_amount(const s_param_amount *param, const char *name) {
         for (int i = 0; i < collec.size; ++i) {
             // TRON divergence from app-ethereum: the native currency is TRX with
             // SUN_TO_TRX (6) decimals, not ETH's WEI_TO_ETHER (18).
-            if (!parsed_value_to_uint_be(&collec.value[i], amount, sizeof(amount)) ||
-                !(ret = amountToString(amount,
+            if (!parsed_value_to_typed_uint_be(&param->value,
+                                               &collec.value[i],
+                                               amount,
+                                               sizeof(amount))) {
+                ret = false;
+                break;
+            }
+            if (!(ret = amountToString(amount,
                                        sizeof(amount),
                                        SUN_TO_TRX,
                                        ticker,

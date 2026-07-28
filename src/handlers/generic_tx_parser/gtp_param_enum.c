@@ -57,7 +57,10 @@ bool format_param_enum(const s_param_enum *param, const char *name) {
         }
         chain_id = get_current_tx_info()->chain_id;
         for (int i = 0; i < collec.size; ++i) {
-            if (!parsed_value_to_uint_be(&collec.value[i], &value, sizeof(value))) {
+            if (!parsed_value_to_typed_uint_be(&param->value,
+                                               &collec.value[i],
+                                               &value,
+                                               sizeof(value))) {
                 ret = false;
                 break;
             }

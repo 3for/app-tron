@@ -73,11 +73,17 @@ bool format_param_nft(const s_param_nft *param, const char *name) {
                             ret = false;
                             break;
                         }
-                        if (!parsed_value_to_uint_be(&ids.value[i], id_buf, sizeof(id_buf)) ||
-                            !(ret = uint256_to_decimal(id_buf,
-                                                       sizeof(id_buf),
-                                                       tmp,
-                                                       sizeof(tmp)))) {
+                        if (!parsed_value_to_typed_uint_be(&param->id,
+                                                          &ids.value[i],
+                                                          id_buf,
+                                                          sizeof(id_buf))) {
+                            ret = false;
+                            break;
+                        }
+                        if (!(ret = uint256_to_decimal(id_buf,
+                                                      sizeof(id_buf),
+                                                      tmp,
+                                                      sizeof(tmp)))) {
                             break;
                         }
                         snprintf(buf, buf_size, "%s #%s", asset->collectionName, tmp);

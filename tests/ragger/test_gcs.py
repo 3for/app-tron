@@ -40,7 +40,7 @@ from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmoun
                         ParamCalldata, ParamDatetime, ParamDuration, ParamEnum,
                         ParamNetwork, ParamNFT, ParamRaw, ParamToken, ParamTokenAmount,
                         ParamTrustedName, ParamType, PathLeaf, PathLeafType,
-                        PathRef, PathTuple, TxInfo, TypeFamily, Value,
+                        ParamUnit, PathRef, PathTuple, TxInfo, TypeFamily, Value,
                         VisibleType)
 from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from client.tlv import eth_to_tron_base58
@@ -3489,6 +3489,85 @@ def test_gcs_rejects_noncanonical_time_values(
     assert error.value.status == StatusWord.INVALID_DATA
 
     # The failed pre-authentication formatter must leave GCS re-entrant.
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "amount",
+        "token_amount",
+        "nft",
+        "datetime",
+        "duration",
+        "unit",
+        "network",
+        "nested_chain_id",
+    ],
+)
+def test_gcs_rejects_noncanonical_narrow_specialized_uint(
+        backend: BackendInterface, case: str):
+    """Specialized formatters must honor a descriptor's declared uint width."""
+    client = TronClient(backend)
+    value_path = build_data_path_static(1)
+    narrow_value = _uint_value(1, value_path)
+    calldata = TRC20_TRANSFER_CALLDATA[:-32] + (0x0101).to_bytes(32, "big")
+
+    if case == "amount":
+        field = Field(1, "Value", ParamAmount(1, narrow_value))
+    elif case == "token_amount":
+        field = Field(1, "Value", ParamTokenAmount(1, narrow_value))
+    elif case == "nft":
+        field = Field(1, "Value",
+                      ParamNFT(1, narrow_value,
+                               _address_value(build_data_path_static(0))))
+    elif case == "datetime":
+        field = Field(1, "Value",
+                      ParamDatetime(1, narrow_value, DatetimeType.DT_UNIX))
+    elif case == "duration":
+        field = Field(1, "Value", ParamDuration(1, narrow_value))
+    elif case == "unit":
+        field = Field(1, "Value", ParamUnit(1, narrow_value, "unit"))
+    elif case == "network":
+        field = Field(
+            1,
+            "Value",
+            ParamNetwork(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=1,
+                      container_path=ContainerPath.CHAIN_ID),
+            ),
+        )
+    else:
+        field = Field(
+            1,
+            "Value",
+            ParamCalldata(
+                1,
+                Value(1, TypeFamily.BYTES, constant=b""),
+                Value(1, TypeFamily.ADDRESS, constant=TKN_ADDR20),
+                chain_id=narrow_value,
+            ),
+        )
+
+    tx = build_trc20_transfer_tx(client, calldata)
+    if case == "nft":
+        client.provide_nft_metadata("Collection",
+                                    eth_to_tron_base58(TKN_ADDR20),
+                                    TRON_MAINNET_CHAINID)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, TRC20_TRANSFER_SELECTOR,
+                      [field], "guarded narrow uint"))
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_field_desc(field.serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
     normal_tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], normal_tx) == StatusWord.OK

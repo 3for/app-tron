@@ -63,16 +63,21 @@ bool format_param_unit(const s_param_unit *param, const char *name) {
     char tmp[80];
     size_t off;
     uint8_t value_buf[INT256_LENGTH] = {0};
+    int written;
 
     if (param->value.type_family != TF_UINT) {
         return false;
     }
     if ((ret = value_get(&param->value, &collec))) {
         for (int i = 0; i < collec.size; ++i) {
-            if (!parsed_value_to_uint_be(&collec.value[i],
-                                         value_buf,
-                                         sizeof(value_buf)) ||
-                !(ret = uint256_to_decimal(value_buf,
+            if (!parsed_value_to_typed_uint_be(&param->value,
+                                               &collec.value[i],
+                                               value_buf,
+                                               sizeof(value_buf))) {
+                ret = false;
+                break;
+            }
+            if (!(ret = uint256_to_decimal(value_buf,
                                            sizeof(value_buf),
                                            tmp,
                                            sizeof(tmp)))) {
@@ -90,7 +95,11 @@ bool format_param_unit(const s_param_unit *param, const char *name) {
                 break;
             }
             off = strlen(buf);
-            snprintf(&buf[off], buf_size - off, " %s", param->base);
+            written = snprintf(&buf[off], buf_size - off, " %s", param->base);
+            if ((written < 0) || ((size_t) written >= (buf_size - off))) {
+                ret = false;
+                break;
+            }
 
             if (!(ret = add_to_field_table(PARAM_TYPE_UNIT, name, buf, NULL))) {
                 break;

@@ -17,11 +17,14 @@ static bool handle_tlv_payload(const buffer_t *buf) {
          !gcs_account_descriptor(buf->size, false))) {
         return false;
     }
+    /* Initialize the local crypto context before acquiring tracked heap
+     * ownership. A CX exception here must not strand an allocation that is not
+     * yet reachable from the global transaction-context cleanup. */
+    cx_sha256_init(&ctx.struct_hash);
     ctx.tx_info = gcs_mem_calloc(sizeof(*ctx.tx_info), GCS_MEM_TX_CONTEXT);
     if (ctx.tx_info == NULL) {
         return false;
     }
-    cx_sha256_init(&ctx.struct_hash);
     if (!handle_tx_info_struct(buf, &ctx)) {
         gcs_mem_free(ctx.tx_info);
         return false;

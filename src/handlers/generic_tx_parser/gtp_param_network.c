@@ -86,20 +86,26 @@ bool handle_param_network_struct(const buffer_t *buf, s_param_network_context *c
  * @param[in] buf_size Size of the output buffer
  * @return true if formatting was successful, false otherwise
  *
- * @note Chain ID must be a 64-bit unsigned integer
+ * @note Chain ID must be canonically encoded and fit in a 64-bit unsigned integer
  * @note Chain ID must be in range [1, 0x7FFFFFFFFFFFFFDB] per EIP-2294
  */
-static bool format_network_name(const s_parsed_value *value, char *buf, size_t buf_size) {
+static bool format_network_name(const s_value *definition,
+                                const s_parsed_value *value,
+                                char *buf,
+                                size_t buf_size) {
     uint64_t chain_id = 0;
+    uint8_t encoded[sizeof(chain_id)] = {0};
 
-    // Check length
-    if (value->length != sizeof(uint64_t)) {
-        PRINTF("CHAIN_ID Length mismatch!\n");
+    if (!parsed_value_to_typed_uint_be(definition,
+                                       value,
+                                       encoded,
+                                       sizeof(encoded))) {
+        PRINTF("CHAIN_ID encoding mismatch!\n");
         return false;
     }
     // Check if the chain ID is supported
     // https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2294.md
-    chain_id = u64_from_BE(value->ptr, value->length);
+    chain_id = u64_from_BE(encoded, sizeof(encoded));
     // Check if the chain_id is supported
     if ((chain_id > MAX_VALID_CHAIN_ID) || (chain_id == 0)) {
         PRINTF("Unsupported chain ID: %llu\n", chain_id);
@@ -131,7 +137,10 @@ bool format_param_network(const s_param_network *param, const char *name) {
         for (int i = 0; i < collec.size && ret == true; ++i) {
             if (param->value.type_family == TF_UINT) {
                 // TODO: Should we rather use TF_FIXED or TF_UFIXED?
-                ret = format_network_name(&collec.value[i], buf, buf_size);
+                ret = format_network_name(&param->value,
+                                          &collec.value[i],
+                                          buf,
+                                          buf_size);
                 if (ret) ret = add_to_field_table(PARAM_TYPE_NETWORK, name, buf, NULL);
             } else {
                 ret = false;

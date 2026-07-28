@@ -37,6 +37,7 @@ static void assert_gcs_parser_guards(void) {
     uint8_t normalized[INT256_LENGTH] = {0};
     uint8_t address[ADDRESS_LENGTH] = {0};
     uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0};
+    s_value narrow_uint = {.type_family = TF_UINT, .type_size = 1U};
 
     field.param_type = PARAM_TYPE_RAW;
     field.visibility = PARAM_VISIBILITY_ALWAYS;
@@ -127,6 +128,20 @@ static void assert_gcs_parser_guards(void) {
         (normalized[sizeof(uint64_t) - 1U] != 7U)) {
         __builtin_trap();
     }
+    if (!parsed_value_to_typed_uint_be(&narrow_uint,
+                                       &parsed,
+                                       normalized,
+                                       sizeof(normalized))) {
+        __builtin_trap();
+    }
+    canonical_word[INT256_LENGTH - 2U] = 1U;
+    if (parsed_value_to_typed_uint_be(&narrow_uint,
+                                      &parsed,
+                                      normalized,
+                                      sizeof(normalized))) {
+        __builtin_trap();
+    }
+    canonical_word[INT256_LENGTH - 2U] = 0U;
 
     memset(canonical_word, 0, sizeof(canonical_word));
     canonical_word[INT256_LENGTH - TRON_ADDRESS_SIZE] = TRON_MAINNET_ADDRESS_PREFIX;

@@ -58,7 +58,10 @@ bool format_param_duration(const s_param_duration *param, const char *name) {
     if ((ret = value_get(&param->value, &collec))) {
         for (int i = 0; i < collec.size; ++i) {
             off = 0;
-            if (!parsed_value_to_uint_be(&collec.value[i], raw_buf, sizeof(raw_buf))) {
+            if (!parsed_value_to_typed_uint_be(&param->value,
+                                               &collec.value[i],
+                                               raw_buf,
+                                               sizeof(raw_buf))) {
                 ret = false;
                 break;
             }
