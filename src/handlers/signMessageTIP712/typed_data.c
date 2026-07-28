@@ -116,6 +116,63 @@ const s_struct_712 *get_structn(const char *name, uint8_t length) {
     return NULL;
 }
 
+bool typed_data_schema_is_acyclic(void) {
+    const s_struct_712 *structs[TIP712_MAX_STRUCTS];
+    uint16_t dependencies[TIP712_MAX_STRUCTS] = {0};
+    size_t count = 0U;
+
+    for (const s_struct_712 *current = g_structs; current != NULL;
+         current = (const s_struct_712 *) ((const flist_node_t *) current)->next) {
+        if (count >= TIP712_MAX_STRUCTS) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+        structs[count++] = current;
+    }
+
+    for (size_t i = 0U; i < count; i++) {
+        for (const s_struct_712_field *field = structs[i]->fields;
+             field != NULL;
+             field = (const s_struct_712_field *)
+                         ((const flist_node_t *) field)->next) {
+            bool found = false;
+
+            if (field->type != TYPE_CUSTOM) {
+                continue;
+            }
+            for (size_t j = 0U; j < count; j++) {
+                if (strcmp(field->type_name, structs[j]->name) == 0) {
+                    dependencies[i] |= (uint16_t) (UINT16_C(1) << j);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                return false;
+            }
+        }
+    }
+
+    /* The schema is tiny (at most 16 structs), so transitive closure gives a
+     * bounded, allocation-free cycle check. Recursive schemas are rejected at
+     * filtering activation instead of failing midway through value parsing. */
+    for (size_t k = 0U; k < count; k++) {
+        for (size_t i = 0U; i < count; i++) {
+            if ((dependencies[i] & (uint16_t) (UINT16_C(1) << k)) != 0U) {
+                dependencies[i] |= dependencies[k];
+            }
+        }
+    }
+    for (size_t i = 0U; i < count; i++) {
+        if ((dependencies[i] & (uint16_t) (UINT16_C(1) << i)) != 0U) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * Set struct name
  *

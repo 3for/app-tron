@@ -95,10 +95,10 @@ static bool hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
  */
 static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     uint64_t chain_id;
-    const uint8_t *addr;
 
-    if (!tip712_context->chain_id_fits_u64) {
-        apdu_response_code = SWO_INCORRECT_DATA;
+    if ((tip712_context == NULL) ||
+        !tip712_context->filtering_context_locked) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         return false;
     }
 
@@ -108,25 +108,76 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     hash_byte(magic, (cx_hash_t *) hash_ctx);
 
     // Chain ID
-    chain_id = __builtin_bswap64(tip712_context->chain_id);
+    chain_id = __builtin_bswap64(tip712_context->filtering_chain_id);
     hash_nbytes((uint8_t *) &chain_id, sizeof(chain_id), (cx_hash_t *) hash_ctx);
 
-    // Contract address: resolve a proxy implementation if one was provided (the
-    // filtering payloads are signed against the resolved address), like app-ethereum.
-    // get_implem_contract() returns NULL when no proxy matches, so the unproxied case
-    // falls back to the verifyingContract unchanged.
-    if ((addr = get_implem_contract(&tip712_context->chain_id,
-                                    tip712_context->contract_addr,
-                                    NULL)) == NULL) {
-        addr = tip712_context->contract_addr;
-    }
-    hash_nbytes(addr, sizeof(tip712_context->contract_addr), (cx_hash_t *) hash_ctx);
+    // Contract and schema remain identical for every descriptor in the review.
+    hash_nbytes(tip712_context->filtering_contract_addr,
+                sizeof(tip712_context->filtering_contract_addr),
+                (cx_hash_t *) hash_ctx);
 
     // Schema hash
-    hash_nbytes(tip712_context->schema_hash,
-                sizeof(tip712_context->schema_hash),
+    hash_nbytes(tip712_context->filtering_schema_hash,
+                sizeof(tip712_context->filtering_schema_hash),
                 (cx_hash_t *) hash_ctx);
     return true;
+}
+
+static bool filtering_context_lock(void) {
+    const uint8_t *resolved_addr;
+
+    if ((tip712_context == NULL) || tip712_context->filtering_context_locked ||
+        !tip712_context->schema_locked || !tip712_context->chain_id_fits_u64 ||
+        (path_get_root_type() != ROOT_DOMAIN) || (path_get_field() != NULL) ||
+        allzeroes(tmpCtx.messageSigningContext712.domainHash,
+                  sizeof(tmpCtx.messageSigningContext712.domainHash))) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        return false;
+    }
+
+    resolved_addr = get_implem_contract(&tip712_context->chain_id,
+                                        tip712_context->contract_addr,
+                                        NULL);
+    if (resolved_addr == NULL) {
+        resolved_addr = tip712_context->contract_addr;
+    }
+    tip712_context->filtering_chain_id = tip712_context->chain_id;
+    memcpy(tip712_context->filtering_verifying_contract,
+           tip712_context->contract_addr,
+           sizeof(tip712_context->filtering_verifying_contract));
+    memcpy(tip712_context->filtering_contract_addr,
+           resolved_addr,
+           sizeof(tip712_context->filtering_contract_addr));
+    memcpy(tip712_context->filtering_schema_hash,
+           tip712_context->schema_hash,
+           sizeof(tip712_context->filtering_schema_hash));
+    tip712_context->filtering_context_locked = true;
+    return true;
+}
+
+bool filtering_context_matches_live(void) {
+    const uint8_t *resolved_addr;
+
+    if ((tip712_context == NULL) ||
+        !tip712_context->filtering_context_locked ||
+        (tip712_context->chain_id != tip712_context->filtering_chain_id) ||
+        (memcmp(tip712_context->contract_addr,
+                tip712_context->filtering_verifying_contract,
+                sizeof(tip712_context->contract_addr)) != 0) ||
+        (memcmp(tip712_context->schema_hash,
+                tip712_context->filtering_schema_hash,
+                sizeof(tip712_context->schema_hash)) != 0)) {
+        return false;
+    }
+    resolved_addr = get_implem_contract(&tip712_context->chain_id,
+                                        tip712_context->contract_addr,
+                                        NULL);
+    if (resolved_addr == NULL) {
+        resolved_addr = tip712_context->contract_addr;
+    }
+    return memcmp(resolved_addr,
+                  tip712_context->filtering_contract_addr,
+                  sizeof(tip712_context->filtering_contract_addr)) == 0;
 }
 
 /**
@@ -215,7 +266,9 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     const uint8_t *sig;
     uint8_t offset = 0;
 
-    if (path_get_root_type() != ROOT_DOMAIN) {
+    if ((path_get_root_type() != ROOT_DOMAIN) || (path_get_field() != NULL) ||
+        allzeroes(tmpCtx.messageSigningContext712.domainHash,
+                  sizeof(tmpCtx.messageSigningContext712.domainHash))) {
         apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
         return false;
     }
@@ -254,6 +307,12 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
         return false;
     }
     sig = &payload[offset];
+
+    // Freeze the fully parsed domain/proxy/schema context before verifying the
+    // first CAL descriptor. Every following descriptor uses this snapshot.
+    if (!filtering_context_lock()) {
+        return false;
+    }
 
     // Verification
     cx_sha256_t hash_ctx;

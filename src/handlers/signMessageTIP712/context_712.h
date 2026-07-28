@@ -10,10 +10,17 @@ typedef struct {
     uint8_t contract_addr[ADDRESS_LENGTH];
     uint64_t chain_id;
     uint8_t schema_hash[CX_SHA224_SIZE];
+    /* Immutable CAL signature context established by message-info after the
+     * domain is complete. Keep the wire address and resolved implementation. */
+    uint8_t filtering_verifying_contract[ADDRESS_LENGTH];
+    uint8_t filtering_contract_addr[ADDRESS_LENGTH];
+    uint64_t filtering_chain_id;
+    uint8_t filtering_schema_hash[CX_SHA224_SIZE];
     bool go_home_on_failure;
     bool chain_id_seen;
     bool chain_id_fits_u64;
     bool schema_locked;
+    bool filtering_context_locked;
     bool signing_path_locked;
     bip32_path_t signing_path;
 } s_tip712_context;

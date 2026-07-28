@@ -979,8 +979,7 @@ def test_tip712_filtering_empty_array(
 
 def test_tip712_advanced_missing_token(
         scenario_navigator: NavigateWithScenario,
-        test_name: str, tokens: list[dict]):
-    test_name += "-%s-%s" % (len(tokens[0]) == 0, len(tokens[1]) == 0)
+        tokens: list[dict]):
 
     backend = scenario_navigator.backend
     device = scenario_navigator.backend.device
@@ -1041,11 +1040,82 @@ def test_tip712_advanced_missing_token(
         }
     }
 
-    vrs = tip712_new_common(scenario_navigator, client, data, filters,
-                            snapshots_dirname=test_name)
+    # Clear signing must never accept an amount-join address without the exact
+    # token metadata that will be snapshotted for its amount display.
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
 
-    addr = recover_message(data, vrs)
-    assert addr == get_wallet_addr(client)
+
+def test_tip712_amount_join_survives_asset_slot_wraparound(
+        scenario_navigator: NavigateWithScenario,
+        monkeypatch: pytest.MonkeyPatch):
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    token_address = "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW"
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "token_first", "type": "address"},
+                {"name": "token_second", "type": "address"},
+                {"name": "amount", "type": "uint256"},
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+        },
+        "message": {
+            "token_first": token_address,
+            "token_second": token_address,
+            "amount": 1_000_000,
+        },
+    }
+    filters = {
+        "name": "Asset snapshot",
+        "tokens": [{
+            "addr": token_address,
+            "ticker": "SNAP",
+            "decimals": 6,
+            "chain_id": 728126428,
+        }],
+        "fields": {
+            "token_first": {"type": "amount_join_token", "token": 0},
+            "token_second": {"type": "amount_join_token", "token": 0},
+            "amount": {
+                "type": "amount_join_value",
+                "name": "Amount",
+                "token": 0,
+            },
+        },
+    }
+    original_send_field = InputData.send_struct_impl_field
+
+    def send_field_then_wrap_slots(value, field):
+        result = original_send_field(value, field)
+        if field["name"] == "token_first":
+            for index in range(5):
+                client.provide_token_metadata(
+                    f"WRAP{index}",
+                    bytes([index + 1]) * 20,
+                    index,
+                    728126428,
+                )
+        return result
+
+    monkeypatch.setattr(InputData, "send_struct_impl_field",
+                        send_field_then_wrap_slots)
+    signing_path = client.getAccount(0)["path"]
+    assert InputData.process_data(client, data, filters, signing_path)
+    with client.tip712_sign_new(signing_path):
+        scenario_navigator.review_approve(do_comparison=False)
 
 
 def test_tip712_advanced_trusted_name(
@@ -1172,6 +1242,62 @@ def _tip712_calldata_common(
 
     addr = recover_message(data, vrs)
     assert addr == get_wallet_addr(client)
+
+
+@pytest.mark.parametrize("fill", [0x00, 0xA5])
+def test_tip712_rejects_nested_calldata_over_semantic_limit(
+        backend: BackendInterface, fill: int):
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    # The selector is embedded in the bytes value, so 4097 bytes of normalized
+    # argument data means a 4101-byte field on the wire.
+    data["message"]["data"] = "0x" + (
+        bytes.fromhex("a9059cbb") + bytes([fill]) * 4097
+    ).hex()
+    filters = {
+        "name": "Oversized calldata",
+        "calldatas": [{
+            "index": 0,
+            "handler": None,
+            "value_flag": True,
+            "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+            "chain_id_flag": False,
+            "selector_flag": False,
+            "amount_flag": True,
+            "spender_flag": EIP712CalldataParamPresence.NONE,
+        }],
+        "fields": {
+            "to": {"type": "calldata_callee", "index": 0},
+            "value": {"type": "calldata_amount", "index": 0},
+            "data": {"type": "calldata_value", "index": 0},
+        },
+    }
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_tip712_filtering_rejects_recursive_schema(backend: BackendInterface):
+    client = TronClient(backend)
+    data = {
+        "types": {
+            "EIP712Domain": [{"name": "chainId", "type": "uint256"}],
+            "Node": [{"name": "children", "type": "Node[]"}],
+        },
+        "primaryType": "Node",
+        "domain": {"chainId": 728126428},
+        "message": {"children": []},
+    }
+    filters = {"name": "Recursive schema", "fields": {}}
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
 def test_tip712_calldata(
@@ -1364,6 +1490,65 @@ def test_tip712_proxy(
 
     addr = recover_message(data, vrs)
     assert addr == get_wallet_addr(client)
+
+
+def test_tip712_rejects_message_info_before_domain_completion(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/00-simple_mail-data.json",
+              encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{tip712_json_path()}/00-simple_mail-filter.json",
+              encoding="utf-8") as file:
+        filters = json.load(file)
+    original_send_struct_impl = InputData.send_struct_impl
+
+    def send_premature_message_info(structs, values, structname):
+        if structname == "EIP712Domain":
+            first_field = structs[structname][0]
+            assert InputData.evaluate_field(
+                structs, values[first_field["name"]], first_field,
+                len(first_field["array_lvls"]))
+            InputData.send_filtering_message_info(
+                filters["name"], len(InputData.filtering_paths))
+            pytest.fail("incomplete domain unexpectedly accepted message-info")
+        return original_send_struct_impl(structs, values, structname)
+
+    monkeypatch.setattr(InputData, "send_struct_impl",
+                        send_premature_message_info)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_tip712_rejects_proxy_after_filter_context_lock(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/00-simple_mail-data.json",
+              encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{tip712_json_path()}/00-simple_mail-filter.json",
+              encoding="utf-8") as file:
+        filters = json.load(file)
+    proxy = ProxyInfo(
+        get_challenge(client),
+        to_tvm_address(data["domain"]["verifyingContract"]),
+        int(data["domain"]["chainId"]),
+        to_tvm_address("TRXcKoEvHr6Y38VMcDYGBEYKznvH3XUX4g"),
+    )
+    original_message_info = InputData.send_filtering_message_info
+
+    def send_message_info_then_proxy(display_name, filters_count):
+        original_message_info(display_name, filters_count)
+        client.provide_proxy_info(proxy.serialize())
+
+    monkeypatch.setattr(InputData, "send_filtering_message_info",
+                        send_message_info_then_proxy)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
 
 def test_tip712_gondi(

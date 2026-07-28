@@ -64,5 +64,6 @@ const s_struct_712 *get_struct_list(void);
 const s_struct_712 *get_structn(const char *name_ptr, uint8_t name_length);
 bool set_struct_name(uint8_t length, const uint8_t *name);
 bool set_struct_field(uint8_t length, const uint8_t *data);
+bool typed_data_schema_is_acyclic(void);
 bool typed_data_init(void);
 void typed_data_deinit(void);

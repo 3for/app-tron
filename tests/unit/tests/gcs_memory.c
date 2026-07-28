@@ -114,6 +114,21 @@ static void test_incompressible_4096_bounded_root_fits_calldata_budget(void **st
     appState = APP_STATE_IDLE;
 }
 
+static void test_nested_calldata_limit_is_state_independent(void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+
+    /* A bounded constructor must not silently become unbounded merely because
+     * TIP-712 has not switched appState to a GCS-specific value. */
+    appState = APP_STATE_IDLE;
+    s_calldata *maximum =
+        calldata_init_nested(GCS_MAX_NESTED_CALLDATA_SIZE, selector);
+    assert_non_null(maximum);
+    calldata_delete(maximum);
+    assert_null(calldata_init_nested(GCS_MAX_NESTED_CALLDATA_SIZE + 1U,
+                                     selector));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_inactive_allocation_is_not_refunded_from_session),
@@ -121,6 +136,7 @@ int main(void) {
         cmocka_unit_test(test_calldata_sub_budget_is_deterministic),
         cmocka_unit_test(test_returned_pointer_preserves_intmax_alignment),
         cmocka_unit_test(test_incompressible_4096_bounded_root_fits_calldata_budget),
+        cmocka_unit_test(test_nested_calldata_limit_is_state_independent),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

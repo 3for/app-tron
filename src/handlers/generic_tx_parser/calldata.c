@@ -3,15 +3,8 @@
 #include "calldata.h"
 #include "os_print.h"
 #include "lists.h"
-#include "shared_context.h"
 #include "gcs_limits.h"
 #include "gcs_memory.h"
-
-static bool gcs_calldata_limits_apply(void) {
-    return (appState == APP_STATE_SIGNING_GCS_STORE) ||
-           (appState == APP_STATE_SIGNING_TX) ||
-           (appState == APP_STATE_GCS_FIELDS_AUTHENTICATED);
-}
 
 static s_calldata *calldata_init_with_limit(
     size_t size,
@@ -19,8 +12,7 @@ static s_calldata *calldata_init_with_limit(
     size_t gcs_size_limit) {
     s_calldata *calldata;
 
-    if ((selector == NULL) ||
-        (gcs_calldata_limits_apply() && (size > gcs_size_limit))) {
+    if ((selector == NULL) || (size > gcs_size_limit)) {
         return NULL;
     }
     calldata = gcs_mem_calloc(sizeof(*calldata), GCS_MEM_CALLDATA);

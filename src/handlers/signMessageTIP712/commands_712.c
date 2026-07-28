@@ -247,9 +247,14 @@ uint16_t handleTIP712Filtering(uint8_t p1,
             if (!N_storage.verbose_tip712) {
                 ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
             }
-            ret = compute_schema_hash();
+            ret = typed_data_schema_is_acyclic();
+            if (ret) {
+                ret = compute_schema_hash();
+            }
             tip712_context->schema_locked = ret;
-            forget_known_assets();
+            if (ret) {
+                forget_known_assets();
+            }
             break;
         case P2_FILT_DISCARDED_PATH:
             ret = filtering_discarded_path(cdata, length);
@@ -367,6 +372,10 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
             explicit_bzero(current_schema_hash, sizeof(current_schema_hash));
             if (!ret) {
                 apdu_response_code = SWO_INCORRECT_DATA;
+            }
+            if (ret && !filtering_context_matches_live()) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                ret = false;
             }
         }
 #ifndef SCREEN_SIZE_WALLET

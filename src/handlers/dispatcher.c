@@ -24,6 +24,7 @@
 
 #include "commands_712.h"
 #include "context_712.h"
+#include "filtering.h"
 
 #include "trusted_name.h"
 #include "challenge.h"
@@ -352,8 +353,23 @@ int apdu_dispatcher(const command_t *cmd) {
             return send_gtp_status(sw);
         }
 
-        case INS_PROVIDE_PROXY_INFO:
-            return io_send_sw(handle_proxy_info(cmd->p1, cmd->p2, cmd->lc, cmd->data));
+        case INS_PROVIDE_PROXY_INFO: {
+            uint16_t sw = handle_proxy_info(cmd->p1, cmd->p2, cmd->lc, cmd->data);
+
+            /* Nested-calldata clear signing legitimately provides unrelated
+             * proxy mappings after outer message-info. Permit those, but tear
+             * down the session if a newly committed mapping changes the
+             * frozen outer CAL signature context. */
+            if ((sw == SWO_SUCCESS) && (tip712_context != NULL) &&
+                tip712_context->filtering_context_locked &&
+                !filtering_context_matches_live()) {
+                sw = SWO_CONDITIONS_NOT_SATISFIED;
+            }
+            if ((sw != SWO_SUCCESS) && (tip712_context != NULL)) {
+                reset_app_context();
+            }
+            return io_send_sw(sw);
+        }
 
 #ifdef HAVE_GATING_SUPPORT
         case INS_PROVIDE_GATING:
