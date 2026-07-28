@@ -443,7 +443,7 @@ def main() -> int:
                   "(that flag only swaps the app's embedded keys, which the token-metadata legacy "
                   "path uses -- GCS does not).\n"
                   "[ERROR] To run GCS end to end: use Speculos (ragger env), OR rebuild/flash with "
-                  "`make ... BYPASS_SIGNATURES=1` (HAVE_BYPASS_SIGNATURES) to skip descriptor "
+                  "`make ... DEBUG=1 BYPASS_SIGNATURES=1` (HAVE_BYPASS_SIGNATURES) to skip descriptor "
                   "signature checks. The store + token-metadata steps already passed, so the APDU "
                   "flow and descriptor bytes are correct.")
         raise

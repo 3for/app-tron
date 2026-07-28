@@ -358,11 +358,11 @@ static bool handle_nft_id(const tlv_data_t *data, s_trusted_name_ctx *context) {
  */
 static bool handle_owner(const tlv_data_t *data, s_trusted_name_ctx *context) {
     buffer_t field = {0};
-    if (!get_buffer_from_tlv_data(data, &field, 1, ADDRESS_LENGTH)) {
+    if (!get_buffer_from_tlv_data(data, &field, ADDRESS_LENGTH, ADDRESS_LENGTH)) {
         PRINTF("OWNER: failed to extract\n");
         return false;
     }
-    buf_shrink_expand(field.ptr, field.size, context->owner, sizeof(context->owner));
+    memcpy(context->owner, field.ptr, sizeof(context->owner));
     return true;
 }
 

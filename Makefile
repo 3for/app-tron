@@ -78,6 +78,9 @@ endif
 # Bypass the signature verification for provideTokenInfo calls
 BYPASS_SIGNATURES ?= 0
 ifneq ($(BYPASS_SIGNATURES),0)
+    ifeq ($(DEBUG),0)
+        $(error BYPASS_SIGNATURES is test-only and requires DEBUG=1)
+    endif
     DEFINES += HAVE_BYPASS_SIGNATURES
 endif
 
@@ -86,6 +89,9 @@ endif
 # without a live GET_CHALLENGE round-trip. Mirrors app-ethereum's CHALLENGE_NO_CHECK.
 CHALLENGE_NO_CHECK ?= 0
 ifneq ($(CHALLENGE_NO_CHECK),0)
+    ifeq ($(DEBUG),0)
+        $(error CHALLENGE_NO_CHECK is test-only and requires DEBUG=1)
+    endif
     DEFINES += HAVE_CHALLENGE_NO_CHECK
 endif
 

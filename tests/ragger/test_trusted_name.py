@@ -387,6 +387,31 @@ def test_trusted_name_v2_mab_account_name(backend: BackendInterface):
     assert rapdu.status == StatusWord.OK
 
 
+def test_trusted_name_v2_mab_rejects_short_owner(
+        backend: BackendInterface):
+    app_client = TronClient(backend)
+    challenge = common(app_client, CommandBuilder())
+    # This deterministic path derives 0x00149a...da46. Removing the leading
+    # zero produces a 19-byte wire value that the old parser left-padded back
+    # to the same owner, so the descriptor incorrectly passed ownership
+    # verification. MAB owner encoding is canonical and must be exactly 20
+    # bytes even when the address starts with zero.
+    owner_path = "m/44'/195'/0'/0/430"
+    owner_without_leading_zero = bytes.fromhex(
+        "149a1b7dd4330a6e5893b266d00c0be443da46")
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        app_client.provide_trusted_name(
+            TrustedName(2, ADDR_B58, "MyLedger",
+                        tn_type=TrustedNameType.ACCOUNT,
+                        tn_source=TrustedNameSource.MULTISIG_ADDRESS_BOOK,
+                        chain_id=CHAIN_ID,
+                        challenge=challenge,
+                        owner=owner_without_leading_zero,
+                        owner_deriv_path=owner_path))
+    assert e.value.status == StatusWord.INVALID_DATA
+
+
 def test_trusted_name_v2_mab_missing_owner_metadata(
         backend: BackendInterface):
     app_client = TronClient(backend)
