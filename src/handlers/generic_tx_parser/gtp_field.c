@@ -210,6 +210,7 @@ bool handle_field_struct(const buffer_t *buf, s_field_ctx *context) {
 }
 
 bool verify_field_struct(const s_field_ctx *context) {
+    bool has_constraints;
     // Check if struct version was provided
     if (!TLV_CHECK_RECEIVED_TAGS(context->received_tags, TAG_VERSION)) {
         PRINTF("Error: no struct version specified!\n");
@@ -238,7 +239,61 @@ bool verify_field_struct(const s_field_ctx *context) {
         // Set default visibility if not provided
         context->field->visibility = PARAM_VISIBILITY_ALWAYS;
     }
-    return true;
+    has_constraints = context->field->constraints != NULL;
+    if (context->field->visibility == PARAM_VISIBILITY_ALWAYS) {
+        return !has_constraints;
+    }
+    if (!has_constraints) {
+        PRINTF("Error: constrained visibility without a constraint!\n");
+        return false;
+    }
+
+    /* Only the formatters below currently implement per-value MUST_BE and
+     * IF_NOT_IN semantics. Reject every other descriptor instead of silently
+     * accepting a constraint that will be discarded after formatting. */
+    if (context->field->param_type == PARAM_TYPE_RAW) {
+        switch (context->field->param_raw.value.type_family) {
+            case TF_UINT:
+            case TF_TRC_TOKEN:
+                for (s_field_constraint *node = context->field->constraints;
+                     node != NULL;
+                     node = (s_field_constraint *) node->node.next) {
+                    if ((node->size == 0U) || (node->size > INT256_LENGTH)) {
+                        return false;
+                    }
+                }
+                return true;
+            case TF_ADDRESS:
+                for (s_field_constraint *node = context->field->constraints;
+                     node != NULL;
+                     node = (s_field_constraint *) node->node.next) {
+                    uint8_t address[ADDRESS_LENGTH];
+                    s_parsed_value value = {.ptr = node->value, .length = node->size};
+                    if (!parsed_value_to_address(&value, address)) {
+                        return false;
+                    }
+                }
+                return true;
+            case TF_BYTES:
+                return true;
+            default:
+                break;
+        }
+    } else if (context->field->param_type == PARAM_TYPE_TRUSTED_NAME) {
+        for (s_field_constraint *node = context->field->constraints;
+             node != NULL;
+             node = (s_field_constraint *) node->node.next) {
+            uint8_t address[ADDRESS_LENGTH];
+            s_parsed_value value = {.ptr = node->value, .length = node->size};
+            if (!parsed_value_to_address(&value, address)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    PRINTF("Error: constraints unsupported for parameter type %u!\n",
+           context->field->param_type);
+    return false;
 }
 
 bool format_field(s_field *field) {

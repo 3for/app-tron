@@ -49,7 +49,12 @@ bool format_param_nft(const s_param_nft *param, const char *name) {
     uint8_t collection_idx;
     uint8_t addr_buf[ADDRESS_LENGTH];
     char tmp[80];
+    uint8_t id_buf[INT256_LENGTH] = {0};
 
+    if ((param->collection.type_family != TF_ADDRESS) ||
+        (param->id.type_family != TF_UINT)) {
+        return false;
+    }
     if ((ret = value_get(&param->collection, &collections))) {
         if ((ret = value_get(&param->id, &ids))) {
             if (collections.size == 0) {
@@ -60,16 +65,17 @@ bool format_param_nft(const s_param_nft *param, const char *name) {
                 } else {
                     for (int i = 0; i < ids.size; ++i) {
                         collection_idx = (i >= collections.size) ? 0 : i;
-                        buf_shrink_expand(collections.value[collection_idx].ptr,
-                                          collections.value[collection_idx].length,
-                                          addr_buf,
-                                          sizeof(addr_buf));
+                        if (!parsed_value_to_address(&collections.value[collection_idx], addr_buf)) {
+                            ret = false;
+                            break;
+                        }
                         if ((asset = get_nft_info_by_addr(addr_buf)) == NULL) {
                             ret = false;
                             break;
                         }
-                        if (!(ret = uint256_to_decimal(ids.value[i].ptr,
-                                                       ids.value[i].length,
+                        if (!parsed_value_to_uint_be(&ids.value[i], id_buf, sizeof(id_buf)) ||
+                            !(ret = uint256_to_decimal(id_buf,
+                                                       sizeof(id_buf),
                                                        tmp,
                                                        sizeof(tmp)))) {
                             break;

@@ -269,7 +269,9 @@ bool verify_tx_info_authenticity(const buffer_t *buf) {
 // Common handler to hash all tags except signature
 static bool tx_info_common_handler(const tlv_data_t *data, s_tx_info_ctx *context) {
     if (data->tag != TAG_SIGNATURE) {
-        hash_nbytes(data->raw.ptr, data->raw.size, (cx_hash_t *) &context->struct_hash);
+        return hash_nbytes_no_throw(data->raw.ptr,
+                                    data->raw.size,
+                                    (cx_hash_t *) &context->struct_hash);
     }
     return true;
 }

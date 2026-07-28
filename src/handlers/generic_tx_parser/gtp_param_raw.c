@@ -82,11 +82,13 @@ static bool apply_visibility_constraint(const s_field *field,
  */
 static bool check_uint_constraint(const s_field *field, const uint256_t *value256) {
     uint256_t constraint = {0};
+    uint8_t encoded[INT256_LENGTH];
 
     for (s_field_constraint *c_node = field->constraints; c_node != NULL;
          c_node = (s_field_constraint *) c_node->node.next) {
-        memset(&constraint, 0, sizeof(constraint));
-        convertUint256BE(c_node->value, c_node->size, &constraint);
+        s_parsed_value parsed = {.ptr = c_node->value, .length = c_node->size};
+        if (!parsed_value_to_uint_be(&parsed, encoded, sizeof(encoded))) continue;
+        convertUint256BE(encoded, sizeof(encoded), &constraint);
         if (equal256(value256, &constraint)) {
             return true;
         }
@@ -226,8 +228,8 @@ static bool check_address_constraint(const s_field *field, const uint8_t *addr) 
 
     for (s_field_constraint *c_node = field->constraints; c_node != NULL;
          c_node = (s_field_constraint *) c_node->node.next) {
-        memset(constraint, 0, sizeof(constraint));
-        buf_shrink_expand(c_node->value, c_node->size, constraint, sizeof(constraint));
+        s_parsed_value parsed = {.ptr = c_node->value, .length = c_node->size};
+        if (!parsed_value_to_address(&parsed, constraint)) continue;
         if (memcmp(addr, constraint, ADDRESS_LENGTH) == 0) {
             return true;
         }
@@ -241,44 +243,12 @@ static bool format_addr(const s_field *field,
                         char *buf,
                         size_t buf_size) {
     uint8_t tmp[ADDRESS_LENGTH] = {0};
-    const uint8_t *addr;
 
     if ((field == NULL) || (to_be_displayed == NULL) ||
-        (value == NULL) || (value->ptr == NULL) ||
         (buf == NULL) || (buf_size == 0U) ||
-        ((value->length != ADDRESS_LENGTH) &&
-         (value->length != TRON_ADDRESS_SIZE) &&
-         (value->length != INT256_LENGTH))) {
+        !parsed_value_to_address(value, tmp)) {
         return false;
     }
-
-    addr = value->ptr;
-    if (value->length == TRON_ADDRESS_SIZE) {
-        if (value->ptr[0] != TRON_MAINNET_ADDRESS_PREFIX) {
-            return false;
-        }
-        addr++;
-    } else if (value->length == INT256_LENGTH) {
-        const size_t tron_prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
-        const size_t address_index = INT256_LENGTH - ADDRESS_LENGTH;
-
-        /* java-tron represents an ABI address as 21 bytes (0x41 + the
-         * EVM-style 20-byte address), right-aligned in the 32-byte word.
-         * Also accept the standard Solidity form with twelve zero padding
-         * bytes. In both cases only the final 20 bytes identify the address
-         * used by GCS constraints and the Base58 renderer. */
-        for (size_t i = 0U; i < tron_prefix_index; ++i) {
-            if (value->ptr[i] != 0U) {
-                return false;
-            }
-        }
-        if ((value->ptr[tron_prefix_index] != 0U) &&
-            (value->ptr[tron_prefix_index] != TRON_MAINNET_ADDRESS_PREFIX)) {
-            return false;
-        }
-        addr = value->ptr + address_index;
-    }
-    memcpy(tmp, addr, sizeof(tmp));
 
     if (!apply_visibility_constraint(field,
                                      to_be_displayed,

@@ -20,7 +20,9 @@ void getBase58FromAddress(const uint8_t address[static ADDRESS_SIZE], char *out)
     out[BASE58CHECK_ADDRESS_SIZE] = '\0';
 }
 
-off_t read_bip32_path(const uint8_t *buffer, size_t length, bip32_path_t *path) {
+__attribute__((weak)) off_t read_bip32_path(const uint8_t *buffer,
+                                            size_t length,
+                                            bip32_path_t *path) {
     if ((length == 0U) || (buffer[0] > MAX_BIP32_PATH) ||
         (length < 1U + ((size_t) buffer[0] * 4U))) {
         return -1;

@@ -154,7 +154,7 @@ bool uint256_to_decimal(const uint8_t *value, size_t value_len, char *out, size_
  * output buffer is too small or an error occurs.
  */
 bool amountToString(const uint8_t *amount,
-                    uint8_t amount_len,
+                    size_t amount_len,
                     uint8_t decimals,
                     const char *ticker,
                     char *out_buffer,

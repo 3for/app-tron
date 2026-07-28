@@ -13,10 +13,17 @@
  * @param[out] dst Pointer to the destination buffer
  * @param[in] dst_size Size of the destination buffer
  */
-void buf_shrink_expand(const uint8_t *src, size_t src_size, uint8_t *dst, size_t dst_size) {
+bool buf_shrink_expand(const uint8_t *src, size_t src_size, uint8_t *dst, size_t dst_size) {
     size_t src_off;
     size_t dst_off;
 
+    if ((dst == NULL) || (dst_size == 0U) || ((src == NULL) && (src_size != 0U))) {
+        return false;
+    }
+    if (src_size == 0U) {
+        explicit_bzero(dst, dst_size);
+        return true;
+    }
     if (src_size > dst_size) {
         src_off = src_size - dst_size;
         dst_off = 0;
@@ -26,6 +33,7 @@ void buf_shrink_expand(const uint8_t *src, size_t src_size, uint8_t *dst, size_t
         explicit_bzero(dst, dst_off);
     }
     memcpy(&dst[dst_off], &src[src_off], dst_size - dst_off);
+    return true;
 }
 
 /**

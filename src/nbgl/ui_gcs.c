@@ -19,7 +19,6 @@
 #include "gtp_field_table.h"
 #include "gtp_field.h"  // e_param_type, tokenDefinition_t/nftInfo_t via asset_info
 #include "enum_value.h"
-#include "proxy_info.h"
 #include "trusted_name.h"
 #include "tx_ctx.h"  // get_current_tx_info, get_tx_chain_id
 #include "gcs_limits.h"
@@ -292,7 +291,6 @@ void ui_gcs_cleanup(void) {
     }
     APP_MEM_FREE_AND_NULL((void *) &index_allocated);
     ui_all_cleanup();
-    proxy_cleanup();
 }
 
 static nbgl_contentValueExt_t *get_infolist_extension(const char *title,

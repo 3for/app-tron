@@ -60,14 +60,14 @@ static bool handle_sources(const tlv_data_t *data, s_param_trusted_name_context 
 }
 
 static bool handle_sender_addr(const tlv_data_t *data, s_param_trusted_name_context *context) {
-    if ((data->value.size > ADDRESS_LENGTH) ||
-        (context->param->sender_addr_count == ARRAYLEN(context->param->sender_addr))) {
+    s_parsed_value value = {.ptr = data->value.ptr, .length = data->value.size};
+
+    if ((context->param->sender_addr_count == ARRAYLEN(context->param->sender_addr)) ||
+        !parsed_value_to_address(
+            &value,
+            context->param->sender_addr[context->param->sender_addr_count])) {
         return false;
     }
-    buf_shrink_expand(data->value.ptr,
-                      data->value.size,
-                      context->param->sender_addr[context->param->sender_addr_count],
-                      sizeof(context->param->sender_addr[context->param->sender_addr_count]));
     context->param->sender_addr_count += 1;
     return true;
 }
@@ -97,19 +97,13 @@ bool handle_param_trusted_name_struct(const buffer_t *buf, s_param_trusted_name_
  * @return true if address matches a constraint, false otherwise
  */
 static bool check_address_constraint(const struct s_field *field,
-                                     const s_parsed_value_collection *values,
-                                     int value_index,
                                      const uint8_t *addr) {
     uint8_t constraint[ADDRESS_LENGTH] = {0};
 
     for (s_field_constraint *c_node = field->constraints; c_node != NULL;
          c_node = (s_field_constraint *) c_node->node.next) {
-        if (c_node->size > values->value[value_index].length) {
-            PRINTF("Warning: TRUSTED_NAME ADDR constraint wrong size!\n");
-            continue;
-        }
-        memset(constraint, 0, sizeof(constraint));
-        buf_shrink_expand(c_node->value, c_node->size, constraint, sizeof(constraint));
+        s_parsed_value encoded = {.ptr = c_node->value, .length = c_node->size};
+        if (!parsed_value_to_address(&encoded, constraint)) continue;
         if (memcmp(addr, constraint, sizeof(constraint)) == 0) {
             return true;
         }
@@ -128,6 +122,9 @@ bool format_param_trusted_name(const struct s_field *field) {
     e_param_type param_type;
     bool to_be_displayed = true;
 
+    if (field->param_trusted_name.value.type_family != TF_ADDRESS) {
+        return false;
+    }
     ret = value_get(&field->param_trusted_name.value, &values);
     if (ret) {
         chain_id = get_current_tx_chain_id();
@@ -136,7 +133,10 @@ bool format_param_trusted_name(const struct s_field *field) {
             goto cleanup;
         }
         for (int i = 0; i < values.size; ++i) {
-            buf_shrink_expand(values.value[i].ptr, values.value[i].length, addr, sizeof(addr));
+            if (!parsed_value_to_address(&values.value[i], addr)) {
+                ret = false;
+                break;
+            }
             // replace by wallet addr if a match is found
             for (uint8_t idx = 0; idx < field->param_trusted_name.sender_addr_count; ++idx) {
                 if (memcmp(addr, field->param_trusted_name.sender_addr[idx], ADDRESS_LENGTH) == 0) {
@@ -156,7 +156,10 @@ bool format_param_trusted_name(const struct s_field *field) {
                 strlcpy(buf, tname->name, buf_size);
                 param_type = PARAM_TYPE_TRUSTED_NAME;
             } else {
-                tronBase58FromBinary(addr, buf, buf_size);
+                if (!tronBase58FromBinary(addr, buf, buf_size)) {
+                    ret = false;
+                    break;
+                }
                 param_type = PARAM_TYPE_RAW;
             }
 
@@ -166,7 +169,7 @@ bool format_param_trusted_name(const struct s_field *field) {
                 case PARAM_VISIBILITY_MUST_BE:
                     // Field is not displayed but must match one of the constraint values,
                     // otherwise tx is rejected
-                    ret = check_address_constraint(field, &values, i, addr);
+                    ret = check_address_constraint(field, addr);
                     if (!ret) {
                         PRINTF("Error: TRUSTED_NAME does not match any MUST_BE constraint!\n");
                         // Reject the TX
@@ -175,11 +178,11 @@ bool format_param_trusted_name(const struct s_field *field) {
                     break;
                 case PARAM_VISIBILITY_IF_NOT_IN:
                     // Field is displayed only if value is NOT in the constraint list
-                    ret = check_address_constraint(field, &values, i, addr);
+                    ret = check_address_constraint(field, addr);
                     if (ret) {
                         PRINTF("Warning: TRUSTED_NAME does match a IF_NOT_IN constraint!\n");
-                        // Skip displaying the field
-                        goto cleanup;
+                        // Skip this element, but continue validating the rest of the array.
+                        continue;
                     }
                     to_be_displayed = true;
                     break;

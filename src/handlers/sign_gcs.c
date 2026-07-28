@@ -376,6 +376,8 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     tron_decode_result_t decoded = {0};
     if (!tron_tx_stream_get_result(&decoded) ||
         !trigger_values_match_mainnet(&decoded) ||
+        (decoded.data_len < CALLDATA_SELECTOR_SIZE) ||
+        (((decoded.data_len - CALLDATA_SELECTOR_SIZE) % CALLDATA_CHUNK_SIZE) != 0U) ||
         (decoded.data_len > GCS_MAX_ROOT_CALLDATA_TOTAL_SIZE) ||
         (decoded.has_custom_data && (g_gcs.memo_received != decoded.custom_data_len)) ||
         (decoded.has_custom_data && (decoded.custom_data_len != 0U) &&

@@ -24,12 +24,10 @@ static bool handle_value(const tlv_data_t *data, s_param_unit_context *context) 
 }
 
 static bool handle_base(const tlv_data_t *data, s_param_unit_context *context) {
-    if (data->value.size >= sizeof(context->param->base)) {
-        return false;
-    }
-    memcpy(context->param->base, data->value.ptr, data->value.size);
-    context->param->base[data->value.size] = '\0';
-    return true;
+    return tlv_get_printable_string(data,
+                                    context->param->base,
+                                    1U,
+                                    sizeof(context->param->base));
 }
 
 static bool handle_decimals(const tlv_data_t *data, s_param_unit_context *context) {
@@ -64,11 +62,18 @@ bool format_param_unit(const s_param_unit *param, const char *name) {
     size_t buf_size = sizeof(strings.tmp.tmp);
     char tmp[80];
     size_t off;
+    uint8_t value_buf[INT256_LENGTH] = {0};
 
+    if (param->value.type_family != TF_UINT) {
+        return false;
+    }
     if ((ret = value_get(&param->value, &collec))) {
         for (int i = 0; i < collec.size; ++i) {
-            if (!(ret = uint256_to_decimal(collec.value[i].ptr,
-                                           collec.value[i].length,
+            if (!parsed_value_to_uint_be(&collec.value[i],
+                                         value_buf,
+                                         sizeof(value_buf)) ||
+                !(ret = uint256_to_decimal(value_buf,
+                                           sizeof(value_buf),
                                            tmp,
                                            sizeof(tmp)))) {
                 break;

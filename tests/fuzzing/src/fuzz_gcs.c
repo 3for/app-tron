@@ -11,11 +11,13 @@
 #include "gtp_field.h"
 #include "gtp_param_raw.h"
 #include "gtp_path_slice.h"
+#include "gtp_value.h"
 #include "tlv_apdu.h"
 #include "tron_tx_stream.h"
 #include "tx_ctx.h"
 #include "parse.h"
 #include "shared_context.h"
+#include "utils.h"
 
 void init_tip712_fuzz_environment(void);
 void fuzz_set_settings(uint8_t value);
@@ -30,6 +32,11 @@ static void assert_gcs_parser_guards(void) {
     uint8_t encoded[INT256_LENGTH] = {0};
     char formatted[80] = {0};
     bool displayed = false;
+    uint8_t wide[INT256_LENGTH + 1U] = {0};
+    uint8_t canonical_word[INT256_LENGTH] = {0};
+    uint8_t normalized[INT256_LENGTH] = {0};
+    uint8_t address[ADDRESS_LENGTH] = {0};
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0};
 
     field.param_type = PARAM_TYPE_RAW;
     field.visibility = PARAM_VISIBILITY_ALWAYS;
@@ -98,6 +105,51 @@ static void assert_gcs_parser_guards(void) {
     parsed.length = sizeof(signed16_encoded);
     if (!format_int(&signed16_def, &parsed, formatted, sizeof(formatted)) ||
         (strcmp(formatted, "-2") != 0)) {
+        __builtin_trap();
+    }
+
+    /* Specialized formatters share these canonical conversion guards. Values
+     * that would lose a non-zero high byte must never be silently truncated. */
+    parsed.ptr = wide;
+    parsed.length = sizeof(wide);
+    if (parsed_value_to_uint_be(&parsed, normalized, sizeof(normalized))) {
+        __builtin_trap();
+    }
+    parsed.ptr = canonical_word;
+    parsed.length = sizeof(canonical_word);
+    canonical_word[0] = 1U;
+    if (parsed_value_to_uint_be(&parsed, normalized, sizeof(uint64_t))) {
+        __builtin_trap();
+    }
+    canonical_word[0] = 0U;
+    canonical_word[INT256_LENGTH - 1U] = 7U;
+    if (!parsed_value_to_uint_be(&parsed, normalized, sizeof(uint64_t)) ||
+        (normalized[sizeof(uint64_t) - 1U] != 7U)) {
+        __builtin_trap();
+    }
+
+    memset(canonical_word, 0, sizeof(canonical_word));
+    canonical_word[INT256_LENGTH - TRON_ADDRESS_SIZE] = TRON_MAINNET_ADDRESS_PREFIX;
+    canonical_word[INT256_LENGTH - 1U] = 0xaaU;
+    if (!parsed_value_to_address(&parsed, address) ||
+        (address[ADDRESS_LENGTH - 1U] != 0xaaU)) {
+        __builtin_trap();
+    }
+    canonical_word[0] = 1U;
+    if (parsed_value_to_address(&parsed, address)) {
+        __builtin_trap();
+    }
+    parsed.ptr = canonical_word;
+    parsed.length = CALLDATA_SELECTOR_SIZE;
+    if (!parsed_value_to_selector(&parsed, selector)) {
+        __builtin_trap();
+    }
+    parsed.ptr = NULL;
+    parsed.length = 0U;
+    memset(normalized, 0xa5, sizeof(normalized));
+    if (parsed_value_to_uint_be(&parsed, normalized, sizeof(normalized)) ||
+        !buf_shrink_expand(NULL, 0U, normalized, sizeof(normalized)) ||
+        !allzeroes(normalized, sizeof(normalized))) {
         __builtin_trap();
     }
 

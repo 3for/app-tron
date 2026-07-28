@@ -104,24 +104,34 @@ static bool process_nested_calldata(const s_param_calldata *param,
     uint8_t chain_id_buf[sizeof(chain_id_value)];
 
     if (param->has_chain_id) {
-        buf_shrink_expand(chain_id->ptr, chain_id->length, chain_id_buf, sizeof(chain_id_buf));
+        if (!parsed_value_to_uint_be(chain_id, chain_id_buf, sizeof(chain_id_buf))) {
+            return false;
+        }
         chain_id_value = read_u64_be(chain_id_buf, 0);
     }
 
-    if (calldata->length > 0) {
-        if (param->has_selector) {
-            buf_shrink_expand(selector->ptr, selector->length, selector_buf, sizeof(selector_buf));
-            calldata_buf = calldata->ptr;
-            calldata_length = calldata->length;
-        } else {
-            if (calldata->length < CALLDATA_SELECTOR_SIZE) {
-                return false;
-            }
-            memcpy(selector_buf, calldata->ptr, CALLDATA_SELECTOR_SIZE);
-            calldata_buf = calldata->ptr + CALLDATA_SELECTOR_SIZE;
-            calldata_length = calldata->length - CALLDATA_SELECTOR_SIZE;
+    if (param->has_selector) {
+        if (!parsed_value_to_selector(selector, selector_buf)) {
+            return false;
         }
+        calldata_buf = calldata->ptr;
+        calldata_length = calldata->length;
+    } else if (calldata->length > 0U) {
+        if ((calldata->ptr == NULL) || (calldata->length < CALLDATA_SELECTOR_SIZE)) {
+            return false;
+        }
+        memcpy(selector_buf, calldata->ptr, CALLDATA_SELECTOR_SIZE);
+        calldata_buf = calldata->ptr + CALLDATA_SELECTOR_SIZE;
+        calldata_length = calldata->length - CALLDATA_SELECTOR_SIZE;
+    } else {
+        calldata_buf = NULL;
+        calldata_length = 0U;
+    }
 
+    if (param->has_selector || (calldata->length > 0U)) {
+        if ((calldata_length % CALLDATA_CHUNK_SIZE) != 0U) {
+            return false;
+        }
         if ((new_calldata = calldata_init_nested(calldata_length, selector_buf)) == NULL) {
             return false;
         }
@@ -131,12 +141,21 @@ static bool process_nested_calldata(const s_param_calldata *param,
         }
     }
 
-    buf_shrink_expand(contract_addr->ptr, contract_addr->length, addr_buf, sizeof(addr_buf));
+    if (!parsed_value_to_address(contract_addr, addr_buf)) {
+        if (new_calldata != NULL) calldata_delete(new_calldata);
+        return false;
+    }
     if (param->has_amount) {
-        buf_shrink_expand(amount->ptr, amount->length, amount_buf, sizeof(amount_buf));
+        if (!parsed_value_to_uint_be(amount, amount_buf, sizeof(amount_buf))) {
+            if (new_calldata != NULL) calldata_delete(new_calldata);
+            return false;
+        }
     }
     if (param->has_spender) {
-        buf_shrink_expand(spender->ptr, spender->length, from_buf, sizeof(from_buf));
+        if (!parsed_value_to_address(spender, from_buf)) {
+            if (new_calldata != NULL) calldata_delete(new_calldata);
+            return false;
+        }
     }
 
     if (!tx_ctx_init(new_calldata,
@@ -192,6 +211,15 @@ bool format_param_calldata(const s_param_calldata *param, const char *name) {
     s_parsed_value_collection spenders = {0};
 
     (void) name;
+    if ((param->calldata.type_family != TF_BYTES) ||
+        ((param->contract_addr.type_family != TF_ADDRESS) &&
+         (param->contract_addr.type_family != TF_BYTES)) ||
+        (param->has_chain_id && (param->chain_id.type_family != TF_UINT)) ||
+        (param->has_selector && (param->selector.type_family != TF_BYTES)) ||
+        (param->has_amount && (param->amount.type_family != TF_UINT)) ||
+        (param->has_spender && (param->spender.type_family != TF_ADDRESS))) {
+        return false;
+    }
     if ((ret = check_param(param,
                            &calldatas,
                            &contract_addrs,

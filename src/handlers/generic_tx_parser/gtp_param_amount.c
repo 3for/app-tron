@@ -42,16 +42,24 @@ bool format_param_amount(const s_param_amount *param, const char *name) {
     s_parsed_value_collection collec = {0};
     char *buf = strings.tmp.tmp;
     size_t buf_size = sizeof(strings.tmp.tmp);
+    uint8_t amount[INT256_LENGTH] = {0};
 
+    if (param->value.type_family != TF_UINT) {
+        return false;
+    }
     if ((ret = value_get(&param->value, &collec))) {
-        if (get_current_tx_info() == NULL) return false;
+        if (get_current_tx_info() == NULL) {
+            ret = false;
+            goto cleanup;
+        }
         chain_id = get_current_tx_info()->chain_id;
         ticker = get_displayable_ticker(&chain_id, chainConfig, true);
         for (int i = 0; i < collec.size; ++i) {
             // TRON divergence from app-ethereum: the native currency is TRX with
             // SUN_TO_TRX (6) decimals, not ETH's WEI_TO_ETHER (18).
-            if (!(ret = amountToString(collec.value[i].ptr,
-                                       collec.value[i].length,
+            if (!parsed_value_to_uint_be(&collec.value[i], amount, sizeof(amount)) ||
+                !(ret = amountToString(amount,
+                                       sizeof(amount),
                                        SUN_TO_TRX,
                                        ticker,
                                        buf,
@@ -63,6 +71,7 @@ bool format_param_amount(const s_param_amount *param, const char *name) {
             }
         }
     }
+cleanup:
     value_cleanup(&param->value, &collec);
     return ret;
 }

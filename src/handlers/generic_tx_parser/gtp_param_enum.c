@@ -47,15 +47,20 @@ bool format_param_enum(const s_param_enum *param, const char *name) {
     uint8_t value;
     const uint8_t *selector;
 
+    if (param->value.type_family != TF_UINT) {
+        return false;
+    }
     if ((ret = value_get(&param->value, &collec))) {
-        if (get_current_tx_info() == NULL) return false;
+        if (get_current_tx_info() == NULL) {
+            ret = false;
+            goto cleanup;
+        }
         chain_id = get_current_tx_info()->chain_id;
         for (int i = 0; i < collec.size; ++i) {
-            if (collec.value[i].length == 0) {
+            if (!parsed_value_to_uint_be(&collec.value[i], &value, sizeof(value))) {
                 ret = false;
                 break;
             }
-            value = collec.value[i].ptr[collec.value[i].length - 1];
             if ((selector = calldata_get_selector(get_current_calldata())) == NULL) {
                 ret = false;
                 break;
@@ -77,6 +82,7 @@ bool format_param_enum(const s_param_enum *param, const char *name) {
             }
         }
     }
+cleanup:
     value_cleanup(&param->value, &collec);
     return ret;
 }

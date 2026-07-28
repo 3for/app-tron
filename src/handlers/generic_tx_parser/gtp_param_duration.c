@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include "gtp_param_duration.h"
 #include "read.h"
 #include "gtp_field_table.h"
@@ -43,26 +44,29 @@ bool format_param_duration(const s_param_duration *param, const char *name) {
     s_parsed_value_collection collec = {0};
     char *buf = strings.tmp.tmp;
     size_t buf_size = sizeof(strings.tmp.tmp);
-    uint16_t days;
+    uint64_t days;
     uint8_t hours;
     uint8_t minutes;
     uint8_t seconds;
     uint64_t remaining;
     uint8_t raw_buf[sizeof(remaining)] = {0};
-    int off;
+    size_t off;
 
+    if (param->value.type_family != TF_UINT) {
+        return false;
+    }
     if ((ret = value_get(&param->value, &collec))) {
         for (int i = 0; i < collec.size; ++i) {
             off = 0;
-            buf_shrink_expand(collec.value[i].ptr,
-                              collec.value[i].length,
-                              raw_buf,
-                              sizeof(raw_buf));
+            if (!parsed_value_to_uint_be(&collec.value[i], raw_buf, sizeof(raw_buf))) {
+                ret = false;
+                break;
+            }
             remaining = read_u64_be(raw_buf, 0);
 
             days = remaining / SECONDS_IN_DAY;
             if (days > 0) {
-                snprintf(&buf[off], buf_size - off, "%dd", days);
+                snprintf(&buf[off], buf_size - off, "%" PRIu64 "d", days);
                 off = strlen(buf);
             }
             remaining %= SECONDS_IN_DAY;

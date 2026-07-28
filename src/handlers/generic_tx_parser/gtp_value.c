@@ -1,3 +1,4 @@
+#include <string.h>
 #include "os_print.h"
 #include "gtp_value.h"
 #include "gtp_data_path.h"
@@ -174,4 +175,75 @@ void value_cleanup(const s_value *value, const s_parsed_value_collection *collec
     if (value->source == SOURCE_CALLDATA) {
         data_path_cleanup(collection);
     }
+}
+
+bool parsed_value_to_uint_be(const s_parsed_value *value, uint8_t *out, size_t out_size) {
+    const uint8_t *src;
+    size_t src_size;
+
+    if ((value == NULL) || (out == NULL) || (out_size == 0U) ||
+        (value->ptr == NULL) || (value->length == 0U) ||
+        (value->length > INT256_LENGTH)) {
+        return false;
+    }
+    src = value->ptr;
+    src_size = value->length;
+    if (src_size > out_size) {
+        const size_t discarded = src_size - out_size;
+        for (size_t i = 0U; i < discarded; ++i) {
+            if (src[i] != 0U) {
+                return false;
+            }
+        }
+        src += discarded;
+        src_size = out_size;
+    }
+    memset(out, 0, out_size - src_size);
+    memcpy(out + out_size - src_size, src, src_size);
+    return true;
+}
+
+bool parsed_value_to_address(const s_parsed_value *value, uint8_t out[static ADDRESS_LENGTH]) {
+    const uint8_t *addr;
+
+    if ((value == NULL) || (out == NULL) || (value->ptr == NULL)) {
+        return false;
+    }
+    addr = value->ptr;
+    if (value->length == ADDRESS_LENGTH) {
+        /* Already the canonical EVM-style address used internally by GCS. */
+    } else if (value->length == TRON_ADDRESS_SIZE) {
+        if (addr[0] != TRON_MAINNET_ADDRESS_PREFIX) {
+            return false;
+        }
+        addr += 1U;
+    } else if (value->length == INT256_LENGTH) {
+        const size_t prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
+        const size_t address_index = INT256_LENGTH - ADDRESS_LENGTH;
+
+        for (size_t i = 0U; i < prefix_index; ++i) {
+            if (addr[i] != 0U) {
+                return false;
+            }
+        }
+        if ((addr[prefix_index] != 0U) &&
+            (addr[prefix_index] != TRON_MAINNET_ADDRESS_PREFIX)) {
+            return false;
+        }
+        addr += address_index;
+    } else {
+        return false;
+    }
+    memcpy(out, addr, ADDRESS_LENGTH);
+    return true;
+}
+
+bool parsed_value_to_selector(const s_parsed_value *value,
+                              uint8_t out[static CALLDATA_SELECTOR_SIZE]) {
+    if ((value == NULL) || (out == NULL) || (value->ptr == NULL) ||
+        (value->length != CALLDATA_SELECTOR_SIZE)) {
+        return false;
+    }
+    memcpy(out, value->ptr, CALLDATA_SELECTOR_SIZE);
+    return true;
 }

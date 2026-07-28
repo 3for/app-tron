@@ -5,6 +5,7 @@
 #include "buffer.h"
 #include "gtp_data_path.h"
 #include "calldata.h"
+#include "common_utils.h"
 
 typedef enum {
     TF_UINT = 1,
@@ -56,3 +57,7 @@ typedef struct {
 bool handle_value_struct(const buffer_t *buf, s_value_context *context);
 bool value_get(const s_value *value, s_parsed_value_collection *collection);
 void value_cleanup(const s_value *value, const s_parsed_value_collection *collection);
+bool parsed_value_to_uint_be(const s_parsed_value *value, uint8_t *out, size_t out_size);
+bool parsed_value_to_address(const s_parsed_value *value, uint8_t out[static ADDRESS_LENGTH]);
+bool parsed_value_to_selector(const s_parsed_value *value,
+                              uint8_t out[static CALLDATA_SELECTOR_SIZE]);

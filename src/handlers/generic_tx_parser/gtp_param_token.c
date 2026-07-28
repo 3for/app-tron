@@ -69,9 +69,15 @@ bool format_param_token(const s_param_token *param, const char *name) {
 
     if (get_current_tx_info() == NULL) return false;
     chain_id = get_current_tx_info()->chain_id;
+    if (param->address.type_family != TF_ADDRESS) return false;
     if ((ret = value_get(&param->address, &collec))) {
         for (int i = 0; i < collec.size; ++i) {
-            buf_shrink_expand(collec.value[i].ptr, collec.value[i].length, addr, sizeof(addr));
+            ticker = NULL;
+            token_def = NULL;
+            if (!parsed_value_to_address(&collec.value[i], addr)) {
+                ret = false;
+                break;
+            }
             if (match_native(addr, param)) {
                 ticker = get_displayable_ticker(&chain_id, chainConfig, true);
             } else if ((token_def = get_token_info_by_addr(addr)) != NULL) {

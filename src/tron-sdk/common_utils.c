@@ -242,7 +242,7 @@ bool adjustDecimals(const char *src,
 
 // change "4.2 ENS" to "ENS 4.2"
 bool amountToString(const uint8_t *amount,
-                    uint8_t amount_size,
+                    size_t amount_size,
                     uint8_t decimals,
                     const char *ticker,
                     char *out_buffer,
