@@ -59,13 +59,14 @@ def tip712_new_common(scenario_navigator: NavigateWithScenario,
         gating_params.selector = bytes(InputData.sig_ctx["schema_hash"])
         nb_warnings += 1
 
-    assert InputData.process_data(client, json_data, filters)
+    signing_path = client.getAccount(0)['path']
+    assert InputData.process_data(client, json_data, filters, signing_path)
 
     if gating_params is not None:
         assert client.provide_gating(gating_params.serialize()).status == StatusWord.OK
 
     do_compare = snapshots_dirname is not None
-    with client.tip712_sign_new(client.getAccount(0)['path']):
+    with client.tip712_sign_new(signing_path):
         if nb_warnings > 0:
             scenario_navigator.review_approve_with_warning(
                 test_name=snapshots_dirname,
@@ -779,6 +780,7 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
 
 def test_sign_tip712(
                          scenario_navigator: NavigateWithScenario):
+    """Legacy P2=0 remains signable without the full-mode INIT command."""
     backend = scenario_navigator.backend
     device = backend.device
     navigator = scenario_navigator.navigator
@@ -803,6 +805,25 @@ def test_sign_tip712(
 
     assert check_hash_signature(digest, resp.data[0:65],
                                 client.getAccount(0)['publicKey'][2:])
+
+
+def test_tip712_legacy_host_apdu_remains_single_step():
+    """Pin the wire format used by existing hash-only TIP-712 hosts."""
+    signing_path = "m/44'/195'/0'/0/0"
+    domain_hash = bytes(range(32))
+    message_hash = bytes(range(32, 64))
+    expected_payload = (pack_derivation_path(signing_path) + domain_hash +
+                        message_hash)
+
+    command = CommandBuilder().tip712_sign_legacy(signing_path,
+                                                   domain_hash,
+                                                   message_hash)
+
+    # E0 0C 00 00 means one-step legacy TIP-712 signing. In particular, this
+    # must not change to the P1=01 INIT command introduced for P2=01 full mode.
+    assert command[:5] == bytes([0xE0, 0x0C, 0x00, 0x00,
+                                 len(expected_payload)])
+    assert command[5:] == expected_payload
 
 
 def test_tip712_new(
@@ -1423,7 +1444,10 @@ def test_tip712_filtering_freezes_schema(
     client = TronClient(scenario_navigator.backend,
                         scenario_navigator.backend.device,
                         scenario_navigator.navigator)
+    signing_path = client.getAccount(0)['path']
 
+    with client.tip712_init_new(signing_path):
+        pass
     with client.tip712_send_struct_def_struct_name("EIP712Domain"):
         pass
     with client.tip712_filtering_activate():
@@ -1433,6 +1457,38 @@ def test_tip712_filtering_freezes_schema(
         with client.tip712_send_struct_def_struct_name("Injected"):
             pass
     assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_tip712_full_requires_path_initialization(
+        scenario_navigator: NavigateWithScenario):
+    """Schema upload cannot begin before the signing path is locked."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+            pass
+    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_tip712_final_path_must_match_locked_path(
+        scenario_navigator: NavigateWithScenario):
+    """The final approval command cannot substitute another signing key."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    signing_path = client.getAccount(0)['path']
+    different_path = "m/44'/195'/1'/0/0"
+
+    assert InputData.process_data(client,
+                                  ADVANCED_DATA_SETS[0].data,
+                                  ADVANCED_DATA_SETS[0].filters,
+                                  signing_path)
+    with pytest.raises(ExceptionRAPDU) as exc_info:
+        with client.tip712_sign_new(different_path):
+            pass
+    assert exc_info.value.status == StatusWord.INVALID_DATA
 
 
 def test_tip712_filtering_rejects_chain_id_above_u64(
@@ -1450,7 +1506,10 @@ def test_tip712_filtering_rejects_chain_id_above_u64(
 
     data["domain"]["chainId"] = 1 << 64
     with pytest.raises(ExceptionRAPDU):
-        InputData.process_data(client, data, filters)
+        InputData.process_data(client,
+                               data,
+                               filters,
+                               client.getAccount(0)['path'])
 
 
 def test_tip712_legacy_review_rejects_existing_full_context(
@@ -1459,17 +1518,22 @@ def test_tip712_legacy_review_rejects_existing_full_context(
     client = TronClient(scenario_navigator.backend,
                         scenario_navigator.backend.device,
                         scenario_navigator.navigator)
+    signing_path = client.getAccount(0)['path']
 
+    with client.tip712_init_new(signing_path):
+        pass
     with client.tip712_send_struct_def_struct_name("EIP712Domain"):
         pass
     with pytest.raises(ExceptionRAPDU) as exc_info:
-        with client.tip712_sign_legacy(client.getAccount(0)['path'],
+        with client.tip712_sign_legacy(signing_path,
                                        bytes(32), bytes(32)):
             pass
     assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
     # The rejected cross-mode command aborts the old session cleanly, so a new
     # full definition must be accepted without rebooting the app.
+    with client.tip712_init_new(signing_path):
+        pass
     with client.tip712_send_struct_def_struct_name("EIP712Domain"):
         pass
 
@@ -1486,11 +1550,14 @@ def test_tip712_definition_rejected_during_personal_message_reception(
     response = client.exchange_raw(first_chunk)
     assert response.status == StatusWord.OK
 
+    signing_path = client.getAccount(0)['path']
     with pytest.raises(ExceptionRAPDU) as exc_info:
-        with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        with client.tip712_init_new(signing_path):
             pass
     assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
+    with client.tip712_init_new(signing_path):
+        pass
     with client.tip712_send_struct_def_struct_name("EIP712Domain"):
         pass
 

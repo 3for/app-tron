@@ -1,10 +1,7 @@
-#include <stdlib.h>
 #include <string.h>
-#include "app_mem_utils.h"
 #include "encode_field.h"
 #include "parse.h"
 #include "app_errors.h"
-#include "gcs_memory.h"
 
 typedef enum { MSB, LSB } e_padding_type;
 
@@ -17,38 +14,33 @@ typedef enum { MSB, LSB } e_padding_type;
  * @param[in] pval value used for padding
  * @return encoded field value
  */
-static void *field_encode(const uint8_t *value,
-                          uint8_t length,
-                          e_padding_type ptype,
-                          uint8_t pval) {
-    uint8_t *padded_value;
+static bool field_encode(const uint8_t *value,
+                         uint8_t length,
+                         e_padding_type ptype,
+                         uint8_t pval,
+                         uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
     uint8_t start_idx;
 
-    if (length > TIP_712_ENCODED_FIELD_LENGTH)  // sanity check
-    {
+    if ((value == NULL) || (out == NULL) ||
+        (length > TIP_712_ENCODED_FIELD_LENGTH)) {
         apdu_response_code = SWO_INCORRECT_DATA;
-        return NULL;
+        return false;
     }
-    if ((padded_value = gcs_mem_alloc(TIP_712_ENCODED_FIELD_LENGTH,
-                                      GCS_MEM_TEMPORARY)) != NULL) {
-        switch (ptype) {
-            case MSB:
-                memset(padded_value, pval, TIP_712_ENCODED_FIELD_LENGTH - length);
-                start_idx = TIP_712_ENCODED_FIELD_LENGTH - length;
-                break;
-            case LSB:
-                explicit_bzero(padded_value + length, TIP_712_ENCODED_FIELD_LENGTH - length);
-                start_idx = 0;
-                break;
-            default:
-                apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
-                return NULL;  // should not be here
-        }
-        memcpy(&padded_value[start_idx], value, length);
-    } else {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    switch (ptype) {
+        case MSB:
+            memset(out, pval, TIP_712_ENCODED_FIELD_LENGTH - length);
+            start_idx = TIP_712_ENCODED_FIELD_LENGTH - length;
+            break;
+        case LSB:
+            explicit_bzero(out, TIP_712_ENCODED_FIELD_LENGTH);
+            start_idx = 0;
+            break;
+        default:
+            apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+            return false;
     }
-    return padded_value;
+    memcpy(&out[start_idx], value, length);
+    return true;
 }
 
 /**
@@ -58,9 +50,10 @@ static void *field_encode(const uint8_t *value,
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_uint(const uint8_t *value, uint8_t length) {
-    // no length check here since it will be checked by field_encode
-    return field_encode(value, length, MSB, 0x00);
+bool encode_uint(const uint8_t *value,
+                 uint8_t length,
+                 uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
+    return field_encode(value, length, MSB, 0x00, out);
 }
 
 /**
@@ -71,12 +64,15 @@ void *encode_uint(const uint8_t *value, uint8_t length) {
  * @param[in] typesize the type size in bytes
  * @return the encoded value
  */
-void *encode_int(const uint8_t *value, uint8_t length, uint8_t typesize) {
+bool encode_int(const uint8_t *value,
+                uint8_t length,
+                uint8_t typesize,
+                uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
     uint8_t padding_value;
 
     if (length < 1) {
         apdu_response_code = SWO_INCORRECT_DATA;
-        return NULL;
+        return false;
     }
 
     if ((length == typesize) && (value[0] & (1 << 7)))  // negative number
@@ -86,7 +82,7 @@ void *encode_int(const uint8_t *value, uint8_t length, uint8_t typesize) {
         padding_value = 0x00;
     }
     // no length check here since it will be checked by field_encode
-    return field_encode(value, length, MSB, padding_value);
+    return field_encode(value, length, MSB, padding_value, out);
 }
 
 /**
@@ -96,9 +92,10 @@ void *encode_int(const uint8_t *value, uint8_t length, uint8_t typesize) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_bytes(const uint8_t *value, uint8_t length) {
-    // no length check here since it will be checked by field_encode
-    return field_encode(value, length, LSB, 0x00);
+bool encode_bytes(const uint8_t *value,
+                  uint8_t length,
+                  uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
+    return field_encode(value, length, LSB, 0x00, out);
 }
 
 /**
@@ -108,13 +105,15 @@ void *encode_bytes(const uint8_t *value, uint8_t length) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_boolean(const bool *value, uint8_t length) {
-    if ((length != 1) || (((const uint8_t *) value)[0] > 1U))  // canonical ABI bool
+bool encode_boolean(const uint8_t *value,
+                    uint8_t length,
+                    uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
+    if ((value == NULL) || (length != 1) || (value[0] > 1U))
     {
         apdu_response_code = SWO_INCORRECT_DATA;
-        return NULL;
+        return false;
     }
-    return encode_uint((uint8_t *) value, length);
+    return encode_uint(value, length, out);
 }
 
 /**
@@ -124,11 +123,13 @@ void *encode_boolean(const bool *value, uint8_t length) {
  * @param[in] length its byte-length
  * @return the encoded value
  */
-void *encode_address(const uint8_t *value, uint8_t length) {
+bool encode_address(const uint8_t *value,
+                    uint8_t length,
+                    uint8_t out[TIP_712_ENCODED_FIELD_LENGTH]) {
     if (length != ADDRESS_LENGTH)  // sanity check
     {
         apdu_response_code = SWO_INCORRECT_DATA;
-        return NULL;
+        return false;
     }
-    return encode_uint(value, length);
+    return encode_uint(value, length, out);
 }

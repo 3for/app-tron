@@ -703,7 +703,9 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
                 return false;
             }
             memcpy(&previous_path, path_struct, sizeof(previous_path));
-            (void) path_advance(false);
+            if (!path_advance(false)) {
+                return false;
+            }
             if ((path_struct->array_depth_count > array_depth_count_bak) &&
                 (memcmp(&previous_path, path_struct, sizeof(previous_path)) == 0)) {
                 apdu_response_code = SWO_INCORRECT_DATA;
@@ -718,17 +720,18 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
 /**
  * Advance within the struct that contains the field the path points to.
  *
- * @return whether the end of the struct has been reached.
+ * @param[out] end_reached whether the end of the struct has been reached
+ * @return whether advancing/finalizing the struct succeeded
  */
-static bool path_advance_in_struct(void) {
-    bool end_reached = true;
+static bool path_advance_in_struct(bool *end_reached) {
     uint8_t *depth = NULL;
     uint8_t fields_count;
 
-    if (path_struct == NULL) {
+    if ((path_struct == NULL) || (end_reached == NULL)) {
         return false;
     }
     if (path_struct->depth_count == 0) {
+        *end_reached = true;
         return true;
     }
     depth = &path_struct->depths[path_struct->depth_count - 1];
@@ -741,52 +744,59 @@ static bool path_advance_in_struct(void) {
     }
     if (path_struct->depth_count > 0) {
         *depth += 1;
-        end_reached = (*depth == fields_count);
+        *end_reached = (*depth == fields_count);
     }
-    if (end_reached) {
-        path_depth_list_pop();
+    if (*end_reached) {
+        return path_depth_list_pop();
     }
-    return end_reached;
+    return true;
 }
 
 /**
  * Advance within the array levels of the current field the path points to.
  *
- * @return whether the end of the array levels has been reached.
+ * @param[out] end_reached whether the end of the array levels has been reached
+ * @return whether advancing/finalizing the array levels succeeded
  */
-static bool path_advance_in_array(void) {
-    bool end_reached;
+static bool path_advance_in_array(bool *end_reached) {
     s_array_depth *arr_depth;
 
-    if (path_struct == NULL) {
+    if ((path_struct == NULL) || (end_reached == NULL)) {
         return false;
     }
     if (path_struct->array_depth_count == 0) {
+        *end_reached = true;
         return true;
     }
     do {
         if (path_struct->array_depth_count == 0) {
+            *end_reached = true;
             return true;
         }
-        end_reached = false;
+        *end_reached = false;
         arr_depth = &path_struct->array_depths[path_struct->array_depth_count - 1];
 
         if ((path_struct->array_depth_count > 0) &&
             (arr_depth->path_index == (path_struct->depth_count - 1))) {
             if (arr_depth->size == 0) {
-                array_depth_list_pop();
-                end_reached = true;
+                if (!array_depth_list_pop()) {
+                    return false;
+                }
+                *end_reached = true;
                 continue;
             }
             arr_depth->index += 1;
             if (arr_depth->index == arr_depth->size) {
-                array_depth_list_pop();
-                end_reached = true;
+                if (!array_depth_list_pop()) {
+                    return false;
+                }
+                *end_reached = true;
             } else {
-                return false;
+                return true;
             }
         }
-    } while (end_reached);
+    } while (*end_reached);
+    *end_reached = true;
     return true;
 }
 
@@ -804,10 +814,14 @@ bool path_advance(bool do_typehash) {
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
-        if (path_advance_in_array()) {
-            end_reached = path_advance_in_struct();
-        } else {
-            end_reached = false;
+        if (!path_advance_in_array(&end_reached)) {
+            return false;
+        }
+        if (end_reached && !path_advance_in_struct(&end_reached)) {
+            return false;
+        }
+        if (end_reached && (path_struct->depth_count == 0)) {
+            return true;
         }
     } while (end_reached);
     return path_update(true, true, do_typehash);

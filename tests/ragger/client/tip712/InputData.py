@@ -621,7 +621,8 @@ def init_signature_context(types, domain, filters=None):
 
 def process_data(aclient,
                  data_json: dict,
-                 filters: Optional[dict] = None) -> bool:
+                 filters: Optional[dict] = None,
+                 bip32_path: Optional[str] = None) -> bool:
     global sig_ctx
     global app_client
     global current_path
@@ -635,6 +636,11 @@ def process_data(aclient,
     types = data_json["types"]
     domain = data_json["domain"]
     message = data_json["message"]
+
+    if bip32_path is None:
+        raise ValueError("full TIP-712 signing path must be locked before schema upload")
+    with app_client.tip712_init_new(bip32_path):
+        pass
 
     if filters:
         init_signature_context(types, domain, filters)

@@ -24,12 +24,15 @@ static bool encode_and_hash_field(const s_struct_712_field *field_ptr) {
         return false;
     }
     // space between field type name and field name
-    hash_byte(' ', (cx_hash_t *) &global_sha3);
+    if (!hash_byte_no_throw(' ', (cx_hash_t *) &global_sha3)) {
+        return false;
+    }
 
     // field name
     name = field_ptr->key_name;
-    hash_nbytes((uint8_t *) name, strlen(name), (cx_hash_t *) &global_sha3);
-    return true;
+    return hash_nbytes_no_throw((const uint8_t *) name,
+                                strlen(name),
+                                (cx_hash_t *) &global_sha3);
 }
 
 /**
@@ -45,16 +48,24 @@ static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
 
     // struct name
     struct_name = struct_ptr->name;
-    hash_nbytes((uint8_t *) struct_name, strlen(struct_name), (cx_hash_t *) &global_sha3);
+    if (!hash_nbytes_no_throw((const uint8_t *) struct_name,
+                              strlen(struct_name),
+                              (cx_hash_t *) &global_sha3)) {
+        return false;
+    }
 
     // opening struct parentheses
-    hash_byte('(', (cx_hash_t *) &global_sha3);
+    if (!hash_byte_no_throw('(', (cx_hash_t *) &global_sha3)) {
+        return false;
+    }
 
     for (field_ptr = struct_ptr->fields; field_ptr != NULL;
          field_ptr = (s_struct_712_field *) ((flist_node_t *) field_ptr)->next) {
         // comma separating struct fields
         if (field_ptr != struct_ptr->fields) {
-            hash_byte(',', (cx_hash_t *) &global_sha3);
+            if (!hash_byte_no_throw(',', (cx_hash_t *) &global_sha3)) {
+                return false;
+            }
         }
 
         if (encode_and_hash_field(field_ptr) == false) {
@@ -62,9 +73,7 @@ static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
         }
     }
     // closing struct parentheses
-    hash_byte(')', (cx_hash_t *) &global_sha3);
-
-    return true;
+    return hash_byte_no_throw(')', (cx_hash_t *) &global_sha3);
 }
 
 typedef struct struct_dep {

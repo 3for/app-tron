@@ -8,3 +8,7 @@
 // substitute the wallet address into trusted-name lookups.
 // Signature matches app-ethereum's get_public_key.h.
 uint16_t get_public_key(uint8_t *out, uint8_t outLength);
+uint16_t get_public_key_from_path(uint8_t *out,
+                                  uint8_t outLength,
+                                  const uint32_t *path,
+                                  uint8_t pathLength);

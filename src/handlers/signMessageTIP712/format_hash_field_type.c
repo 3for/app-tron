@@ -1,6 +1,6 @@
 #include "format_hash_field_type.h"
-#include "app_mem_utils.h"
-#include "mem_utils.h"
+#include <stdio.h>
+#include <string.h>
 #include "commands_712.h"
 #include "hash_bytes.h"
 #include "app_errors.h"  // APDU response codes
@@ -16,7 +16,7 @@
  */
 static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_hash_t *hash_ctx) {
     uint16_t field_size;
-    const char *uint_str_ptr;
+    char uint_str[sizeof("4294967295")];
 
     field_size = field_ptr->type_size;
     switch (field_ptr->type) {
@@ -32,13 +32,17 @@ static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
     }
-    uint_str_ptr = mem_alloc_and_format_uint(field_size);
-    if (uint_str_ptr == NULL) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    int written = snprintf(uint_str,
+                           sizeof(uint_str),
+                           "%u",
+                           (unsigned int) field_size);
+    if ((written < 0) || ((size_t) written >= sizeof(uint_str)) ||
+        !hash_nbytes_no_throw((const uint8_t *) uint_str,
+                              (size_t) written,
+                              hash_ctx)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    hash_nbytes((uint8_t *) uint_str_ptr, strlen(uint_str_ptr), hash_ctx);
-    APP_MEM_FREE((void *) uint_str_ptr);
     return true;
 }
 
@@ -51,29 +55,38 @@ static bool format_hash_field_type_size(const s_struct_712_field *field_ptr, cx_
  */
 static bool format_hash_field_type_array_levels(const s_struct_712_field *field_ptr,
                                                 cx_hash_t *hash_ctx) {
-    const char *uint_str_ptr;
+    char uint_str[sizeof("255")];
 
     for (int i = 0; i < field_ptr->array_level_count; ++i) {
-        hash_byte('[', hash_ctx);
+        if (!hash_byte_no_throw('[', hash_ctx)) {
+            return false;
+        }
 
         switch (field_ptr->array_levels[i].type) {
             case ARRAY_DYNAMIC:
                 break;
-            case ARRAY_FIXED_SIZE:
-                if ((uint_str_ptr = mem_alloc_and_format_uint(field_ptr->array_levels[i].size)) ==
-                    NULL) {
-                    apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+            case ARRAY_FIXED_SIZE: {
+                int written = snprintf(uint_str,
+                                       sizeof(uint_str),
+                                       "%u",
+                                       (unsigned int) field_ptr->array_levels[i].size);
+                if ((written < 0) || ((size_t) written >= sizeof(uint_str)) ||
+                    !hash_nbytes_no_throw((const uint8_t *) uint_str,
+                                          (size_t) written,
+                                          hash_ctx)) {
+                    apdu_response_code = SWO_INCORRECT_DATA;
                     return false;
                 }
-                hash_nbytes((uint8_t *) uint_str_ptr, strlen(uint_str_ptr), hash_ctx);
-                APP_MEM_FREE((void *) uint_str_ptr);
                 break;
+            }
             default:
                 // should not be in here :^)
                 apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
         }
-        hash_byte(']', hash_ctx);
+        if (!hash_byte_no_throw(']', hash_ctx)) {
+            return false;
+        }
     }
     return true;
 }
@@ -93,7 +106,10 @@ bool format_hash_field_type(const s_struct_712_field *field_ptr, cx_hash_t *hash
     if (name == NULL) {
         return false;
     }
-    hash_nbytes((uint8_t *) name, strlen(name), hash_ctx);
+    if (!hash_nbytes_no_throw((const uint8_t *) name, strlen(name), hash_ctx)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
 
     // field type size
     if (field_ptr->type_has_size) {

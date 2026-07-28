@@ -171,24 +171,30 @@ static bool check_token_index(uint8_t idx) {
     return true;
 }
 
-/**
- * Check if the current element's typename matches the expected one
- *
- * @param[in] expected the typename we expect
- * @return whether it is a match or not
- */
-static bool check_typename(const char *expected) {
-    uint8_t typename_len = 0;
-    const char *typename;
+static bool check_field_shape(e_type expected,
+                              bool require_size,
+                              uint8_t expected_size) {
+    const s_struct_712_field *field = path_get_field();
 
-    if ((typename = get_struct_field_typename(path_get_field())) == NULL) {
+    if ((field == NULL) || field->type_is_array || (field->type != expected)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    typename_len = (uint8_t) strlen(typename);
-    if ((typename_len != strlen(expected)) || (strncmp(typename, expected, typename_len) != 0)) {
-        PRINTF("Error: expected field of type \"%s\" but got \"", expected);
-        for (int i = 0; i < typename_len; ++i) PRINTF("%c", typename[i]);
-        PRINTF("\" instead.\n");
+    if (require_size &&
+        (!field->type_has_size || (field->type_size != expected_size))) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    return true;
+}
+
+static bool filter_label_valid(const char *name,
+                               uint8_t name_len,
+                               size_t max_len,
+                               bool allow_empty) {
+    if (((name_len == 0U) && !allow_empty) || (name_len > max_len) ||
+        !is_printable(name, name_len)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     return true;
@@ -402,7 +408,8 @@ bool filtering_calldata_spender(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -460,7 +467,8 @@ bool filtering_calldata_amount(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -518,7 +526,8 @@ bool filtering_calldata_selector(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_BYTES_FIX, true, CALLDATA_SELECTOR_SIZE)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -576,7 +585,8 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -634,7 +644,8 @@ bool filtering_calldata_callee(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -692,7 +703,8 @@ bool filtering_calldata_value(const uint8_t *payload,
         return false;
     }
 
-    if (get_calldata_info(index) == NULL) {
+    if ((get_calldata_info(index) == NULL) ||
+        !check_field_shape(TYPE_SOL_BYTES_DYN, false, 0U)) {
         PRINTF("Error: no matching calldata info (index=%u)\n", index);
         return false;
     }
@@ -711,11 +723,11 @@ bool filtering_calldata_value(const uint8_t *payload,
 bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     uint8_t offset = 0;
     uint8_t index;
-    bool value_flag;
+    uint8_t value_flag;
     e_calldata_addr_flag callee_flag;
-    bool chain_id_flag;
-    bool selector_flag;
-    bool amount_flag;
+    uint8_t chain_id_flag;
+    uint8_t selector_flag;
+    uint8_t amount_flag;
     e_calldata_addr_flag spender_flag;
     uint8_t sig_len;
     const uint8_t *sig;
@@ -740,7 +752,7 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
         return false;
     }
     value_flag = payload[offset++];
-    if (!value_flag) return false;
+    if (value_flag != 1U) return false;
 
     if ((offset + sizeof(callee_flag)) > length) {
         return false;
@@ -758,16 +770,19 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
         return false;
     }
     chain_id_flag = payload[offset++];
+    if (chain_id_flag > 1U) return false;
 
     if ((offset + sizeof(selector_flag)) > length) {
         return false;
     }
     selector_flag = payload[offset++];
+    if (selector_flag > 1U) return false;
 
     if ((offset + sizeof(amount_flag)) > length) {
         return false;
     }
     amount_flag = payload[offset++];
+    if (amount_flag > 1U) return false;
 
     if ((offset + sizeof(spender_flag)) > length) {
         return false;
@@ -841,7 +856,19 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
             calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
             break;
         case CALLDATA_FLAG_ADDR_NONE:
-            get_public_key(calldata_info->spender, sizeof(calldata_info->spender));
+            {
+                const bip32_path_t *signing_path = tip712_get_signing_path();
+
+                if ((signing_path == NULL) ||
+                    (get_public_key_from_path(calldata_info->spender,
+                                              sizeof(calldata_info->spender),
+                                              signing_path->indices,
+                                              signing_path->length) != SWO_SUCCESS)) {
+                    gcs_mem_free(calldata_info);
+                    apdu_response_code = SWO_INCORRECT_DATA;
+                    return false;
+                }
+            }
             calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
             break;
         default:
@@ -892,6 +919,12 @@ bool filtering_trusted_name(const uint8_t *payload,
     }
     name = (char *) &payload[offset];
     offset += name_len;
+    if (!filter_label_valid(name,
+                            name_len,
+                            TIP712_MAX_FILTER_LABEL_LENGTH,
+                            true)) {
+        return false;
+    }
     if ((offset + sizeof(type_count)) > length) {
         return false;
     }
@@ -956,7 +989,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     }
 
     // Handling
-    if (!check_typename("address")) {
+    if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
         return false;
     }
     if (name_len > 0) {  // don't substitute for an empty name
@@ -1001,6 +1034,12 @@ bool filtering_date_time(const uint8_t *payload,
     }
     name = (char *) &payload[offset];
     offset += name_len;
+    if (!filter_label_valid(name,
+                            name_len,
+                            TIP712_MAX_FILTER_LABEL_LENGTH,
+                            true)) {
+        return false;
+    }
     if ((offset + sizeof(sig_len)) > length) {
         return false;
     }
@@ -1024,7 +1063,7 @@ bool filtering_date_time(const uint8_t *payload,
     }
 
     // Handling
-    if (!check_typename("uint")) {
+    if (!check_field_shape(TYPE_SOL_UINT, false, 0U)) {
         return false;
     }
     if (name_len > 0) {  // don't substitute for an empty name
@@ -1085,7 +1124,8 @@ bool filtering_amount_join_token(const uint8_t *payload,
     }
 
     // Handling
-    if (!check_typename("address") || !check_token_index(token_idx)) {
+    if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U) ||
+        !check_token_index(token_idx)) {
         return false;
     }
     ui_712_flag_field(false, false, true, false, false, false);
@@ -1126,11 +1166,14 @@ bool filtering_amount_join_value(const uint8_t *payload,
     if ((offset + name_len) > length) {
         return false;
     }
-    if (name_len == 0) {
-        return false;
-    }
     name = (char *) &payload[offset];
     offset += name_len;
+    if (!filter_label_valid(name,
+                            name_len,
+                            TIP712_MAX_AMOUNT_LABEL_LENGTH,
+                            false)) {
+        return false;
+    }
     if ((offset + sizeof(token_idx)) > length) {
         return false;
     }
@@ -1174,7 +1217,8 @@ bool filtering_amount_join_value(const uint8_t *payload,
             return false;
         }
     }
-    if (!check_typename("uint") || !check_token_index(token_idx)) {
+    if (!check_field_shape(TYPE_SOL_UINT, false, 0U) ||
+        !check_token_index(token_idx)) {
         return false;
     }
     ui_712_flag_field(false, false, true, false, false, false);
@@ -1214,6 +1258,12 @@ bool filtering_raw_field(const uint8_t *payload,
     }
     name = (char *) &payload[offset];
     offset += name_len;
+    if (!filter_label_valid(name,
+                            name_len,
+                            TIP712_MAX_FILTER_LABEL_LENGTH,
+                            true)) {
+        return false;
+    }
     if ((offset + sizeof(sig_len)) > length) {
         return false;
     }

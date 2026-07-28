@@ -10,6 +10,7 @@
 #include "shared_context.h"  // reset_app_context
 #include "common_ui.h"       // ui_idle
 #include "gcs_memory.h"
+#include "helpers.h"
 
 e_struct_init struct_state = NOT_INITIALIZED;
 s_tip712_context *tip712_context = NULL;
@@ -67,6 +68,12 @@ bool tip712_context_init(void) {
     // after checking whether its numeric value can safely back u64 metadata.
     tip712_context->chain_id_fits_u64 = true;
 
+    /* tmpCtx is a union shared with transaction/public-key commands. Clear the
+     * TIP-712 member before accepting a path so no stale union bytes can be
+     * interpreted as hashes or a derivation path. */
+    explicit_bzero(&tmpCtx.messageSigningContext712,
+                   sizeof(tmpCtx.messageSigningContext712));
+
     struct_state = NOT_INITIALIZED;
     tip712_phase = TIP712_PHASE_FULL_BUILDING;
 
@@ -75,6 +82,38 @@ error:
     tip712_context_cleanup();
     (void) gcs_budget_end();
     return false;
+}
+
+bool tip712_lock_signing_path(const uint8_t *data, size_t length) {
+    off_t parsed;
+
+    if ((tip712_context == NULL) || tip712_context->signing_path_locked ||
+        (tip712_phase != TIP712_PHASE_FULL_BUILDING) || (data == NULL)) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        return false;
+    }
+    parsed = read_bip32_path(data, length, &tip712_context->signing_path);
+    if ((parsed < 0) || ((size_t) parsed != length)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        explicit_bzero(&tip712_context->signing_path,
+                       sizeof(tip712_context->signing_path));
+        return false;
+    }
+
+    tmpCtx.messageSigningContext712.pathLength =
+        tip712_context->signing_path.length;
+    memcpy(tmpCtx.messageSigningContext712.bip32Path,
+           tip712_context->signing_path.indices,
+           sizeof(uint32_t) * tip712_context->signing_path.length);
+    tip712_context->signing_path_locked = true;
+    return true;
+}
+
+const bip32_path_t *tip712_get_signing_path(void) {
+    if ((tip712_context == NULL) || !tip712_context->signing_path_locked) {
+        return NULL;
+    }
+    return &tip712_context->signing_path;
 }
 
 /**

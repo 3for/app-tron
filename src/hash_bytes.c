@@ -21,6 +21,15 @@ void hash_byte(uint8_t byte, cx_hash_t *hash_ctx) {
     hash_nbytes(&byte, 1, hash_ctx);
 }
 
+bool hash_nbytes_no_throw(const uint8_t *bytes_ptr, size_t n, cx_hash_t *hash_ctx) {
+    return (hash_ctx != NULL) && ((bytes_ptr != NULL) || (n == 0U)) &&
+           (cx_hash_no_throw(hash_ctx, 0, bytes_ptr, n, NULL, 0) == CX_OK);
+}
+
+bool hash_byte_no_throw(uint8_t byte, cx_hash_t *hash_ctx) {
+    return hash_nbytes_no_throw(&byte, 1U, hash_ctx);
+}
+
 /**
  * Finalize a progressive hash, writing the digest to out.
  * Mirrors app-ethereum's hash_bytes.c, used by the generic_tx_parser module.

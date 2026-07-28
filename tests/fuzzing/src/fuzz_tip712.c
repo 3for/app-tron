@@ -21,6 +21,8 @@ enum {
     OP_SET_SETTINGS = 5,
 };
 
+static const uint8_t default_path[] = {1U, 0x80U, 0x00U, 0x00U, 0x2cU};
+
 static void check_zero_extended_u64_boundaries(void) {
     const uint64_t expected = UINT64_C(0x0102030405060708);
     uint8_t value8[8] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -59,7 +61,12 @@ static void check_tip712_phase_boundaries(void) {
     tip712_context_cleanup();
 
     if (!tip712_context_init() || !tip712_full_session_in_progress() ||
-        tip712_mark_legacy_reviewing()) {
+        tip712_mark_legacy_reviewing() ||
+        !tip712_lock_signing_path(default_path, sizeof(default_path)) ||
+        (tip712_get_signing_path() == NULL) ||
+        (tip712_get_signing_path()->length != 1U) ||
+        (tip712_get_signing_path()->indices[0] != UINT32_C(0x8000002c)) ||
+        tip712_lock_signing_path(default_path, sizeof(default_path))) {
         __builtin_trap();
     }
     tip712_context_deinit();
@@ -107,6 +114,10 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
         switch (op % 4U) {
             case OP_STRUCT_DEF:
                 {
+                    if (tip712_context == NULL) {
+                        (void) handleTIP712Init(default_path,
+                                                sizeof(default_path));
+                    }
                     bool schema_was_locked =
                         (tip712_context != NULL) && tip712_context->schema_locked;
                     uint16_t sw = handleTIP712StructDef(p2, (uint8_t *) data, len);

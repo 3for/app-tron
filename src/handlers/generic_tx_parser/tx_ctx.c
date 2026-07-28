@@ -11,6 +11,7 @@
 #include "hash_bytes.h"
 #include "gcs_signing_context.h"
 #include "gcs_limits.h"
+#include "app_errors.h"
 
 static s_tx_ctx *g_tx_ctx_list = NULL;
 static s_tx_ctx *g_tx_ctx_current = NULL;
@@ -290,7 +291,11 @@ bool tx_ctx_init(s_calldata *calldata,
     }
     node->calldata = calldata;
     if (get_tx_ctx_count() == 0) {
-        get_public_key(node->from, ADDRESS_LENGTH);
+        if ((from == NULL) &&
+            (get_public_key(node->from, ADDRESS_LENGTH) != SWO_SUCCESS)) {
+            gcs_mem_free(node);
+            return false;
+        }
         if (appState == APP_STATE_SIGNING_EIP712) {
             calldata_info = get_current_calldata_info();
             if (!calldata_info_all_received(calldata_info) || calldata_info->processed) {

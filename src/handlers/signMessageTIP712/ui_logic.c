@@ -31,7 +31,7 @@
 
 #define AMOUNT_JOIN_FLAG_TOKEN  (1 << 0)
 #define AMOUNT_JOIN_FLAG_VALUE  (1 << 1)
-#define AMOUNT_JOIN_NAME_LENGTH 25
+#define AMOUNT_JOIN_NAME_LENGTH TIP712_MAX_AMOUNT_LABEL_LENGTH
 
 typedef struct amount_join {
     flist_node_t _list;
@@ -715,12 +715,15 @@ static bool ui_712_format_int(const uint8_t *data,
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    if (length > field_ptr->type_size) {
+    const uint8_t effective_size = field_ptr->type_has_size
+                                       ? field_ptr->type_size
+                                       : INT256_LENGTH;
+    if (length > effective_size) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
 
-    switch (field_ptr->type_size * 8) {
+    switch (effective_size * 8) {
         case 256:
             convertUint256BE(data, length, &value256);
             tostring256_signed(&value256, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
@@ -1096,7 +1099,7 @@ static bool update_calldata_callee(const uint8_t *data,
                                    bool last,
                                    s_eip712_calldata_info *calldata_info) {
     if (calldata_info->callee_state != CALLDATA_INFO_PARAM_UNSET) return false;
-    if (!last) return false;
+    if (!last || (length != ADDRESS_LENGTH)) return false;
     buf_shrink_expand(data, length, calldata_info->callee, sizeof(calldata_info->callee));
     calldata_info->callee_state = CALLDATA_INFO_PARAM_SET;
     return true;
@@ -1126,7 +1129,7 @@ static bool update_calldata_selector(const uint8_t *data,
                                      bool last,
                                      s_eip712_calldata_info *calldata_info) {
     if (calldata_info->selector_state != CALLDATA_INFO_PARAM_UNSET) return false;
-    if (!last) return false;
+    if (!last || (length != CALLDATA_SELECTOR_SIZE)) return false;
     buf_shrink_expand(data, length, calldata_info->selector, sizeof(calldata_info->selector));
     calldata_info->selector_state = CALLDATA_INFO_PARAM_SET;
     if (calldata_info->value_state == CALLDATA_INFO_PARAM_SET) {
@@ -1140,7 +1143,7 @@ static bool update_calldata_amount(const uint8_t *data,
                                    bool last,
                                    s_eip712_calldata_info *calldata_info) {
     if (calldata_info->amount_state != CALLDATA_INFO_PARAM_UNSET) return false;
-    if (!last) return false;
+    if (!last || (length == 0U) || (length > sizeof(calldata_info->amount))) return false;
     buf_shrink_expand(data, length, calldata_info->amount, sizeof(calldata_info->amount));
     calldata_info->amount_state = CALLDATA_INFO_PARAM_SET;
     return true;
@@ -1151,7 +1154,7 @@ static bool update_calldata_spender(const uint8_t *data,
                                     bool last,
                                     s_eip712_calldata_info *calldata_info) {
     if (calldata_info->spender_state != CALLDATA_INFO_PARAM_UNSET) return false;
-    if (!last) return false;
+    if (!last || (length != ADDRESS_LENGTH)) return false;
     buf_shrink_expand(data, length, calldata_info->spender, sizeof(calldata_info->spender));
     calldata_info->spender_state = CALLDATA_INFO_PARAM_SET;
     return true;
@@ -1526,16 +1529,14 @@ void ui_712_token_join_prepare_addr_check(uint8_t index) {
 
 bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length) {
     s_amount_join *amount_join = get_amount_join(index);
-    uint8_t cpy_len;
-
-    if (amount_join == NULL) {
+    if ((amount_join == NULL) || (name == NULL) || (name_length == 0U) ||
+        (name_length > AMOUNT_JOIN_NAME_LENGTH)) {
         return false;
     }
-    cpy_len = MIN(sizeof(amount_join->name) - 1, name_length);
     ui_ctx->amount.idx = index;
     ui_ctx->amount.state = AMOUNT_JOIN_STATE_VALUE;
-    memcpy(amount_join->name, name, cpy_len);
-    amount_join->name[cpy_len] = '\0';
+    memcpy(amount_join->name, name, name_length);
+    amount_join->name[name_length] = '\0';
     return true;
 }
 

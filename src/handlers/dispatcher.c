@@ -147,6 +147,9 @@ int apdu_dispatcher(const command_t *cmd) {
         }
     }
     if (cmd->cla != CLA) {
+        if (tip712_get_phase() == TIP712_PHASE_FULL_BUILDING) {
+            return reject_tip712_command(E_CLA_NOT_SUPPORTED);
+        }
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
 
@@ -256,10 +259,13 @@ int apdu_dispatcher(const command_t *cmd) {
                     break;
 
                 case P2_TIP712_FULL_IMPLEM:
-                    if (cmd->p1 != 0x00) {
+                    if (cmd->p1 == P1_TIP712_INIT) {
+                        sw = handleTIP712Init(cmd->data, cmd->lc);
+                    } else if (cmd->p1 == P1_TIP712_SIGN) {
+                        sw = handleTIP712Sign(cmd->data, cmd->lc, &flags);
+                    } else {
                         return reject_tip712_command(E_INCORRECT_P1_P2);
                     }
-                    sw = handleTIP712Sign(cmd->data, cmd->lc, &flags);
                     break;
 
                 default:

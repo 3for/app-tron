@@ -97,6 +97,11 @@
 #define P2_TIP712_LEGACY_IMPLEM 0x00
 #define P2_TIP712_FULL_IMPLEM   0x01
 
+/* Full TIP-712 uses P1=1 to initialize and lock the signing path before any
+ * schema/filter/calldata APDU, then P1=0 for the final sign command. */
+#define P1_TIP712_SIGN 0x00
+#define P1_TIP712_INIT 0x01
+
 int apdu_dispatcher(const command_t *cmd);
 
 int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dataLength);

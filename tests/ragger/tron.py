@@ -177,6 +177,10 @@ class TronClient:
         return self.exchange_async_raw(
             CommandBuilder().tip712_sign_new(bip32_path))
 
+    def tip712_init_new(self, bip32_path: str):
+        return self.exchange_async_raw(
+            CommandBuilder().tip712_init_new(bip32_path))
+
     def tip712_sign_legacy(self, bip32_path: str, domain_hash: bytes,
                            message_hash: bytes):
         return self.exchange_async_raw(

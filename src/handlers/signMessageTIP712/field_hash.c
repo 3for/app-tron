@@ -14,8 +14,11 @@
 #include "parse.h"
 #include "ui_globals.h"
 #include "gcs_memory.h"
+#include "utils.h"
 
 static s_field_hashing *fh = NULL;
+
+static uint8_t field_effective_size(const s_struct_712_field *field_ptr);
 
 /**
  * Initialize the field hash context
@@ -77,36 +80,77 @@ static const uint8_t *field_hash_prepare(const s_struct_712_field *field_ptr,
  * @param[in] data_length the value length
  * @return pointer to the encoded value
  */
-static const uint8_t *field_hash_finalize_static(const s_struct_712_field *field_ptr,
-                                                 const uint8_t *data,
-                                                 uint8_t data_length) {
-    uint8_t *value = NULL;
-
+static bool field_hash_finalize_static(const s_struct_712_field *field_ptr,
+                                       const uint8_t *data,
+                                       uint8_t data_length,
+                                       uint8_t value[TIP_712_ENCODED_FIELD_LENGTH]) {
     switch (field_ptr->type) {
         case TYPE_SOL_INT:
-            value = encode_int(data, data_length, field_ptr->type_size);
-            break;
+            return encode_int(data,
+                              data_length,
+                              field_effective_size(field_ptr),
+                              value);
         case TYPE_SOL_UINT:
-            value = encode_uint(data, data_length);
-            break;
+            return encode_uint(data, data_length, value);
         case TYPE_SOL_BYTES_FIX:
-            value = encode_bytes(data, data_length);
-            break;
+            return encode_bytes(data, data_length, value);
         case TYPE_SOL_ADDRESS:
-            value = encode_address(data, data_length);
-            break;
+            return encode_address(data, data_length, value);
         case TYPE_SOL_BOOL:
-            value = encode_boolean((bool *) data, data_length);
-            break;
+            return encode_boolean(data, data_length, value);
         case TYPE_SOL_TRCTOKEN:  // trcToken is equal to uint256
-            value = encode_uint(data, data_length);
-            break;
+            return encode_uint(data, data_length, value);
         case TYPE_CUSTOM:
         default:
             apdu_response_code = SWO_INCORRECT_DATA;
             PRINTF("Unknown solidity type!\n");
+            return false;
     }
-    return value;
+}
+
+static uint8_t field_effective_size(const s_struct_712_field *field_ptr) {
+    if (field_ptr == NULL) {
+        return 0U;
+    }
+    switch (field_ptr->type) {
+        case TYPE_SOL_INT:
+        case TYPE_SOL_UINT:
+            return field_ptr->type_has_size ? field_ptr->type_size
+                                            : TIP_712_ENCODED_FIELD_LENGTH;
+        case TYPE_SOL_TRCTOKEN:
+            return TIP_712_ENCODED_FIELD_LENGTH;
+        case TYPE_SOL_BYTES_FIX:
+            return field_ptr->type_size;
+        case TYPE_SOL_ADDRESS:
+            return ADDRESS_LENGTH;
+        case TYPE_SOL_BOOL:
+            return 1U;
+        default:
+            return 0U;
+    }
+}
+
+static bool validate_static_field_value(const s_struct_712_field *field_ptr,
+                                        const uint8_t *data,
+                                        uint8_t data_length) {
+    uint8_t effective_size = field_effective_size(field_ptr);
+
+    if ((field_ptr == NULL) || (data == NULL) || (effective_size == 0U)) {
+        return false;
+    }
+    switch (field_ptr->type) {
+        case TYPE_SOL_INT:
+        case TYPE_SOL_UINT:
+        case TYPE_SOL_TRCTOKEN:
+            return (data_length > 0U) && (data_length <= effective_size);
+        case TYPE_SOL_BYTES_FIX:
+        case TYPE_SOL_ADDRESS:
+            return data_length == effective_size;
+        case TYPE_SOL_BOOL:
+            return (data_length == 1U) && (data[0] <= 1U);
+        default:
+            return false;
+    }
 }
 
 /**
@@ -116,20 +160,10 @@ static const uint8_t *field_hash_finalize_static(const s_struct_712_field *field
  *
  * @return pointer to the hash, \ref NULL if it failed
  */
-static uint8_t *field_hash_finalize_dynamic(void) {
-    uint8_t *value;
-
-    if ((value = gcs_mem_alloc(KECCAK256_HASH_BYTESIZE,
-                               GCS_MEM_TEMPORARY)) == NULL) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return NULL;
-    }
-    // copy hash into memory
-    if (finalize_hash((cx_hash_t *) &global_sha3, value, KECCAK256_HASH_BYTESIZE) != true) {
-        gcs_mem_free(value);
-        return NULL;
-    }
-    return value;
+static bool field_hash_finalize_dynamic(uint8_t value[KECCAK256_HASH_BYTESIZE]) {
+    return finalize_hash((cx_hash_t *) &global_sha3,
+                         value,
+                         KECCAK256_HASH_BYTESIZE);
 }
 
 /**
@@ -138,7 +172,7 @@ static uint8_t *field_hash_finalize_dynamic(void) {
  * @param[in] field_type the struct field's type
  * @param[in] hash the field hash
  */
-static void field_hash_feed_parent(e_type field_type, const uint8_t *hash) {
+static bool field_hash_feed_parent(e_type field_type, const uint8_t *hash) {
     uint8_t len;
 
     if (IS_DYN(field_type)) {
@@ -150,12 +184,20 @@ static void field_hash_feed_parent(e_type field_type, const uint8_t *hash) {
     // last thing in mem is the hash of the previous field
     // and just before it is the current hash context
     s_hash_ctx *hash_ctx = get_last_hash_ctx();
-    if (hash_ctx != NULL) {
-        // continue the progressive hash on it
-        hash_nbytes(hash, len, (cx_hash_t *) &hash_ctx->hash);
+    if (hash_ctx == NULL) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
     }
-    // deallocate it
-    gcs_mem_free((void *) hash);
+    if (cx_hash_no_throw((cx_hash_t *) &hash_ctx->hash,
+                         0,
+                         hash,
+                         len,
+                         NULL,
+                         0) != CX_OK) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -172,38 +214,19 @@ static bool field_hash_domain_special_fields(const s_struct_712_field *field_ptr
                                              const uint8_t *data,
                                              uint8_t data_length) {
     const char *key;
-    const char *ethermint_vc = "cosmos";
-
     key = field_ptr->key_name;
     // copy contract address into context
     if (strcmp(key, "verifyingContract") == 0) {
-        switch (field_ptr->type) {
-            case TYPE_SOL_ADDRESS:
-                if (data_length > sizeof(tip712_context->contract_addr)) {
-                    apdu_response_code = SWO_INCORRECT_DATA;
-                    PRINTF("Error: verifyingContract too big\n");
-                    return false;
-                }
-                break;
-            case TYPE_SOL_STRING:
-                // hardcoded check for their non-standard implementation
-                if ((data_length != strlen(ethermint_vc)) ||
-                    (strncmp((char *) data, ethermint_vc, data_length) != 0)) {
-                    apdu_response_code = SWO_INCORRECT_DATA;
-                    PRINTF("Error: non standard verifyingContract\n");
-                    return false;
-                }
-                break;
-            default:
-                apdu_response_code = SWO_INCORRECT_DATA;
-                PRINTF("Error: unexpected type for verifyingContract (%u)!\n", field_ptr->type);
-                return false;
+        if (field_ptr->type_is_array || (field_ptr->type != TYPE_SOL_ADDRESS) ||
+            (data_length != sizeof(tip712_context->contract_addr))) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            PRINTF("Error: non-canonical verifyingContract\n");
+            return false;
         }
         memcpy(tip712_context->contract_addr, data, data_length);
-        explicit_bzero(&tip712_context->contract_addr[data_length],
-                       sizeof(tip712_context->contract_addr) - data_length);
     } else if (strcmp(key, "chainId") == 0) {
-        if (data_length == 0) {
+        if (field_ptr->type_is_array || (field_ptr->type != TYPE_SOL_UINT) ||
+            (data_length == 0U)) {
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
@@ -244,26 +267,37 @@ static bool field_hash_domain_special_fields(const s_struct_712_field *field_ptr
 static bool field_hash_finalize(const s_struct_712_field *field_ptr,
                                 const uint8_t *data,
                                 uint8_t data_length) {
-    const uint8_t *value = NULL;
+    uint8_t value[TIP_712_ENCODED_FIELD_LENGTH];
+    bool encoded;
 
     if (!IS_DYN(field_ptr->type)) {
-        if ((value = field_hash_finalize_static(field_ptr, data, data_length)) == NULL) {
-            return false;
-        }
+        encoded = field_hash_finalize_static(field_ptr,
+                                             data,
+                                             data_length,
+                                             value);
     } else {
-        if ((value = field_hash_finalize_dynamic()) == NULL) {
-            return false;
-        }
+        encoded = field_hash_finalize_dynamic(value);
+    }
+    if (!encoded) {
+        explicit_bzero(value, sizeof(value));
+        return false;
     }
 
-    field_hash_feed_parent(field_ptr->type, value);
+    if (!field_hash_feed_parent(field_ptr->type, value)) {
+        explicit_bzero(value, sizeof(value));
+        return false;
+    }
+    explicit_bzero(value, sizeof(value));
 
     if (path_get_root_type() == ROOT_DOMAIN) {
         if (field_hash_domain_special_fields(field_ptr, data, data_length) == false) {
             return false;
         }
     }
-    path_advance(true);
+    if (!path_advance(true)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     fh->state = FHS_IDLE;
     ui_712_finalize_field();
     return true;
@@ -310,9 +344,24 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         return false;
     }
     fh->remaining_size -= data_length;
+    if ((field_ptr->type == TYPE_SOL_STRING) &&
+        !is_printable((const char *) data, data_length)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    if (!IS_DYN(field_ptr->type) &&
+        !validate_static_field_value(field_ptr, data, data_length)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     // if a dynamic type -> continue progressive hash
     if (IS_DYN(field_ptr->type)) {
-        hash_nbytes(data, data_length, (cx_hash_t *) &global_sha3);
+        if (!hash_nbytes_no_throw(data,
+                                  data_length,
+                                  (cx_hash_t *) &global_sha3)) {
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return false;
+        }
     }
     if (!ui_712_feed_to_display(field_ptr,
                                 data,

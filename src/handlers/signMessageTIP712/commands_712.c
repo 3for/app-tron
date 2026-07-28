@@ -11,6 +11,7 @@
 #include "app_errors.h"
 #include "settings.h"
 #include "tx_ctx.h"  // get_tx_ctx_count
+#include "bip32_utils.h"
 
 // APDUs P1
 #define P1_COMPLETE  0x00
@@ -93,10 +94,8 @@ void handle_tip712_return_code(bool success) {
 uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length) {
     bool ret = true;
 
-    if (tip712_context == NULL) {
-        ret = tip712_context_init();
-    }
-    if ((tip712_get_phase() != TIP712_PHASE_FULL_BUILDING) ||
+    if ((tip712_context == NULL) || !tip712_context->signing_path_locked ||
+        (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING) ||
         (struct_state == DEFINED) ||
         ((tip712_context != NULL) && tip712_context->schema_locked)) {
         apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
@@ -116,6 +115,24 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
                 apdu_response_code = SWO_WRONG_P1_P2;
                 ret = false;
         }
+    }
+    apdu_reply(ret);
+    return apdu_response_code;
+}
+
+uint16_t handleTIP712Init(const uint8_t *cdata, uint8_t length) {
+    bool ret;
+
+    if ((tip712_context != NULL) ||
+        (tip712_get_phase() != TIP712_PHASE_NONE) ||
+        (appState != APP_STATE_IDLE)) {
+        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_reply(false);
+        return apdu_response_code;
+    }
+    ret = tip712_context_init();
+    if (ret) {
+        ret = tip712_lock_signing_path(cdata, length);
     }
     apdu_reply(ret);
     return apdu_response_code;
@@ -306,6 +323,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
 uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags) {
     bool ret = false;
     off_t path_length;
+    bip32_path_t final_path = {0};
     uint8_t current_schema_hash[CX_SHA224_SIZE];
     volatile uint8_t schema_diff = 0;
 
@@ -328,9 +346,13 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
     } else if (!all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
         PRINTF("Unprocessed calldata\n");
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
-    } else if (((path_length =
-                     read_bip32_path_712(cdata, length, &tmpCtx.messageSigningContext712)) < 0) ||
-               ((size_t) path_length != length)) {
+    } else if (!tip712_context->signing_path_locked ||
+               ((path_length = read_bip32_path(cdata, length, &final_path)) < 0) ||
+               ((size_t) path_length != length) ||
+               (final_path.length != tip712_context->signing_path.length) ||
+               (memcmp(final_path.indices,
+                       tip712_context->signing_path.indices,
+                       sizeof(uint32_t) * final_path.length) != 0)) {
         apdu_response_code = SWO_INCORRECT_DATA;
     } else {
         ret = true;
@@ -357,6 +379,7 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
             ret = ui_712_end_sign();
         }
     }
+    explicit_bzero(&final_path, sizeof(final_path));
 
     if (!ret) {
         // Some UI allocation helpers already replied and reset the context.

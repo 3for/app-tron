@@ -161,6 +161,11 @@ class CommandBuilder:
         return self._serialize(InsType.TIP712_SIGN, P1Type.COMPLETE_SEND,
                                P2Type.NEW_IMPLEM, data)
 
+    def tip712_init_new(self, bip32_path: str) -> bytes:
+        data = pack_derivation_path(bip32_path)
+        return self._serialize(InsType.TIP712_SIGN, P1Type.FIRST_CHUNK,
+                               P2Type.NEW_IMPLEM, data)
+
     def tip712_sign_legacy(self, bip32_path: str, domain_hash: bytes,
                            message_hash: bytes) -> bytes:
         data = pack_derivation_path(bip32_path)

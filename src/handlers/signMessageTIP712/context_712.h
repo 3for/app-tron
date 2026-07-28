@@ -4,6 +4,7 @@
 #include "common_utils.h"
 #include "lists.h"
 #include "lcx_sha256.h"
+#include "bip32_utils.h"
 
 typedef struct {
     uint8_t contract_addr[ADDRESS_LENGTH];
@@ -13,6 +14,8 @@ typedef struct {
     bool chain_id_seen;
     bool chain_id_fits_u64;
     bool schema_locked;
+    bool signing_path_locked;
+    bip32_path_t signing_path;
 } s_tip712_context;
 
 extern s_tip712_context *tip712_context;
@@ -25,6 +28,8 @@ typedef enum {
 } tip712_phase_t;
 
 bool tip712_context_init(void);
+bool tip712_lock_signing_path(const uint8_t *data, size_t length);
+const bip32_path_t *tip712_get_signing_path(void);
 void tip712_context_cleanup(void);
 void tip712_context_deinit(void);
 tip712_phase_t tip712_get_phase(void);
