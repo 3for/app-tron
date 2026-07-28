@@ -357,7 +357,14 @@ static bool format_permission_fields(uint8_t *field_index,
     return true;
 }
 
-static bool format_permission_update_fields(const protocol_AccountPermissionUpdateContract *perm) {
+typedef enum {
+    PERMISSION_FORMAT_OK = 0,
+    PERMISSION_FORMAT_INVALID,
+    PERMISSION_FORMAT_OUT_OF_MEMORY,
+} permission_format_status_t;
+
+static permission_format_status_t format_permission_update_fields(
+    const protocol_AccountPermissionUpdateContract *perm) {
     uint8_t field = 0;
 
     perm_field_labels = APP_MEM_ALLOC(PERM_MAX_FIELDS * sizeof(*perm_field_labels));
@@ -365,18 +372,18 @@ static bool format_permission_update_fields(const protocol_AccountPermissionUpda
     if ((perm_field_labels == NULL) || (perm_field_values == NULL)) {
         APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
         APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
-        return false;
+        return PERMISSION_FORMAT_OUT_OF_MEMORY;
     }
 
     if (!format_permission_fields(&field, "Owner", &perm->owner, false)) {
-        return false;
+        return PERMISSION_FORMAT_INVALID;
     }
     if (perm->has_witness &&
         !format_permission_fields(&field,
                                   "Witness",
                                   &perm->witness,
                                   false)) {
-        return false;
+        return PERMISSION_FORMAT_INVALID;
     }
     for (pb_size_t i = 0; i < perm->actives_count; i++) {
         char prefix[PERM_ITEM_LEN];
@@ -387,12 +394,12 @@ static bool format_permission_update_fields(const protocol_AccountPermissionUpda
             snprintf(prefix, sizeof(prefix), "Active %u", (unsigned) i + 1);
         }
         if (!format_permission_fields(&field, prefix, &perm->actives[i], true)) {
-            return false;
+            return PERMISSION_FORMAT_INVALID;
         }
     }
 
     perm_field_count = field;
-    return true;
+    return PERMISSION_FORMAT_OK;
 }
 
 typedef enum {
@@ -561,7 +568,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         sign_cleanup();
         sign_stream = APP_MEM_ALLOC(sizeof(*sign_stream));
         if (sign_stream == NULL) {
-            return send_sign_status(E_INCORRECT_DATA);
+            return send_sign_status(SWO_INSUFFICIENT_MEMORY);
         }
         memset(sign_stream, 0, sizeof(*sign_stream));
         const legacy_parameter_observer_t observer = {
@@ -854,12 +861,11 @@ handle_parser_result:
                              sizeof(strings.common.TRC20Action),
                              "%08x",
                              txContent.customSelector);
-                    // A custom contract can only attach native TRX as its call value
-                    // (txContent.amount[0]); amount[1]/token-name is never set on this
-                    // path. Show a single "Amount" field: "<value> TRX", or "-"
-                    // when no value is attached.
-                    G_io_apdu_buffer[0] = '\0';
-                    G_io_apdu_buffer[100] = '\0';
+                    // Keep each attached asset explicit. Unknown TriggerSmartContract
+                    // calls may carry both native TRX and TVM TRC10 value.
+                    G_io_apdu_buffer[CUSTOM_CONTRACT_TRX_OFFSET] = '\0';
+                    G_io_apdu_buffer[CUSTOM_CONTRACT_TRC10_ID_OFFSET] = '\0';
+                    G_io_apdu_buffer[CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET] = '\0';
                     if (txContent.amount[0] > 0) {
                         if (!format_trx_amount(txContent.amount[0],
                                                (char *) G_io_apdu_buffer,
@@ -870,6 +876,17 @@ handle_parser_result:
                         customContractField |= (1 << 0x06);
                     } else {
                         strlcpy((char *) G_io_apdu_buffer, "-", sizeof(G_io_apdu_buffer));
+                    }
+                    if (((txContent.callTokenValue != 0) || (txContent.tokenId != 0)) &&
+                        (!u64_to_string(txContent.tokenId,
+                                       (char *) G_io_apdu_buffer +
+                                           CUSTOM_CONTRACT_TRC10_ID_OFFSET,
+                                       CUSTOM_CONTRACT_UINT64_SLOT_SIZE) ||
+                         !u64_to_string(txContent.callTokenValue,
+                                       (char *) G_io_apdu_buffer +
+                                           CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                       CUSTOM_CONTRACT_UINT64_SLOT_SIZE))) {
+                        return send_sign_status(E_INCORRECT_LENGTH);
                     }
 
 #ifdef HAVE_GATING_SUPPORT
@@ -1031,7 +1048,7 @@ handle_parser_result:
             votes_count = (uint8_t) contract->votes_count;
             vote_display_buffer = APP_MEM_ALLOC((size_t) votes_count * VOTE_PACK);
             if (vote_display_buffer == NULL) {
-                return send_sign_status(E_INCORRECT_DATA);
+                return send_sign_status(SWO_INSUFFICIENT_MEMORY);
             }
             memset(vote_display_buffer, 0, (size_t) votes_count * VOTE_PACK);
             uint64_t total_votes = 0;
@@ -1192,8 +1209,11 @@ handle_parser_result:
             protocol_AccountPermissionUpdateContract *perm =
                 &msg.account_permission_update_contract;
 
-            if (!format_permission_update_fields(perm)) {
-                return send_sign_status(E_INCORRECT_DATA);
+            permission_format_status_t format_status = format_permission_update_fields(perm);
+            if (format_status != PERMISSION_FORMAT_OK) {
+                return send_sign_status(format_status == PERMISSION_FORMAT_OUT_OF_MEMORY
+                                            ? SWO_INSUFFICIENT_MEMORY
+                                            : E_INCORRECT_DATA);
             }
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {

@@ -31,6 +31,13 @@
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 
+// Stable G_io_apdu_buffer/reviewDisplayBuffer slots used by the custom-contract
+// review. Decimal uint64 values need at most 20 digits plus the terminator.
+#define CUSTOM_CONTRACT_TRX_OFFSET          0
+#define CUSTOM_CONTRACT_TRC10_ID_OFFSET     100
+#define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 124
+#define CUSTOM_CONTRACT_UINT64_SLOT_SIZE     24
+
 // AccountPermissionUpdate clear-sign display. Expanded fields:
 // name, operations, threshold, and each authorized key/weight.
 #define PERM_MAX_FIELDS 80

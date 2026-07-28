@@ -31,6 +31,8 @@
 #include "create_smart_contract_stream.h"
 #include "utils.h"
 
+#define DEFAULT_DELEGATE_LOCK_PERIOD_BLOCKS 86400
+
 static pb_size_t decoded_proposal_parameters_count;
 static protocol_ProposalCreateContract_ParametersEntry *decoded_proposal_parameters;
 
@@ -1026,10 +1028,14 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
                    &msg.delegate_resource_contract)) {
         return false;
     }
+    const bool lock = msg.delegate_resource_contract.lock;
+    const int64_t lock_period = msg.delegate_resource_contract.lock_period;
+
     if ((msg.delegate_resource_contract.balance < 1000000) ||
         !is_mainnet_address(msg.delegate_resource_contract.owner_address) ||
         !is_mainnet_address(msg.delegate_resource_contract.receiver_address) ||
         !is_delegatable_resource(msg.delegate_resource_contract.resource) ||
+        (lock && (lock_period < 0)) ||
         (memcmp(msg.delegate_resource_contract.owner_address,
                 msg.delegate_resource_contract.receiver_address,
                 ADDRESS_SIZE) == 0)) {
@@ -1037,8 +1043,11 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
     }
     content->resource = msg.delegate_resource_contract.resource;
     content->amount[0] = (uint64_t) msg.delegate_resource_contract.balance;
-    content->lock = msg.delegate_resource_contract.lock;
-    content->lockPeriod = msg.delegate_resource_contract.lock_period;
+    content->lock = lock;
+    // java-tron treats an omitted/zero lock_period as the mainnet default of
+    // 259200000 ms / 3-second blocks = 86400 blocks.
+    content->lockPeriod =
+        (lock && (lock_period == 0)) ? DEFAULT_DELEGATE_LOCK_PERIOD_BLOCKS : lock_period;
 
     COPY_ADDRESS(content->account, &msg.delegate_resource_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.delegate_resource_contract.receiver_address);
@@ -1346,6 +1355,8 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     COPY_ADDRESS(content->account, &msg.trigger_smart_contract.owner_address);
     COPY_ADDRESS(content->contractAddress, &msg.trigger_smart_contract.contract_address);
     content->amount[0] = (uint64_t) call_value;
+    content->callTokenValue = (uint64_t) token_value;
+    content->tokenId = (uint64_t) token_id;
 
     tokenDefinition_t *trc20 = getKnownToken(content);
 

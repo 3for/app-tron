@@ -20,6 +20,11 @@ extern uint8_t G_io_apdu_buffer[260];
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) (((index) * VOTE_PACK) + (type))
 
+#define CUSTOM_CONTRACT_TRX_OFFSET          0
+#define CUSTOM_CONTRACT_TRC10_ID_OFFSET     100
+#define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 124
+#define CUSTOM_CONTRACT_UINT64_SLOT_SIZE     24
+
 #define PERM_MAX_FIELDS 80
 #define PERM_ITEM_LEN   32
 #define PERM_VAL_LEN    96

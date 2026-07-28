@@ -1225,7 +1225,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
             break;
-        case APPROVAL_CUSTOM_CONTRACT:
+        case APPROVAL_CUSTOM_CONTRACT: {
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
@@ -1236,13 +1236,24 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = "Selector";
             txInfos.fields[2].value = strings.common.TRC20Action;
-            // Custom contracts only ever pay native TRX, so the token + amount are
-            // merged into a single "Amount" field ("<value> TRX", built in sign.c).
-            txInfos.fields[3].item = "Amount";
-            txInfos.fields[3].value = (const char *) reviewDisplayBuffer;
+            const bool has_attached_trc10 =
+                (txContent.callTokenValue != 0) || (txContent.tokenId != 0);
+            txInfos.fields[3].item = has_attached_trc10 ? "Attached TRX" : "Amount";
+            txInfos.fields[3].value =
+                (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRX_OFFSET;
             g_pairsList->nbPairs = 4;
+            if (has_attached_trc10) {
+                txInfos.fields[4].item = "TRC10 ID";
+                txInfos.fields[4].value =
+                    (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRC10_ID_OFFSET;
+                txInfos.fields[5].item = "TRC10 amount";
+                txInfos.fields[5].value =
+                    (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
+                g_pairsList->nbPairs = 6;
+            }
             txInfos.flowSubtitle = "Custom Contract";
             break;
+        }
         case APPROVAL_SHARED_ECDH_SECRET:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;

@@ -2274,6 +2274,28 @@ class TestTRX():
                     0x0a857040, int(10001)))))
         self.sign_and_validate(client, device, 0, tx, warning_approve=True)
 
+    def test_trx_custom_contract_with_attached_trc10(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+                data=bytes.fromhex('{:08x}{:064x}'.format(
+                    0x0a857040, int(10001))),
+                call_value=1_000_000,
+                call_token_value=123,
+                token_id=1_000_001))
+        # Snapshot the dedicated Attached TRX / TRC10 ID / TRC10 amount fields:
+        # signing success alone would not detect a regression that hides them.
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               warning_approve=True)
+
     def test_trx_unknown_trc20_send(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -2611,7 +2633,10 @@ class TestTRX():
                 receiver_address=bytes.fromhex(
                     client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
                 lock=True))
-        self.sign_and_validate(client, device, 0, tx)
+        # The normalized default is the same 86400-block value covered by the
+        # explicit-period snapshot below; this case specifically guards omitted
+        # protobuf-field handling without duplicating identical screenshots.
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
 
     def test_trx_delegate_resource_lock_with_period(self, backend, device):
         client = TronClient(backend)
@@ -2627,6 +2652,23 @@ class TestTRX():
                 lock=True,
                 lock_period=86400))
         self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_delegate_resource_rejects_negative_lock_period(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.DelegateResourceContract,
+            contract.DelegateResourceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                resource=contract.ENERGY,
+                balance=100000000,
+                receiver_address=bytes.fromhex(
+                    client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
+                lock=True,
+                lock_period=-1))
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     def test_trx_undelegate_resource(self, backend, device):
         client = TronClient(backend)

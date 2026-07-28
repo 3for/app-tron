@@ -83,6 +83,8 @@ typedef struct txContent_t {
     uint64_t exchangeID;
     uint64_t feeLimit;
     uint64_t bytecodeSize;
+    uint64_t callTokenValue;
+    uint64_t tokenId;
     int64_t lockPeriod;
     uint64_t dataBytes;
     uint8_t account[TRON_ADDRESS_SIZE];
