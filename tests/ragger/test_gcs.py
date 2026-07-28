@@ -3571,3 +3571,79 @@ def test_gcs_rejects_noncanonical_narrow_specialized_uint(
     normal_tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["token_native", "token_amount_native", "token_amount_empty_threshold"],
+)
+def test_gcs_rejects_noncanonical_token_descriptor_values(
+        backend: BackendInterface, case: str):
+    """Authenticated token descriptors must have one canonical wire encoding."""
+    client = TronClient(backend)
+    native_addr = b"\x00" + (b"\x11" * (20 - 1))
+    calldata = (TRC20_TRANSFER_SELECTOR + (b"\x00" * 12) + native_addr +
+                (1_000_000).to_bytes(32, "big"))
+    token_value = _address_value(build_data_path_static(0))
+    amount_value = _uint_value(32, build_data_path_static(1))
+
+    if case == "token_native":
+        field = Field(
+            1,
+            "Token",
+            ParamToken(1, token_value,
+                       native_currency=[native_addr[1:]]),
+        )
+    elif case == "token_amount_native":
+        field = Field(
+            1,
+            "Amount",
+            ParamTokenAmount(1, amount_value, token=token_value,
+                             native_currency=[native_addr[1:]]),
+        )
+    else:
+        field = Field(
+            1,
+            "Amount",
+            ParamTokenAmount(1, amount_value, threshold=b""),
+        )
+
+    tx = build_trc20_transfer_tx(client, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, TRC20_TRANSFER_SELECTOR,
+                      [field], "canonical token descriptor"))
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_field_desc(field.serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+@pytest.mark.parametrize("deploy_date", [b"", b"\x01", b"\x00\x00\x01"])
+def test_gcs_rejects_noncanonical_deploy_date(
+        backend: BackendInterface, deploy_date: bytes):
+    """An authenticated deploy-date tag is a fixed-width uint32."""
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    tx_info = TxInfo(
+        1,
+        TRON_MAINNET_CHAINID,
+        eth_to_tron_base58(TRC20_CONTRACT_ADDR20),
+        TRC20_TRANSFER_SELECTOR,
+        compute_inst_hash([]),
+        "canonical deploy date",
+        deploy_date=deploy_date,
+    )
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_info(tx_info.serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK

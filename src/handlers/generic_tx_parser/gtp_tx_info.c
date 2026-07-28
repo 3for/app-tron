@@ -116,14 +116,12 @@ static bool handle_contract_name(const tlv_data_t *data, s_tx_info_ctx *context)
 }
 
 static bool handle_deploy_date(const tlv_data_t *data, s_tx_info_ctx *context) {
-    uint8_t buf[sizeof(uint32_t)] = {0};
     time_t timestamp;
 
-    if (data->value.size > sizeof(buf)) {
+    if (data->value.size != sizeof(uint32_t)) {
         return false;
     }
-    buf_shrink_expand(data->value.ptr, data->value.size, buf, sizeof(buf));
-    timestamp = read_u32_be(buf, 0);
+    timestamp = read_u32_be(data->value.ptr, 0);
     if (!time_format_to_yyyymmdd(&timestamp,
                                  context->tx_info->deploy_date,
                                  sizeof(context->tx_info->deploy_date))) {

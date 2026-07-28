@@ -38,22 +38,21 @@ static bool handle_token(const tlv_data_t *data, s_param_token_amount_context *c
 }
 
 static bool handle_native_currency(const tlv_data_t *data, s_param_token_amount_context *context) {
-    if (data->value.size > ADDRESS_LENGTH) {
+    if (data->value.size != ADDRESS_LENGTH) {
         return false;
     }
     if (context->param->native_addr_count == MAX_NATIVE_ADDRS) {
         return false;
     }
-    memcpy(&context->param->native_addrs[context->param->native_addr_count]
-                                        [ADDRESS_LENGTH - data->value.size],
+    memcpy(context->param->native_addrs[context->param->native_addr_count],
            data->value.ptr,
-           data->value.size);
+           ADDRESS_LENGTH);
     context->param->native_addr_count += 1;
     return true;
 }
 
 static bool handle_threshold(const tlv_data_t *data, s_param_token_amount_context *context) {
-    if (data->value.size > sizeof(uint256_t)) {
+    if ((data->value.size == 0U) || (data->value.size > sizeof(uint256_t))) {
         return false;
     }
     convertUint256BE(data->value.ptr, data->value.size, &context->param->threshold);
