@@ -131,6 +131,9 @@ static nbgl_contentValueExt_t toTrustedNameExt;
 // NBGL review keeps the pointers.
 static char actionReviewTitle[48];
 static char actionSignTitle[48];
+// A non-zero TriggerSmartContract fee limit is part of the signed transaction
+// and must remain visible for the lifetime of the asynchronous TRC20 review.
+static char trc20FeeLimit[32];
 // Reviews are asynchronous while the APDU transport immediately reuses its
 // buffer. Keep a stable snapshot for all review fields prepared in sign.c.
 static uint8_t reviewDisplayBuffer[sizeof(G_io_apdu_buffer)];
@@ -507,7 +510,7 @@ static bool prepare_update_asset_display(void) {
     return true;
 }
 
-static bool format_create_trx_amount(uint64_t value, char *out, size_t outlen) {
+static bool format_trx_amount_with_ticker(uint64_t value, char *out, size_t outlen) {
     if (value == 0) {
         return strlcpy(out, "0 TRX", outlen) == 5;
     }
@@ -533,12 +536,12 @@ static bool prepare_create_smart_contract_display(void) {
                             strlen(new_contract->name),
                             createSmartContractDisplay->name,
                             sizeof(createSmartContractDisplay->name)) ||
-        !format_create_trx_amount((uint64_t) new_contract->call_value,
-                                  createSmartContractDisplay->callValue,
-                                  sizeof(createSmartContractDisplay->callValue)) ||
-        !format_create_trx_amount(txContent.feeLimit,
-                                  createSmartContractDisplay->feeLimit,
-                                  sizeof(createSmartContractDisplay->feeLimit)) ||
+        !format_trx_amount_with_ticker((uint64_t) new_contract->call_value,
+                                       createSmartContractDisplay->callValue,
+                                       sizeof(createSmartContractDisplay->callValue)) ||
+        !format_trx_amount_with_ticker(txContent.feeLimit,
+                                       createSmartContractDisplay->feeLimit,
+                                       sizeof(createSmartContractDisplay->feeLimit)) ||
         !u64_to_string((uint64_t) new_contract->consume_user_resource_percent,
                        createSmartContractDisplay->userResourcePercent,
                        sizeof(createSmartContractDisplay->userResourcePercent)) ||
@@ -641,6 +644,18 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[idx].item = stringLabelTxAmount;
             txInfos.fields[idx].value = (const char *) reviewDisplayBuffer;
             idx++;
+
+            if ((txContent.contractType == TRIGGERSMARTCONTRACT) &&
+                (txContent.feeLimit != 0U)) {
+                if (!format_trx_amount_with_ticker(txContent.feeLimit,
+                                                   trc20FeeLimit,
+                                                   sizeof(trc20FeeLimit))) {
+                    return false;
+                }
+                txInfos.fields[idx].item = "Fee limit";
+                txInfos.fields[idx].value = trc20FeeLimit;
+                idx++;
+            }
 
             // TRC10 asset transfers keep Amount and Token split: the token is an
             // asset id/name (often numeric), so merging it into the amount would be

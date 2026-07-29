@@ -100,21 +100,30 @@ class Test_GET_PUBLIC_KEY():
         provide = builder.provide_trc20_token_information(
             "", b"", 0, 0, b"")
 
-        with client.get_public_addr(display=True,
+        previous_policy = backend.raise_policy
+        backend.raise_policy = RaisePolicy.RAISE_NOTHING
+        try:
+            with client.get_public_addr(display=True,
+                                        chaincode=True,
+                                        bip32_path=TRX_PATH):
+                response = backend.exchange_raw(provide)
+                assert response.status == StatusWord.CONDITION_NOT_SATISFIED
+
+                # Rejection must not reset or replace the active address page.
+                scenario_navigator.address_review_approve(
+                    test_name=None, do_comparison=False)
+        finally:
+            backend.raise_policy = previous_policy
+
+        # Speculos/Ragger cannot correlate out-of-order responses from two
+        # concurrent APDUs: the immediate 0x6985 is also recorded as the outer
+        # async exchange response.  Verify the approval callback and reset by
+        # starting a fresh command instead of interpreting that stale response
+        # as GET_PUBLIC_KEY data.
+        with client.get_public_addr(display=False,
                                     chaincode=True,
                                     bip32_path=TRX_PATH):
-            previous_policy = backend.raise_policy
-            backend.raise_policy = RaisePolicy.RAISE_NOTHING
-            try:
-                response = backend.exchange_raw(provide)
-            finally:
-                backend.raise_policy = previous_policy
-            assert response.status == StatusWord.CONDITION_NOT_SATISFIED
-
-            # Rejection must not reset or replace the active address page.
-            scenario_navigator.address_review_approve(
-                test_name=None, do_comparison=False)
-
+            pass
         response = client.response()
         assert response.status == StatusWord.OK
         public_key, _, chaincode = client.parse_get_public_key_response(

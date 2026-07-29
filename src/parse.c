@@ -711,7 +711,10 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     }
     if ((msg.transfer_contract.amount <= 0) ||
         !is_mainnet_address(msg.transfer_contract.owner_address) ||
-        !is_mainnet_address(msg.transfer_contract.to_address)) {
+        !is_mainnet_address(msg.transfer_contract.to_address) ||
+        (memcmp(msg.transfer_contract.owner_address,
+                msg.transfer_contract.to_address,
+                ADDRESS_SIZE) == 0)) {
         return false;
     }
 
@@ -731,7 +734,10 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     }
     if ((msg.transfer_asset_contract.amount <= 0) ||
         !is_mainnet_address(msg.transfer_asset_contract.owner_address) ||
-        !is_mainnet_address(msg.transfer_asset_contract.to_address)) {
+        !is_mainnet_address(msg.transfer_asset_contract.to_address) ||
+        (memcmp(msg.transfer_asset_contract.owner_address,
+                msg.transfer_asset_contract.to_address,
+                ADDRESS_SIZE) == 0)) {
         return false;
     }
     content->amount[0] = (uint64_t) msg.transfer_asset_contract.amount;
@@ -1445,7 +1451,12 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     }
     if (!is_mainnet_address(msg.exchange_create_contract.owner_address) ||
         (msg.exchange_create_contract.first_token_balance <= 0) ||
-        (msg.exchange_create_contract.second_token_balance <= 0)) {
+        (msg.exchange_create_contract.second_token_balance <= 0) ||
+        ((msg.exchange_create_contract.first_token_id.size ==
+          msg.exchange_create_contract.second_token_id.size) &&
+         (memcmp(msg.exchange_create_contract.first_token_id.bytes,
+                 msg.exchange_create_contract.second_token_id.bytes,
+                 msg.exchange_create_contract.first_token_id.size) == 0))) {
         return false;
     }
 

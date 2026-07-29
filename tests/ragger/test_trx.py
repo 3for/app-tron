@@ -88,7 +88,8 @@ class TestTRX():
                           warning_instruction=None,
                           ins: InsType = InsType.SIGN,
                           include_tx_len: bool = False,
-                          do_comparison: bool = True):
+                          do_comparison: bool = True,
+                          required_review_text=None):
         path = Path(currentframe().f_back.f_code.co_name)
         if signatures is None:
             signatures = []
@@ -99,11 +100,39 @@ class TestTRX():
                                signatures=signatures,
                                ins=ins,
                                include_tx_len=include_tx_len):
-            self.review_approve(str(path),
-                                warning=warning_approve,
-                                custom_screen_text=custom_screen_text,
-                                warning_instruction=warning_instruction,
-                                do_comparison=do_comparison)
+            if required_review_text is None:
+                self.review_approve(str(path),
+                                    warning=warning_approve,
+                                    custom_screen_text=custom_screen_text,
+                                    warning_instruction=warning_instruction,
+                                    do_comparison=do_comparison)
+            else:
+                assert not warning_approve
+                scenario = NavigationScenarioData(
+                    device,
+                    self.scenario_navigator.backend,
+                    UseCase.TX_REVIEW,
+                    True)
+                if custom_screen_text is not None:
+                    scenario.pattern = custom_screen_text
+
+                # Assert the security-relevant field explicitly, then continue
+                # from that page to the normal approval action.
+                self.scenario_navigator.navigator.navigate_until_text(
+                    navigate_instruction=scenario.navigation,
+                    validation_instructions=[],
+                    text=required_review_text,
+                    screen_change_after_last_instruction=False)
+                self.scenario_navigator.navigator.navigate_until_text(
+                    navigate_instruction=scenario.navigation,
+                    validation_instructions=scenario.validation,
+                    text=scenario.pattern,
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=
+                    scenario.post_validation_spinner is None)
+                if scenario.post_validation_spinner is not None:
+                    self.scenario_navigator.backend.wait_for_text_on_screen(
+                        scenario.post_validation_spinner)
 
         resp = client.response()
         assert check_tx_signature(tx, resp.data[0:65],
@@ -152,6 +181,30 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 amount=2**63 - 1))
         self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize("contract_kind", ["transfer", "transfer_asset"])
+    def test_trx_rejects_self_transfer(self, backend, contract_kind):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+
+        if contract_kind == "transfer":
+            contract_type = tron.Transaction.Contract.TransferContract
+            message = contract.TransferContract(
+                owner_address=owner,
+                to_address=owner,
+                amount=1)
+        else:
+            contract_type = tron.Transaction.Contract.TransferAssetContract
+            message = contract.TransferAssetContract(
+                owner_address=owner,
+                to_address=owner,
+                asset_name=b"1002000",
+                amount=1)
+
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     @pytest.mark.parametrize(
         "contract_kind, amount",
@@ -423,6 +476,21 @@ class TestTRX():
                                             second_token_id="1000166".encode(),
                                             second_token_balance=10000000))
         self.sign_and_validate(client, device, 1, tx)
+
+    def test_trx_exchange_create_rejects_same_token(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeCreateContract,
+            contract.ExchangeCreateContract(
+                owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+                first_token_id=b"1000166",
+                first_token_balance=1_000_000,
+                second_token_id=b"1000166",
+                second_token_balance=1_000_000))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     @pytest.mark.parametrize("exchange_contract", [
         "create",
@@ -1688,6 +1756,28 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
+
+    def test_trx_trc20_send_with_fee_limit(self, backend, device):
+        client = TronClient(backend)
+        tx_calldata = build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=tx_calldata),
+            fee_limit=100_000_000)
+
+        # Assert the extra asynchronous field directly without making every
+        # device's baseline snapshots depend on this semantic boundary test.
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               do_comparison=False,
+                               required_review_text="Fee limit")
 
     @pytest.mark.parametrize("attached", ["trx", "trc10", "token_id_only"])
     def test_trx_trc20_rejects_hidden_attached_assets(self, backend, attached):
