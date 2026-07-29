@@ -270,7 +270,6 @@ typedef struct {
     uint8_t depth;
     uint16_t passes_remaining[MAX_ARRAYS];
     uint8_t index;
-    uint16_t combinations;
 } s_arrays_info;
 
 static bool path_array(const s_array_args *array,
@@ -320,13 +319,10 @@ static bool path_array(const s_array_args *array,
         return false;
     }
     if (arrays_info->index == arrays_info->depth) {
-        // new depth
-        uint16_t combinations;
-        if (__builtin_mul_overflow(arrays_info->combinations, passes, &combinations) ||
-            (combinations > MAX_VALUE_COLLECTION_SIZE)) {
-            return false;
-        }
-        arrays_info->combinations = combinations;
+        // New depth. The total number of traversed combinations is bounded in
+        // data_path_get(). Do not multiply this branch's size into a sticky
+        // product: an inner array is re-entered for every outer element, and a
+        // product that is not restored on unwind rejects valid nested arrays.
         arrays_info->passes_remaining[arrays_info->index] = passes;
         arrays_info->depth += 1;
     }
@@ -354,7 +350,8 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
     bool ret;
     uint32_t offset;
     uint32_t ref_offset;
-    s_arrays_info arinf = {.combinations = 1U};
+    uint8_t combinations_processed = 0U;
+    s_arrays_info arinf = {0};
 
     do {
         arinf.index = 0;
@@ -388,7 +385,15 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
 
             if (!ret) return false;
         }
+        combinations_processed += 1U;
         arrays_update(&arinf);
+        /* A path without a leaf would not grow collection->size, so keep an
+         * independent exact bound on complete path traversals. Exactly 16
+         * combinations are supported; reject only if another one is pending. */
+        if ((arinf.depth > 0U) &&
+            (combinations_processed >= MAX_VALUE_COLLECTION_SIZE)) {
+            return false;
+        }
     } while (arinf.depth > 0);
     return true;
 }

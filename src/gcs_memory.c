@@ -219,17 +219,23 @@ bool gcs_budget_begin(void) {
 
 bool gcs_budget_end(void) {
     if (!g_budget_active) {
+        /* Ending/resetting a non-GCS flow is still a session boundary. Do not
+         * let an allocation failure raised by a failed metadata/TIP-712 parse
+         * leak into the status mapping of the next APDU. */
+        g_allocation_failure = false;
         return !g_invariant_failure;
     }
     if ((g_session_live_bytes != 0U) || g_invariant_failure) {
         g_invariant_failure = true;
         g_budget_active = false;
+        g_allocation_failure = false;
         return false;
     }
     for (size_t i = 0U; i < GCS_MEM_CATEGORY_COUNT; i++) {
         if (g_category_live_bytes[i] != 0U) {
             g_invariant_failure = true;
             g_budget_active = false;
+            g_allocation_failure = false;
             return false;
         }
     }

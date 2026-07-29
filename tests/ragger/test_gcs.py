@@ -40,7 +40,7 @@ from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmoun
                         ParamCalldata, ParamDatetime, ParamDuration, ParamEnum,
                         ParamNetwork, ParamNFT, ParamRaw, ParamToken, ParamTokenAmount,
                         ParamTrustedName, ParamType, PathLeaf, PathLeafType,
-                        ParamUnit, PathRef, PathTuple, TxInfo, TypeFamily, Value,
+                        ParamUnit, PathArray, PathRef, PathTuple, TxInfo, TypeFamily, Value,
                         VisibleType)
 from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from client.tlv import eth_to_tron_base58
@@ -509,6 +509,48 @@ def test_gcs_memo_respects_data_allowed(backend: BackendInterface,
 def build_data_path_static(tuple_index: int) -> DataPath:
     """Select one top-level static ABI word from calldata."""
     return DataPath(1, [PathTuple(tuple_index), PathLeaf(PathLeafType.STATIC)])
+
+
+def _encode_uint256_nested_array(rows: list[list[int]]) -> bytes:
+    """Encode one uint256[][] argument without relying on a web3 codec API."""
+    def word(value: int) -> bytes:
+        return value.to_bytes(32, "big")
+
+    encoded_rows = [word(len(row)) + b"".join(word(value) for value in row)
+                    for row in rows]
+    next_offset = 32 * len(rows)
+    offsets = bytearray()
+    for encoded_row in encoded_rows:
+        offsets += word(next_offset)
+        next_offset += len(encoded_row)
+    return word(32) + word(len(rows)) + bytes(offsets) + b"".join(encoded_rows)
+
+
+def test_gcs_accepts_six_values_from_nested_arrays(
+        backend: BackendInterface):
+    """Re-entering an inner array must not inflate the 16-combination limit."""
+    client = TronClient(backend)
+    selector = bytes.fromhex("12345678")
+    calldata = selector + _encode_uint256_nested_array(
+        [[1, 2], [3, 4], [5, 6]])
+    tx = build_trigger_smart_contract_tx(client, TRC20_CONTRACT_ADDR20, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    value = Value(
+        1,
+        TypeFamily.UINT,
+        type_size=32,
+        data_path=DataPath(
+            1,
+            [PathTuple(0), PathRef(), PathArray(), PathRef(), PathArray(),
+             PathLeaf(PathLeafType.STATIC)],
+        ),
+    )
+    field = Field(1, "Value", ParamRaw(1, value))
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, selector, [field], "nested arrays"))
+    assert client.provide_transaction_field_desc(field.serialize()).status == StatusWord.OK
 
 
 def _uint_value(type_size: int, data_path: DataPath) -> Value:

@@ -1,6 +1,7 @@
 #include <os.h>
 #include <os_io.h>
 #include <cx.h>
+#include "io.h"
 // #include "apdu_constants.h"
 #include "challenge.h"
 #include "app_errors.h"
@@ -47,10 +48,13 @@ bool check_challenge(uint32_t received_challenge) {
  * Send back the current challenge
  */
 uint16_t handle_get_challenge(uint8_t p1, uint8_t p2, const uint8_t *data, uint8_t length) {
-    UNUSED(p1);
-    UNUSED(p2);
     UNUSED(data);
-    UNUSED(length);
+    if ((p1 != 0U) || (p2 != 0U)) {
+        return io_send_sw(E_INCORRECT_P1_P2);
+    }
+    if (length != 0U) {
+        return io_send_sw(E_WRONG_DATA_LENGTH);
+    }
     PRINTF("New challenge -> %u\n", get_challenge());
     U4BE_ENCODE(G_io_apdu_buffer, 0, get_challenge());
     uint32_t tx = 4;

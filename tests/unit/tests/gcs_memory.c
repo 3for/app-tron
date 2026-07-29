@@ -18,6 +18,14 @@
 
 app_state_t appState;
 
+static void test_inactive_budget_end_clears_allocation_failure(void **state) {
+    (void) state;
+
+    assert_null(gcs_mem_alloc(0U, GCS_MEM_GENERIC));
+    assert_true(gcs_budget_end());
+    assert_false(gcs_mem_take_allocation_failure());
+}
+
 static void test_inactive_allocation_is_not_refunded_from_session(void **state) {
     (void) state;
     void *before = gcs_mem_alloc(32U, GCS_MEM_METADATA);
@@ -131,6 +139,7 @@ static void test_nested_calldata_limit_is_state_independent(void **state) {
 
 int main(void) {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_inactive_budget_end_clears_allocation_failure),
         cmocka_unit_test(test_inactive_allocation_is_not_refunded_from_session),
         cmocka_unit_test(test_tracked_live_budget_is_deterministic),
         cmocka_unit_test(test_calldata_sub_budget_is_deterministic),

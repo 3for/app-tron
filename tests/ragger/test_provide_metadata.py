@@ -24,6 +24,21 @@ def get_challenge(client: TronClient) -> int:
     return ResponseParser.challenge(response.data)
 
 
+@pytest.mark.parametrize(
+    ("apdu", "status"),
+    [
+        (bytes.fromhex("e020010000"), StatusWord.INVALID_P1_P2),
+        (bytes.fromhex("e020000100"), StatusWord.INVALID_P1_P2),
+        (bytes.fromhex("e02000000100"), StatusWord.WRONG_DATA_LENGTH),
+    ],
+)
+def test_get_challenge_rejects_noncanonical_apdu(
+        backend: BackendInterface, apdu: bytes, status: StatusWord):
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange_raw(apdu)
+    assert error.value.status == status
+
+
 def send_tlv_chunks(client: TronClient, chunks: list[bytes]) -> None:
     for chunk in chunks:
         client.exchange_raw(chunk)
