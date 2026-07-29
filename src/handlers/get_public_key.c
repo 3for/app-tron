@@ -27,33 +27,43 @@
 
 #ifdef HAVE_SWAP
 #include "swap.h"
+#include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
+
+static int send_public_key_status(uint16_t sw) {
+#ifdef HAVE_SWAP
+    if ((sw != E_OK) && G_called_from_swap) {
+        io_send_sw(sw);
+        swap_finalize_exchange_sign_transaction(false);
+    }
+#endif  // HAVE_SWAP
+    return io_send_sw(sw);
+}
 
 int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dataLength) {
     // Get private key data
     bip32_path_t bip32_path;
 
-    uint8_t p2Chain = p2 & 0x3F;
-
     if ((p1 != P1_CONFIRM) && (p1 != P1_NON_CONFIRM)) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return send_public_key_status(E_INCORRECT_P1_P2);
     }
-    if ((p2Chain != P2_CHAINCODE) && (p2Chain != P2_NO_CHAINCODE)) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+    if ((p2 != P2_CHAINCODE) && (p2 != P2_NO_CHAINCODE)) {
+        return send_public_key_status(E_INCORRECT_P1_P2);
     }
 
-    tmpCtx.publicKeyContext.getChaincode = (p2Chain == P2_CHAINCODE);
+    tmpCtx.publicKeyContext.getChaincode = (p2 == P2_CHAINCODE);
 
     // Add requested BIP path to tmp array
-    if (read_bip32_path(dataBuffer, dataLength, &bip32_path) < 0) {
+    off_t parsed = read_bip32_path(dataBuffer, dataLength, &bip32_path);
+    if ((parsed < 0) || ((size_t) parsed != dataLength)) {
         PRINTF("read_bip32_path failed\n");
-        return io_send_sw(E_INCORRECT_BIP32_PATH);
+        return send_public_key_status(E_INCORRECT_BIP32_PATH);
     }
 
     if (initPublicKeyContext(&bip32_path,
                              tmpCtx.publicKeyContext.address58,
                              &tmpCtx.publicKeyContext) != 0) {
-        return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        return send_public_key_status(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
     memcpy(strings.common.toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
@@ -64,7 +74,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
 #ifdef HAVE_SWAP
         if (G_called_from_swap) {
             PRINTF("Refused GET_PUBLIC_KEY mode when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
+            return send_public_key_status(E_SWAP_CHECKING_FAIL);
         }
 #endif  // HAVE_SWAP
 
@@ -74,7 +84,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         appState = APP_STATE_REVIEWING_ADDRESS;
         if (!ux_flow_display(APPROVAL_VERIFY_ADDRESS, false)) {
             reset_app_context();
-            return io_send_sw(SWO_INSUFFICIENT_MEMORY);
+            return send_public_key_status(SWO_INSUFFICIENT_MEMORY);
         }
         return 0;
     }

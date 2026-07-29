@@ -190,18 +190,25 @@ static void prepare_and_display_home(const char *appname, const char *tagline, u
  * (standalone TRON app, or as a clone/plugin caller app).
  */
 static void get_appname_and_tagline(const char **appname, const char **tagline) {
-    uint8_t line_len = 1;  // Initialize length to 1 for the '\0' character
+    size_t line_len;
 
     if (caller_app != NULL) {
         *appname = caller_app->name;
         if (caller_app->type == CALLER_TYPE_PLUGIN) {
-            line_len += strlen(FORMAT_PLUGIN);
-            line_len += strlen(caller_app->name);
-            // Allocate the buffer - will never be deallocated...
-            if (APP_MEM_CALLOC((void **) &g_tag_line, line_len) == true) {
+            if (g_tag_line == NULL) {
+                const size_t format_len = strlen(FORMAT_PLUGIN);
+                const size_t appname_len = strlen(caller_app->name);
+
+                // FORMAT_PLUGIN contains one two-byte "%s" conversion.
+                if ((format_len < 2U) ||
+                    __builtin_add_overflow(format_len - 2U, appname_len, &line_len) ||
+                    __builtin_add_overflow(line_len, 1U, &line_len) ||
+                    !APP_MEM_CALLOC((void **) &g_tag_line, line_len)) {
+                    return;
+                }
                 snprintf(g_tag_line, line_len, FORMAT_PLUGIN, *appname);
-                *tagline = g_tag_line;
             }
+            *tagline = g_tag_line;
         }
     } else {  // standalone TRON app
         *appname = APPNAME;

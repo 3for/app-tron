@@ -29,6 +29,11 @@ void swap_handle_get_printable_amount(get_printable_amount_parameters_t* params)
 
     PRINTF("Inside Tron swap_handle_get_printable_amount\n");
 
+    if ((params->amount == NULL) || (params->amount_length > INT256_LENGTH)) {
+        PRINTF("Amount is too large or missing\n");
+        goto error;
+    }
+
     // If the amount is a fee, its value is nominated in TRX even if we're doing an TRC20 swap
     // If there is no coin_configuration, consider that we are doing a TRX swap
     if (params->is_fee || params->coin_configuration == NULL) {

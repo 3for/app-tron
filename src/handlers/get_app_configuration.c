@@ -23,10 +23,14 @@
 #include "app_errors.h"
 
 int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    UNUSED(p1);
-    UNUSED(p2);
     UNUSED(workBuffer);
-    UNUSED(dataLength);
+
+    if ((p1 != 0U) || (p2 != 0U)) {
+        return io_send_sw(E_INCORRECT_P1_P2);
+    }
+    if (dataLength != 0U) {
+        return io_send_sw(E_WRONG_DATA_LENGTH);
+    }
 
     // Add info to buffer. resp[0] is the settings flag byte (mirrors app-ethereum's
     // handle_get_app_configuration); S_INITIALIZED is internal and never exposed here.

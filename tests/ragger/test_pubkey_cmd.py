@@ -1,6 +1,8 @@
 from ragger.backend import SpeculosBackend
 from ragger.backend.interface import RaisePolicy
 from ragger.bip import calculate_public_key_and_chaincode, CurveChoice
+from ragger.error import ExceptionRAPDU
+import pytest
 
 from client.status_word import StatusWord
 from client.command_builder import CommandBuilder
@@ -21,6 +23,22 @@ def check_get_public_key_resp(backend, path, public_key, chaincode):
 
 
 class Test_GET_PUBLIC_KEY():
+
+    @pytest.mark.parametrize("mutation", ["trailing_data", "p2_high_bits"])
+    def test_get_public_key_rejects_noncanonical_apdu(self, backend, mutation):
+        command = bytearray(CommandBuilder().get_public_addr(
+            False, True, TRX_PATH, None))
+        if mutation == "trailing_data":
+            command[4] += 1
+            command.append(0)
+            expected = StatusWord.INCORRECT_BIP32_PATH
+        else:
+            command[3] |= 0x40
+            expected = StatusWord.INVALID_P1_P2
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange_raw(bytes(command))
+        assert error.value.status == expected
 
     def test_get_public_key_non_confirm(self, backend):
         client = TronClient(backend)

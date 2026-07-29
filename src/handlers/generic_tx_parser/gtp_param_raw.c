@@ -1,9 +1,7 @@
-#include <inttypes.h>
 #include "os_print.h"
 #include "gtp_param_raw.h"
 #include "gtp_field.h"
 #include "uint256.h"
-#include "read.h"
 #include "gtp_field_table.h"
 #include "utils.h"
 #include "shared_context.h"
@@ -129,16 +127,7 @@ bool format_int(const s_value *def, const s_parsed_value *value, char *buf, size
     size_t encoded_length;
     size_t ignored_prefix = 0U;
     uint8_t padding;
-    bool ret;
-    int written;
-    union {
-        uint256_t value256;
-        uint128_t value128;
-        int64_t value64;
-        int32_t value32;
-        int16_t value16;
-        int8_t value8;
-    } uv;
+    uint256_t value256 = {0};
 
     if ((def == NULL) || (value == NULL) || (value->ptr == NULL) ||
         (value->length == 0U) || (value->length > INT256_LENGTH) ||
@@ -159,41 +148,13 @@ bool format_int(const s_value *def, const s_parsed_value *value, char *buf, size
             return false;
         }
     }
-    memset(tmp, padding, def->type_size);
-    memcpy(tmp + def->type_size - encoded_length, encoded, encoded_length);
-    switch (def->type_size * 8) {
-        case 256:
-            convertUint256BE(tmp, def->type_size, &uv.value256);
-            ret = tostring256_signed(&uv.value256, 10, buf, buf_size);
-            break;
-        case 128:
-            convertUint128BE(tmp, def->type_size, &uv.value128);
-            ret = tostring128_signed(&uv.value128, 10, buf, buf_size);
-            break;
-        case 64:
-            uv.value64 = (int64_t) read_u64_be(tmp, 0);
-            written = snprintf(buf, buf_size, "%" PRId64, uv.value64);
-            ret = (written >= 0) && ((size_t) written < buf_size);
-            break;
-        case 32:
-            uv.value32 = (int32_t) read_u32_be(tmp, 0);
-            written = snprintf(buf, buf_size, "%" PRId32, uv.value32);
-            ret = (written >= 0) && ((size_t) written < buf_size);
-            break;
-        case 16:
-            uv.value16 = (int16_t) read_u16_be(tmp, 0);
-            written = snprintf(buf, buf_size, "%" PRId16, uv.value16);
-            ret = (written >= 0) && ((size_t) written < buf_size);
-            break;
-        case 8:
-            uv.value8 = (int8_t) tmp[0];
-            written = snprintf(buf, buf_size, "%" PRId8, uv.value8);
-            ret = (written >= 0) && ((size_t) written < buf_size);
-            break;
-        default:
-            ret = false;
-    }
-    return ret;
+    // Sign-extend into a full 256-bit two's-complement value. This supports
+    // every Solidity int width (int8..int256 in 8-bit steps), not only the
+    // native C widths handled by the old switch.
+    memset(tmp, padding, sizeof(tmp));
+    memcpy(tmp + sizeof(tmp) - encoded_length, encoded, encoded_length);
+    convertUint256BE(tmp, sizeof(tmp), &value256);
+    return tostring256_signed(&value256, 10, buf, buf_size);
 }
 
 /**
@@ -305,11 +266,6 @@ static bool format_bytes(const s_field *field,
         return false;
     }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat"
-    snprintf(buf, buf_size, "0x%.*h", value->length, value->ptr);
-#pragma GCC diagnostic pop
-
     if (!apply_visibility_constraint(field,
                                      to_be_displayed,
                                      check_bytes_constraint(field, value))) {
@@ -320,10 +276,16 @@ static bool format_bytes(const s_field *field,
         return true;
     }
 
-    // Truncate if needed for display
+    // A clear-sign field must render every signed byte. Prefix + ellipsis is
+    // informative but not an unambiguous representation, so fail closed.
     if (rendered_size > buf_size) {
-        memmove(&buf[buf_size - 1 - 3], "...", 3);
+        return false;
     }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat"
+    snprintf(buf, buf_size, "0x%.*h", value->length, value->ptr);
+#pragma GCC diagnostic pop
     return true;
 }
 

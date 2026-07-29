@@ -43,19 +43,24 @@
 
 extern void reset_app_context();
 
-static int send_sign_status(uint16_t sw) {
-    if (sw != E_OK) {
-        reset_app_context();
-    }
-    return io_send_sw(sw);
-}
-
 #ifdef HAVE_SWAP
 static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
     io_send_sw(sw);
     swap_finalize_exchange_sign_transaction(false);
 }
 #endif  // HAVE_SWAP
+
+static int send_sign_status(uint16_t sw) {
+    if (sw != E_OK) {
+#ifdef HAVE_SWAP
+        if (G_called_from_swap) {
+            finalize_swap_with_error(sw);
+        }
+#endif  // HAVE_SWAP
+        reset_app_context();
+    }
+    return io_send_sw(sw);
+}
 
 #ifdef SCREEN_SIZE_WALLET
 static void fillVoteAddressSlot(char *destination, const char *from, uint8_t index) {

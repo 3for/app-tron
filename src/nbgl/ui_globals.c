@@ -82,6 +82,13 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 }
 
 bool ui_callback_tx_cancel(bool display_menu) {
+#ifdef HAVE_SWAP
+    if (G_called_from_swap && G_swap_response_ready) {
+        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        swap_finalize_exchange_sign_transaction(false);
+    }
+#endif  // HAVE_SWAP
+
     reset_app_context();
     io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
 

@@ -44,6 +44,7 @@
 
 #ifdef HAVE_SWAP
 #include "swap.h"
+#include "handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
 static int send_gtp_status(uint16_t sw) {
@@ -159,6 +160,12 @@ int apdu_dispatcher(const command_t *cmd) {
                              sign_reception_command_allowed(cmd->p1, cmd->p2);
         if (!allowed) {
             PRINTF("Refused APDU while INS_SIGN reception is active\n");
+#ifdef HAVE_SWAP
+            if (G_called_from_swap) {
+                io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+                swap_finalize_exchange_sign_transaction(false);
+            }
+#endif  // HAVE_SWAP
             reset_app_context();
             return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
         }
@@ -240,7 +247,8 @@ int apdu_dispatcher(const command_t *cmd) {
     if (G_called_from_swap) {
         if ((cmd->ins != INS_GET_PUBLIC_KEY) && (cmd->ins != INS_SIGN)) {
             PRINTF("Refused INS when in SWAP mode\n");
-            return io_send_sw(E_SWAP_CHECKING_FAIL);
+            io_send_sw(E_SWAP_CHECKING_FAIL);
+            swap_finalize_exchange_sign_transaction(false);
         }
     }
 #endif  // HAVE_SWAP

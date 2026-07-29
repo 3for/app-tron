@@ -28,7 +28,9 @@ static void assert_gcs_parser_guards(void) {
     s_parsed_value parsed = {0};
     s_value signed_def = {.type_family = TF_INT, .type_size = 1U};
     s_value signed16_def = {.type_family = TF_INT, .type_size = 2U};
+    s_value signed24_def = {.type_family = TF_INT, .type_size = 3U};
     uint8_t signed16_encoded[] = {0xffU, 0xfeU};
+    uint8_t signed24_encoded[] = {0xffU, 0xffU, 0xfeU};
     uint8_t encoded[INT256_LENGTH] = {0};
     char formatted[80] = {0};
     bool displayed = false;
@@ -105,6 +107,12 @@ static void assert_gcs_parser_guards(void) {
     parsed.ptr = signed16_encoded;
     parsed.length = sizeof(signed16_encoded);
     if (!format_int(&signed16_def, &parsed, formatted, sizeof(formatted)) ||
+        (strcmp(formatted, "-2") != 0)) {
+        __builtin_trap();
+    }
+    parsed.ptr = signed24_encoded;
+    parsed.length = sizeof(signed24_encoded);
+    if (!format_int(&signed24_def, &parsed, formatted, sizeof(formatted)) ||
         (strcmp(formatted, "-2") != 0)) {
         __builtin_trap();
     }

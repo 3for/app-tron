@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 import pytest
+from ragger.error import ExceptionRAPDU
 
 from ledgered.devices import Device
 
@@ -8,6 +9,7 @@ from ragger.backend import BackendInterface
 from ragger.navigator import Navigator
 from ragger.utils.misc import get_current_app_name_and_version
 
+from client.status_word import StatusWord
 from settings import (APP_CLA, GET_APP_CONFIGURATION_INS,
                       RESERVED_TRUNCATE_ADDRESS_MASK, SettingID,
                       get_settings_moves)
@@ -54,3 +56,19 @@ def test_truncate_address_flag_is_reserved(backend: BackendInterface):
     """The deprecated truncate-address wire bit must remain clear."""
     response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
     assert response.data[0] & RESERVED_TRUNCATE_ADDRESS_MASK == 0
+
+
+@pytest.mark.parametrize(
+    "p1,p2,data,expected",
+    [
+        (1, 0, b"", StatusWord.INVALID_P1_P2),
+        (0, 1, b"", StatusWord.INVALID_P1_P2),
+        (0, 0, b"\x00", StatusWord.WRONG_DATA_LENGTH),
+    ],
+)
+def test_get_configuration_rejects_noncanonical_apdu(
+        backend: BackendInterface, p1: int, p2: int, data: bytes,
+        expected: StatusWord):
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, p1, p2, data)
+    assert error.value.status == expected

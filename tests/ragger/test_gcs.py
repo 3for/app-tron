@@ -692,6 +692,7 @@ def _abi_dynamic_calldata(selector: bytes, value: bytes,
         "address_wrong_tron_prefix",
         "uint8_high_bits",
         "bytes_constraint_hidden_suffix",
+        "bytes_not_fully_displayable",
     ],
 )
 def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
@@ -703,8 +704,8 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
     visibility = VisibleType.ALWAYS
     constraints = None
 
-    if case == "bytes_constraint_hidden_suffix":
-        raw_value = b"A" * 127 + b"B"
+    if case in {"bytes_constraint_hidden_suffix", "bytes_not_fully_displayable"}:
+        raw_value = (b"A" * 127 + b"B") if case == "bytes_constraint_hidden_suffix" else b"A" * 189
         calldata = _abi_dynamic_calldata(selector, raw_value)
         value = Value(
             1,
@@ -714,8 +715,9 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
                 [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
             ),
         )
-        visibility = VisibleType.MUST_BE
-        constraints = [b"A" * 127 + b"C"]
+        if case == "bytes_constraint_hidden_suffix":
+            visibility = VisibleType.MUST_BE
+            constraints = [b"A" * 127 + b"C"]
     elif case in {
             "string_nul",
             "string_control",

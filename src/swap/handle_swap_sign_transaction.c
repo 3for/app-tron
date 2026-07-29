@@ -21,6 +21,8 @@
 
 #include "parse.h"
 #include "uint256.h"
+#include "mem_utils.h"
+#include "common_utils.h"
 
 typedef struct swap_validated_s {
     bool initialized;
@@ -54,7 +56,7 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t* params) {
         return false;
     }
 
-    if (params->amount == NULL) {
+    if ((params->amount == NULL) || (params->amount_length > INT256_LENGTH)) {
         PRINTF("Amount expected\n");
         return false;
     }
@@ -84,12 +86,20 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t* params) {
         }
     }
 
-    // Save recipient
-    strlcpy(swap_validated.recipient,
-            params->destination_address,
-            sizeof(swap_validated.recipient));
-    if (swap_validated.recipient[sizeof(swap_validated.recipient) - 1] != '\0') {
-        PRINTF("Address copy error\n");
+    // The Exchange request must bind the complete, canonical TRON address.
+    // Checking the last destination byte after strlcpy() cannot detect
+    // truncation because strlcpy() always terminates a non-empty destination.
+    uint8_t recipient_binary[ADDRESS_LENGTH] = {0};
+    const size_t recipient_length =
+        strnlen(params->destination_address, sizeof(swap_validated.recipient));
+    if ((recipient_length != BASE58CHECK_ADDRESS_SIZE) ||
+        !tronBase58ToBinaryLen(params->destination_address,
+                               recipient_length,
+                               recipient_binary) ||
+        (strlcpy(swap_validated.recipient,
+                 params->destination_address,
+                 sizeof(swap_validated.recipient)) != recipient_length)) {
+        PRINTF("Invalid or truncated destination address\n");
         return false;
     }
 
@@ -99,6 +109,14 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t* params) {
 
     // Full reset the global variables
     os_explicit_zero_BSS_segment();
+
+    // The allocator and its backing buffer live in BSS. Library-mode entry
+    // does not run the standalone app initialization, so rebuild allocator
+    // metadata immediately after clearing BSS and before INS_SIGN allocates.
+    if (!app_mem_init()) {
+        PRINTF("Failed to initialize application memory\n");
+        return false;
+    }
 
     // Keep the address at which we'll reply the signing status
     G_swap_sign_return_value_address = &params->result;
