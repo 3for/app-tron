@@ -908,6 +908,9 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     if (selector_flag) calldata_info->selector_state = CALLDATA_INFO_PARAM_UNSET;
     if (amount_flag) calldata_info->amount_state = CALLDATA_INFO_PARAM_UNSET;
     switch (spender_flag) {
+        case CALLDATA_FLAG_ADDR_FILTER:
+            calldata_info->spender_state = CALLDATA_INFO_PARAM_UNSET;
+            break;
         case CALLDATA_FLAG_ADDR_VERIFYING_CONTRACT:
             memcpy(calldata_info->spender,
                    tip712_context->contract_addr,

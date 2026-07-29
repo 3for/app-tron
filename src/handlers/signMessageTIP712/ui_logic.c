@@ -18,7 +18,7 @@
 #include "ui_globals.h"  // ui_error_blind_signing
 #include "ui_utils.h"    // g_pairs, g_pairsList, ui_pairs_init
 #include "utils.h"       // ethToTronBase58
-#include "tx_ctx.h"      // g_parked_calldata, validate_instruction_hash
+#include "tx_ctx.h"      // tx_ctx_init, validate_instruction_hash
 #include "read.h"        // read_u64_be
 #include "parse.h"       // asset_slot_is_kind
 #include "tip712_limits.h"
@@ -1095,40 +1095,48 @@ static bool update_calldata_value(const uint8_t *data,
     if (calldata_info->value_state != CALLDATA_INFO_PARAM_UNSET) return false;
     if (complete_length != NULL) {
         calldata_size = *complete_length;
-        if (calldata_size > 0) {
-            if (calldata_info->selector_state == CALLDATA_INFO_PARAM_NONE) {
-                if ((length < CALLDATA_SELECTOR_SIZE) || (calldata_size < CALLDATA_SELECTOR_SIZE)) {
+        if (calldata_info->pending_calldata != NULL) return false;
+
+        if (calldata_info->selector_state == CALLDATA_INFO_PARAM_NONE) {
+            if (calldata_size == 0U) {
+                // No embedded or separately filtered selector: this is a real
+                // empty transaction, not a zero-argument contract call.
+                calldata_info->processed = true;
+            } else {
+                if ((length < CALLDATA_SELECTOR_SIZE) ||
+                    (calldata_size < CALLDATA_SELECTOR_SIZE)) {
                     return false;
                 }
                 selector = data;
                 data += CALLDATA_SELECTOR_SIZE;
                 length -= CALLDATA_SELECTOR_SIZE;
                 calldata_size -= CALLDATA_SELECTOR_SIZE;
-            } else if (calldata_info->selector_state == CALLDATA_INFO_PARAM_SET) {
-                selector = calldata_info->selector;
             }
-            if (selector == NULL) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
+        } else {
+            // A separately filtered selector may arrive before or after the
+            // value. A zero selector is only a temporary placeholder while
+            // selector_state is UNSET; the TX context cannot be published
+            // until the real selector has been received.
+            selector = calldata_info->selector;
+        }
+
+        if (selector != NULL) {
             if (calldata_size > GCS_MAX_NESTED_CALLDATA_SIZE) {
                 apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
-            if ((g_parked_calldata =
-                     calldata_init_nested(calldata_size, selector)) == NULL) {
+            calldata_info->pending_calldata = calldata_init_nested(calldata_size, selector);
+            if (calldata_info->pending_calldata == NULL) {
                 apdu_response_code = SWO_INSUFFICIENT_MEMORY;
                 return false;
             }
         }
     }
-    if (g_parked_calldata != NULL) {
-        if (!calldata_append(g_parked_calldata, data, length)) {
+
+    if (calldata_info->pending_calldata != NULL) {
+        if (!calldata_append(calldata_info->pending_calldata, data, length)) {
             return false;
         }
-    } else {
-        // won't receive a TX info & descriptors about a non-existent calldata
-        calldata_info->processed = true;
     }
     if (last) calldata_info->value_state = CALLDATA_INFO_PARAM_SET;
     return true;
@@ -1173,7 +1181,17 @@ static bool update_calldata_selector(const uint8_t *data,
     buf_shrink_expand(data, length, calldata_info->selector, sizeof(calldata_info->selector));
     calldata_info->selector_state = CALLDATA_INFO_PARAM_SET;
     if (calldata_info->value_state == CALLDATA_INFO_PARAM_SET) {
-        calldata_set_selector(g_parked_calldata, calldata_info->selector);
+        if (calldata_info->pending_calldata == NULL) {
+            calldata_info->pending_calldata =
+                calldata_init_nested(0U, calldata_info->selector);
+            if (calldata_info->pending_calldata == NULL) {
+                apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+                return false;
+            }
+        } else if (!calldata_set_selector(calldata_info->pending_calldata,
+                                          calldata_info->selector)) {
+            return false;
+        }
     }
     return true;
 }
@@ -1231,19 +1249,19 @@ static bool update_calldata(const uint8_t *data,
             return false;
     }
     if (calldata_info_all_received(calldata_info)) {
-        if (g_parked_calldata == NULL) {
+        if (calldata_info->pending_calldata == NULL) {
             if (!handle_fallback_empty_calldata(calldata_info)) return false;
         } else {
-            if (!tx_ctx_init(g_parked_calldata,
+            if (!tx_ctx_init(calldata_info->pending_calldata,
                              calldata_info->spender,
                              calldata_info->callee,
                              calldata_info->amount,
                              &calldata_info->chain_id)) {
-                calldata_delete(g_parked_calldata);
-                g_parked_calldata = NULL;
+                calldata_delete(calldata_info->pending_calldata);
+                calldata_info->pending_calldata = NULL;
                 return false;
             }
-            g_parked_calldata = NULL;
+            calldata_info->pending_calldata = NULL;
         }
     }
     return true;
@@ -1416,6 +1434,10 @@ bool ui_712_init(void) {
 }
 
 static void delete_calldata_info(s_eip712_calldata_info *node) {
+    if (node->pending_calldata != NULL) {
+        calldata_delete(node->pending_calldata);
+        node->pending_calldata = NULL;
+    }
     gcs_mem_free(node);
 }
 

@@ -55,7 +55,11 @@ typedef struct {
 
     bool processed : 1;
 
-    // value is stored in the TX context
+    // Owns the calldata while the filtered fields for this info are being
+    // collected. Ownership moves to a TX context only after every required
+    // field has been received successfully.
+    s_calldata *pending_calldata;
+
     uint8_t callee[ADDRESS_LENGTH];
     uint64_t chain_id;
     uint8_t selector[CALLDATA_SELECTOR_SIZE];

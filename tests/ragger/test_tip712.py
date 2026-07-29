@@ -780,6 +780,34 @@ def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
     client.provide_transaction_info(tx_info.serialize())
 
 
+def _provide_no_param_tx_info(client: TronClient, json_data: dict,
+                              callee_field: str, calldata_field: str) -> None:
+    tx_info = TxInfo(
+        1,
+        json_data["domain"]["chainId"],
+        to_tvm_address(json_data["message"][callee_field]),
+        get_selector_from_data(json_data["message"][calldata_field]),
+        hashlib.sha3_256().digest(),
+        "zero-argument call",
+    )
+    client.provide_transaction_info(tx_info.serialize())
+
+
+def gcs_handler_interleaved_first(client: TronClient, json_data: dict) -> None:
+    _provide_no_param_tx_info(client, json_data, "toA", "dataA")
+    # TX_INFO loads the calldata certificate. Restore the CAL certificate
+    # before the next filtered TIP-712 field is sent.
+    InputData.send_coin_meta_certificate(client)
+
+
+def gcs_handler_interleaved_second(client: TronClient, json_data: dict) -> None:
+    _provide_no_param_tx_info(client, json_data, "toB", "dataB")
+
+
+def gcs_handler_separate_selector(client: TronClient, json_data: dict) -> None:
+    _provide_no_param_tx_info(client, json_data, "to", "selector")
+
+
 def test_sign_tip712(
                          scenario_navigator: NavigateWithScenario):
     """Legacy P2=0 remains signable without the full-mode INIT command."""
@@ -1489,6 +1517,160 @@ def test_tip712_calldata_no_param(
     _tip712_calldata_common(scenario_navigator, test_name,
                                  "safe_calldata_no_param",
                                  gcs_handler_no_param)
+
+
+def test_tip712_calldata_infos_keep_independent_pending_values(
+        scenario_navigator: NavigateWithScenario):
+    """Interleaved calldata fields must not overwrite another info's value."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    data = {
+        "domain": {
+            "verifyingContract": "TTcY7HWMs6jqQr2BPRnEKZZDF8FVLHJoYx",
+            "chainId": 728126428,
+        },
+        "message": {
+            "dataA": "0x18160ddd",
+            "dataB": "0x313ce567",
+            "toA": "TTVHrJWLPEMpsRJLs14bAZTpfXB5HBmNRa",
+            "toB": "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh",
+        },
+        "primaryType": "InterleavedCalls",
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "InterleavedCalls": [
+                {"name": "dataA", "type": "bytes"},
+                {"name": "dataB", "type": "bytes"},
+                {"name": "toA", "type": "address"},
+                {"name": "toB", "type": "address"},
+            ],
+        },
+    }
+    filters = {
+        "name": "Interleaved calls",
+        "calldatas": [
+            {
+                "index": 0,
+                "handler": gcs_handler_interleaved_first,
+                "value_flag": True,
+                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                "chain_id_flag": False,
+                "selector_flag": False,
+                "amount_flag": False,
+                "spender_flag": EIP712CalldataParamPresence.NONE,
+            },
+            {
+                "index": 1,
+                "handler": gcs_handler_interleaved_second,
+                "value_flag": True,
+                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+                "chain_id_flag": False,
+                "selector_flag": False,
+                "amount_flag": False,
+                "spender_flag": EIP712CalldataParamPresence.NONE,
+            },
+        ],
+        "fields": {
+            "dataA": {"type": "calldata_value", "index": 0},
+            "dataB": {"type": "calldata_value", "index": 1},
+            "toA": {"type": "calldata_callee", "index": 0},
+            "toB": {"type": "calldata_callee", "index": 1},
+        },
+    }
+
+    signature = tip712_new_common(scenario_navigator, client, data, filters)
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
+def test_tip712_zero_argument_call_with_separate_selector(
+        scenario_navigator: NavigateWithScenario):
+    """A separately filtered selector plus empty args remains a contract call."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    data = {
+        "domain": {
+            "verifyingContract": "TTcY7HWMs6jqQr2BPRnEKZZDF8FVLHJoYx",
+            "chainId": 728126428,
+        },
+        "message": {
+            "selector": "0x18160ddd",
+            "data": "0x",
+            "to": "TTVHrJWLPEMpsRJLs14bAZTpfXB5HBmNRa",
+        },
+        "primaryType": "SeparateSelectorCall",
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "SeparateSelectorCall": [
+                {"name": "selector", "type": "bytes4"},
+                {"name": "data", "type": "bytes"},
+                {"name": "to", "type": "address"},
+            ],
+        },
+    }
+    filters = {
+        "name": "Separate selector",
+        "calldatas": [{
+            "index": 0,
+            "handler": gcs_handler_separate_selector,
+            "value_flag": True,
+            "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+            "chain_id_flag": False,
+            "selector_flag": True,
+            "amount_flag": False,
+            "spender_flag": EIP712CalldataParamPresence.NONE,
+        }],
+        "fields": {
+            "selector": {"type": "calldata_selector", "index": 0},
+            "data": {"type": "calldata_value", "index": 0},
+            "to": {"type": "calldata_callee", "index": 0},
+        },
+    }
+
+    signature = tip712_new_common(scenario_navigator, client, data, filters)
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
+def test_tip712_calldata_filtered_spender(
+        scenario_navigator: NavigateWithScenario):
+    """PRESENT_FILTERED spender descriptors accept their address field."""
+    client = TronClient(scenario_navigator.backend,
+                        scenario_navigator.backend.device,
+                        scenario_navigator.navigator)
+    with open(f"{tip712_json_path()}/safe_calldata_no_param.json",
+              encoding="utf-8") as data_file:
+        data = json.load(data_file)
+    data["types"]["SafeTx"].append({"name": "spender", "type": "address"})
+    data["message"]["spender"] = "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh"
+    filters = {
+        "name": "Filtered spender",
+        "calldatas": [{
+            "index": 0,
+            "handler": gcs_handler_no_param,
+            "value_flag": True,
+            "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+            "chain_id_flag": False,
+            "selector_flag": False,
+            "amount_flag": True,
+            "spender_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+        }],
+        "fields": {
+            "to": {"type": "calldata_callee", "index": 0},
+            "value": {"type": "calldata_amount", "index": 0},
+            "data": {"type": "calldata_value", "index": 0},
+            "spender": {"type": "calldata_spender", "index": 0},
+        },
+    }
+
+    signature = tip712_new_common(scenario_navigator, client, data, filters)
+    assert recover_message(data, signature) == get_wallet_addr(client)
 
 
 def test_tip712_batch(
