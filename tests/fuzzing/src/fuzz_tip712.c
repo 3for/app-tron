@@ -9,6 +9,7 @@
 #include "ui_logic.h"
 #include "shared_context.h"
 #include "gcs_memory.h"
+#include "tip712_limits.h"
 
 void init_tip712_fuzz_environment(void);
 
@@ -46,6 +47,48 @@ static void check_zero_extended_u64_boundaries(void) {
     }
 }
 
+static void check_display_boundaries(void) {
+    const uint8_t compact_ff[] = {0xff};
+    uint8_t full_ff[INT256_LENGTH];
+    char output[80];
+
+    memset(full_ff, 0xff, sizeof(full_ff));
+    if (tip712_is_full_width_max_value(compact_ff,
+                                       sizeof(compact_ff),
+                                       INT256_LENGTH) ||
+        !tip712_is_full_width_max_value(full_ff,
+                                        sizeof(full_ff),
+                                        INT256_LENGTH) ||
+        !tip712_is_full_width_max_value(compact_ff,
+                                        sizeof(compact_ff),
+                                        sizeof(compact_ff))) {
+        __builtin_trap();
+    }
+
+    /* Every Solidity int width is a multiple of eight bits.  A full-width
+     * all-ones value is -1, while compact 0xff remains +255 unless the
+     * declared type itself is int8. */
+    for (uint8_t width = 1U; width <= INT256_LENGTH; width++) {
+        if (!tip712_format_signed_int_value(full_ff,
+                                            width,
+                                            width,
+                                            output,
+                                            sizeof(output)) ||
+            (strcmp(output, "-1") != 0)) {
+            __builtin_trap();
+        }
+        if ((width > 1U) &&
+            (!tip712_format_signed_int_value(compact_ff,
+                                             sizeof(compact_ff),
+                                             width,
+                                             output,
+                                             sizeof(output)) ||
+             (strcmp(output, "255") != 0))) {
+            __builtin_trap();
+        }
+    }
+}
+
 static void check_tip712_phase_boundaries(void) {
     appState = APP_STATE_SIGNING;
     if (tip712_context_init() || (tip712_context != NULL) ||
@@ -61,12 +104,17 @@ static void check_tip712_phase_boundaries(void) {
     tip712_context_cleanup();
 
     if (!tip712_context_init() || !tip712_full_session_in_progress() ||
+        (tip712_context->build_apdu_count != 1U) ||
         tip712_mark_legacy_reviewing() ||
         !tip712_lock_signing_path(default_path, sizeof(default_path)) ||
         (tip712_get_signing_path() == NULL) ||
         (tip712_get_signing_path()->length != 1U) ||
         (tip712_get_signing_path()->indices[0] != UINT32_C(0x8000002c)) ||
         tip712_lock_signing_path(default_path, sizeof(default_path))) {
+        __builtin_trap();
+    }
+    tip712_context->build_apdu_count = TIP712_MAX_BUILD_APDUS - 1U;
+    if (!tip712_note_build_apdu() || tip712_note_build_apdu()) {
         __builtin_trap();
     }
     tip712_context_deinit();
@@ -148,6 +196,7 @@ static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     check_zero_extended_u64_boundaries();
+    check_display_boundaries();
     check_tip712_phase_boundaries();
     init_tip712_fuzz_environment();
     fuzz_tip712_apdu_stream(data, size);

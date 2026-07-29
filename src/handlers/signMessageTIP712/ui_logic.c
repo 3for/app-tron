@@ -24,6 +24,7 @@
 #include "tip712_limits.h"
 #include "gcs_limits.h"
 #include "gcs_memory.h"
+#include "encode_field.h"
 #include <string.h>
 #include <time.h>
 #include <limits.h>
@@ -148,27 +149,42 @@ static char *ui_712_alloc_numbered_key(const char *key, uint16_t suffix) {
  * entries are distinguishable on screen. @p cur is the freshly completed tail
  * page and @p prev the page before it.
  */
-static void ui_712_number_duplicate_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
-    char *renamed;
+static bool ui_712_number_duplicate_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
+    char *renamed_prev = NULL;
+    char *renamed_cur = NULL;
+    uint16_t next_count;
 
     if ((prev == NULL) || (prev->raw_key == NULL) || (prev->value == NULL) ||
         (cur->raw_key == NULL) || (cur->value == NULL) ||
         (strcmp(prev->raw_key, cur->raw_key) != 0) || (strcmp(prev->value, cur->value) != 0)) {
         ui_ctx->ui_pairs_dup_count = 1;
-        return;
+        return true;
     }
     if (ui_ctx->ui_pairs_dup_count == 1) {
         // Start of a run: retroactively number the previous page "<key>-1"
-        if ((renamed = ui_712_alloc_numbered_key(prev->raw_key, 1)) != NULL) {
-            gcs_mem_free(prev->key);
-            prev->key = renamed;
+        renamed_prev = ui_712_alloc_numbered_key(prev->raw_key, 1);
+        if (renamed_prev == NULL) {
+            goto error;
         }
     }
-    ui_ctx->ui_pairs_dup_count += 1;
-    if ((renamed = ui_712_alloc_numbered_key(cur->raw_key, ui_ctx->ui_pairs_dup_count)) != NULL) {
-        gcs_mem_free(cur->key);
-        cur->key = renamed;
+    next_count = ui_ctx->ui_pairs_dup_count + 1U;
+    renamed_cur = ui_712_alloc_numbered_key(cur->raw_key, next_count);
+    if (renamed_cur == NULL) {
+        goto error;
     }
+    if (renamed_prev != NULL) {
+        gcs_mem_free(prev->key);
+        prev->key = renamed_prev;
+    }
+    ui_ctx->ui_pairs_dup_count = next_count;
+    gcs_mem_free(cur->key);
+    cur->key = renamed_cur;
+    return true;
+error:
+    gcs_mem_free(renamed_prev);
+    gcs_mem_free(renamed_cur);
+    apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+    return false;
 }
 
 // to be used as a \ref f_list_node_del
@@ -216,15 +232,18 @@ static bool ui_712_reserve_dynamic_display(size_t bytes) {
     return true;
 }
 
-static void ui_712_finalize_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
+static bool ui_712_finalize_pair(s_ui_712_pair *prev, s_ui_712_pair *cur) {
     ui_ctx->dynamic_value_remaining = 0;
     ui_ctx->dynamic_value_written = 0;
     // TRON: number consecutive pages sharing the same key/value into a run
-    ui_712_number_duplicate_pair(prev, cur);
+    if (!ui_712_number_duplicate_pair(prev, cur)) {
+        return false;
+    }
     cur->end_intent = validate_instruction_hash();
     if (cur->end_intent) {
         PRINTF("[Intent] End\n");
     }
+    return true;
 }
 
 /**
@@ -395,8 +414,7 @@ bool ui_712_set_value(const char *str, size_t length) {
             return false;
         }
     }
-    ui_712_finalize_pair(prev, tmp);
-    return true;
+    return ui_712_finalize_pair(prev, tmp);
 }
 
 /**
@@ -546,7 +564,9 @@ static bool ui_712_append_str(const uint8_t *data,
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
-        ui_712_finalize_pair(prev, pair);
+        if (!ui_712_finalize_pair(prev, pair)) {
+            return false;
+        }
     }
     return true;
 }
@@ -685,7 +705,9 @@ static bool ui_712_format_bytes(const uint8_t *data,
             apdu_response_code = SWO_INCORRECT_DATA;
             return false;
         }
-        ui_712_finalize_pair(prev, pair);
+        if (!ui_712_finalize_pair(prev, pair)) {
+            return false;
+        }
     }
     return true;
 }
@@ -703,65 +725,21 @@ static bool ui_712_format_int(const uint8_t *data,
                               uint8_t length,
                               bool first,
                               const s_struct_712_field *field_ptr) {
-    uint256_t value256;
-    uint128_t value128;
-    int32_t value32;
-    int16_t value16;
-    int8_t value8;
-    uint8_t tmp[sizeof(int32_t)] = {0};
-
     // no reason for an integer to be received over multiple chunks
-    if (!first || (length == 0) || (length > sizeof(value256))) {
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
-    }
-    if (length < 1) {
+    if (!first || (length == 0) || (length > INT256_LENGTH)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
     const uint8_t effective_size = field_ptr->type_has_size
                                        ? field_ptr->type_size
                                        : INT256_LENGTH;
-    if (length > effective_size) {
+    if (!tip712_format_signed_int_value(data,
+                                        length,
+                                        effective_size,
+                                        strings.tmp.tmp,
+                                        sizeof(strings.tmp.tmp))) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
-    }
-
-    switch (effective_size * 8) {
-        case 256:
-            convertUint256BE(data, length, &value256);
-            tostring256_signed(&value256, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
-            break;
-        case 128:
-            convertUint128BE(data, length, &value128);
-            tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
-            break;
-        case 64:
-            convertUint64BEto128(data, length, &value128);
-            tostring128_signed(&value128, 10, strings.tmp.tmp, sizeof(strings.tmp.tmp));
-            break;
-        case 32:
-            buf_shrink_expand(data, length, tmp, sizeof(int32_t));
-            value32 = (int32_t) read_u32_be(tmp, 0);
-            snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value32);
-            break;
-        case 16:
-            buf_shrink_expand(data, length, tmp, sizeof(int16_t));
-            value16 = (int16_t) read_u16_be(tmp, 0);
-            snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value16);
-            break;
-        case 8:
-            if (length != sizeof(int8_t)) {
-                apdu_response_code = SWO_INCORRECT_DATA;
-                return false;
-            }
-            value8 = (int8_t) data[0];
-            snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "%d", value8);
-            break;
-        default:
-            PRINTF("Unhandled field typesize\n");
-            apdu_response_code = SWO_INCORRECT_DATA;
-            return false;
     }
     return true;
 }
@@ -975,6 +953,35 @@ bool tip712_u64_from_zero_extended(const uint8_t *data,
     return true;
 }
 
+bool tip712_is_full_width_max_value(const uint8_t *data,
+                                    size_t length,
+                                    size_t effective_size) {
+    return (data != NULL) && (effective_size != 0U) &&
+           (length == effective_size) && ismaxint((uint8_t *) data, length);
+}
+
+bool tip712_format_signed_int_value(const uint8_t *data,
+                                    size_t length,
+                                    uint8_t effective_size,
+                                    char *out,
+                                    size_t out_size) {
+    uint8_t encoded[INT256_LENGTH];
+    uint256_t value256;
+    bool formatted;
+
+    if ((data == NULL) || (length == 0U) || (length > effective_size) ||
+        (effective_size == 0U) || (effective_size > sizeof(encoded)) ||
+        (out == NULL) || (out_size == 0U) ||
+        !encode_int(data, (uint8_t) length, effective_size, encoded)) {
+        return false;
+    }
+    convertUint256BE(encoded, sizeof(encoded), &value256);
+    formatted = tostring256_signed(&value256, 10, out, out_size);
+    explicit_bzero(encoded, sizeof(encoded));
+    explicit_bzero(&value256, sizeof(value256));
+    return formatted;
+}
+
 /**
  * Format given data as a human-readable date/time representation
  *
@@ -997,7 +1004,10 @@ static bool ui_712_format_datetime(const uint8_t *data,
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
-    if ((length >= field_ptr->type_size) && ismaxint((uint8_t *) data, length)) {
+    const uint8_t effective_size = field_ptr->type_has_size
+                                       ? field_ptr->type_size
+                                       : INT256_LENGTH;
+    if (tip712_is_full_width_max_value(data, length, effective_size)) {
         snprintf(strings.tmp.tmp, sizeof(strings.tmp.tmp), "Unlimited");
         return true;
     }

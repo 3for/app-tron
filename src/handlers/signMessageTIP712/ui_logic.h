@@ -117,3 +117,11 @@ bool calldata_info_all_received(const s_eip712_calldata_info *calldata_info);
 bool tip712_u64_from_zero_extended(const uint8_t *data,
                                    size_t length,
                                    uint64_t *value);
+bool tip712_is_full_width_max_value(const uint8_t *data,
+                                    size_t length,
+                                    size_t effective_size);
+bool tip712_format_signed_int_value(const uint8_t *data,
+                                    size_t length,
+                                    uint8_t effective_size,
+                                    char *out,
+                                    size_t out_size);

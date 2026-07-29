@@ -17,3 +17,6 @@
 #define TIP712_MAX_CALLDATA_INFOS        16U
 #define TIP712_MAX_FILTER_LABEL_LENGTH   64U
 #define TIP712_MAX_AMOUNT_LABEL_LENGTH   25U
+/* Bounds the complete build session, including schema, values, filters and
+ * metadata commands accepted while TIP712_PHASE_FULL_BUILDING owns the app. */
+#define TIP712_MAX_BUILD_APDUS            1024U

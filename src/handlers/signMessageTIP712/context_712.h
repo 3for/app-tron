@@ -16,6 +16,7 @@ typedef struct {
     uint8_t filtering_contract_addr[ADDRESS_LENGTH];
     uint64_t filtering_chain_id;
     uint8_t filtering_schema_hash[CX_SHA224_SIZE];
+    uint16_t build_apdu_count;
     bool go_home_on_failure;
     bool chain_id_seen;
     bool chain_id_fits_u64;
@@ -44,6 +45,7 @@ bool tip712_full_session_in_progress(void);
 bool tip712_review_in_progress(void);
 bool tip712_mark_reviewing(void);
 bool tip712_mark_legacy_reviewing(void);
+bool tip712_note_build_apdu(void);
 
 typedef enum { NOT_INITIALIZED, INITIALIZED, DEFINED } e_struct_init;
 extern e_struct_init struct_state;

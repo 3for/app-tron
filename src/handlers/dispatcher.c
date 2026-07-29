@@ -199,11 +199,17 @@ int apdu_dispatcher(const command_t *cmd) {
     /* Full TIP-712 owns its type tree, tmpCtx and accumulated UI fields from
      * the first struct definition, while appState may still be IDLE. Only the
      * commands needed to finish that exact session may run in between. */
-    if ((tip712_get_phase() == TIP712_PHASE_FULL_BUILDING) &&
-        !tip712_build_command_allowed(cmd)) {
-        PRINTF("Refused APDU outside the active TIP-712 build phase\n");
-        reset_app_context();
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    if (tip712_get_phase() == TIP712_PHASE_FULL_BUILDING) {
+        if (!tip712_build_command_allowed(cmd)) {
+            PRINTF("Refused APDU outside the active TIP-712 build phase\n");
+            reset_app_context();
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+        if (!tip712_note_build_apdu()) {
+            PRINTF("TIP-712 build APDU limit exceeded\n");
+            reset_app_context();
+            return io_send_sw(E_INCORRECT_DATA);
+        }
     }
     if (gcs_signing_in_progress()) {
         bool allowed = false;

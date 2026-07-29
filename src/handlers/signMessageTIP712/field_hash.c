@@ -339,6 +339,13 @@ bool field_hash(const uint8_t *data, uint8_t data_length, bool partial) {
         }
         total_length = fh->remaining_size;
     }
+    /* Once a dynamic field is waiting for bytes, an empty continuation makes
+     * no progress and could otherwise keep the build session alive forever. */
+    if (!first && IS_DYN(field_ptr->type) && (fh->remaining_size > 0U) &&
+        (data_length == 0U)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
     if (data_length > fh->remaining_size) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;

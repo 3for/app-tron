@@ -23,10 +23,12 @@ from utils import (check_hash_signature, get_challenge, get_selector_from_data,
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
 from ragger.navigator import Navigator, NavInsID
-from ragger.navigator.navigation_scenario import NavigateWithScenario
+from ragger.navigator.navigation_scenario import (NavigateWithScenario,
+                                                   NavigationScenarioData,
+                                                   UseCase)
 
 from settings import settings_toggle, SettingID, get_device_settings
-from client.command_builder import CommandBuilder
+from client.command_builder import CommandBuilder, InsType, P1Type, P2Type
 import response_parser as ResponseParser
 from client.tip712 import InputData as InputData, EIP712CalldataParamPresence
 from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
@@ -1298,6 +1300,109 @@ def test_tip712_filtering_rejects_recursive_schema(backend: BackendInterface):
         InputData.process_data(client, data, filters,
                                client.getAccount(0)["path"])
     assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_tip712_rejects_empty_dynamic_continuation(
+        scenario_navigator: NavigateWithScenario,
+        monkeypatch: pytest.MonkeyPatch):
+    """A partial string/bytes APDU must consume at least one value byte."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
+    client = TronClient(backend, device, navigator)
+    signing_path = client.getAccount(0)["path"]
+    with open(f"{tip712_json_path()}/03-long_string-data.json",
+              encoding="utf-8") as data_file:
+        data = json.load(data_file)
+    data["message"]["contents"] = "A" * 300
+    original_send = client.tip712_send_struct_impl_struct_field
+    injected = False
+
+    def send_with_empty_continuation(raw_value: bytes):
+        nonlocal injected
+        if (not injected) and (len(raw_value) == 300):
+            injected = True
+            chunks = CommandBuilder().tip712_send_struct_impl_struct_field(
+                bytearray(raw_value))
+            assert len(chunks) == 2
+            client.exchange_raw(chunks[0])
+            empty = CommandBuilder()._serialize(
+                InsType.TIP712_SEND_STRUCT_IMPL,
+                P1Type.PARTIAL_SEND,
+                P2Type.STRUCT_FIELD,
+                b"")
+            return client.exchange_async_raw(empty)
+        return original_send(raw_value)
+
+    monkeypatch.setattr(client, "tip712_send_struct_impl_struct_field",
+                        send_with_empty_continuation)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, None, signing_path)
+    assert injected
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+@pytest.mark.parametrize(
+    "field_type,value,expected_text",
+    [
+        pytest.param("uint", 255, "1970-01-01", id="bare-uint-compact-ff"),
+        pytest.param("uint", (1 << 256) - 1, "Unlimited",
+                     id="bare-uint-full-ff"),
+        pytest.param("uint8", 255, "Unlimited", id="uint8-full-ff"),
+    ])
+def test_tip712_datetime_max_requires_full_type_width(
+        scenario_navigator: NavigateWithScenario, field_type: str, value: int,
+        expected_text: str):
+    """Only a full-width all-ones uint is rendered as Unlimited."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    signing_path = client.getAccount(0)["path"]
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Permit": [{"name": "expires", "type": field_type}],
+        },
+        "primaryType": "Permit",
+        "domain": {
+            "name": "Bare uint datetime",
+            "version": "1",
+            "chainId": 728126428,
+            "verifyingContract": "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh",
+        },
+        "message": {"expires": value},
+    }
+    filters = {
+        "name": "Bare uint datetime",
+        "fields": {
+            "expires": {"type": "datetime", "name": "Expires"},
+        },
+    }
+
+    assert InputData.process_data(client, data, filters, signing_path)
+    with client.tip712_sign_new(signing_path):
+        navigator.navigate_until_text(
+            navigate_instruction=(NavInsID.RIGHT_CLICK if device.is_nano else
+                                  NavInsID.SWIPE_CENTER_TO_LEFT),
+            validation_instructions=[],
+            text=expected_text,
+            screen_change_after_last_instruction=False)
+        if expected_text != "Unlimited":
+            assert "Unlimited" not in current_screen_texts(backend)
+        approve = NavigationScenarioData(device, backend, UseCase.TX_REVIEW,
+                                         True)
+        navigator.navigate_until_text(
+            navigate_instruction=approve.navigation,
+            validation_instructions=approve.validation,
+            text=approve.pattern,
+            screen_change_before_first_instruction=False)
 
 
 def test_tip712_calldata(

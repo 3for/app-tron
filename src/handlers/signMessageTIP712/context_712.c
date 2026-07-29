@@ -11,6 +11,7 @@
 #include "common_ui.h"       // ui_idle
 #include "gcs_memory.h"
 #include "helpers.h"
+#include "tip712_limits.h"
 
 e_struct_init struct_state = NOT_INITIALIZED;
 s_tip712_context *tip712_context = NULL;
@@ -63,6 +64,10 @@ bool tip712_context_init(void) {
     }
 
     tip712_context->go_home_on_failure = true;
+    /* tip712_context_init() is entered by the full-mode INIT APDU, before the
+     * dispatcher can observe FULL_BUILDING. Count that first command here so
+     * TIP712_MAX_BUILD_APDUS is an exact whole-session limit. */
+    tip712_context->build_apdu_count = 1U;
     // A missing domain chainId historically maps to zero. If a chainId is
     // received later, field_hash_domain_special_fields() updates this flag
     // after checking whether its numeric value can safely back u64 metadata.
@@ -168,5 +173,15 @@ bool tip712_mark_legacy_reviewing(void) {
         return false;
     }
     tip712_phase = TIP712_PHASE_LEGACY_REVIEW;
+    return true;
+}
+
+bool tip712_note_build_apdu(void) {
+    if ((tip712_context == NULL) ||
+        (tip712_phase != TIP712_PHASE_FULL_BUILDING) ||
+        (tip712_context->build_apdu_count >= TIP712_MAX_BUILD_APDUS)) {
+        return false;
+    }
+    tip712_context->build_apdu_count += 1U;
     return true;
 }

@@ -65,11 +65,13 @@ def get_typesize(typename):
 
 
 def parse_int(typesize):
-    return (TIP712FieldType.INT, int(typesize / 8))
+    return (TIP712FieldType.INT,
+            None if typesize is None else int(typesize / 8))
 
 
 def parse_uint(typesize):
-    return (TIP712FieldType.UINT, int(typesize / 8))
+    return (TIP712FieldType.UINT,
+            None if typesize is None else int(typesize / 8))
 
 
 def parse_address(typesize):
@@ -122,10 +124,14 @@ def send_struct_def_field(typename, keyname):
     return (typename, type_enum, typesize, array_lvls)
 
 
-def encode_integer(value: Union[str, int], typesize: int) -> bytes:
+def encode_integer(value: Union[str, int], typesize: Optional[int]) -> bytes:
     # Some are already represented as integers in the JSON, but most as strings
     if isinstance(value, str):
         value = int(value, 0)
+
+    # Solidity's bare int/uint aliases have an effective width of 256 bits,
+    # while their schema descriptor intentionally omits the explicit-size bit.
+    effective_size = 32 if typesize is None else typesize
 
     if value == 0:
         data = b'\x00'
@@ -135,16 +141,16 @@ def encode_integer(value: Union[str, int], typesize: int) -> bytes:
         data = struct.pack(">QQQQ", (value >> 192) & uint64_mask,
                            (value >> 128) & uint64_mask,
                            (value >> 64) & uint64_mask, value & uint64_mask)
-        data = data[len(data) - typesize:]
+        data = data[len(data) - effective_size:]
         data = data.lstrip(b'\x00')
     return data
 
 
-def encode_int(value: str, typesize: int) -> bytes:
+def encode_int(value: str, typesize: Optional[int]) -> bytes:
     return encode_integer(value, typesize)
 
 
-def encode_uint(value: str, typesize: int) -> bytes:
+def encode_uint(value: str, typesize: Optional[int]) -> bytes:
     return encode_integer(value, typesize)
 
 
