@@ -48,6 +48,9 @@ typedef enum {
     // GET_PUBLIC_KEY/P1_CONFIRM owns tmpCtx.publicKeyContext and an
     // asynchronous address-review page until the user accepts or rejects it.
     APP_STATE_REVIEWING_ADDRESS,
+    // ECDH and sign-by-hash own tmpCtx.transactionContext and an asynchronous
+    // review page until the user accepts or rejects it.
+    APP_STATE_REVIEWING_OPERATION,
     APP_STATE_SIGNING_MESSAGE,
     APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY,
     APP_STATE_REVIEWING_PERSONAL_MESSAGE,

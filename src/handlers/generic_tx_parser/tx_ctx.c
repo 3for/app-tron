@@ -281,6 +281,9 @@ bool tx_ctx_init(s_calldata *calldata,
                  const uint64_t *chain_id) {
     s_tx_ctx *node;
     s_eip712_calldata_info *calldata_info;
+    bool mark_calldata_info_processed = false;
+    const bool initialize_field_table =
+        (appState == APP_STATE_SIGNING_TX) && (get_tx_ctx_count() == 0U);
 
     if (get_tx_ctx_count() >= GCS_MAX_TX_CONTEXTS) {
         return false;
@@ -302,7 +305,7 @@ bool tx_ctx_init(s_calldata *calldata,
                 gcs_mem_free(node);
                 return false;
             }
-            calldata_info->processed = true;
+            mark_calldata_info_processed = true;
         }
     } else {
         // as default, copy value from last tx context
@@ -332,18 +335,23 @@ bool tx_ctx_init(s_calldata *calldata,
         gcs_mem_free(node);
         return false;
     }
-    list_push_back((list_node_t **) &g_tx_ctx_list, (list_node_t *) node);
 
-    // Ownership of the calldata has been transferred to the node.
-    // Clear g_parked_calldata now so callers cannot double-free it if we return
-    // false below (e.g. when field_table_init fails after the node is in the list
-    // and will be freed by tx_ctx_cleanup via delete_tx_ctx).
-    if (g_parked_calldata == calldata) {
-        g_parked_calldata = NULL;
+    // Finish every fallible initialization step before transferring calldata
+    // ownership to the list. Callers may therefore always free calldata when
+    // this function returns false without having to infer partial ownership.
+    if (initialize_field_table && !field_table_init()) {
+        gcs_mem_free(node);
+        return false;
     }
 
-    if ((appState == APP_STATE_SIGNING_TX) && (node == g_tx_ctx_list)) {
-        return field_table_init();
+    if (mark_calldata_info_processed) {
+        calldata_info->processed = true;
+    }
+    list_push_back((list_node_t **) &g_tx_ctx_list, (list_node_t *) node);
+
+    // Ownership of the calldata has now been transferred to the node.
+    if (g_parked_calldata == calldata) {
+        g_parked_calldata = NULL;
     }
     return true;
 }

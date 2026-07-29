@@ -66,7 +66,13 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     // Contract Type = Unknown Type
     setContractType(UNKNOWN_CONTRACT, strings.common.fullContract, sizeof(strings.common.fullContract));
 
-    ux_flow_display(APPROVAL_SIMPLE_TRANSACTION, false);
+    // Keep the path and hash isolated until the asynchronous review callback
+    // completes. ux_flow_display replies and resets the session itself if UI
+    // preparation fails after the state is published.
+    appState = APP_STATE_REVIEWING_OPERATION;
+    if (!ux_flow_display(APPROVAL_SIMPLE_TRANSACTION, false)) {
+        return 0;
+    }
 
     return 0;
 }

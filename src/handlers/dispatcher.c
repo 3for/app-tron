@@ -178,6 +178,14 @@ int apdu_dispatcher(const command_t *cmd) {
         return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
     }
 
+    // ECDH and sign-by-hash use the common transaction review callbacks and
+    // keep their path/hash or peer key in tmpCtx until the user decides. Do not
+    // let another APDU reply out of order or replace that shared context.
+    if (appState == APP_STATE_REVIEWING_OPERATION) {
+        PRINTF("Refused APDU while operation review is active\n");
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
     // INS_SIGN review is asynchronous. Reject every subsequent command without
     // resetting the signing/UI allocations that the current NBGL page owns.
     if (sign_review_in_progress()) {

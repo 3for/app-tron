@@ -53,7 +53,14 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     // Get base58 address from workBuffer public key
     getBase58FromPublicKey(tmpCtx.transactionContext.signature, strings.common.toAddress);
 
-    ux_flow_display(APPROVAL_SHARED_ECDH_SECRET, false);
+    // The NBGL review is asynchronous and continues to own the BIP32 path and
+    // peer public key in tmpCtx. Mark that ownership before preparing the page
+    // so the dispatcher rejects every interleaved APDU. On preparation failure
+    // ux_flow_display completes the pending APDU and resets the context.
+    appState = APP_STATE_REVIEWING_OPERATION;
+    if (!ux_flow_display(APPROVAL_SHARED_ECDH_SECRET, false)) {
+        return 0;
+    }
 
     return 0;
 }

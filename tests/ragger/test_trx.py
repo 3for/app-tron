@@ -10,6 +10,7 @@ import struct
 import re
 
 from ragger.error import ExceptionRAPDU
+from ragger.backend.interface import RaisePolicy
 from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -2430,6 +2431,51 @@ class TestTRX():
             ec.SECP256K1(), pubKey)
         shared_key = client.getAccount(1)['dh'].exchange(ec.ECDH(), pubKeyDH)
         assert (shared_key.hex() == resp.data[1:33].hex())
+
+    @pytest.mark.parametrize("operation", ["sign_hash", "ecdh"])
+    def test_sensitive_review_rejects_interleaved_provide(
+            self, backend, device, operation):
+        client = TronClient(backend)
+        path = pack_derivation_path(client.getAccount(0)['path'])
+
+        if operation == "sign_hash":
+            ins = InsType.SIGN_TXN_HASH
+            p2 = 0x00
+            data = path + bytes(range(32))
+        else:
+            ins = InsType.GET_ECDH_SECRET
+            p2 = 0x01
+            data = path + bytes.fromhex(
+                f"04{client.getAccount(1)['publicKey'][2:]}")
+
+        previous_policy = backend.raise_policy
+        try:
+            with backend.exchange_async(CLA, ins, 0x00, p2, data):
+                backend.raise_policy = RaisePolicy.RAISE_NOTHING
+                response = backend.exchange(
+                    CLA,
+                    InsType.PROVIDE_TRC20_TOKEN_INFORMATION,
+                    0x00,
+                    0x00,
+                    b"")
+                assert response.status == StatusWord.CONDITION_NOT_SATISFIED
+
+                # The rejected PROVIDE must not reset or replace the active
+                # operation review page.
+                self.review_approve(
+                    test_name=None,
+                    custom_screen_text=(
+                        self.NANO_TRANSACTION_SIGN_PATTERN
+                        if device.is_nano else None),
+                    do_comparison=False)
+        finally:
+            backend.raise_policy = previous_policy
+
+        # Ragger records the immediate 0x6985 as the outer async response, so
+        # verify callback cleanup and re-entrancy with a fresh command.
+        response = backend.exchange(
+            CLA, InsType.GET_PUBLIC_KEY, 0x00, 0x00, path)
+        assert response.status == StatusWord.OK
 
     def test_trx_custom_contract(self, backend, device):
         client = TronClient(backend)
