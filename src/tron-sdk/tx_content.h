@@ -105,6 +105,7 @@ typedef struct txContent_t {
     uint32_t customSelector;
     contractType_e contractType;
     uint8_t permission_id;
+    bool hasCalldata;
     bool lock;
 } txContent_t;
 // --8<-- [end:tx_content_structures]

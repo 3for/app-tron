@@ -1249,7 +1249,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = strings.common.fromAddress;
             txInfos.fields[1].item = "Contract";
             txInfos.fields[1].value = strings.common.fullContract;
-            txInfos.fields[2].item = "Selector";
+            txInfos.fields[2].item = txContent.hasCalldata ? "Selector" : "Calldata";
             txInfos.fields[2].value = strings.common.TRC20Action;
             const bool has_attached_trc10 =
                 (txContent.callTokenValue != 0) || (txContent.tokenId != 0);

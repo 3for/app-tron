@@ -1232,29 +1232,29 @@ static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream
     return true;
 }
 
-static bool proposal_create_contract(txContent_t *content, pb_istream_t *stream) {
+static parserStatus_e proposal_create_contract(txContent_t *content, pb_istream_t *stream) {
     if (!proposal_parameters_init()) {
-        return false;
+        return USTREAM_INSUFFICIENT_MEMORY;
     }
     msg.proposal_create_contract.parameters.funcs.decode = pb_decode_proposal_parameter;
     msg.proposal_create_contract.parameters.arg = NULL;
 
     if (!pb_decode(stream, protocol_ProposalCreateContract_fields, &msg.proposal_create_contract)) {
         proposal_parameters_cleanup();
-        return false;
+        return USTREAM_FAULT;
     }
 
     if (msg.proposal_create_contract.owner_address[0] != ADD_PRE_FIX_BYTE_MAINNET) {
         proposal_parameters_cleanup();
-        return false;
+        return USTREAM_FAULT;
     }
     if (decoded_proposal_parameters_count == 0) {
         proposal_parameters_cleanup();
-        return false;
+        return USTREAM_FAULT;
     }
     content->amount[0] = decoded_proposal_parameters_count;
     COPY_ADDRESS(content->account, &msg.proposal_create_contract.owner_address);
-    return true;
+    return USTREAM_PROCESSING;
 }
 
 static bool proposal_approve_contract(txContent_t *content, pb_istream_t *stream) {
@@ -1418,7 +1418,11 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
         }
         content->TRC20Method = 0;
         // consume this field
-        return pb_read(stream, NULL, stream->bytes_left);
+        if (!pb_read(stream, NULL, stream->bytes_left)) {
+            return false;
+        }
+        content->hasCalldata = true;
+        return true;
     }
 
     // TRC20 data size check: 32 + 32
@@ -1446,6 +1450,7 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
     }
     memmove(content->TRC20Amount, buf, 32);
 
+    content->hasCalldata = true;
     return true;
 }
 
@@ -2022,8 +2027,7 @@ parserStatus_e processContractParameter(
             ret = withdraw_balance_contract(content, &tx_stream);
             break;
         case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
-            ret = proposal_create_contract(content, &tx_stream);
-            break;
+            return proposal_create_contract(content, &tx_stream);
         case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
             ret = proposal_approve_contract(content, &tx_stream);
             break;

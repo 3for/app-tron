@@ -709,6 +709,8 @@ handle_parser_result:
             }
 #endif
             return send_sign_status(E_MISSING_SETTING_DATA_ALLOWED);
+        case USTREAM_INSUFFICIENT_MEMORY:
+            return send_sign_status(SWO_INSUFFICIENT_MEMORY);
         default:
             PRINTF("Unexpected parser status\n");
             return send_sign_status(txResult);
@@ -857,10 +859,16 @@ handle_parser_result:
                     customContractField = 1;
 
                     getBase58FromAddress(txContent.contractAddress, strings.common.fullContract);
-                    snprintf((char *) strings.common.TRC20Action,
-                             sizeof(strings.common.TRC20Action),
-                             "%08x",
-                             txContent.customSelector);
+                    if (txContent.hasCalldata) {
+                        snprintf((char *) strings.common.TRC20Action,
+                                 sizeof(strings.common.TRC20Action),
+                                 "%08x",
+                                 txContent.customSelector);
+                    } else {
+                        strlcpy(strings.common.TRC20Action,
+                                "None",
+                                sizeof(strings.common.TRC20Action));
+                    }
                     // Keep each attached asset explicit. Unknown TriggerSmartContract
                     // calls may carry both native TRX and TVM TRC10 value.
                     G_io_apdu_buffer[CUSTOM_CONTRACT_TRX_OFFSET] = '\0';

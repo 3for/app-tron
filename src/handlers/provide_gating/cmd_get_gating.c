@@ -596,6 +596,10 @@ static bool check_gating_selector(void) {
             if (allzeroes((const void *) GATING->hash_selector, CALLDATA_SELECTOR_SIZE)) {
                 break;
             }
+            if (!txContent.hasCalldata) {
+                PRINTF("[GATING] Transaction has no calldata selector\n");
+                return false;
+            }
             // Legacy protobuf path: txContent.customSelector holds the 4-byte method
             // selector decoded big-endian (parse.c U4BE). Re-encode it big-endian to
             // compare against the descriptor selector.

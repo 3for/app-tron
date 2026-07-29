@@ -108,14 +108,18 @@ class TestTRX():
                                     warning_instruction=warning_instruction,
                                     do_comparison=do_comparison)
             else:
-                assert not warning_approve
                 scenario = NavigationScenarioData(
                     device,
                     self.scenario_navigator.backend,
                     UseCase.TX_REVIEW,
-                    True)
+                    True,
+                    nb_warnings=1 if warning_approve else 0)
                 if custom_screen_text is not None:
                     scenario.pattern = custom_screen_text
+
+                if warning_approve:
+                    self.scenario_navigator._navigate_warning(
+                        scenario, None, False, "warning")
 
                 # Assert the security-relevant field explicitly, then continue
                 # from that page to the normal approval action.
@@ -2498,6 +2502,34 @@ class TestTRX():
                 data=bytes.fromhex('{:08x}{:064x}'.format(
                     0x0a857040, int(10001)))))
         self.sign_and_validate(client, device, 0, tx, warning_approve=True)
+
+    @pytest.mark.parametrize(
+        "calldata, expected_review_text",
+        [
+            pytest.param(None, "None", id="absent"),
+            pytest.param(b"\x00" * 4, "00000000", id="zero-selector"),
+        ])
+    def test_trx_custom_contract_calldata_presence(
+            self, backend, device, calldata, expected_review_text):
+        client = TronClient(backend)
+        trigger = {
+            "owner_address": bytes.fromhex(client.getAccount(0)["addressHex"]),
+            "contract_address": bytes.fromhex(
+                client.address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
+        }
+        if calldata is not None:
+            trigger["data"] = calldata
+
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(**trigger))
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               warning_approve=True,
+                               do_comparison=False,
+                               required_review_text=expected_review_text)
 
     def test_trx_custom_contract_with_attached_trc10(self, backend, device):
         client = TronClient(backend)
