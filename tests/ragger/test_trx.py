@@ -419,7 +419,9 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx, tokenSignature)
         assert e.value.status == StatusWord.INVALID_DATA
 
-    def test_trx_send_asset_rejects_nul_in_token_metadata(self, backend):
+    @pytest.mark.parametrize("invalid_byte", [0x00, 0x09, 0x0a, 0x0d, 0x20, 0x7f])
+    def test_trx_send_asset_rejects_invalid_name_byte(self, backend,
+                                                      invalid_byte):
         client = TronClient(backend)
         tx = client.packContract(
             tron.Transaction.Contract.TransferAssetContract,
@@ -432,7 +434,7 @@ class TestTRX():
                 asset_name=b"1002000"))
         metadata = bytearray.fromhex(
             "0a0a426974546f7272656e7410061a46304402202e2502f36b00e57be785fc79ec4043abcdd4fdd1b58d737ce123599dffad2cb602201702c307f009d014a553503b499591558b3634ceee4c054c61cedd8aca94c02b")
-        metadata[metadata.index(b"BitTorrent") + 3] = 0
+        metadata[metadata.index(b"BitTorrent") + 3] = invalid_byte
 
         with pytest.raises(ExceptionRAPDU) as error:
             client.sign_sync(client.getAccount(0)['path'], tx,
@@ -590,7 +592,9 @@ class TestTRX():
         ]
         self.sign_and_validate(client, device, 0, tx, exchangeSignature)
 
-    def test_trx_exchange_rejects_nul_in_metadata(self, backend):
+    @pytest.mark.parametrize("invalid_byte", [0x00, 0x09, 0x0a, 0x0d, 0x20, 0x7f])
+    def test_trx_exchange_rejects_invalid_name_byte(self, backend,
+                                                    invalid_byte):
         client = TronClient(backend)
         tx = client.packContract(
             tron.Transaction.Contract.ExchangeInjectContract,
@@ -602,7 +606,7 @@ class TestTRX():
                 quant=10000000))
         metadata = bytearray.fromhex(
             "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793")
-        metadata[metadata.index(b"CryptoChain") + 6] = 0
+        metadata[metadata.index(b"CryptoChain") + 6] = invalid_byte
 
         with pytest.raises(ExceptionRAPDU) as error:
             client.sign_sync(client.getAccount(0)['path'], tx,
@@ -1332,6 +1336,7 @@ class TestTRX():
         'frozen_supply_exceeds_total',
         'too_many_frozen_supplies',
         'preset_asset_id',
+        'nul_prefixed_asset_id',
     ])
     def test_trx_asset_issue_invalid(self, backend, case):
         client = TronClient(backend)
@@ -1406,6 +1411,10 @@ class TestTRX():
             ]
         elif case == 'preset_asset_id':
             overrides['id'] = '1000001'
+        elif case == 'nul_prefixed_asset_id':
+            # A nanopb static string would otherwise collapse this non-empty
+            # wire value to an apparently empty C string.
+            overrides['id'] = '\0hidden'
 
         tx = client.packContract(
             tron.Transaction.Contract.AssetIssueContract,

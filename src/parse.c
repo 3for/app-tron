@@ -255,17 +255,22 @@ _Static_assert(sizeof(((ExchangeDetails *) 0)->token1Name) ==
                    MAX_TRC10_ASSET_NAME_LENGTH + 1,
                "ExchangeDetails token names must hold 32 characters plus NUL");
 
+typedef struct {
+    uint32_t tag;
+    uint8_t min_byte;
+    uint8_t max_byte;
+} protobuf_string_rule_t;
+
 /* Nanopb's static STRING representation records only a C terminator, not the
- * original protobuf byte length.  Inspect selected top-level string fields on
- * the wire before decoding so an embedded (including trailing) NUL can never
- * be omitted from the legacy metadata signature preimage or display. */
-static bool protobuf_string_fields_are_nul_free(const uint8_t *data,
-                                                size_t length,
-                                                const uint32_t *string_tags,
-                                                size_t string_tag_count) {
+ * original protobuf byte length. Inspect selected top-level string fields on
+ * the wire before decoding so every signed/displayed byte is validated. */
+static bool protobuf_string_fields_match_rules(const uint8_t *data,
+                                               size_t length,
+                                               const protobuf_string_rule_t *rules,
+                                               size_t rule_count) {
     pb_istream_t stream;
 
-    if ((data == NULL) || (string_tags == NULL) || (string_tag_count == 0U)) {
+    if ((data == NULL) || (rules == NULL) || (rule_count == 0U)) {
         return false;
     }
     stream = pb_istream_from_buffer(data, length);
@@ -273,18 +278,18 @@ static bool protobuf_string_fields_are_nul_free(const uint8_t *data,
         pb_wire_type_t wire_type;
         uint32_t tag;
         bool eof = false;
-        bool is_string = false;
+        const protobuf_string_rule_t *rule = NULL;
 
         if (!pb_decode_tag(&stream, &wire_type, &tag, &eof) || eof) {
             return false;
         }
-        for (size_t i = 0; i < string_tag_count; i++) {
-            if (tag == string_tags[i]) {
-                is_string = true;
+        for (size_t i = 0; i < rule_count; i++) {
+            if (tag == rules[i].tag) {
+                rule = &rules[i];
                 break;
             }
         }
-        if (!is_string) {
+        if (rule == NULL) {
             if (!pb_skip_field(&stream, wire_type)) {
                 return false;
             }
@@ -300,11 +305,50 @@ static bool protobuf_string_fields_are_nul_free(const uint8_t *data,
         }
         while (field_stream.bytes_left > 0U) {
             uint8_t byte;
-            if (!pb_read(&field_stream, &byte, 1U) || (byte == 0U)) {
+            if (!pb_read(&field_stream, &byte, 1U) || (byte < rule->min_byte) ||
+                (byte > rule->max_byte)) {
                 return false;
             }
         }
         if (!pb_close_string_substream(&stream, &field_stream)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Require a length-delimited protobuf field to be absent or encoded with an
+ * empty value. This preserves the original wire-length distinction that a
+ * nanopb static STRING would otherwise lose at the first NUL byte. */
+static bool protobuf_string_field_is_empty(pb_istream_t *stream, uint32_t target_tag) {
+    if (stream == NULL) {
+        return false;
+    }
+
+    while (stream->bytes_left > 0U) {
+        pb_wire_type_t wire_type;
+        uint32_t tag;
+        bool eof = false;
+
+        if (!pb_decode_tag(stream, &wire_type, &tag, &eof) || eof) {
+            return false;
+        }
+        if (tag != target_tag) {
+            if (!pb_skip_field(stream, wire_type)) {
+                return false;
+            }
+            continue;
+        }
+        if (wire_type != PB_WT_STRING) {
+            return false;
+        }
+
+        pb_istream_t field_stream;
+        if (!pb_make_string_substream(stream, &field_stream)) {
+            return false;
+        }
+        bool is_empty = field_stream.bytes_left == 0U;
+        if (!pb_close_string_substream(stream, &field_stream) || !is_empty) {
             return false;
         }
     }
@@ -341,14 +385,16 @@ static bool format_token_display(char *out,
 
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *content) {
     TokenDetails details = {};
-    static const uint32_t string_tags[] = {TokenDetails_name_tag};
+    static const protobuf_string_rule_t string_rules[] = {
+        {TokenDetails_name_tag, 0x21, 0x7e},
+    };
 
     if ((data == NULL) || (content == NULL) ||
         (token_id >= ARRAY_SIZE(content->tokenNames)) ||
-        !protobuf_string_fields_are_nul_free(data,
-                                             dataLength,
-                                             string_tags,
-                                             ARRAY_SIZE(string_tags))) {
+        !protobuf_string_fields_match_rules(data,
+                                            dataLength,
+                                            string_rules,
+                                            ARRAY_SIZE(string_rules))) {
         return false;
     }
 
@@ -489,18 +535,19 @@ static bool append_exchange_preimage(uint8_t *buffer,
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
     ExchangeDetails details = ExchangeDetails_init_zero;
     uint8_t buffer[EXCHANGE_SIGNATURE_PREIMAGE_SIZE];
-    static const uint32_t string_tags[] = {
-        ExchangeDetails_token1Id_tag,
-        ExchangeDetails_token1Name_tag,
-        ExchangeDetails_token2Id_tag,
-        ExchangeDetails_token2Name_tag,
+    static const protobuf_string_rule_t string_rules[] = {
+        /* IDs are validated structurally after decoding; preserve all non-NUL bytes here. */
+        {ExchangeDetails_token1Id_tag, 0x01, UINT8_MAX},
+        {ExchangeDetails_token1Name_tag, 0x21, 0x7e},
+        {ExchangeDetails_token2Id_tag, 0x01, UINT8_MAX},
+        {ExchangeDetails_token2Name_tag, 0x21, 0x7e},
     };
 
     if ((data == NULL) || (content == NULL) ||
-        !protobuf_string_fields_are_nul_free(data,
-                                             length,
-                                             string_tags,
-                                             ARRAY_SIZE(string_tags))) {
+        !protobuf_string_fields_match_rules(data,
+                                            length,
+                                            string_rules,
+                                            ARRAY_SIZE(string_rules))) {
         return false;
     }
 
@@ -674,6 +721,15 @@ static bool asset_name_is_trx(const uint8_t *name, size_t name_len) {
 }
 
 static bool asset_issue_contract(txContent_t *content, pb_istream_t *stream) {
+    if ((content == NULL) || (stream == NULL)) {
+        return false;
+    }
+
+    pb_istream_t validation_stream = *stream;
+    if (!protobuf_string_field_is_empty(&validation_stream, protocol_AssetIssueContract_id_tag)) {
+        return false;
+    }
+
     if (!pb_decode(stream,
                    protocol_AssetIssueContract_fields,
                    &msg.asset_issue_contract)) {
