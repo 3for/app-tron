@@ -79,6 +79,15 @@ static bool pb_decode_proposal_parameter(pb_istream_t *stream,
     if (!pb_decode(stream, field->submsg_desc, &entry)) {
         return false;
     }
+    /* java-tron materializes this protobuf map through getParametersMap(),
+     * where a repeated wire key has last-value-wins semantics.  Reject the
+     * non-canonical wire form instead of reviewing entries that the node will
+     * later collapse into a different effective set. */
+    for (pb_size_t i = 0; i < decoded_proposal_parameters_count; i++) {
+        if (decoded_proposal_parameters[i].key == entry.key) {
+            return false;
+        }
+    }
     decoded_proposal_parameters[decoded_proposal_parameters_count] = entry;
     decoded_proposal_parameters_count++;
     return true;
@@ -246,6 +255,62 @@ _Static_assert(sizeof(((ExchangeDetails *) 0)->token1Name) ==
                    MAX_TRC10_ASSET_NAME_LENGTH + 1,
                "ExchangeDetails token names must hold 32 characters plus NUL");
 
+/* Nanopb's static STRING representation records only a C terminator, not the
+ * original protobuf byte length.  Inspect selected top-level string fields on
+ * the wire before decoding so an embedded (including trailing) NUL can never
+ * be omitted from the legacy metadata signature preimage or display. */
+static bool protobuf_string_fields_are_nul_free(const uint8_t *data,
+                                                size_t length,
+                                                const uint32_t *string_tags,
+                                                size_t string_tag_count) {
+    pb_istream_t stream;
+
+    if ((data == NULL) || (string_tags == NULL) || (string_tag_count == 0U)) {
+        return false;
+    }
+    stream = pb_istream_from_buffer(data, length);
+    while (stream.bytes_left > 0U) {
+        pb_wire_type_t wire_type;
+        uint32_t tag;
+        bool eof = false;
+        bool is_string = false;
+
+        if (!pb_decode_tag(&stream, &wire_type, &tag, &eof) || eof) {
+            return false;
+        }
+        for (size_t i = 0; i < string_tag_count; i++) {
+            if (tag == string_tags[i]) {
+                is_string = true;
+                break;
+            }
+        }
+        if (!is_string) {
+            if (!pb_skip_field(&stream, wire_type)) {
+                return false;
+            }
+            continue;
+        }
+        if (wire_type != PB_WT_STRING) {
+            return false;
+        }
+
+        pb_istream_t field_stream;
+        if (!pb_make_string_substream(&stream, &field_stream)) {
+            return false;
+        }
+        while (field_stream.bytes_left > 0U) {
+            uint8_t byte;
+            if (!pb_read(&field_stream, &byte, 1U) || (byte == 0U)) {
+                return false;
+            }
+        }
+        if (!pb_close_string_substream(&stream, &field_stream)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // ALLOW SAME NAME TOKEN
 // CHECK SIGNATURE(ID+NAME+PRECISION)
 // Parse token Name and Signature
@@ -276,9 +341,14 @@ static bool format_token_display(char *out,
 
 bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txContent_t *content) {
     TokenDetails details = {};
+    static const uint32_t string_tags[] = {TokenDetails_name_tag};
 
     if ((data == NULL) || (content == NULL) ||
-        (token_id >= ARRAY_SIZE(content->tokenNames))) {
+        (token_id >= ARRAY_SIZE(content->tokenNames)) ||
+        !protobuf_string_fields_are_nul_free(data,
+                                             dataLength,
+                                             string_tags,
+                                             ARRAY_SIZE(string_tags))) {
         return false;
     }
 
@@ -419,8 +489,18 @@ static bool append_exchange_preimage(uint8_t *buffer,
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
     ExchangeDetails details = ExchangeDetails_init_zero;
     uint8_t buffer[EXCHANGE_SIGNATURE_PREIMAGE_SIZE];
+    static const uint32_t string_tags[] = {
+        ExchangeDetails_token1Id_tag,
+        ExchangeDetails_token1Name_tag,
+        ExchangeDetails_token2Id_tag,
+        ExchangeDetails_token2Name_tag,
+    };
 
-    if ((data == NULL) || (content == NULL)) {
+    if ((data == NULL) || (content == NULL) ||
+        !protobuf_string_fields_are_nul_free(data,
+                                             length,
+                                             string_tags,
+                                             ARRAY_SIZE(string_tags))) {
         return false;
     }
 
@@ -849,7 +929,7 @@ static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) 
     // Proto3 omits an empty bytes field from the wire, so the url decode callback is
     // never invoked in that case; content->url stays zeroed. Catch both the absent-field
     // and the wire-present zero-length cases here.
-    if (content->url[0] == '\0') {
+    if (!is_mainnet_address(content->account) || (content->url[0] == '\0')) {
         return false;
     }
 
@@ -871,7 +951,7 @@ static bool witness_update_contract(txContent_t *content, pb_istream_t *stream) 
     // Reject empty update_url (java-tron TransactionUtil.validUrl, allowEmpty=false).
     // Proto3 omits an empty bytes field, so the url callback may never run; content->url
     // stays zeroed. Catch both the absent-field and wire-present zero-length cases here.
-    if (content->url[0] == '\0') {
+    if (!is_mainnet_address(content->account) || (content->url[0] == '\0')) {
         return false;
     }
 

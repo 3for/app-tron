@@ -418,6 +418,26 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)['path'], tx, tokenSignature)
         assert e.value.status == StatusWord.INVALID_DATA
 
+    def test_trx_send_asset_rejects_nul_in_token_metadata(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=b"1002000"))
+        metadata = bytearray.fromhex(
+            "0a0a426974546f7272656e7410061a46304402202e2502f36b00e57be785fc79ec4043abcdd4fdd1b58d737ce123599dffad2cb602201702c307f009d014a553503b499591558b3634ceee4c054c61cedd8aca94c02b")
+        metadata[metadata.index(b"BitTorrent") + 3] = 0
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx,
+                             [metadata.hex()])
+        assert error.value.status == StatusWord.INVALID_DATA
+
     @pytest.mark.parametrize(
         "token_id",
         [
@@ -569,6 +589,25 @@ class TestTRX():
         ]
         self.sign_and_validate(client, device, 0, tx, exchangeSignature)
 
+    def test_trx_exchange_rejects_nul_in_metadata(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeInjectContract,
+            contract.ExchangeInjectContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                exchange_id=6,
+                token_id=b"1000166",
+                quant=10000000))
+        metadata = bytearray.fromhex(
+            "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793")
+        metadata[metadata.index(b"CryptoChain") + 6] = 0
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx,
+                             [metadata.hex()])
+        assert error.value.status == StatusWord.INVALID_DATA
+
     def test_trx_exchange_inject_trx_with_name(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -660,6 +699,23 @@ class TestTRX():
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign_sync(client.getAccount(0)['path'], tx)
         assert e.value.status == StatusWord.INVALID_DATA
+
+    @pytest.mark.parametrize("update", [False, True], ids=["create", "update"])
+    def test_trx_witness_rejects_missing_owner(self, backend, update):
+        client = TronClient(backend)
+        if update:
+            contract_type = tron.Transaction.Contract.WitnessUpdateContract
+            message = contract.WitnessUpdateContract(
+                update_url=b"http://sr-without-owner.example")
+        else:
+            contract_type = tron.Transaction.Contract.WitnessCreateContract
+            message = contract.WitnessCreateContract(
+                url=b"http://sr-without-owner.example")
+        tx = client.packContract(contract_type, message)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     @pytest.mark.parametrize("url", [b"http://safe\x00hidden", b"http://safe\nnext"])
     def test_trx_witness_rejects_ambiguous_url(self, backend, url):
@@ -932,6 +988,30 @@ class TestTRX():
         with pytest.raises(ExceptionRAPDU) as e:
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
         assert e.value.status == StatusWord.INVALID_DATA
+
+    def test_trx_proposal_create_rejects_duplicate_wire_key(self, backend):
+        client = TronClient(backend)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        tx = client.packContract(
+            tron.Transaction.Contract.ProposalCreateContract,
+            contract.ProposalCreateContract(owner_address=owner,
+                                            parameters={1: 10}))
+        raw_tx = tron.Transaction.raw()
+        raw_tx.ParseFromString(tx)
+
+        # ProposalCreateContract { owner_address: owner,
+        #   parameters: {1: 10}, parameters: {1: 20} }
+        entry_10 = b"\x08\x01\x10\x0a"
+        entry_20 = b"\x08\x01\x10\x14"
+        proposal_wire = (b"\x0a" + bytes([len(owner)]) + owner +
+                         b"\x12" + bytes([len(entry_10)]) + entry_10 +
+                         b"\x12" + bytes([len(entry_20)]) + entry_20)
+        raw_tx.contract[0].parameter.value = proposal_wire
+        tx = raw_tx.SerializeToString(deterministic=True)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
 
     def test_trx_proposal_create_dynamic_parameter(self, backend, device):
         client = TronClient(backend)
