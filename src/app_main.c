@@ -99,6 +99,10 @@ void reset_app_context() {
     enum_value_cleanup();
     forget_known_assets();
     explicit_bzero(&global_sha3, sizeof(global_sha3));
+    // UI cleanup above releases every asynchronous consumer before these
+    // stable review snapshots are scrubbed.
+    explicit_bzero(&strings, sizeof(strings));
+    explicit_bzero(&msg, sizeof(msg));
     explicit_bzero(&txContext, sizeof(txContext));
     explicit_bzero(&txContent, sizeof(txContent));
     explicit_bzero(&tmpCtx, sizeof(tmpCtx));

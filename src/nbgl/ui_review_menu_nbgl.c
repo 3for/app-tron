@@ -138,8 +138,15 @@ static char trc20FeeLimit[32];
 // buffer. Keep a stable snapshot for all review fields prepared in sign.c.
 static uint8_t reviewDisplayBuffer[sizeof(G_io_apdu_buffer)];
 
+typedef enum {
+    UI_PREPARE_OK = 0,
+    UI_PREPARE_OUT_OF_MEMORY,
+    UI_PREPARE_INVALID_DATA,
+    UI_PREPARE_FORMAT_ERROR,
+} ui_prepare_status_t;
+
 // Static functions declarations
-static bool prepareTxInfos(ui_approval_state_t state, bool data_warning);
+static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_warning);
 static void reviewStart(void);
 static void displayTransaction(void);
 static void displayDataWarning(void);
@@ -165,6 +172,14 @@ void ui_review_menu_cleanup(void) {
     asset_issue_display_cleanup();
     create_smart_contract_display_cleanup();
     ui_pairs_cleanup();
+    explicit_bzero(reviewDisplayBuffer, sizeof(reviewDisplayBuffer));
+    explicit_bzero(&txInfos, sizeof(txInfos));
+    explicit_bzero(&infoLongPress, sizeof(infoLongPress));
+    explicit_bzero(&toTrustedNameExt, sizeof(toTrustedNameExt));
+    explicit_bzero(actionReviewTitle, sizeof(actionReviewTitle));
+    explicit_bzero(actionSignTitle, sizeof(actionSignTitle));
+    explicit_bzero(trc20FeeLimit, sizeof(trc20FeeLimit));
+    explicit_bzero(proposalIdValue, sizeof(proposalIdValue));
 }
 
 #ifdef SCREEN_SIZE_WALLET
@@ -399,13 +414,13 @@ static bool format_asset_bytes(const uint8_t *value,
     return bytes_to_string(out, outlen, value, value_len) == 0;
 }
 
-static bool prepare_asset_issue_display(void) {
+static ui_prepare_status_t prepare_asset_issue_display(void) {
     protocol_AssetIssueContract *contract = &msg.asset_issue_contract;
 
     asset_issue_display_cleanup();
     assetIssueDisplay = APP_MEM_ALLOC(sizeof(*assetIssueDisplay));
     if (assetIssueDisplay == NULL) {
-        return false;
+        return UI_PREPARE_OUT_OF_MEMORY;
     }
     memset(assetIssueDisplay, 0, sizeof(*assetIssueDisplay));
 
@@ -459,7 +474,7 @@ static bool prepare_asset_issue_display(void) {
                             assetIssueDisplay->publicLatestFreeNetTime,
                             sizeof(assetIssueDisplay->publicLatestFreeNetTime))) {
         asset_issue_display_cleanup();
-        return false;
+        return UI_PREPARE_FORMAT_ERROR;
     }
 
     for (pb_size_t i = 0; i < contract->frozen_supply_count; i++) {
@@ -474,19 +489,19 @@ static bool prepare_asset_issue_display(void) {
                            assetIssueDisplay->frozenDays[i],
                            sizeof(assetIssueDisplay->frozenDays[i]))) {
             asset_issue_display_cleanup();
-            return false;
+            return UI_PREPARE_FORMAT_ERROR;
         }
     }
-    return true;
+    return UI_PREPARE_OK;
 }
 
-static bool prepare_update_asset_display(void) {
+static ui_prepare_status_t prepare_update_asset_display(void) {
     protocol_UpdateAssetContract *contract = &msg.update_asset_contract;
 
     asset_issue_display_cleanup();
     assetIssueDisplay = APP_MEM_ALLOC(sizeof(*assetIssueDisplay));
     if (assetIssueDisplay == NULL) {
-        return false;
+        return UI_PREPARE_OUT_OF_MEMORY;
     }
     memset(assetIssueDisplay, 0, sizeof(*assetIssueDisplay));
 
@@ -505,9 +520,9 @@ static bool prepare_update_asset_display(void) {
                        assetIssueDisplay->publicFreeBandwidth,
                        sizeof(assetIssueDisplay->publicFreeBandwidth))) {
         asset_issue_display_cleanup();
-        return false;
+        return UI_PREPARE_FORMAT_ERROR;
     }
-    return true;
+    return UI_PREPARE_OK;
 }
 
 static bool format_trx_amount_with_ticker(uint64_t value, char *out, size_t outlen) {
@@ -521,14 +536,14 @@ static bool format_trx_amount_with_ticker(uint64_t value, char *out, size_t outl
     return true;
 }
 
-static bool prepare_create_smart_contract_display(void) {
+static ui_prepare_status_t prepare_create_smart_contract_display(void) {
     protocol_CreateSmartContract *contract = &msg.create_smart_contract;
     protocol_SmartContract *new_contract = &contract->new_contract;
 
     create_smart_contract_display_cleanup();
     createSmartContractDisplay = APP_MEM_ALLOC(sizeof(*createSmartContractDisplay));
     if (createSmartContractDisplay == NULL) {
-        return false;
+        return UI_PREPARE_OUT_OF_MEMORY;
     }
     memset(createSmartContractDisplay, 0, sizeof(*createSmartContractDisplay));
 
@@ -566,9 +581,9 @@ static bool prepare_create_smart_contract_display(void) {
                        createSmartContractDisplay->tokenValue,
                        sizeof(createSmartContractDisplay->tokenValue))) {
         create_smart_contract_display_cleanup();
-        return false;
+        return UI_PREPARE_FORMAT_ERROR;
     }
-    return true;
+    return UI_PREPARE_OK;
 }
 
 // Whether the optional "Transaction hash" field (the displayHash setting) applies to
@@ -590,7 +605,9 @@ static bool state_shows_tx_hash(ui_approval_state_t state) {
     }
 }
 
-static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
+static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_warning) {
+    uint8_t pair_capacity = MAX_TX_FIELDS;
+
     memcpy(reviewDisplayBuffer, G_io_apdu_buffer, sizeof(reviewDisplayBuffer));
     memset(&txInfos, 0, sizeof(txInfos));
     memset(&infoLongPress, 0, sizeof(infoLongPress));
@@ -604,8 +621,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     infoLongPress.longPressText = "Hold to sign";
     infoLongPress.icon = &APP_TRON_ICON;
 
-    if (!ui_pairs_init(MAX_TX_FIELDS)) {
-        return false;
+    if (state == APPROVAL_PERMISSION_UPDATE) {
+        if ((perm_field_count == 0U) || (perm_field_count > PERM_MAX_FIELDS)) {
+            return UI_PREPARE_INVALID_DATA;
+        }
+        pair_capacity = (uint8_t) (perm_field_count + 1U);
+    }
+    if (!ui_pairs_init(pair_capacity)) {
+        return UI_PREPARE_OUT_OF_MEMORY;
     }
     txInfos.fields = g_pairs;
 
@@ -650,7 +673,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 if (!format_trx_amount_with_ticker(txContent.feeLimit,
                                                    trc20FeeLimit,
                                                    sizeof(trc20FeeLimit))) {
-                    return false;
+                    return UI_PREPARE_FORMAT_ERROR;
                 }
                 txInfos.fields[idx].item = "Fee limit";
                 txInfos.fields[idx].value = trc20FeeLimit;
@@ -754,7 +777,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
         case APPROVAL_ACCOUNTCREATE_TRANSACTION: {
             const char *accountType = account_type_name(txContent.accountType);
             if (accountType == NULL) {
-                return false;
+                return UI_PREPARE_INVALID_DATA;
             }
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
@@ -779,9 +802,12 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            if ((contract->frozen_supply_count > MAX_ASSET_FROZEN_SUPPLY_COUNT) ||
-                !prepare_asset_issue_display()) {
-                return false;
+            if (contract->frozen_supply_count > MAX_ASSET_FROZEN_SUPPLY_COUNT) {
+                return UI_PREPARE_INVALID_DATA;
+            }
+            ui_prepare_status_t prepare_status = prepare_asset_issue_display();
+            if (prepare_status != UI_PREPARE_OK) {
+                return prepare_status;
             }
 #define ADD_ASSET_ISSUE_FIELD(label_, value_)           \
     do {                                                 \
@@ -846,13 +872,14 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUnfreeze Asset";
             infoLongPress.text = "Sign transaction to\nUnfreeze Asset";
             break;
-        case APPROVAL_UPDATEASSET_TRANSACTION:
+        case APPROVAL_UPDATEASSET_TRANSACTION: {
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            if (!prepare_update_asset_display()) {
-                return false;
+            ui_prepare_status_t prepare_status = prepare_update_asset_display();
+            if (prepare_status != UI_PREPARE_OK) {
+                return prepare_status;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
@@ -868,6 +895,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nUpdate Asset";
             infoLongPress.text = "Sign transaction to\nUpdate Asset";
             break;
+        }
         case APPROVAL_ACCOUNTUPDATE_TRANSACTION:
 #if !defined(SCREEN_SIZE_WALLET)
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
@@ -899,8 +927,9 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
-            if (!prepare_create_smart_contract_display()) {
-                return false;
+            ui_prepare_status_t prepare_status = prepare_create_smart_contract_display();
+            if (prepare_status != UI_PREPARE_OK) {
+                return prepare_status;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
@@ -986,7 +1015,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             if ((count == 0) || (count > MAX_PROPOSAL_PARAMETERS) ||
                 (count > MAX_TX_FIELDS - 1)) {
                 proposal_parameters_cleanup();
-                return false;
+                return UI_PREPARE_INVALID_DATA;
             }
             proposal_fields_cleanup();
             proposalFieldLabels = APP_MEM_ALLOC(count * sizeof(*proposalFieldLabels));
@@ -994,7 +1023,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             if ((proposalFieldLabels == NULL) || (proposalFieldValues == NULL)) {
                 proposal_fields_cleanup();
                 proposal_parameters_cleanup();
-                return false;
+                return UI_PREPARE_OUT_OF_MEMORY;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
@@ -1007,13 +1036,13 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 if (!proposal_parameter_at(i, &key, &value)) {
                     proposal_fields_cleanup();
                     proposal_parameters_cleanup();
-                    return false;
+                    return UI_PREPARE_INVALID_DATA;
                 }
                 if (!format_int64_value(key, key_str, sizeof(key_str)) ||
                     !format_int64_value(value, value_str, sizeof(value_str))) {
                     proposal_fields_cleanup();
                     proposal_parameters_cleanup();
-                    return false;
+                    return UI_PREPARE_FORMAT_ERROR;
                 }
                 snprintf(proposalFieldLabels[i],
                          sizeof(proposalFieldLabels[i]),
@@ -1039,7 +1068,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             if (!u64_to_string(txContent.exchangeID, proposalIdValue, sizeof(proposalIdValue))) {
-                return false;
+                return UI_PREPARE_FORMAT_ERROR;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
@@ -1058,7 +1087,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
             if (!u64_to_string(txContent.exchangeID, proposalIdValue, sizeof(proposalIdValue))) {
-                return false;
+                return UI_PREPARE_FORMAT_ERROR;
             }
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
@@ -1076,7 +1105,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
             if ((perm_field_count == 0) || (perm_field_count > PERM_MAX_FIELDS)) {
-                return false;
+                return UI_PREPARE_INVALID_DATA;
             }
             for (uint8_t i = 0; i < perm_field_count; i++) {
                 txInfos.fields[i + 1].item = perm_field_items[i];
@@ -1334,7 +1363,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 if (!format_int64_value(txContent.lockPeriod,
                                         (char *) reviewDisplayBuffer + 106,
                                         sizeof(reviewDisplayBuffer) - 106)) {
-                    return false;
+                    return UI_PREPARE_FORMAT_ERROR;
                 }
                 txInfos.fields[idx].item = "Lock period (blocks)";
                 txInfos.fields[idx].value = (const char *) reviewDisplayBuffer + 106;
@@ -1401,7 +1430,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             break;
         default:
             PRINTF("This should not happen !\n");
-            break;
+            return UI_PREPARE_INVALID_DATA;
     }
 
     // Append the transaction hash when the displayHash setting is on, or always for the
@@ -1424,7 +1453,7 @@ static bool prepareTxInfos(ui_approval_state_t state, bool data_warning) {
         g_pairsList->nbPairs++;
     }
 
-    return true;
+    return UI_PREPARE_OK;
 }
 
 static void display_address_callback(bool confirm) {
@@ -1448,11 +1477,27 @@ bool ux_flow_display(ui_approval_state_t state, bool data_warning) {
         return true;
     } else {
         // Prepare transaction infos to be displayed (field values etc.)
-        if (!prepareTxInfos(state, data_warning)) {
-            // Complete the APDU and reset state for every allocation failure,
-            // including ui_pairs_init() and later preparation steps.
+        const ui_prepare_status_t prepare_status = prepareTxInfos(state, data_warning);
+        if (prepare_status != UI_PREPARE_OK) {
+            uint16_t sw;
+
+            switch (prepare_status) {
+                case UI_PREPARE_OUT_OF_MEMORY:
+                    sw = SWO_INSUFFICIENT_MEMORY;
+                    break;
+                case UI_PREPARE_FORMAT_ERROR:
+                    sw = E_INCORRECT_LENGTH;
+                    break;
+                case UI_PREPARE_INVALID_DATA:
+                default:
+                    sw = E_INCORRECT_DATA;
+                    break;
+            }
+            // Complete the pending asynchronous APDU before returning. The
+            // status now distinguishes allocator exhaustion from malformed or
+            // unrenderable transaction data.
             if (appState != APP_STATE_IDLE) {
-                io_seproxyhal_send_status(SWO_INSUFFICIENT_MEMORY, 0, true, true);
+                io_seproxyhal_send_status(sw, 0, true, true);
             }
             return false;
         }

@@ -82,6 +82,9 @@
 
 #define MAX_PERSONAL_MESSAGE_LENGTH 4096U
 #define MAX_PERSONAL_MESSAGE_APDUS   64U
+// A full 500 KiB raw transaction needs about 2009 maximum-sized APDUs. Keep
+// ample compatibility margin while preventing unbounded one-byte sessions.
+#define INS_SIGN_MAX_APDUS 4096U
 
 #define P2_NO_CHAINCODE 0x00
 #define P2_CHAINCODE    0x01

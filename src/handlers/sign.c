@@ -286,8 +286,11 @@ raw_hex:
     bytes_to_string(out, outlen, operations->bytes, 32);
 }
 
+static uint8_t perm_field_capacity;
+
 static bool add_permission_field(uint8_t *field_index, const char *label, const char *value) {
-    if (*field_index >= PERM_MAX_FIELDS) {
+    if ((*field_index >= perm_field_capacity) ||
+        (perm_field_labels == NULL) || (perm_field_values == NULL)) {
         return false;
     }
 
@@ -368,12 +371,41 @@ typedef enum {
     PERMISSION_FORMAT_OUT_OF_MEMORY,
 } permission_format_status_t;
 
+static bool permission_field_count(const protocol_AccountPermissionUpdateContract *perm,
+                                   uint8_t *count_out) {
+    size_t count;
+
+    if ((perm == NULL) || (count_out == NULL)) {
+        return false;
+    }
+
+    // Owner: name + threshold + keys. Witness has the same shape. Each
+    // active permission additionally renders its operations bitmap.
+    count = 2U + perm->owner.keys_count;
+    if (perm->has_witness) {
+        count += 2U + perm->witness.keys_count;
+    }
+    for (pb_size_t i = 0; i < perm->actives_count; i++) {
+        count += 3U + perm->actives[i].keys_count;
+    }
+    if ((count == 0U) || (count > PERM_MAX_FIELDS) || (count > UINT8_MAX)) {
+        return false;
+    }
+    *count_out = (uint8_t) count;
+    return true;
+}
+
 static permission_format_status_t format_permission_update_fields(
     const protocol_AccountPermissionUpdateContract *perm) {
     uint8_t field = 0;
 
-    perm_field_labels = APP_MEM_ALLOC(PERM_MAX_FIELDS * sizeof(*perm_field_labels));
-    perm_field_values = APP_MEM_ALLOC(PERM_MAX_FIELDS * sizeof(*perm_field_values));
+    if (!permission_field_count(perm, &perm_field_capacity)) {
+        return PERMISSION_FORMAT_INVALID;
+    }
+    perm_field_labels = APP_MEM_ALLOC((size_t) perm_field_capacity *
+                                      sizeof(*perm_field_labels));
+    perm_field_values = APP_MEM_ALLOC((size_t) perm_field_capacity *
+                                      sizeof(*perm_field_values));
     if ((perm_field_labels == NULL) || (perm_field_values == NULL)) {
         APP_MEM_FREE_AND_NULL((void **) &perm_field_labels);
         APP_MEM_FREE_AND_NULL((void **) &perm_field_values);
@@ -403,6 +435,9 @@ static permission_format_status_t format_permission_update_fields(
         }
     }
 
+    if (field != perm_field_capacity) {
+        return PERMISSION_FORMAT_INVALID;
+    }
     perm_field_count = field;
     return PERMISSION_FORMAT_OK;
 }
@@ -427,6 +462,8 @@ typedef struct {
 
 static sign_stream_context_t *sign_stream;
 static sign_phase_t sign_phase;
+static uint16_t sign_apdu_count;
+static uint8_t sign_metadata_seen_mask;
 
 bool sign_review_in_progress(void) {
     return sign_phase == SIGN_PHASE_REVIEW;
@@ -534,13 +571,17 @@ void sign_cleanup(void) {
     ui_review_menu_cleanup();
     proposal_parameters_cleanup();
     sign_phase = SIGN_PHASE_IDLE;
+    sign_apdu_count = 0;
+    sign_metadata_seen_mask = 0;
     votes_count = 0;
     perm_field_count = 0;
+    perm_field_capacity = 0;
 }
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
+    const bool first_apdu = (p1 == P1_FIRST) || (p1 == P1_SIGN);
     const bool metadata_apdu = ((p1 & 0xF0) == P1_TRC10_NAME);
     bool finalize_transaction = false;
     parserStatus_e txResult = USTREAM_PROCESSING;
@@ -555,8 +596,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         return send_sign_status(E_INCORRECT_P1_P2);
     }
 
+    if (!first_apdu) {
+        if ((sign_apdu_count == 0U) ||
+            (sign_apdu_count >= INS_SIGN_MAX_APDUS)) {
+            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+        sign_apdu_count++;
+    }
+
     // initialize context
-    if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
+    if (first_apdu) {
         if (appState != APP_STATE_IDLE) {
             reset_app_context();
         }
@@ -584,6 +633,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         };
         legacy_tx_stream_init(&sign_stream->envelope, &observer);
         sign_phase = SIGN_PHASE_RAW_DATA;
+        sign_apdu_count = 1U;
 
     } else if (metadata_apdu) {
         if (sign_phase == SIGN_PHASE_RAW_DATA) {
@@ -599,16 +649,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
         switch (txContent.contractType) {
             case TRANSFERASSETCONTRACT:
-            case EXCHANGECREATECONTRACT:
+            case EXCHANGECREATECONTRACT: {
                 // Max 2 Tokens Name
-                if ((p1 & 0x07) > 1) {
+                const uint8_t token_slot = p1 & 0x07;
+                const uint8_t token_slot_mask = (uint8_t) (1U << token_slot);
+                if ((token_slot > 1U) ||
+                    ((sign_metadata_seen_mask & token_slot_mask) != 0U)) {
                     return send_sign_status(E_INCORRECT_P1_P2);
                 }
                 // Decode Token name and validate signature
-                if (!parseTokenName((p1 & 0x07), workBuffer, dataLength, &txContent)) {
+                if (!parseTokenName(token_slot, workBuffer, dataLength, &txContent)) {
                     PRINTF("Unexpected parser status\n");
                     return send_sign_status(E_INCORRECT_DATA);
                 }
+                sign_metadata_seen_mask |= token_slot_mask;
                 // if not last token name, return
                 if (!(p1 & 0x08)) {
                     return send_sign_status(E_OK);
@@ -616,11 +670,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 finalize_transaction = true;
 
                 break;
+            }
             case EXCHANGEINJECTCONTRACT:
             case EXCHANGEWITHDRAWCONTRACT:
             case EXCHANGETRANSACTIONCONTRACT:
                 // Max 1 pair set
-                if ((p1 & 0x07) > 0) {
+                if (((p1 & 0x07) > 0) ||
+                    ((sign_metadata_seen_mask & 0x01U) != 0U)) {
                     return send_sign_status(E_INCORRECT_P1_P2);
                 }
                 // error if not last
@@ -633,6 +689,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                     PRINTF("Unexpected parser status\n");
                     return send_sign_status(E_INCORRECT_DATA);
                 }
+                sign_metadata_seen_mask |= 0x01U;
                 finalize_transaction = true;
                 break;
             default:

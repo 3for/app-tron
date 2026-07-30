@@ -404,6 +404,44 @@ class TestTRX():
         ]
         self.sign_and_validate(client, device, 0, tx, tokenSignature)
 
+    def test_trx_send_asset_rejects_duplicate_metadata_slot(self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=b"1002000"))
+        token_metadata = (
+            "0a0a426974546f7272656e7410061a46304402202e2502f36b00e57be785fc79e"
+            "c4043abcdd4fdd1b58d737ce123599dffad2cb602201702c307f009d014a5535"
+            "03b499591558b3634ceee4c054c61cedd8aca94c02b")
+        messages, token_pos = client._prepare_sign_messages(
+            client.getAccount(0)['path'], tx, [token_metadata])
+        client._send_sign_prefix_messages(messages, token_pos, InsType.SIGN)
+
+        # Submit slot zero once without the final bit, then try to finalize by
+        # resubmitting the same slot. A metadata slot is immutable once set.
+        client.exchange(CLA,
+                        InsType.SIGN,
+                        P1Type.TRC10_NAME | P1Type.FIRST,
+                        0x00,
+                        messages[-1])
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.exchange(CLA,
+                            InsType.SIGN,
+                            P1Type.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE,
+                            0x00,
+                            messages[-1])
+        assert error.value.status == StatusWord.INVALID_P1_P2
+
+        # The rejection terminates the signing session rather than leaving it
+        # pinned in metadata mode.
+        assert client.getVersion().status == StatusWord.OK
+
     def test_trx_send_asset_with_name_wrong_signature(self, backend):
         client = TronClient(backend)
         tx = client.packContract(
