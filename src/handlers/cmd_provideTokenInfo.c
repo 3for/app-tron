@@ -6,6 +6,7 @@
 #include "network.h"
 #include "ui_globals.h"
 #include "app_errors.h"
+#include "lcx_ecdsa.h"
 #include "os_pki.h"
 #include "parse.h"
 #include "utils.h"
@@ -79,6 +80,16 @@ int handleProvideTrc20TokenInformation(uint8_t p1,
     }
     offset += 4;
     dataLength -= 4;
+
+    /* Reject non-canonical ECDSA encodings before invoking PKI/CX.  Besides
+     * matching the other metadata handlers, this keeps signature-bypass test
+     * builds from accepting an empty or oversized signature as authenticated
+     * token metadata. */
+    if ((dataLength < CX_ECDSA_SHA256_SIG_MIN_ASN1_LENGTH) ||
+        (dataLength > CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH)) {
+        PRINTF("Invalid token signature length: %u\n", dataLength);
+        return io_send_sw(E_INCORRECT_DATA);
+    }
 
     if (!check_signature_with_pubkey(hash,
                                      sizeof(hash),

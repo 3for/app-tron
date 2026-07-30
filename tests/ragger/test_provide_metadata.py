@@ -11,6 +11,7 @@ from client.keychain import Key, sign_data
 from client.ledger_pki import PKIPubKeyUsage
 from client.proxy_info import ProxyInfo
 from client.status_word import StatusWord
+from client.tlv import eth_to_tron_base58
 
 
 CHAIN_ID = 728126428
@@ -137,6 +138,19 @@ def test_trc20_rejects_ambiguous_ticker(
 
     with pytest.raises(ExceptionRAPDU) as error:
         client.provide_token_metadata(ticker, CONTRACT, 6, CHAIN_ID)
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+@pytest.mark.parametrize("signature", [b"", b"\x30" * 7, b"\x30" * 73])
+def test_trc20_rejects_noncanonical_signature_length(
+        backend: BackendInterface, signature: bytes):
+    builder = CommandBuilder()
+    address = eth_to_tron_base58(CONTRACT).encode()
+    apdu = builder.provide_trc20_token_information(
+        "TKN", address, 6, CHAIN_ID, signature)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange_raw(apdu)
     assert error.value.status == StatusWord.INVALID_DATA
 
 
