@@ -4,7 +4,7 @@
 #include "shared_context.h"  // appState, txContext, strings, tmpCtx, chainConfig
 #include "common_utils.h"
 #include "common_712.h"
-#include "context_712.h"  // tip712_context_deinit
+#include "context_712.h"  // tip712_context
 #include "path.h"         // path_get_root_type
 #include "app_errors.h"   // SWO_* status words
 #include "typed_data.h"
@@ -1468,22 +1468,19 @@ void ui_712_deinit(void) {
 }
 
 /**
- * Approve button handling, calls the common handler function then
- * deinitializes the TIP712 context altogether.
+ * Approve button handling. The common callback sends the response and resets
+ * the complete application context.
  */
 void ui_712_approve(void) {
     ui_712_approve_cb(true);
-    tip712_context_deinit();
 }
 
 /**
- * Reject button handling, calls the common handler function then
- * deinitializes the TIP712 context altogether.
-
+ * Reject button handling. The common callback sends the response and resets
+ * the complete application context.
  */
 void ui_712_reject(void) {
     ui_712_reject_cb(true);
-    tip712_context_deinit();
 }
 
 /**

@@ -3,6 +3,7 @@
 #include "app_errors.h"
 #include "nbgl_use_case.h"
 #include "settings.h"
+#include "shared_context.h"  // apdu_response_code
 #include "utils.h"
 #include "common_712.h"
 #include "ui_logic.h"
@@ -28,9 +29,9 @@ nbgl_warning_t warning;
  * divergences: no transaction-checks/gating, and the finish title comes from the
  * blind-signing warning state rather than the tx-simulation string.
  */
-static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
-                                nbgl_operationType_t operation_type,
-                                nbgl_choiceCallback_t choice_callback) {
+static uint16_t ui_712_start_review(e_tip712_filtering_mode filtering_mode,
+                                    nbgl_operationType_t operation_type,
+                                    nbgl_choiceCallback_t choice_callback) {
 #ifdef SCREEN_SIZE_WALLET
     const char *sign_label = (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN))
                                  ? TEXT_BLIND_SIGN_TIP712
@@ -49,12 +50,12 @@ static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
     // Allocate the finish title buffer (app-ethereum parity: g_finishMsg).
     uint8_t finish_len = strlen(sign_label) + 1;  // +1 for '\0'
     if (!ui_buffers_init(0, 0, finish_len)) {
-        return false;
+        return SWO_INSUFFICIENT_MEMORY;
     }
     snprintf(g_finishMsg, finish_len, "%s", sign_label);
 
     if (!tip712_mark_reviewing()) {
-        return false;
+        return SWO_INCORRECT_DATA;
     }
 #ifndef FUZZ
     nbgl_useCaseAdvancedReview(operation_type,
@@ -67,7 +68,7 @@ static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
                                &warning,
                                choice_callback);
 #endif
-    return true;
+    return SWO_SUCCESS;
 }
 
 /**
@@ -77,9 +78,16 @@ static bool ui_712_start_review(e_tip712_filtering_mode filtering_mode,
  * @return status code indicating success or failure
  */
 uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
+    uint16_t status;
+
     // Build the global tag/value pairs list from the accumulated TIP-712 pairs.
     if (!ui_712_push_pairs()) {
-        return SWO_INSUFFICIENT_MEMORY;
+        // ui_712_push_pairs() distinguishes allocation failures from malformed
+        // or inconsistent UI state. Preserve that status for the host instead
+        // of reporting every construction failure as OOM. Fall back to a data
+        // error if a future failure path forgets to set a status code.
+        return (apdu_response_code == SWO_SUCCESS) ? SWO_INCORRECT_DATA
+                                                   : apdu_response_code;
     }
 
 #ifdef HAVE_GATING_SUPPORT
@@ -93,8 +101,11 @@ uint16_t ui_sign_712(e_tip712_filtering_mode filtering) {
     }
 #endif  // HAVE_GATING_SUPPORT
 
-    if (!ui_712_start_review(filtering, TYPE_MESSAGE, ui_typed_message_review_choice)) {
-        return SWO_INSUFFICIENT_MEMORY;
+    status = ui_712_start_review(filtering,
+                                 TYPE_MESSAGE,
+                                 ui_typed_message_review_choice);
+    if (status != SWO_SUCCESS) {
+        return status;
     }
     return SWO_SUCCESS;
 }
