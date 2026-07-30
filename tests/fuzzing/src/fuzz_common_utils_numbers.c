@@ -7,6 +7,7 @@
 #include "common_utils.h"
 #include "uint128.h"
 #include "uint256.h"
+#include "utils.h"
 
 #define DECIMAL_BUFFER_SIZE 80U
 #define AMOUNT_BUFFER_SIZE  384U
@@ -28,6 +29,28 @@ static void require_untouched_tail(const char *buffer, size_t used_size, size_t 
     for (size_t i = used_size; i < buffer_size; i++) {
         require((uint8_t) buffer[i] == 0xCC);
     }
+}
+
+static void test_reverse_string(const uint8_t *data, size_t size) {
+    char value[DECIMAL_BUFFER_SIZE];
+    char original[DECIMAL_BUFFER_SIZE];
+    const size_t length = size < sizeof(value) ? size : sizeof(value);
+    char single = 'x';
+
+    /* Edge cases must be no-ops, including a NULL buffer with no work to do. */
+    reverseString(NULL, 0U);
+    reverseString(NULL, 1U);
+    reverseString(&single, 0U);
+    reverseString(&single, 1U);
+    require(single == 'x');
+
+    if (length != 0U) {
+        memcpy(value, data, length);
+        memcpy(original, data, length);
+    }
+    reverseString(value, (uint32_t) length);
+    reverseString(value, (uint32_t) length);
+    require(memcmp(value, original, length) == 0);
 }
 
 /* Independent base-256 long division reference, deliberately not using uint128/uint256. */
@@ -355,6 +378,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     memset(max_ticker, 'Z', sizeof(max_ticker) - 1U);
     max_ticker[sizeof(max_ticker) - 1U] = '\0';
 
+    test_reverse_string(data, size);
     test_uint128_decimal(value);
     test_uint256_decimal(value);
     test_common_uint256_decimal(value, amount_len, random_output_size);

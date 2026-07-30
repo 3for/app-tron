@@ -31,7 +31,8 @@ static bool derive_public_key(const uint8_t *buffer,
     bip32_path_t bip32_path;
     uint8_t public_key[PUBLIC_KEY_SIZE];
 
-    if (read_bip32_path(buffer, buffer_length, &bip32_path) < 0) {
+    off_t parsed = read_bip32_path(buffer, buffer_length, &bip32_path);
+    if ((parsed < 0) || ((size_t) parsed != (size_t) buffer_length)) {
         PRINTF("read_bip32_path failed\n");
         return false;
     }

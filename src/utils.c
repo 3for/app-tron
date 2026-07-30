@@ -99,6 +99,10 @@ bool is_printable(const char *str, size_t len) {
  * @param[in] length The length of the string to be reversed
  */
 void reverseString(char *const str, uint32_t length) {
+    if ((str == NULL) || (length < 2U)) {
+        return;
+    }
+
     uint32_t i, j;
     for (i = 0, j = length - 1; i < j; i++, j--) {
         char c;
