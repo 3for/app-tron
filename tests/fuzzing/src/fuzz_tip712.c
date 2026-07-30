@@ -125,6 +125,132 @@ static void check_tip712_phase_boundaries(void) {
     appState = APP_STATE_IDLE;
 }
 
+static bool feed_empty_calldata_part(e_eip712_calldata_state state,
+                                     const uint8_t *data,
+                                     uint8_t length,
+                                     const uint16_t *complete_length) {
+    const s_struct_712_field field = {.type = TYPE_SOL_BYTES_DYN};
+    bool result;
+
+    calldata_info_set_state(0U, state);
+    ui_712_field_flags_reset();
+    ui_712_flag_field(false, false, false, false, false, true);
+    result = ui_712_feed_to_display(&field,
+                                    data,
+                                    length,
+                                    complete_length,
+                                    true);
+    ui_712_field_flags_reset();
+    return result;
+}
+
+static s_eip712_calldata_info *new_empty_calldata_info(void) {
+    s_eip712_calldata_info *info =
+        gcs_mem_calloc(sizeof(*info), GCS_MEM_TX_CONTEXT);
+
+    if (info != NULL) {
+        info->value_state = CALLDATA_INFO_PARAM_UNSET;
+        info->callee_state = CALLDATA_INFO_PARAM_UNSET;
+        info->chain_id_state = CALLDATA_INFO_PARAM_UNSET;
+        info->selector_state = CALLDATA_INFO_PARAM_NONE;
+        info->amount_state = CALLDATA_INFO_PARAM_UNSET;
+        info->spender_state = CALLDATA_INFO_PARAM_UNSET;
+        add_calldata_info(info);
+    }
+    return info;
+}
+
+static void check_empty_calldata_completion_boundaries(void) {
+    static const uint8_t address[ADDRESS_LENGTH] = {0x11U};
+    static const uint8_t scalar[] = {1U};
+    void *fillers[512] = {0};
+    size_t filler_count = 0U;
+    const uint16_t empty_length = 0U;
+    s_eip712_calldata_info *info;
+
+    appState = APP_STATE_IDLE;
+    if (!tip712_context_init() ||
+        ((info = new_empty_calldata_info()) == NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_VALUE,
+                                  NULL,
+                                  0U,
+                                  &empty_length) ||
+        info->processed || all_calldata_info_processed() ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_CALLEE,
+                                  address,
+                                  sizeof(address),
+                                  NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_CHAIN_ID,
+                                  scalar,
+                                  sizeof(scalar),
+                                  NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_AMOUNT,
+                                  scalar,
+                                  sizeof(scalar),
+                                  NULL)) {
+        __builtin_trap();
+    }
+
+    /* Exhaust the tracked session budget immediately before fallback UI
+     * construction. The final field must fail without publishing processed,
+     * and cleanup must leave the following session re-entrant. */
+    while (filler_count < ARRAY_SIZE(fillers)) {
+        fillers[filler_count] = gcs_mem_alloc(32U, GCS_MEM_GENERIC);
+        if (fillers[filler_count] == NULL) break;
+        filler_count++;
+    }
+    if ((filler_count == ARRAY_SIZE(fillers)) ||
+        !gcs_mem_take_allocation_failure() ||
+        feed_empty_calldata_part(EIP712_CALLDATA_SPENDER,
+                                 address,
+                                 sizeof(address),
+                                 NULL) ||
+        info->processed || (info->pending_calldata != NULL)) {
+        __builtin_trap();
+    }
+    for (size_t i = 0U; i < filler_count; i++) {
+        gcs_mem_free(fillers[i]);
+    }
+    tip712_context_deinit();
+    if (gcs_budget_is_active() || (gcs_mem_session_live_bytes() != 0U) ||
+        gcs_mem_invariant_failed()) {
+        __builtin_trap();
+    }
+
+    if (!tip712_context_init() ||
+        ((info = new_empty_calldata_info()) == NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_VALUE,
+                                  NULL,
+                                  0U,
+                                  &empty_length) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_CALLEE,
+                                  address,
+                                  sizeof(address),
+                                  NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_CHAIN_ID,
+                                  scalar,
+                                  sizeof(scalar),
+                                  NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_AMOUNT,
+                                  scalar,
+                                  sizeof(scalar),
+                                  NULL) ||
+        !feed_empty_calldata_part(EIP712_CALLDATA_SPENDER,
+                                  address,
+                                  sizeof(address),
+                                  NULL) ||
+        !info->processed || !all_calldata_info_processed() ||
+        (info->pending_calldata != NULL)) {
+        __builtin_trap();
+    }
+    tip712_context_deinit();
+    if (gcs_budget_is_active() || (gcs_mem_session_live_bytes() != 0U) ||
+        gcs_mem_invariant_failed()) {
+        __builtin_trap();
+    }
+    appState = APP_STATE_IDLE;
+}
+
 static void fuzz_tip712_apdu_stream(const uint8_t *data, size_t size) {
     while (size > 0U) {
         const uint8_t op = *data++;
@@ -198,6 +324,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     check_zero_extended_u64_boundaries();
     check_display_boundaries();
     check_tip712_phase_boundaries();
+    check_empty_calldata_completion_boundaries();
     init_tip712_fuzz_environment();
     fuzz_tip712_apdu_stream(data, size);
     if (gcs_budget_is_active() || (gcs_mem_session_live_bytes() != 0U) ||

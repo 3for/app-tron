@@ -1098,11 +1098,9 @@ static bool update_calldata_value(const uint8_t *data,
         if (calldata_info->pending_calldata != NULL) return false;
 
         if (calldata_info->selector_state == CALLDATA_INFO_PARAM_NONE) {
-            if (calldata_size == 0U) {
-                // No embedded or separately filtered selector: this is a real
-                // empty transaction, not a zero-argument contract call.
-                calldata_info->processed = true;
-            } else {
+            // No embedded or separately filtered selector with an empty value
+            // is a real empty transaction, not a zero-argument contract call.
+            if (calldata_size != 0U) {
                 if ((length < CALLDATA_SELECTOR_SIZE) ||
                     (calldata_size < CALLDATA_SELECTOR_SIZE)) {
                     return false;
@@ -1249,8 +1247,10 @@ static bool update_calldata(const uint8_t *data,
             return false;
     }
     if (calldata_info_all_received(calldata_info)) {
+        if (calldata_info->processed) return false;
         if (calldata_info->pending_calldata == NULL) {
             if (!handle_fallback_empty_calldata(calldata_info)) return false;
+            calldata_info->processed = true;
         } else {
             if (!tx_ctx_init(calldata_info->pending_calldata,
                              calldata_info->spender,
@@ -1804,7 +1804,10 @@ s_eip712_calldata_info *get_current_calldata_info(void) {
 bool all_calldata_info_processed(void) {
     for (const s_eip712_calldata_info *tmp = ui_ctx->calldata_info; tmp != NULL;
          tmp = (const s_eip712_calldata_info *) ((const flist_node_t *) tmp)->next) {
-        if (!tmp->processed) return false;
+        if (!tmp->processed || !calldata_info_all_received(tmp) ||
+            (tmp->pending_calldata != NULL)) {
+            return false;
+        }
     }
     return true;
 }

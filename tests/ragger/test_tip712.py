@@ -1578,6 +1578,54 @@ def test_tip712_calldata_empty_send(
     _tip712_calldata_common(scenario_navigator, test_name, filename)
 
 
+@pytest.mark.parametrize(
+    "missing_field", ["callee", "amount", "chain_id", "spender"])
+def test_tip712_empty_calldata_requires_all_declared_fields(
+        backend: BackendInterface, missing_field: str):
+    """Empty calldata is complete only after every declared CAL field arrives."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe_empty.json",
+              encoding="utf-8") as data_file:
+        data = json.load(data_file)
+
+    data["types"]["SafeTx"].append({"name": "spender", "type": "address"})
+    data["message"]["spender"] = "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh"
+    filters = {
+        "name": "Incomplete empty calldata",
+        "calldatas": [{
+            "index": 0,
+            "handler": None,
+            "value_flag": True,
+            "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+            "chain_id_flag": missing_field == "chain_id",
+            "selector_flag": False,
+            "amount_flag": True,
+            "spender_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
+        }],
+        "fields": {
+            "to": {"type": "calldata_callee", "index": 0},
+            "value": {"type": "calldata_amount", "index": 0},
+            "data": {"type": "calldata_value", "index": 0},
+            "spender": {"type": "calldata_spender", "index": 0},
+        },
+    }
+    if missing_field != "chain_id":
+        del filters["fields"][{
+            "callee": "to",
+            "amount": "value",
+            "spender": "spender",
+        }[missing_field]]
+    # For the chain_id case the domain value is still hashed, but it is
+    # deliberately not routed through the calldata handler declared by CAL.
+
+    signing_path = client.getAccount(0)["path"]
+    assert InputData.process_data(client, data, filters, signing_path)
+    with pytest.raises(ExceptionRAPDU) as error:
+        with client.tip712_sign_new(signing_path):
+            pass
+    assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
+
+
 def test_tip712_calldata_no_param(
         scenario_navigator: NavigateWithScenario, test_name: str):
     _tip712_calldata_common(scenario_navigator, test_name,
