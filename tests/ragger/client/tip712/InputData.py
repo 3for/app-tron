@@ -27,6 +27,23 @@ current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
 
 
+def _reset_process_context() -> None:
+    """Discard every mutable context owned by a previous process_data call."""
+    global app_client
+    global filtering_paths
+    global filtering_tokens
+    global filtering_calldatas
+    global current_path
+    global sig_ctx
+
+    app_client = None
+    filtering_paths = {}
+    filtering_tokens = []
+    filtering_calldatas = []
+    current_path = []
+    sig_ctx = {}
+
+
 # From a string typename, extract the type and all the array depth
 # Input  = "uint8[2][][4]"          |   "bool"
 # Output = ('uint8', [2, None, 4])  |   ('bool', [])
@@ -629,13 +646,16 @@ def process_data(aclient,
                  data_json: dict,
                  filters: Optional[dict] = None,
                  bip32_path: Optional[str] = None) -> bool:
-    global sig_ctx
     global app_client
-    global current_path
 
-    current_path = []  # init to be empty
-    # deepcopy because this function modifies the dict
+    # Each signing request owns an isolated driver context. In particular, an
+    # unfiltered request must never reuse filtering paths or signature metadata
+    # left by a previous filtered request.
+    _reset_process_context()
+    # Both inputs are modified while types and calldata handlers are prepared.
+    # Keep caller-owned fixtures reusable across parametrized test cases.
     data_json = copy.deepcopy(data_json)
+    filters = copy.deepcopy(filters)
     app_client = aclient
     domain_typename = "EIP712Domain"
     message_typename = data_json["primaryType"]

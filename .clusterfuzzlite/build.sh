@@ -22,6 +22,7 @@ for target in \
     fuzz_tip712 \
     fuzz_handle_sign \
     fuzz_personal_message \
+    fuzz_gcs \
     fuzz_external_metadata; do
     corpus_dir="./corpus/${target}"
     if [[ -n "$(find "$corpus_dir" -type f -print -quit)" ]]; then

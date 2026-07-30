@@ -47,6 +47,7 @@ BASE58_ADDRESS_SIZE = 34
 GET_ADDRESS_RESP_LEN = 101
 GET_VERSION_RESP_LEN = 4
 TRON_MAINNET_ADDRESS_PREFIX = 0x41
+MAX_TOUCH_REVIEW_PAGES = 128
 
 Errors = StatusWord
 
@@ -400,6 +401,10 @@ class TronClient:
                 screen_change_before_first_instruction=screen_change_before_first_instruction)
             snap_idx = 0
             while not self.compare_screen_with_text(text):
+                if snap_idx >= MAX_TOUCH_REVIEW_PAGES:
+                    raise AssertionError(
+                        f"review text {text!r} not found after "
+                        f"{MAX_TOUCH_REVIEW_PAGES} pages")
                 snap_idx += 1
                 self._navigator.navigate([NavInsID.USE_CASE_REVIEW_TAP],
                                          screen_change_before_first_instruction=False,
@@ -569,7 +574,7 @@ class TronClient:
         if navigate:
             with self.exchange_async(CLA, ins, p1, 0x00, messages[-1]):
                 self.navigate(snappath, text, warning_approve)
-            return self.last_async_response
+            return self.response()
         else:
             return self.exchange(CLA, ins, p1, 0x00, messages[-1])
 

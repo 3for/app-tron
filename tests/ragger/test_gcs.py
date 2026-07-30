@@ -782,8 +782,9 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
     field = Field(1, "Value", ParamRaw(1, value), visibility, constraints)
     client.provide_transaction_info(
         build_tx_info(contract_addr20, selector, [field], "guarded call"))
-    with pytest.raises((ExceptionRAPDU, AssertionError)):
+    with pytest.raises(ExceptionRAPDU) as error:
         client.provide_transaction_field_desc(field.serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
 
     # The rejected descriptor must not poison the next GCS session.
     normal_tx = build_trc20_transfer_tx(client)
@@ -1664,11 +1665,10 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
     client.provide_transaction_info(tx_info.serialize())
 
     if test_config == "must_be_0":
-        with pytest.raises((ExceptionRAPDU, AssertionError)) as err:
+        with pytest.raises(ExceptionRAPDU) as error:
             for field in fields:
                 client.provide_transaction_field_desc(field.serialize())
-        if isinstance(err.value, ExceptionRAPDU):
-            assert err.value.status == StatusWord.INVALID_DATA
+        assert error.value.status == StatusWord.INVALID_DATA
         return
 
     for field in fields:

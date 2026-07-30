@@ -4,6 +4,7 @@ from ledgered.devices import Device, DeviceType
 
 from ragger.backend import BackendInterface
 from ragger.navigator import Navigator, NavInsID, NavIns
+from client.status_word import StatusWord
 
 
 # The order must match that of BAGL and NBGL.
@@ -76,6 +77,11 @@ def get_device_settings(device: Device) -> list[SettingID]:
 def get_enabled_settings(backend: BackendInterface,
                          device: Device) -> set[SettingID]:
     response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
+    if response.status != StatusWord.OK:
+        raise RuntimeError(
+            f"GET_APP_CONFIGURATION failed with status 0x{response.status:04x}")
+    if len(response.data) < 1:
+        raise RuntimeError("GET_APP_CONFIGURATION returned an empty response")
     enabled_mask = response.data[0]
     return {
         setting

@@ -5,10 +5,12 @@ Usage: pytest -v -s ./tests/ragger/test_tip712.py
 import pytest
 import json
 import fnmatch
+import functools
 import os
 import web3
 import hashlib
 
+from contextlib import nullcontext
 from ctypes import c_uint64
 
 from typing import Optional, Callable
@@ -856,6 +858,66 @@ def test_tip712_legacy_host_apdu_remains_single_step():
     assert command[5:] == expected_payload
 
 
+def test_tip712_input_driver_isolates_filtered_unfiltered_sequence(monkeypatch):
+    """Every process_data call owns fresh filters, handlers and signature state."""
+
+    class FakeClient:
+        def tip712_init_new(self, _path):
+            return nullcontext()
+
+        def tip712_filtering_activate(self):
+            return nullcontext()
+
+        def tip712_send_struct_impl_root_struct(self, _name):
+            return nullcontext()
+
+    def calldata_handler(_client, _data):
+        pass
+
+    data = {
+        "primaryType": "Message",
+        "types": {},
+        "domain": {
+            "name": "Isolation test",
+            "chainId": 1,
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+        },
+        "message": {},
+    }
+    filters = {
+        "name": "Isolation filter",
+        "fields": {
+            "message.data": {"type": "calldata_value", "index": 0},
+        },
+        "calldatas": [{"index": 0, "handler": calldata_handler}],
+    }
+    client = FakeClient()
+    signing_path = "m/44'/195'/0'/0/0"
+
+    monkeypatch.setattr(InputData, "send_coin_meta_certificate", lambda _client: None)
+    monkeypatch.setattr(InputData, "send_struct_impl", lambda *_args: True)
+    monkeypatch.setattr(InputData, "send_filtering_message_info", lambda *_args: None)
+
+    assert InputData.process_data(client, data, filters, signing_path)
+    first_handler = InputData.filtering_calldatas[0]["handler"]
+    assert isinstance(first_handler, functools.partial)
+    assert first_handler.func is calldata_handler
+    assert filters["calldatas"][0] == {"index": 0, "handler": calldata_handler}
+
+    assert InputData.process_data(client, data, None, signing_path)
+    assert InputData.filtering_paths == {}
+    assert InputData.filtering_tokens == []
+    assert InputData.filtering_calldatas == []
+    assert InputData.sig_ctx == {}
+
+    assert InputData.process_data(client, data, filters, signing_path)
+    second_handler = InputData.filtering_calldatas[0]["handler"]
+    assert isinstance(second_handler, functools.partial)
+    assert second_handler.func is calldata_handler
+    assert second_handler is not first_handler
+    assert filters["calldatas"][0] == {"index": 0, "handler": calldata_handler}
+
+
 def test_tip712_new(
                         scenario_navigator: NavigateWithScenario,
                         tip712_case: tuple[Path, bool], verbose_raw: bool,
@@ -877,8 +939,12 @@ def test_tip712_new(
             filterfile = Path(f"{test_path}-filter.json")
             with open(filterfile, encoding="utf-8") as f:
                 filters = json.load(f)
-        except (IOError, json.decoder.JSONDecodeError) as e:
-            pytest.skip(f"{filterfile.name}: {e.strerror}")
+        except FileNotFoundError as error:
+            pytest.skip(f"{filterfile.name}: {error}")
+        except json.decoder.JSONDecodeError as error:
+            pytest.fail(f"{filterfile.name}: invalid JSON: {error}")
+        except OSError as error:
+            pytest.fail(f"{filterfile.name}: unable to read filter: {error}")
     else:
         # Unfiltered (blind) signing needs SIGN_BY_HASH enabled.
         settings_to_toggle.append(SettingID.SIGN_BY_HASH)
