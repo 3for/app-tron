@@ -79,6 +79,9 @@ __attribute__((weak)) bool gcs_account_descriptor(size_t descriptor_size,
     (void) rendered_field;
     return true;
 }
+__attribute__((weak)) bool gcs_account_descriptor_apdu(void) {
+    return true;
+}
 __attribute__((weak)) bool gcs_add_forced_fields(void) {
     return true;
 }

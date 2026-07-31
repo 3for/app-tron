@@ -31,31 +31,10 @@
 #include "ui_nbgl.h"        // warning
 #include "utils.h"          // SET_BIT
 #include "context_712.h"
+#include "der_signature.h"
 
 // TIP-712 (EIP-191 0x19 / version 0x01) signing prefix.
 static const uint8_t TIP_712_MAGIC[] = {0x19, 0x01};
-
-static void format_signature_out(const uint8_t *signature) {
-    memset(G_io_apdu_buffer, 0x00, 64);
-    uint8_t offset = 0;
-    uint8_t xoffset = 4;  // point to r value
-    // copy r
-    uint8_t xlength = signature[xoffset - 1];
-    if (xlength == 33) {
-        xlength = 32;
-        xoffset++;
-    }
-    memmove(G_io_apdu_buffer + offset + 32 - xlength, signature + xoffset, xlength);
-    offset += 32;
-    xoffset += xlength + 2;  // move over rvalue and TagLEn
-    // copy s value
-    xlength = signature[xoffset - 1];
-    if (xlength == 33) {
-        xlength = 32;
-        xoffset++;
-    }
-    memmove(G_io_apdu_buffer + offset + 32 - xlength, signature + xoffset, xlength);
-}
 
 bool tip712_hash_to_sign(uint8_t hash[static INT256_LENGTH]) {
     cx_sha3_t sha3;
@@ -135,7 +114,10 @@ bool ui_712_approve_cb(bool display_menu) {
         goto end;
     }
 
-    format_signature_out(signature);
+    if (!ecdsa_der_to_rs(signature, signatureLength, G_io_apdu_buffer)) {
+        err = CX_INTERNAL_ERROR;
+        goto end;
+    }
     G_io_apdu_buffer[64] = 0;
     if (info & CX_ECCINFO_PARITY_ODD) {
         G_io_apdu_buffer[64]++;

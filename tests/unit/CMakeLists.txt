@@ -193,3 +193,16 @@ if(NOT APPLE)
 endif()
 
 add_test(test_create_smart_contract_stream test_create_smart_contract_stream)
+
+add_executable(test_der_signature
+               tests/der_signature.c
+               ../../src/der_signature.c)
+target_include_directories(test_der_signature
+                           PRIVATE
+                           ../../src)
+target_link_libraries(test_der_signature PUBLIC cmocka)
+if(NOT APPLE)
+    target_link_libraries(test_der_signature PUBLIC gcov)
+endif()
+
+add_test(test_der_signature test_der_signature)
