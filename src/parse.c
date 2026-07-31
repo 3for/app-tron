@@ -1947,6 +1947,7 @@ parserStatus_e processStreamedCreateSmartContract(
 
     msg.create_smart_contract = result->contract;
     content->bytecodeSize = result->bytecode_size;
+    content->abiSize = result->abi_size;
     memcpy(content->bytecodeHash, result->bytecode_hash, sizeof(content->bytecodeHash));
     if (!validate_create_smart_contract(&msg.create_smart_contract)) {
         return USTREAM_FAULT;

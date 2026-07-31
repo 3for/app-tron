@@ -108,6 +108,7 @@ typedef struct {
     char userResourcePercent[24];
     char originEnergyLimit[24];
     char bytecodeSize[24];
+    char abiSize[24];
     char bytecodeHash[67];
     char tokenId[24];
     char tokenValue[24];
@@ -134,6 +135,9 @@ static char actionSignTitle[48];
 // A non-zero TriggerSmartContract fee limit is part of the signed transaction
 // and must remain visible for the lifetime of the asynchronous TRC20 review.
 static char trc20FeeLimit[32];
+// Custom TriggerSmartContract is a blind-signing flow, but its fee limit is a
+// useful signed summary field and must remain stable during asynchronous review.
+static char customContractFeeLimit[32];
 // Reviews are asynchronous while the APDU transport immediately reuses its
 // buffer. Keep a stable snapshot for all review fields prepared in sign.c.
 static uint8_t reviewDisplayBuffer[sizeof(G_io_apdu_buffer)];
@@ -179,6 +183,7 @@ void ui_review_menu_cleanup(void) {
     explicit_bzero(actionReviewTitle, sizeof(actionReviewTitle));
     explicit_bzero(actionSignTitle, sizeof(actionSignTitle));
     explicit_bzero(trc20FeeLimit, sizeof(trc20FeeLimit));
+    explicit_bzero(customContractFeeLimit, sizeof(customContractFeeLimit));
     explicit_bzero(proposalIdValue, sizeof(proposalIdValue));
 }
 
@@ -570,6 +575,9 @@ static ui_prepare_status_t prepare_create_smart_contract_display(void) {
         !u64_to_string(txContent.bytecodeSize,
                        createSmartContractDisplay->bytecodeSize,
                        sizeof(createSmartContractDisplay->bytecodeSize)) ||
+        !u64_to_string(txContent.abiSize,
+                       createSmartContractDisplay->abiSize,
+                       sizeof(createSmartContractDisplay->abiSize)) ||
         (bytes_to_string(createSmartContractDisplay->bytecodeHash,
                          sizeof(createSmartContractDisplay->bytecodeHash),
                          txContent.bytecodeHash,
@@ -945,17 +953,19 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.fields[5].value = createSmartContractDisplay->originEnergyLimit;
             txInfos.fields[6].item = "Bytecode size";
             txInfos.fields[6].value = createSmartContractDisplay->bytecodeSize;
-            txInfos.fields[7].item = "Bytecode hash";
-            txInfos.fields[7].value = createSmartContractDisplay->bytecodeHash;
-            g_pairsList->nbPairs = 8;
+            txInfos.fields[7].item = "ABI size";
+            txInfos.fields[7].value = createSmartContractDisplay->abiSize;
+            txInfos.fields[8].item = "Bytecode hash";
+            txInfos.fields[8].value = createSmartContractDisplay->bytecodeHash;
+            g_pairsList->nbPairs = 9;
 
             protocol_CreateSmartContract *contract = &msg.create_smart_contract;
             if ((contract->token_id != 0) || (contract->call_token_value != 0)) {
-                txInfos.fields[8].item = "TRC10 ID";
-                txInfos.fields[8].value = createSmartContractDisplay->tokenId;
-                txInfos.fields[9].item = "TRC10 amount";
-                txInfos.fields[9].value = createSmartContractDisplay->tokenValue;
-                g_pairsList->nbPairs = 10;
+                txInfos.fields[9].item = "TRC10 ID";
+                txInfos.fields[9].value = createSmartContractDisplay->tokenId;
+                txInfos.fields[10].item = "TRC10 amount";
+                txInfos.fields[10].value = createSmartContractDisplay->tokenValue;
+                g_pairsList->nbPairs = 11;
             }
             txInfos.flowTitle = "Review transaction to\nDeploy Smart Contract";
             txInfos.flowSubtitle = "Smart contract deployment";
@@ -1280,20 +1290,27 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.fields[1].value = strings.common.fullContract;
             txInfos.fields[2].item = txContent.hasCalldata ? "Selector" : "Calldata";
             txInfos.fields[2].value = strings.common.TRC20Action;
+            if (!format_trx_amount_with_ticker(txContent.feeLimit,
+                                               customContractFeeLimit,
+                                               sizeof(customContractFeeLimit))) {
+                return UI_PREPARE_FORMAT_ERROR;
+            }
+            txInfos.fields[3].item = "Fee limit";
+            txInfos.fields[3].value = customContractFeeLimit;
             const bool has_attached_trc10 =
                 (txContent.callTokenValue != 0) || (txContent.tokenId != 0);
-            txInfos.fields[3].item = has_attached_trc10 ? "Attached TRX" : "Amount";
-            txInfos.fields[3].value =
+            txInfos.fields[4].item = has_attached_trc10 ? "Attached TRX" : "Amount";
+            txInfos.fields[4].value =
                 (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRX_OFFSET;
-            g_pairsList->nbPairs = 4;
+            g_pairsList->nbPairs = 5;
             if (has_attached_trc10) {
-                txInfos.fields[4].item = "TRC10 ID";
-                txInfos.fields[4].value =
-                    (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRC10_ID_OFFSET;
-                txInfos.fields[5].item = "TRC10 amount";
+                txInfos.fields[5].item = "TRC10 ID";
                 txInfos.fields[5].value =
+                    (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRC10_ID_OFFSET;
+                txInfos.fields[6].item = "TRC10 amount";
+                txInfos.fields[6].value =
                     (const char *) reviewDisplayBuffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
-                g_pairsList->nbPairs = 6;
+                g_pairsList->nbPairs = 7;
             }
             txInfos.flowSubtitle = "Custom Contract";
             break;

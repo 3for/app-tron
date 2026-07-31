@@ -35,6 +35,8 @@ if PROTO_PATH not in sys.path:
     sys.path.insert(0, PROTO_PATH)
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
+from google.protobuf.any_pb2 import Any
+from google.protobuf.internal.encoder import _VarintBytes
 
 
 @pytest.mark.usefixtures('configuration')
@@ -2020,7 +2022,8 @@ class TestTRX():
                                  outer_overrides=None,
                                  fee_limit=100_000_000,
                                  include_new_contract=True,
-                                 data=None):
+                                 data=None,
+                                 abi_payload=None):
         owner = bytes.fromhex(client.getAccount(0)['addressHex'])
         new_contract_values = {
             'origin_address': owner,
@@ -2044,16 +2047,49 @@ class TestTRX():
             outer_values['new_contract'] = contract.SmartContract(
                 **new_contract_values)
 
-        return client.packContract(
-            tron.Transaction.Contract.CreateSmartContract,
-            contract.CreateSmartContract(**outer_values),
-            data=data,
-            fee_limit=fee_limit,
+        create_contract = contract.CreateSmartContract(**outer_values)
+        if abi_payload is None:
+            return client.packContract(
+                tron.Transaction.Contract.CreateSmartContract,
+                create_contract,
+                data=data,
+                fee_limit=fee_limit,
+            )
+
+        # The signing-time protobuf intentionally omits java-tron's SmartContract
+        # ABI field (tag 3), so inject its encoded payload into new_contract by
+        # rebuilding the small outer message. This exercises the streamed parser
+        # and the review's ABI-size display without retaining the ABI bytes.
+        owner_wire = b'\x0a' + _VarintBytes(len(create_contract.owner_address))
+        owner_wire += create_contract.owner_address
+        inner = create_contract.new_contract.SerializeToString(deterministic=True)
+        inner += b'\x1a' + _VarintBytes(len(abi_payload)) + abi_payload
+        create_wire = owner_wire + b'\x12' + _VarintBytes(len(inner)) + inner
+        if create_contract.call_token_value != 0:
+            create_wire += b'\x18' + _VarintBytes(create_contract.call_token_value)
+        if create_contract.token_id != 0:
+            create_wire += b'\x20' + _VarintBytes(create_contract.token_id)
+
+        tx = tron.Transaction()
+        tx.raw_data.timestamp = 1575712492061
+        tx.raw_data.expiration = 1575712551000
+        tx.raw_data.ref_block_hash = bytes.fromhex("95DA42177DB00507")
+        tx.raw_data.ref_block_bytes = bytes.fromhex("3DCE")
+        if data:
+            tx.raw_data.custom_data = data
+        packed = Any(
+            type_url="type.googleapis.com/protocol.CreateSmartContract",
+            value=create_wire,
         )
+        tx_contract = tx.raw_data.contract.add()
+        tx_contract.type = tron.Transaction.Contract.CreateSmartContract
+        tx_contract.parameter.CopyFrom(packed)
+        tx.raw_data.fee_limit = fee_limit
+        return tx.raw_data.SerializeToString()
 
     def test_trx_create_smart_contract(self, backend, device):
         client = TronClient(backend)
-        tx = self.create_smart_contract_tx(client)
+        tx = self.create_smart_contract_tx(client, abi_payload=b'\x0a\x00')
         self.sign_and_validate(client,
                                device,
                                0,
@@ -2538,7 +2574,8 @@ class TestTRX():
                 contract_address=bytes.fromhex(
                     client.address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
                 data=bytes.fromhex('{:08x}{:064x}'.format(
-                    0x0a857040, int(10001)))))
+                    0x0a857040, int(10001)))),
+            fee_limit=100_000_000)
         self.sign_and_validate(client, device, 0, tx, warning_approve=True)
 
     @pytest.mark.parametrize(
