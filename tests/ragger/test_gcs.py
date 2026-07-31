@@ -32,6 +32,7 @@ from typing import Optional
 import pytest
 from web3 import Web3
 
+from ledgered.devices import DeviceType
 from client.command_builder import (CLA, MAX_APDU_LEN, InsType, P1Type, P2Type)
 from client.enum_value import EnumValue
 from client.gating import Gating
@@ -50,6 +51,7 @@ from gcs_utils import ABIS_FOLDER, compute_inst_hash
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
+from ragger.navigator import Navigator, NavIns, NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 from client.status_word import StatusWord
 from settings import SettingID, settings_toggle
@@ -909,6 +911,61 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                                tx,
                                nb_warnings=_gating_warnings(scenario_navigator,
                                                             gating_params))
+
+
+def test_gcs_contract_address_without_name(
+        navigator: Navigator,
+        scenario_navigator: NavigateWithScenario,
+        default_screenshot_path: Path,
+        test_name: str):
+    """Wallet GCS details must expose the callee when TX_INFO has no contract name."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    if device.is_nano:
+        pytest.skip("Nano already displays the contract address as a plain info row")
+
+    client = _client_from_scenario(scenario_navigator)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    amount_field = build_field_raw("Amount", 32,
+                                   data_path=build_data_path_static(1))
+    fields = [amount_field]
+    # contract_name intentionally remains absent: the authenticated address must
+    # still be available from the wallet-screen contract information page.
+    tx_info = TxInfo(1,
+                     TRON_MAINNET_CHAINID,
+                     eth_to_tron_base58(contract_addr20),
+                     TRC20_TRANSFER_SELECTOR,
+                     compute_inst_hash(fields),
+                     "transfer").serialize()
+    client.provide_transaction_info(tx_info)
+    client.provide_transaction_field_desc(amount_field.serialize())
+
+    contract_info_positions = {
+        DeviceType.FLEX: (428, 100),
+        DeviceType.STAX: (360, 108),
+        DeviceType.APEX_P: (272, 61),
+    }
+    moves = [
+        NavInsID.SWIPE_CENTER_TO_LEFT,
+        NavIns(NavInsID.TOUCH, contract_info_positions[device.type]),
+        NavInsID.LEFT_HEADER_TAP,
+    ]
+    with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        navigator.navigate_and_compare(default_screenshot_path,
+                                       f"{test_name}/part1",
+                                       moves,
+                                       screen_change_after_last_instruction=False)
+        scenario_navigator.review_approve(test_name=f"{test_name}/part2")
+
+    resp = backend.last_async_response
+    assert resp.status == StatusWord.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
 
 
 # keccak256("transferToken(address,uint256,trcToken)")[:4] -- the TVM native token

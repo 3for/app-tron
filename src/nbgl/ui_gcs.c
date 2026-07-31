@@ -215,7 +215,27 @@ static bool prepare_infos(nbgl_contentInfoList_t *infos) {
         if (!append_info(infos, keys, values, &count, MAX_INFO_COUNT, key, tmp_buf)) return false;
     }
 
-#ifndef SCREEN_SIZE_WALLET
+#ifdef SCREEN_SIZE_WALLET
+    /* The contract name is optional in TX_INFO v1, but the authenticated
+     * contract address is not. When no alias was provided, expose the address
+     * as a plain information row instead of silently omitting the callee from
+     * the wallet-screen review. Named contracts keep the existing QR-code
+     * extension below. */
+    if (contract_idx == -1) {
+        if (!format_contract_address(get_contract_addr(get_current_tx_info()),
+                                     tmp_buf,
+                                     tmp_buf_size) ||
+            !append_info(infos,
+                         keys,
+                         values,
+                         &count,
+                         MAX_INFO_COUNT,
+                         "Contract address",
+                         tmp_buf)) {
+            return false;
+        }
+    }
+#else
     if (!format_contract_address(get_contract_addr(get_current_tx_info()), tmp_buf, tmp_buf_size)) {
         return false;
     }
@@ -228,7 +248,7 @@ static bool prepare_infos(nbgl_contentInfoList_t *infos) {
                      tmp_buf)) {
         return false;
     }
-#endif
+#endif  // SCREEN_SIZE_WALLET
 
     if ((value = get_deploy_date(get_current_tx_info())) != NULL) {
         snprintf(tmp_buf, tmp_buf_size, "%s", value);
