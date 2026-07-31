@@ -72,6 +72,8 @@ P1_MORE = P1Type.MORE
 P1_LAST = P1Type.LAST
 P2_GCS_STORE = P2Type.GCS_STORE
 P2_GCS_START_FLOW = P2Type.GCS_START_FLOW
+GCS_MAX_DESCRIPTOR_SIZE = 4096
+GCS_MAX_DESCRIPTOR_APDUS = 512
 
 # TRON mainnet chain id used by the GCS descriptors (chain_config.h).
 TRON_MAINNET_CHAINID = 728126428
@@ -341,6 +343,43 @@ def test_gcs_invalid_tx_info_resets_state(backend: BackendInterface):
         backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
                          P2_GCS_START_FLOW, b"")
     assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_gcs_descriptor_apdu_limit_resets_state(backend: BackendInterface,
+                                                device):
+    """Single-byte descriptor chunks must not hold a GCS session indefinitely."""
+    if device.type != DeviceType.NANOSP:
+        pytest.skip("Device-independent APDU accounting is covered on Nano S Plus")
+
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    first_chunk = pack(">H", GCS_MAX_DESCRIPTOR_SIZE) + b"\x00"
+    assert backend.exchange(CLA,
+                            InsType.PROVIDE_TRANSACTION_INFO,
+                            P1Type.FIRST_CHUNK,
+                            0x00,
+                            first_chunk).status == StatusWord.OK
+    for _ in range(1, GCS_MAX_DESCRIPTOR_APDUS):
+        assert backend.exchange(CLA,
+                                InsType.PROVIDE_TRANSACTION_INFO,
+                                P1Type.FOLLOWING_CHUNK,
+                                0x00,
+                                b"\x00").status == StatusWord.OK
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA,
+                         InsType.PROVIDE_TRANSACTION_INFO,
+                         P1Type.FOLLOWING_CHUNK,
+                         0x00,
+                         b"\x00")
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    # Limit rejection must release the partial descriptor and the GCS session.
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
 
 
 @pytest.mark.parametrize("case", [
@@ -695,6 +734,7 @@ def _abi_dynamic_calldata(selector: bytes, value: bytes,
         "uint8_high_bits",
         "bytes_constraint_hidden_suffix",
         "bytes_not_fully_displayable",
+        "data_path_without_leaf",
     ],
 )
 def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
@@ -747,6 +787,14 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
                 1,
                 [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
             ),
+        )
+    elif case == "data_path_without_leaf":
+        word = bytes(32)
+        calldata = selector + word
+        value = Value(
+            1,
+            TypeFamily.UINT,
+            data_path=DataPath(1, [PathTuple(0)]),
         )
     else:
         word = bytearray(32)

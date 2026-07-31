@@ -51,6 +51,7 @@ typedef struct {
     size_t raw_data_size;
     size_t raw_data_received;
     size_t store_apdu_count;
+    size_t descriptor_apdu_count;
     size_t descriptor_bytes;
     size_t descriptor_count;
     size_t rendered_fields;
@@ -68,6 +69,15 @@ void gcs_signing_context_cleanup(void) {
 
 bool gcs_signing_in_progress(void) {
     return g_gcs.active;
+}
+
+bool gcs_account_descriptor_apdu(void) {
+    if (!g_gcs.active ||
+        (g_gcs.descriptor_apdu_count >= GCS_MAX_DESCRIPTOR_APDUS)) {
+        return false;
+    }
+    g_gcs.descriptor_apdu_count += 1U;
+    return true;
 }
 
 bool gcs_account_descriptor(size_t descriptor_size, bool rendered_field) {

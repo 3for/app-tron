@@ -109,7 +109,8 @@ bool value_get(const s_value *value, s_parsed_value_collection *collection) {
     switch (value->source) {
         case SOURCE_CALLDATA:
             collection->size = 0;
-            if (!data_path_get(&value->data_path, collection)) {
+            if (!data_path_get(&value->data_path, collection) ||
+                (collection->size == 0U)) {
                 return false;
             }
             break;

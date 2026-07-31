@@ -65,6 +65,11 @@ uint16_t handle_field(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *payload
         gcs_cleanup();
         return SWO_COMMAND_NOT_ALLOWED;
     }
+    if ((appState == APP_STATE_SIGNING_TX) &&
+        !gcs_account_descriptor_apdu()) {
+        tlv_apdu_reset();
+        return SWO_INCORRECT_DATA;
+    }
 
     if (!tlv_from_apdu(INS_GTP_FIELD,
                        p2,

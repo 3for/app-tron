@@ -198,6 +198,36 @@ static void assert_gcs_parser_guards(void) {
             __builtin_trap();
         }
     }
+
+    /* A calldata path must identify at least one value. Navigation-only paths
+     * must fail both at descriptor parsing and at the value-consumption
+     * boundary rather than silently producing no Review field. */
+    {
+        static uint8_t no_leaf_path[] = {
+            0x00, 0x01, 0x01,        /* version = 1 */
+            0x01, 0x02, 0x00, 0x00,  /* tuple index = 0 */
+        };
+        buffer_t encoded_path = {
+            .ptr = no_leaf_path,
+            .size = sizeof(no_leaf_path),
+            .offset = 0U,
+        };
+        s_data_path parsed_path = {0};
+        s_data_path_context path_context = {.data_path = &parsed_path};
+        s_value value = {.source = SOURCE_CALLDATA};
+        s_parsed_value_collection collection = {0};
+
+        if (handle_data_path_struct(&encoded_path, &path_context)) {
+            __builtin_trap();
+        }
+        value.data_path.version = 1U;
+        value.data_path.size = 1U;
+        value.data_path.elements[0].type = ELEMENT_TYPE_TUPLE;
+        value.data_path.elements[0].tuple.value = 0U;
+        if (value_get(&value, &collection) || (collection.size != 0U)) {
+            __builtin_trap();
+        }
+    }
 }
 
 static void assert_asset_type_isolation(void) {

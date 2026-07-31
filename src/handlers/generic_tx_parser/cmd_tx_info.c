@@ -59,6 +59,11 @@ uint16_t handle_tx_info(uint8_t p1, uint8_t p2, uint8_t lc, const uint8_t *paylo
         tlv_apdu_reset();
         return SWO_COMMAND_NOT_ALLOWED;
     }
+    if ((appState == APP_STATE_SIGNING_TX) &&
+        !gcs_account_descriptor_apdu()) {
+        tlv_apdu_reset();
+        return SWO_INCORRECT_DATA;
+    }
     if (!tlv_from_apdu(INS_GTP_TRANSACTION_INFO,
                        p2,
                        p1 == P1_FIRST_CHUNK,

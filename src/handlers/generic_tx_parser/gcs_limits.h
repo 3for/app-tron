@@ -18,6 +18,8 @@
 
 #define GCS_MAX_DESCRIPTOR_SIZE             4096U
 #define GCS_MAX_DESCRIPTOR_COUNT            64U
+/* Leaves ample margin over max-sized 255-byte Host chunking (~192 APDUs). */
+#define GCS_MAX_DESCRIPTOR_APDUS             512U
 #define GCS_MAX_DESCRIPTOR_THROUGHPUT_BYTES (32U * 1024U)
 #define GCS_MAX_RENDERED_FIELDS             64U
 #define GCS_MAX_TX_CONTEXTS                 16U

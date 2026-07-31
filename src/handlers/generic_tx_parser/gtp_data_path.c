@@ -111,10 +111,21 @@ static bool data_path_common_handler(const tlv_data_t *data, s_data_path_context
 
 bool handle_data_path_struct(const buffer_t *buf, s_data_path_context *context) {
     TLV_reception_t received_tags = {0};
-    return (context != NULL) && (context->data_path != NULL) &&
-           data_path_tlv_parser(buf, context, &received_tags) &&
-           TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION) &&
-           (context->data_path->version == 1U) && (context->data_path->size != 0U);
+    bool leaf_seen = false;
+
+    if ((context == NULL) || (context->data_path == NULL) ||
+        !data_path_tlv_parser(buf, context, &received_tags) ||
+        !TLV_CHECK_RECEIVED_TAGS(received_tags, TAG_VERSION) ||
+        (context->data_path->version != 1U) || (context->data_path->size == 0U)) {
+        return false;
+    }
+    for (size_t i = 0U; i < context->data_path->size; ++i) {
+        if (context->data_path->elements[i].type == ELEMENT_TYPE_LEAF) {
+            leaf_seen = true;
+            break;
+        }
+    }
+    return leaf_seen;
 }
 
 static bool path_tuple(const s_tuple_args *tuple, uint32_t *offset, uint32_t *ref_offset) {
@@ -387,9 +398,8 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
         }
         combinations_processed += 1U;
         arrays_update(&arinf);
-        /* A path without a leaf would not grow collection->size, so keep an
-         * independent exact bound on complete path traversals. Exactly 16
-         * combinations are supported; reject only if another one is pending. */
+        /* Keep an independent exact bound on complete path traversals. Exactly
+         * 16 combinations are supported; reject only if another one is pending. */
         if ((arinf.depth > 0U) &&
             (combinations_processed >= MAX_VALUE_COLLECTION_SIZE)) {
             return false;
