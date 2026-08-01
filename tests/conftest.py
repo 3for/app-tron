@@ -19,6 +19,12 @@ configuration.OPTIONAL.BACKEND_SCOPE = "class"
 configuration.OPTIONAL.CUSTOM_SEED = MNEMONIC
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "security_poc: proof-of-concept tests asserting a known "
+        "vulnerable behaviour; exclude with -m 'not security_poc'")
+
+
 @pytest.fixture(scope="class")
 def configuration(backend: BackendInterface, navigator, firmware):
     if type(backend) is SpeculosBackend:

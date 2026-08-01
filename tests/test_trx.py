@@ -17,7 +17,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
 from tron import TronClient, Errors, CLA, InsType
 from ragger.bip import pack_derivation_path
-from utils import check_tx_signature, check_hash_signature, build_trc20_calldata
+from utils import (check_tx_signature, check_hash_signature,
+                   build_trc20_calldata, build_trc20_method_calldata)
 from eth_keys import KeyAPI
 '''
 Tron Protobuf
@@ -25,6 +26,15 @@ Tron Protobuf
 sys.path.append(f"{Path(__file__).parent.parent.resolve()}/proto")
 from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
+
+
+SPECULOS_AUDIT_ACCOUNT = "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"
+NILE_USDT_CONTRACT = "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf"
+MAINNET_USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+TRC20_TRANSFER_SELECTOR = "a9059cbb"
+TRC20_APPROVE_SELECTOR = "095ea7b3"
+MAX_UINT256 = 2**256 - 1
+TRC10_BTT_TOKEN_ID = 1_002_000
 
 
 @pytest.mark.usefixtures('configuration')
@@ -632,6 +642,123 @@ class TestTRX():
                     "a9059cbb000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d700000000000000000000000000000000000000000000000000000000000f4240"
                 )))
         self.sign_and_validate(client, firmware, 0, tx, warning_approve=True)
+
+    def test_trx_nile_usdt_transfer_blind_signing_audit(
+            self, backend, firmware, navigator):
+        """Capture the legacy review for an offline Nile USDT transfer.
+
+        This security regression test deliberately uses the public Speculos
+        mnemonic and never submits the signed transaction to a TRON node.
+        Because the Nile contract is not in the built-in token list, the
+        snapshots document that recipient and token amount are not decoded.
+        """
+        client = TronClient(backend, firmware, navigator)
+        assert client.address_hex(SPECULOS_AUDIT_ACCOUNT) == \
+            client.getAccount(0)['addressHex']
+
+        recipient = client.getAccount(1)['addressHex']
+        tx_calldata = build_trc20_method_calldata(
+            TRC20_TRANSFER_SELECTOR, recipient, Decimal(10_000_000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(NILE_USDT_CONTRACT)),
+                data=tx_calldata))
+
+        self.sign_and_validate(client, firmware, 0, tx, warning_approve=True)
+
+    def test_trx_nile_usdt_unlimited_approve_blind_signing_audit(
+            self, backend, firmware, navigator):
+        """Capture the legacy review for an offline unlimited USDT approval.
+
+        The controlled account-1 address acts as the spender. The test proves
+        that Speculos can sign the exact raw transaction while the snapshots
+        document which security-critical parameters the device does not decode.
+        No transaction is exported or broadcast.
+        """
+        client = TronClient(backend, firmware, navigator)
+        assert client.address_hex(SPECULOS_AUDIT_ACCOUNT) == \
+            client.getAccount(0)['addressHex']
+
+        controlled_spender = client.getAccount(1)['addressHex']
+        tx_calldata = build_trc20_method_calldata(
+            TRC20_APPROVE_SELECTOR, controlled_spender, Decimal(MAX_UINT256))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(NILE_USDT_CONTRACT)),
+                data=tx_calldata))
+
+        self.sign_and_validate(client, firmware, 0, tx, warning_approve=True)
+
+    def test_trx_mainnet_usdt_transfer_hides_call_value_audit(
+            self, backend, firmware, navigator):
+        """A known-token review omits TRX attached to the contract call.
+
+        The raw transaction transfers 1 USDT in calldata and attaches 100 TRX.
+        It is signed only by Speculos and is never submitted to a TRON node.
+        """
+        client = TronClient(backend, firmware, navigator)
+        recipient = client.getAccount(1)['addressHex']
+        tx_calldata = build_trc20_method_calldata(
+            TRC20_TRANSFER_SELECTOR, recipient, Decimal(1_000_000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(MAINNET_USDT_CONTRACT)),
+                call_value=100_000_000,
+                data=tx_calldata))
+
+        raw = tron.Transaction.raw()
+        raw.ParseFromString(tx)
+        trigger = contract.TriggerSmartContract()
+        assert raw.contract[0].parameter.Unpack(trigger)
+        assert trigger.call_value == 100_000_000
+        assert trigger.data == tx_calldata
+
+        self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_mainnet_usdt_transfer_hides_call_token_value_audit(
+            self, backend, firmware, navigator):
+        """A known-token review omits TRC10 attached to the contract call.
+
+        The raw transaction transfers 1 USDT in calldata and attaches 50 units
+        of TRC10 token 1002000 (six decimal places in the test metadata). It is
+        signed only by Speculos and is never submitted to a TRON node.
+        """
+        client = TronClient(backend, firmware, navigator)
+        recipient = client.getAccount(1)['addressHex']
+        tx_calldata = build_trc20_method_calldata(
+            TRC20_TRANSFER_SELECTOR, recipient, Decimal(1_000_000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(MAINNET_USDT_CONTRACT)),
+                data=tx_calldata,
+                call_token_value=50_000_000,
+                token_id=TRC10_BTT_TOKEN_ID))
+
+        raw = tron.Transaction.raw()
+        raw.ParseFromString(tx)
+        trigger = contract.TriggerSmartContract()
+        assert raw.contract[0].parameter.Unpack(trigger)
+        assert trigger.call_token_value == 50_000_000
+        assert trigger.token_id == TRC10_BTT_TOKEN_ID
+        assert trigger.data == tx_calldata
+
+        self.sign_and_validate(client, firmware, 0, tx)
 
     def test_trx_freezeV2_balance(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
