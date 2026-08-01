@@ -27,6 +27,9 @@ bool field_table_init(void) {
 static void delete_table_node(s_field_table_node *node) {
     gcs_mem_free(node->field.key);
     gcs_mem_free(node->field.value);
+    if (node->field.owns_extra_data) {
+        gcs_mem_free((void *) node->field.extra_data);
+    }
     gcs_mem_free(node);
 }
 
@@ -34,15 +37,17 @@ void field_table_cleanup(void) {
     flist_clear((flist_node_t **) &g_table, (f_list_node_del) &delete_table_node);
 }
 
-bool add_to_field_table(e_param_type type,
-                        const char *key,
-                        const char *value,
-                        const void *extra_data) {
+static bool add_to_field_table_internal(e_param_type type,
+                                        const char *key,
+                                        const char *value,
+                                        const void *extra_data,
+                                        size_t extra_data_size) {
     size_t key_len;
     size_t value_len;
     s_field_table_node *node;
 
-    if ((key == NULL) || (value == NULL)) {
+    if ((key == NULL) || (value == NULL) ||
+        ((extra_data_size != 0U) && (extra_data == NULL))) {
         PRINTF("Error: NULL key/value!\n");
         return false;
     }
@@ -79,6 +84,19 @@ bool add_to_field_table(e_param_type type,
         gcs_mem_free(node);
         return false;
     }
+    if (extra_data_size != 0U) {
+        node->field.extra_data = gcs_mem_alloc(extra_data_size, GCS_MEM_FIELD);
+        if (node->field.extra_data == NULL) {
+            gcs_mem_free(node->field.value);
+            gcs_mem_free(node->field.key);
+            gcs_mem_free(node);
+            return false;
+        }
+        memcpy((void *) node->field.extra_data, extra_data, extra_data_size);
+        node->field.owns_extra_data = true;
+    } else {
+        node->field.extra_data = extra_data;
+    }
     if (type == PARAM_TYPE_INTENT) {
         // Special handling for intent
         node->field.start_intent = true;
@@ -94,10 +112,31 @@ bool add_to_field_table(e_param_type type,
     node->field.type = type;
     memcpy(node->field.key, key, key_len);
     memcpy(node->field.value, value, value_len);
-    node->field.extra_data = extra_data;
 
     flist_push_back((flist_node_t **) &g_table, (flist_node_t *) node);
     return true;
+}
+
+bool add_to_field_table(e_param_type type,
+                        const char *key,
+                        const char *value,
+                        const void *extra_data) {
+    return add_to_field_table_internal(type, key, value, extra_data, 0U);
+}
+
+bool add_to_field_table_with_extra_data_copy(e_param_type type,
+                                             const char *key,
+                                             const char *value,
+                                             const void *extra_data,
+                                             size_t extra_data_size) {
+    if (extra_data_size == 0U) {
+        return false;
+    }
+    return add_to_field_table_internal(type,
+                                       key,
+                                       value,
+                                       extra_data,
+                                       extra_data_size);
 }
 
 bool set_intent_field(const char *value) {

@@ -3553,6 +3553,53 @@ def test_gcs_token_amount(scenario_navigator: NavigateWithScenario):
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
+def test_gcs_unknown_token_amount_shows_address(
+        navigator: Navigator,
+        scenario_navigator: NavigateWithScenario,
+        default_screenshot_path: Path,
+        test_name: str):
+    """Unknown TOKEN_AMOUNT keeps the exact calldata token address reviewable."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    if device.type not in (DeviceType.NANOSP, DeviceType.STAX):
+        pytest.skip("Exercise the extension UI on one Nano and one screen wallet")
+
+    client = _client_from_scenario(scenario_navigator)
+    field = build_field_token_amount("Amount",
+                                     value_path=build_data_path_static(1),
+                                     token_path=build_data_path_static(0))
+    tx = _gcs_send_descriptor(client, backend, [field])
+
+    if device.is_nano:
+        extension_moves = ([NavInsID.RIGHT_CLICK] * 6 +
+                           [NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK,
+                            NavInsID.BOTH_CLICK])
+    else:
+        extension_moves = [
+            NavInsID.SWIPE_CENTER_TO_LEFT,
+            NavInsID.SWIPE_CENTER_TO_LEFT,
+            NavIns(NavInsID.TOUCH, (200, 280)),
+            NavInsID.LEFT_HEADER_TAP,
+        ]
+
+    # Snapshot the normal review, the extension entry and the exact contract
+    # address. Nano's screen-content API only exposes the extension's Back
+    # control, so the address itself is protected by the pixel comparison.
+    with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                P2_GCS_START_FLOW, b""):
+        navigator.navigate_and_compare(
+            default_screenshot_path,
+            f"{test_name}/part1",
+            extension_moves,
+            screen_change_after_last_instruction=False)
+        scenario_navigator.review_approve(do_comparison=False)
+
+    resp = backend.last_async_response
+    assert resp.status == StatusWord.OK
+    assert check_tx_signature(tx, resp.data[0:65],
+                              client.getAccount(0)["publicKey"][2:])
+
+
 def test_gcs_trusted_name(scenario_navigator: NavigateWithScenario):
     """TRUSTED_NAME resolves a calldata address via provideTrustedName (0x22).
 

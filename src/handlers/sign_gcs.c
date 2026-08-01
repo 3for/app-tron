@@ -43,6 +43,12 @@ extern void reset_app_context();
 
 #define GCS_MEMO_DISPLAY_MAX 32U
 
+#ifdef SCREEN_SIZE_WALLET
+#define GCS_TX_DATA_SIZE_LABEL "Raw transaction size"
+#else
+#define GCS_TX_DATA_SIZE_LABEL "Raw tx size"
+#endif
+
 typedef struct {
     bool active;
     bool memo_hash_initialized;
@@ -246,7 +252,7 @@ bool gcs_add_forced_fields(void) {
         return false;
     }
     if (snprintf(buf, buf_size, "%u bytes", (unsigned int) g_gcs.raw_data_size) <= 0 ||
-        !add_to_field_table(PARAM_TYPE_RAW, "Transaction data size", buf, NULL) ||
+        !add_to_field_table(PARAM_TYPE_RAW, GCS_TX_DATA_SIZE_LABEL, buf, NULL) ||
         !add_to_field_table(PARAM_TYPE_RAW,
                             "Fee notice",
                             "Bandwidth, memo and multisig fees may apply",

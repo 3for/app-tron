@@ -96,9 +96,11 @@ static bool process_token_amount(const s_param_token_amount *param,
     uint256_t val256 = {0};
     uint8_t value_buf[INT256_LENGTH] = {0};
     const tokenDefinition_t *token_def = NULL;
+    tokenDefinition_t unknown_token_def = {0};
     uint64_t chain_id;
     const char *ticker = g_unknown_ticker;
     uint8_t decimals = 0;
+    bool native_token = false;
     int written;
 
     if (get_current_tx_info() == NULL) return false;
@@ -108,6 +110,7 @@ static bool process_token_amount(const s_param_token_amount *param,
             return false;
         }
         if (match_native(addr_buf, param)) {
+            native_token = true;
             ticker = get_displayable_ticker(&chain_id, chainConfig, true);
             // TRON divergence from app-ethereum: native TRX uses SUN_TO_TRX (6)
             // decimals, not ETH's WEI_TO_ETHER (18).
@@ -141,13 +144,28 @@ static bool process_token_amount(const s_param_token_amount *param,
             return false;
         }
     }
-    if (!add_to_field_table(token_def ? PARAM_TYPE_TOKEN_AMOUNT : PARAM_TYPE_AMOUNT,
-                            name,
-                            buf,
-                            token_def)) {
-        return false;
+    if (token_def != NULL) {
+        return add_to_field_table(PARAM_TYPE_TOKEN_AMOUNT, name, buf, token_def);
     }
-    return true;
+    if (param->has_token && !native_token) {
+        /*
+         * Keep unknown token amounts unambiguous without requiring metadata:
+         * the main value still says "???", while the standard token extension
+         * exposes the exact calldata address. The field table must own this
+         * synthetic definition because addr_buf is stack-local and the NBGL
+         * review remains active after this formatter returns.
+         */
+        memcpy(unknown_token_def.address, addr_buf, ADDRESS_LENGTH);
+        strlcpy(unknown_token_def.ticker,
+                g_unknown_ticker,
+                sizeof(unknown_token_def.ticker));
+        return add_to_field_table_with_extra_data_copy(PARAM_TYPE_TOKEN_AMOUNT,
+                                                       name,
+                                                       buf,
+                                                       &unknown_token_def,
+                                                       sizeof(unknown_token_def));
+    }
+    return add_to_field_table(PARAM_TYPE_AMOUNT, name, buf, NULL);
 }
 
 bool format_param_token_amount(const s_param_token_amount *param, const char *name) {
