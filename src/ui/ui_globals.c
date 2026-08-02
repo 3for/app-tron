@@ -37,6 +37,14 @@ publicKeyContext_t publicKeyContext;
 messageSigningContext712_t messageSigningContext712;
 strings_t strings;
 
+static void debug_print_bip32_path(const char *label, const bip32_path_t *path) {
+    PRINTF("%s len=%u", label, path->length);
+    for (uint8_t i = 0; i < path->length; i++) {
+        PRINTF(" %08X", path->indices[i]);
+    }
+    PRINTF("\n");
+}
+
 bool ui_callback_address_ok(bool display_menu) {
     helper_send_response_pubkey(&publicKeyContext);
 
@@ -82,10 +90,13 @@ bool ui_callback_tx_cancel(bool display_menu) {
 bool ui_callback_tx_ok(bool display_menu) {
     bool ret = true;
 
+    debug_print_bip32_path("ui_callback_tx_ok path", &transactionContext.bip32_path);
     if (signTransaction(&transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         ret = false;
     } else {
+        PRINTF("ui_callback_tx_ok signatureLength=%u\n",
+               transactionContext.signatureLength);
         io_send_response_pointer(transactionContext.signature,
                                  transactionContext.signatureLength,
                                  E_OK);

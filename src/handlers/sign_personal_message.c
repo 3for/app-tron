@@ -31,6 +31,14 @@
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
+static void debug_print_bip32_path(const char *label, const bip32_path_t *path) {
+    PRINTF("%s len=%u", label, path->length);
+    for (uint8_t i = 0; i < path->length; i++) {
+        PRINTF(" %08X", path->indices[i]);
+    }
+    PRINTF("\n");
+}
+
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     cx_sha3_t sha3;
 
@@ -101,6 +109,8 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
 
+        debug_print_bip32_path("sign_personal_message path", &transactionContext.bip32_path);
+        PRINTF("sign_personal_message fromAddress=%s\n", fromAddress);
         ux_flow_display(APPROVAL_SIGN_PERSONAL_MESSAGE, false);
 
     } else {

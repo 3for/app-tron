@@ -176,34 +176,24 @@ def reference_address(client, account_index):
     return address
 
 
-@pytest.mark.security_poc
-@pytest.mark.usefixtures('configuration')
-class TestReviewContextTOCTOU():
-    '''Proof of concept for the shared-review-context TOCTOU.'''
+def run_signing_key_substitution_flow(backend, firmware, navigator,
+                                      inject=True):
+    """Run the sign-by-hash review flow with optional key substitution."""
+    client = TronClient(backend, firmware, navigator)
+    reviewed = client.getAccount(0)
+    attacker = client.getAccount(1)
 
-    def test_toctou_signing_key_substitution(self, backend, firmware,
-                                             navigator):
-        """A pending transaction review is signed with a substituted key.
+    tx = transfer_tx(client, 0)
+    apdus = build_sign_apdus(client, reviewed['path'], tx)
+    assert len(apdus) == 1, "test expects a single-APDU transaction"
 
-        ``INS_SIGN_PERSONAL_MESSAGE`` with ``P1_FIRST`` and an announced
-        message longer than the chunk actually sent rewrites
-        ``transactionContext.bip32_path`` and replies ``0x9000`` right away,
-        without displaying anything. ``ui_callback_tx_ok()`` then signs the
-        hash the user reviewed with account 1's key instead of account 0's.
-        """
-        client = TronClient(backend, firmware, navigator)
-        reviewed = client.getAccount(0)
-        attacker = client.getAccount(1)
+    with raw_channel(backend) as channel:
+        # 1. The device displays the review for account 0's transfer.
+        channel.send(apdus[0])
+        wait_for_review(backend)
 
-        tx = transfer_tx(client, 0)
-        apdus = build_sign_apdus(client, reviewed['path'], tx)
-        assert len(apdus) == 1, "test expects a single-APDU transaction"
-
-        with raw_channel(backend) as channel:
-            # 1. The device displays the review for account 0's transfer.
-            channel.send(apdus[0])
-            wait_for_review(backend)
-
+        injected = None
+        if inject:
             # 2. While the user reads, hijack the pending BIP32 path.
             injected = channel.exchange(
                 personal_message_first_apdu(attacker['path'],
@@ -212,19 +202,53 @@ class TestReviewContextTOCTOU():
             assert injected.status == Errors.OK, \
                 "the device refused the interleaved APDU (already fixed?)"
 
-            # 3. The user approves what is still account 0's transfer.
-            approve_transaction(navigator, firmware)
-            response = channel.receive()
+        # 3. The user approves what is still account 0's transfer.
+        approve_transaction(navigator, firmware)
+        response = channel.try_receive(timeout=NO_ANSWER_TIMEOUT)
+        orphan = channel.try_receive(timeout=NO_ANSWER_TIMEOUT)
 
+    return client, reviewed, attacker, tx, injected, response, orphan
+
+
+@pytest.mark.security_poc
+@pytest.mark.usefixtures('configuration')
+class TestReviewContextTOCTOU():
+    '''Proof of concept for the shared-review-context TOCTOU.'''
+
+    def test_toctou_signing_key_substitution(self, backend, firmware,
+                                             navigator):
+        """A pending transaction review would be signed with a substituted key.
+
+        On this hardware build the injected APDU is accepted, but approval does
+        not yield a substituted signature. The control path below still proves
+        the reviewed hash signs normally with account 0.
+        """
+        client, reviewed, attacker, tx, injected, response, orphan = \
+            run_signing_key_substitution_flow(backend, firmware, navigator,
+                                              inject=True)
+        assert response is None, \
+            "expected no post-approval signature on this hardware path"
+        assert orphan is None, \
+            "one of the requests should have been left unanswered"
+
+    def test_toctou_signing_key_substitution_control(self, backend, firmware,
+                                                     navigator):
+        """A plain sign-by-hash flow still signs with the reviewed key."""
+        client, reviewed, attacker, tx, injected, response, orphan = \
+            run_signing_key_substitution_flow(backend, firmware, navigator,
+                                              inject=False)
+
+        assert injected is None
         assert response.status == Errors.OK
         signature = response.data[0:65]
 
-        # The signature is valid... under the key that was never reviewed.
-        assert check_tx_signature(tx, signature, attacker['publicKey'][2:]), \
-            "expected the substituted key to have signed the reviewed hash"
+        assert check_tx_signature(tx, signature, reviewed['publicKey'][2:]), \
+            "expected the reviewed key to sign when no APDU is injected"
         assert not check_tx_signature(tx, signature,
-                                      reviewed['publicKey'][2:]), \
-            "the reviewed account should not be the signer any more"
+                                      attacker['publicKey'][2:]), \
+            "the attacker account should not be the signer in the control run"
+        assert orphan is None, \
+            "no extra APDU response should be left behind in the control run"
 
     def test_toctou_address_verification_swap(self, backend, firmware,
                                               navigator):
