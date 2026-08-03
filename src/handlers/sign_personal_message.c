@@ -155,6 +155,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
 
+        LEDGER_ASSERT(appState == APP_STATE_SIGNING_MESSAGE, "signing msg required");
         appState = APP_STATE_REVIEWING_PERSONAL_MESSAGE;
         if (!ux_flow_display(APPROVAL_SIGN_PERSONAL_MESSAGE, false)) {
             // UI preparation failures already complete and reset the APDU.

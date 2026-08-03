@@ -28,13 +28,18 @@
 #ifdef HAVE_SWAP
 #include "swap.h"
 #include "handle_swap_sign_transaction.h"
+
+// Keep the swap abort explicit here so the error path is visibly terminal.
+static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
+    io_send_sw(sw);
+    swap_finalize_exchange_sign_transaction(false);
+}
 #endif  // HAVE_SWAP
 
 static int send_public_key_status(uint16_t sw) {
 #ifdef HAVE_SWAP
     if ((sw != E_OK) && G_called_from_swap) {
-        io_send_sw(sw);
-        swap_finalize_exchange_sign_transaction(false);
+        finalize_swap_with_error(sw);
     }
 #endif  // HAVE_SWAP
     return io_send_sw(sw);
@@ -78,9 +83,10 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
         }
 #endif  // HAVE_SWAP
 
-        // The address review is asynchronous. Mark ownership before starting
-        // NBGL so the dispatcher cannot run another command that replies to a
-        // different APDU or replaces tmpCtx while this page is active.
+        // The address review is asynchronous. It must begin from idle so the
+        // dispatcher cannot run another command that replies to a different
+        // APDU or replaces tmpCtx while this page is active.
+        LEDGER_ASSERT(appState == APP_STATE_IDLE, "idle required");
         appState = APP_STATE_REVIEWING_ADDRESS;
         if (!ux_flow_display(APPROVAL_VERIFY_ADDRESS, false)) {
             reset_app_context();

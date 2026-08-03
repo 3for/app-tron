@@ -230,6 +230,9 @@ static void ui_start_page(uint8_t page) {
  * Go to home screen
  */
 void ui_idle(void) {
+    // Every approval callback must restore APP_STATE_IDLE before returning
+    // here; otherwise we are redrawing the home screen with a live review.
+    LEDGER_ASSERT(appState == APP_STATE_IDLE, "idle required");
     ui_start_page(INIT_HOME_PAGE);
 }
 

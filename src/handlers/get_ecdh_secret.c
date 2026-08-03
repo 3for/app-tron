@@ -54,9 +54,10 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     getBase58FromPublicKey(tmpCtx.transactionContext.signature, strings.common.toAddress);
 
     // The NBGL review is asynchronous and continues to own the BIP32 path and
-    // peer public key in tmpCtx. Mark that ownership before preparing the page
-    // so the dispatcher rejects every interleaved APDU. On preparation failure
-    // ux_flow_display completes the pending APDU and resets the context.
+    // peer public key in tmpCtx. It must begin from idle so the dispatcher
+    // rejects every interleaved APDU while the page is active. On preparation
+    // failure ux_flow_display completes the pending APDU and resets the context.
+    LEDGER_ASSERT(appState == APP_STATE_IDLE, "idle required");
     appState = APP_STATE_REVIEWING_OPERATION;
     if (!ux_flow_display(APPROVAL_SHARED_ECDH_SECRET, false)) {
         return 0;

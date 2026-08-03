@@ -302,6 +302,9 @@ static void rejectChoice(void) {
     nbgl_reviewStatusType_t reject_status = STATUS_TYPE_TRANSACTION_REJECTED;
 
     if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
+        // TIP-712 is the one review that completes its own reset in
+        // ui_712_reject_cb(); the trailing status callback only redraws the
+        // idle screen and must not duplicate that cleanup.
         ui_712_reject_cb(false);
         reject_status = STATUS_TYPE_MESSAGE_REJECTED;
     } else {

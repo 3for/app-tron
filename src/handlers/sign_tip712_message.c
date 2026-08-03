@@ -76,6 +76,7 @@ uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t 
     if (!tip712_mark_legacy_reviewing()) {
         return E_CONDITIONS_OF_USE_NOT_SATISFIED;
     }
+    LEDGER_ASSERT(appState == APP_STATE_IDLE, "idle required");
     appState = APP_STATE_SIGNING_TIP712;
     if (!ux_flow_display(APPROVAL_SIGN_TIP72_TRANSACTION, false)) {
         // The UI preparation helper already replied and reset the session.

@@ -491,6 +491,7 @@ static bool start_sign_review(ui_approval_state_t state, bool data_warning) {
     // Mark the session non-resumable before handing control to asynchronous UI.
     // A preparation failure sends an error and resets this phase via
     // reset_app_context()/sign_cleanup().
+    LEDGER_ASSERT(appState == APP_STATE_SIGNING, "signing required");
     sign_phase = SIGN_PHASE_REVIEW;
     return ux_flow_display(state, data_warning);
 }
