@@ -169,8 +169,11 @@ static void check_empty_calldata_completion_boundaries(void) {
     s_eip712_calldata_info *info;
 
     appState = APP_STATE_IDLE;
-    if (!tip712_context_init() ||
-        ((info = new_empty_calldata_info()) == NULL) ||
+    if (!tip712_context_init()) {
+        __builtin_trap();
+    }
+    ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
+    if (((info = new_empty_calldata_info()) == NULL) ||
         !feed_empty_calldata_part(EIP712_CALLDATA_VALUE,
                                   NULL,
                                   0U,
@@ -217,8 +220,11 @@ static void check_empty_calldata_completion_boundaries(void) {
         __builtin_trap();
     }
 
-    if (!tip712_context_init() ||
-        ((info = new_empty_calldata_info()) == NULL) ||
+    if (!tip712_context_init()) {
+        __builtin_trap();
+    }
+    ui_712_set_filtering_mode(TIP712_FILTERING_FULL);
+    if (((info = new_empty_calldata_info()) == NULL) ||
         !feed_empty_calldata_part(EIP712_CALLDATA_VALUE,
                                   NULL,
                                   0U,

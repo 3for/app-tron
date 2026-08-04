@@ -25,6 +25,7 @@ previously discovered by libFuzzer:
 
 - `fuzz_common_utils_address`
 - `fuzz_common_utils_numbers`
+- `fuzz_gcs_memory`
 
 `generate_corpus.sh` is the canonical target-to-generator mapping used by both
 local fuzzing and ClusterFuzzLite. The generators require only Python 3's
@@ -115,6 +116,7 @@ disabled whenever `CORPUS_DIR` is supplied.
 | `fuzz_handle_sign` | `corpus/fuzz_handle_sign` | 8192 | Legacy `INS_SIGN` APDU/state-machine flow |
 | `fuzz_personal_message` | `corpus/fuzz_personal_message` | 8192 | Legacy and full-display personal messages |
 | `fuzz_gcs` | `corpus/fuzz_gcs` | 8192 | Generic Clear Signing commands and descriptors |
+| `fuzz_gcs_memory` | `corpus/fuzz_gcs_memory` | 8192 | GCS allocator bookkeeping, budget boundaries, and invariant checks |
 | `fuzz_external_metadata` | `corpus/fuzz_external_metadata` | 8192 | Trusted-name, proxy, enum, TRC20, and NFT metadata commands |
 | `fuzz_common_utils_address` | `corpus/fuzz_common_utils_address` | 64 | TRON address and Base58Check conversions |
 | `fuzz_common_utils_numbers` | `corpus/fuzz_common_utils_numbers` | 64 | uint128/uint256 and amount formatting |
@@ -142,6 +144,17 @@ cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
 cmake --build build --target fuzz_handle_sign
 ./build/fuzz_handle_sign -runs=10000 -max_len=8192 \
   ./corpus/fuzz_handle_sign
+```
+
+Build and run only `fuzz_gcs_memory`:
+
+```sh
+cd tests/fuzzing
+./generate_corpus.sh --clean fuzz_gcs_memory
+cmake -B build -S . -DCMAKE_C_COMPILER=clang -DSANITIZER=address
+cmake --build build --target fuzz_gcs_memory
+./build/fuzz_gcs_memory -runs=10000 -max_len=8192 \
+  ./corpus/fuzz_gcs_memory
 ```
 
 Build the transaction decoder with its dictionary:
@@ -192,6 +205,7 @@ the binary without arguments to exercise one empty input:
 
 ```sh
 ./build/fuzz_gcs
+./build/fuzz_gcs_memory
 ```
 
 `local_run.sh` detects this mode and handles the empty-input fallback
@@ -217,7 +231,7 @@ case or focused regression test.
 The repository workflow uses `.clusterfuzzlite/build.sh`. That script now:
 
 1. runs `generate_corpus.sh --clean all` inside the builder;
-2. builds and exports all eight fuzz targets;
+2. builds and exports all nine fuzz targets;
 3. packages each generated baseline as
    `<target>_seed_corpus.zip` in `$OUT`;
 4. exports `transaction_trigger_decode_fuzzer.dict` under the standard name.
@@ -257,8 +271,8 @@ fuzz_external_metadata_seed_corpus.zip
 fuzz_gcs_seed_corpus.zip
 ```
 
-The two common-utility targets have no baseline archive because they can start
-from an empty corpus.
+`fuzz_gcs_memory` and the two common-utility targets have no baseline archive
+because they can start from an empty corpus.
 
 ### Running every target with Docker
 
@@ -293,6 +307,7 @@ run_fuzzer_target fuzz_tip712 8192
 run_fuzzer_target fuzz_handle_sign 8192
 run_fuzzer_target fuzz_personal_message 8192
 run_fuzzer_target fuzz_gcs 8192
+run_fuzzer_target fuzz_gcs_memory 8192
 run_fuzzer_target fuzz_external_metadata 8192
 run_fuzzer_target fuzz_common_utils_address 64
 run_fuzzer_target fuzz_common_utils_numbers 64
@@ -306,7 +321,7 @@ run_fuzzer_target fuzz_handle_sign 8192 10000
 ```
 
 Invoke the target commands individually. An open-ended invocation does not
-return until interrupted, so pasting all eight lines will only start the first
+return until interrupted, so pasting all nine lines will only start the first
 target.
 
 The base runner discovers target-specific build artifacts by filename:
@@ -318,6 +333,7 @@ The base runner discovers target-specific build artifacts by filename:
 | `fuzz_handle_sign` | yes | none |
 | `fuzz_personal_message` | yes | none |
 | `fuzz_gcs` | no; starts empty | none |
+| `fuzz_gcs_memory` | no; starts empty | none |
 | `fuzz_external_metadata` | yes | none |
 | `fuzz_common_utils_address` | no; starts empty | none |
 | `fuzz_common_utils_numbers` | no; starts empty | none |
@@ -400,6 +416,18 @@ binary messages, and public-key failures.
 `INS_GTP_TRANSACTION_INFO`, and `INS_GTP_FIELD` to exercise transaction storage,
 signed descriptors, field hashes, review startup, restarts, ordering failures,
 and truncated streams.
+
+### GCS memory bookkeeping
+
+`fuzz_gcs_memory` starts from an empty corpus and interprets each input byte as
+an allocator op. It exercises `gcs_mem_alloc()`, `gcs_mem_calloc()`,
+`gcs_mem_calloc_into()`, `gcs_mem_strdup()`, `gcs_mem_free()`,
+`gcs_mem_free_and_null()`, `gcs_budget_begin()`, `gcs_budget_end()`, and
+`gcs_mem_reset_phase_peaks()` while checking the tracked, session, category,
+and peak counters against an independent host-side model. It also has
+expected-failure ops for live allocations at session end, stale generation
+frees, and category/session accounting mismatches, and verifies the sticky
+invariant-failure flag without treating those paths as fuzzer crashes.
 
 ### External metadata
 

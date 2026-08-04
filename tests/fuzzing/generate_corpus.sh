@@ -36,6 +36,8 @@ generate_one() {
         fuzz_gcs)
             generator="generate_gcs_corpus.py"
             ;;
+        fuzz_gcs_memory)
+            ;;
         fuzz_common_utils_address|fuzz_common_utils_numbers)
             ;;
         *)
@@ -69,11 +71,13 @@ Generated baseline corpora:
   fuzz_handle_sign
   fuzz_personal_message
   fuzz_gcs
+  fuzz_gcs_memory
   fuzz_external_metadata
 
 Targets that intentionally start from an empty or fuzzer-populated corpus:
   fuzz_common_utils_address
   fuzz_common_utils_numbers
+  fuzz_gcs_memory
 
 Without --clean, generated baseline files are refreshed while fuzzer-discovered
 inputs already in the corpus directory are preserved. With --clean, the target
@@ -87,6 +91,7 @@ EOF
             fuzz_handle_sign \
             fuzz_personal_message \
             fuzz_gcs \
+            fuzz_gcs_memory \
             fuzz_external_metadata \
             fuzz_common_utils_address \
             fuzz_common_utils_numbers; do

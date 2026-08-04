@@ -14,7 +14,7 @@ case "$FUZZ_TARGET" in
     fuzz_common_utils_address|fuzz_common_utils_numbers)
         MAX_LEN=64
         ;;
-    transaction_trigger_decode_fuzzer|fuzz_tip712|fuzz_handle_sign|fuzz_personal_message|fuzz_gcs|fuzz_external_metadata)
+    transaction_trigger_decode_fuzzer|fuzz_tip712|fuzz_handle_sign|fuzz_personal_message|fuzz_gcs|fuzz_gcs_memory|fuzz_external_metadata)
         MAX_LEN=8192
         ;;
     *)

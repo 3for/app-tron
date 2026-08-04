@@ -286,3 +286,17 @@ void gcs_mem_reset_phase_peaks(void) {
 bool gcs_mem_invariant_failed(void) {
     return g_invariant_failure;
 }
+
+#if defined(GCS_MEMORY_FUZZ_TESTING)
+void gcs_mem_fuzz_reset_state(void) {
+    g_tracked_live_bytes = 0U;
+    g_session_live_bytes = 0U;
+    memset(g_category_live_bytes, 0, sizeof(g_category_live_bytes));
+    g_phase_tracked_peak_bytes = 0U;
+    memset(g_phase_category_peak_bytes, 0, sizeof(g_phase_category_peak_bytes));
+    g_generation = 0U;
+    g_budget_active = false;
+    g_allocation_failure = false;
+    g_invariant_failure = false;
+}
+#endif

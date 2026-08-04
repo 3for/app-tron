@@ -12,6 +12,7 @@
 #include "tlv_apdu.h"
 #include "shared_context.h"
 #include "app_errors.h"
+#include "common_utils.h"
 #include "lcx_ecdsa.h"
 #include "ui_globals.h"
 #include "parse.h"
@@ -129,7 +130,7 @@ static void assert_metadata_lookup_null_guards(void) {
 }
 
 static void assert_trc20_signature_length_guards(void) {
-    static const uint8_t address[] = "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH";
+    static const uint8_t raw_address[ADDRESS_LENGTH] = {0};
     static const size_t signature_lengths[] = {
         0U,
         CX_ECDSA_SHA256_SIG_MIN_ASN1_LENGTH - 1U,
@@ -137,15 +138,22 @@ static void assert_trc20_signature_length_guards(void) {
         CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH,
         CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH + 1U,
     };
-    uint8_t payload[1U + 3U + sizeof(address) - 1U + 4U + 4U +
+    char address[TRON_BASE58CHECK_ADDRESS_SIZE + 1U];
+    uint8_t payload[1U + 3U + TRON_BASE58CHECK_ADDRESS_SIZE + 4U + 4U +
                     CX_ECDSA_SHA256_SIG_MAX_ASN1_LENGTH + 1U] = {0};
     size_t offset = 0U;
 
+    /* The host fuzz build uses a deterministic hash shim instead of SHA-256,
+     * so a real-world Base58Check address does not pass its checksum check.
+     * Generate the fixture with the same shim to reach the signature guard. */
+    if (!tronBase58FromBinary(raw_address, address, sizeof(address))) {
+        __builtin_trap();
+    }
     payload[offset++] = 3U;
     memcpy(payload + offset, "TOK", 3U);
     offset += 3U;
-    memcpy(payload + offset, address, sizeof(address) - 1U);
-    offset += sizeof(address) - 1U;
+    memcpy(payload + offset, address, TRON_BASE58CHECK_ADDRESS_SIZE);
+    offset += TRON_BASE58CHECK_ADDRESS_SIZE;
     payload[offset + 3U] = 6U;
     offset += 4U;
     payload[offset++] = 0x2bU;

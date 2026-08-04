@@ -289,6 +289,29 @@ if (TARGET_LINK_LIBS)
   target_link_libraries(fuzz_gcs PRIVATE ${TARGET_LINK_LIBS})
 endif()
 
+set(GCS_MEMORY_FUZZ_SOURCES
+    src/fuzz_gcs_memory.c
+    ../../src/gcs_memory.c)
+
+add_executable(fuzz_gcs_memory ${GCS_MEMORY_FUZZ_SOURCES})
+if (STANDALONE_FUZZ_MODE)
+  target_sources(fuzz_gcs_memory PRIVATE src/fuzz_standalone_main.c)
+endif()
+target_include_directories(fuzz_gcs_memory
+                           PRIVATE
+                           .
+                           include
+                           ../../src
+                           ../../src/handlers/generic_tx_parser)
+target_compile_options(fuzz_gcs_memory PRIVATE ${TARGET_COMPILE_FLAGS})
+target_compile_options(fuzz_gcs_memory
+                       PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/include/fuzz_compat.h)
+target_compile_definitions(fuzz_gcs_memory PRIVATE GCS_MEMORY_FUZZ_TESTING)
+target_link_options(fuzz_gcs_memory PRIVATE ${TARGET_LINK_FLAGS})
+if (TARGET_LINK_LIBS)
+  target_link_libraries(fuzz_gcs_memory PRIVATE ${TARGET_LINK_LIBS})
+endif()
+
 set(EXTERNAL_METADATA_FUZZ_SOURCES
     src/fuzz_external_metadata.c
     src/external_metadata_fuzz_support.c
