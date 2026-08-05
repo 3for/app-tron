@@ -369,7 +369,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          dataLength,
                          NULL,
                          0) != CX_OK) {
-        return send_gcs_status(SWO_UNKNOWN);
+        return send_gcs_status(E_INTERNAL_ERROR);
     }
 
     // process buffer
@@ -417,7 +417,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          sizeof(g_gcs.memo_hash)) != CX_OK) {
         tron_tx_stream_free();
         gcs_bridge_abort();
-        return send_gcs_status(SWO_UNKNOWN);
+        return send_gcs_status(E_INTERNAL_ERROR);
     }
     g_gcs.memo_hash_ready = true;
     g_gcs.tx = decoded;
@@ -441,7 +441,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          0,
                          tmpCtx.transactionContext.hash,
                          32) != CX_OK) {
-        return send_gcs_status(SWO_UNKNOWN);
+        return send_gcs_status(E_INTERNAL_ERROR);
     }
     // Accept the incoming generic_tx_parser descriptors.
     appState = APP_STATE_SIGNING_TX;

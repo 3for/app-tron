@@ -126,7 +126,7 @@ end:
         // A cryptographic helper failure is an internal/unclassified error, not
         // an unmet device security state such as a locked device or invalid
         // access rights.
-        io_send_sw(SWO_UNKNOWN);
+        io_send_sw(E_INTERNAL_ERROR);
     }
 
     if (display_menu) {

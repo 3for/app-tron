@@ -64,7 +64,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
     bool ret = true;
 
     if (signTransaction(&tmpCtx.transactionContext) != 0) {
-        io_send_sw(SWO_UNKNOWN);
+        io_send_sw(E_INTERNAL_ERROR);
         ret = false;
     } else {
         io_send_response_pointer(tmpCtx.transactionContext.signature,
@@ -107,7 +107,7 @@ bool ui_callback_tx_ok(bool display_menu) {
 #endif  // HAVE_SWAP
 
     if (signTransaction(&tmpCtx.transactionContext) != 0) {
-        io_send_sw(SWO_UNKNOWN);
+        io_send_sw(E_INTERNAL_ERROR);
         ret = false;
     } else {
         io_send_response_pointer(tmpCtx.transactionContext.signature,
@@ -180,7 +180,7 @@ end:
     if (err == CX_OK) {
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
     } else {
-        io_send_sw(SWO_UNKNOWN);
+        io_send_sw(E_INTERNAL_ERROR);
     }
 
     if (display_menu) {

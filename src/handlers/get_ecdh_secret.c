@@ -44,7 +44,7 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                              strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
-        return io_send_sw(SWO_UNKNOWN);
+        return io_send_sw(E_INTERNAL_ERROR);
     }
 
     // Load raw Data

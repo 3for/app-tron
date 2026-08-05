@@ -68,7 +68,7 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
     if (initPublicKeyContext(&bip32_path,
                              tmpCtx.publicKeyContext.address58,
                              &tmpCtx.publicKeyContext) != 0) {
-        return send_public_key_status(SWO_UNKNOWN);
+        return send_public_key_status(E_INTERNAL_ERROR);
     }
 
     memcpy(strings.common.toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);

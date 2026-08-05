@@ -90,7 +90,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                               NULL,
                               0) != CX_OK)) {
             reset_app_context();
-            return io_send_sw(SWO_UNKNOWN);
+            return io_send_sw(E_INTERNAL_ERROR);
         }
 
         char tmp[11];
@@ -102,7 +102,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                              NULL,
                              0) != CX_OK) {
             reset_app_context();
-            return io_send_sw(SWO_UNKNOWN);
+            return io_send_sw(E_INTERNAL_ERROR);
         }
 
     } else if (p1 != P1_MORE) {
@@ -130,7 +130,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     if (cx_hash_no_throw((cx_hash_t *) &global_sha3, 0, workBuffer, dataLength, NULL, 0) !=
         CX_OK) {
         reset_app_context();
-        return io_send_sw(SWO_UNKNOWN);
+        return io_send_sw(E_INTERNAL_ERROR);
     }
     txContent.dataBytes -= dataLength;
     if (txContent.dataBytes == 0) {
@@ -141,7 +141,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                              tmpCtx.transactionContext.hash,
                              HASH_SIZE) != CX_OK) {
             reset_app_context();
-            return io_send_sw(SWO_UNKNOWN);
+            return io_send_sw(E_INTERNAL_ERROR);
         }
         format_hex(tmpCtx.transactionContext.hash,
                    sizeof(tmpCtx.transactionContext.hash),
@@ -152,7 +152,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                  strings.common.fromAddress,
                                  &tmp_public_key_ctx) != 0) {
             reset_app_context();
-            return io_send_sw(SWO_UNKNOWN);
+            return io_send_sw(E_INTERNAL_ERROR);
         }
 
         LEDGER_ASSERT(appState == APP_STATE_SIGNING_MESSAGE, "signing msg required");

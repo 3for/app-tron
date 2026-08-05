@@ -8,6 +8,7 @@
 
 #define E_OK                              SWO_SUCCESS
 #define E_USER_REJECTED                   SWO_CONDITIONS_NOT_SATISFIED
+#define E_INTERNAL_ERROR                  SWO_UNKNOWN
 #define E_INCORRECT_DATA                  SWO_INCORRECT_DATA
 #define E_INCORRECT_P1_P2                 SWO_WRONG_P1_P2
 

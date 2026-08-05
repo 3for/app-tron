@@ -112,7 +112,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                              strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
-        return SWO_UNKNOWN;
+        return E_INTERNAL_ERROR;
     }
 
     if (APP_MEM_CALLOC((void **) &signMsgCtx, sizeof(signMsgCtx_t)) == false) {
@@ -151,7 +151,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
                           sizeof(SIGN_MAGIC) - 1,
                           NULL,
                           0) != CX_OK)) {
-        return SWO_UNKNOWN;
+        return E_INTERNAL_ERROR;
     }
 
     char length_str[11];
@@ -162,7 +162,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
                          strlen(length_str),
                          NULL,
                          0) != CX_OK) {
-        return SWO_UNKNOWN;
+        return E_INTERNAL_ERROR;
     }
 
     return E_OK;
@@ -178,7 +178,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 static int process_data(const uint8_t *data, uint16_t length) {
     // Hash the data
     if (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx, 0, data, length, NULL, 0) != CX_OK) {
-        return SWO_UNKNOWN;
+        return E_INTERNAL_ERROR;
     }
 
     // Copy the data to the buffer
@@ -283,7 +283,7 @@ static int final_process(void) {
                          0,
                          tmpCtx.transactionContext.hash,
                          HASH_SIZE) != CX_OK) {
-        return SWO_UNKNOWN;
+        return E_INTERNAL_ERROR;
     }
 
     if (personal_message_format_for_display(signMsgCtx->message_buffer,
