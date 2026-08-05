@@ -36,7 +36,7 @@ static bool field_encode(const uint8_t *value,
             start_idx = 0;
             break;
         default:
-            apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+            apdu_response_code = SWO_INCORRECT_DATA;
             return false;
     }
     memcpy(&out[start_idx], value, length);

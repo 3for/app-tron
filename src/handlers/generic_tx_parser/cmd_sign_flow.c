@@ -19,7 +19,7 @@ int handle_gcs_start_flow(void) {
     // The GCS STORE must have run first (it sets APP_STATE_SIGNING_TX).
     if (appState != APP_STATE_SIGNING_TX) {
         PRINTF("GCS start flow: not in TX signing mode!\n");
-        return send_gcs_flow_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return send_gcs_flow_status(SWO_COMMAND_NOT_ALLOWED);
     }
     // All declared fields must have been received: the running fields_hash must
     // match the value committed in TX_INFO.
@@ -37,7 +37,7 @@ int handle_gcs_start_flow(void) {
     // still unprocessed (e.g. an unfinished nested calldata).
     if (get_tx_ctx_count() != 1) {
         PRINTF("GCS start flow: remnant unprocessed TX context!\n");
-        return send_gcs_flow_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return send_gcs_flow_status(SWO_COMMAND_NOT_ALLOWED);
     }
     PRINTF("GCS descriptor phase: tracked peak=%u, calldata peak=%u\n",
            (unsigned int) gcs_mem_phase_tracked_peak_bytes(),

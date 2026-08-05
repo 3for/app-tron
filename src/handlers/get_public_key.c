@@ -62,13 +62,13 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
     off_t parsed = read_bip32_path(dataBuffer, dataLength, &bip32_path);
     if ((parsed < 0) || ((size_t) parsed != dataLength)) {
         PRINTF("read_bip32_path failed\n");
-        return send_public_key_status(E_INCORRECT_BIP32_PATH);
+        return send_public_key_status(SWO_INCORRECT_DATA);
     }
 
     if (initPublicKeyContext(&bip32_path,
                              tmpCtx.publicKeyContext.address58,
                              &tmpCtx.publicKeyContext) != 0) {
-        return send_public_key_status(E_SECURITY_STATUS_NOT_SATISFIED);
+        return send_public_key_status(SWO_UNKNOWN);
     }
 
     memcpy(strings.common.toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);

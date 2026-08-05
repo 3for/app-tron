@@ -19,7 +19,7 @@ extern void reset_app_context(void);
 static void ui_191_rejected(void) {
     reset_app_context();
     ui_idle();
-    io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    io_send_sw(E_USER_REJECTED);
 }
 
 static void ui_191_finish_cb(bool confirm) {

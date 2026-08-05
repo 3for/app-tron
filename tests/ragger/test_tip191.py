@@ -28,7 +28,7 @@ def test_personal_message_reception_rejects_cross_ins(backend, full_display):
     get_public_key = builder.get_public_addr(False, False, BIP32_PATH, None)
     with pytest.raises(ExceptionRAPDU) as error:
         backend.exchange_raw(get_public_key)
-    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert error.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     # The rejected command aborts the interrupted session without executing
     # GET_PUBLIC_KEY; after reset, the same command must work normally.

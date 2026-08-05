@@ -124,7 +124,7 @@ int apdu_dispatcher(const command_t *cmd) {
         } else {
             tlv_apdu_reset();
         }
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // Personal-message reception owns tmpCtx.transactionContext until the
@@ -145,7 +145,7 @@ int apdu_dispatcher(const command_t *cmd) {
         if (!allowed) {
             PRINTF("Refused APDU while personal-message reception is active\n");
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
     }
 
@@ -162,12 +162,12 @@ int apdu_dispatcher(const command_t *cmd) {
             PRINTF("Refused APDU while INS_SIGN reception is active\n");
 #ifdef HAVE_SWAP
             if (G_called_from_swap) {
-                io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+                io_send_sw(SWO_COMMAND_NOT_ALLOWED);
                 swap_finalize_exchange_sign_transaction(false);
             }
 #endif  // HAVE_SWAP
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
     }
     if (cmd->cla != CLA) {
@@ -182,7 +182,7 @@ int apdu_dispatcher(const command_t *cmd) {
     // only the address approval/rejection callback may finish this APDU.
     if (appState == APP_STATE_REVIEWING_ADDRESS) {
         PRINTF("Refused APDU while address review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // ECDH and sign-by-hash use the common transaction review callbacks and
@@ -190,26 +190,26 @@ int apdu_dispatcher(const command_t *cmd) {
     // let another APDU reply out of order or replace that shared context.
     if (appState == APP_STATE_REVIEWING_OPERATION) {
         PRINTF("Refused APDU while operation review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // INS_SIGN review is asynchronous. Reject every subsequent command without
     // resetting the signing/UI allocations that the current NBGL page owns.
     if (sign_review_in_progress()) {
         PRINTF("Refused APDU while INS_SIGN review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     if (tip712_review_in_progress()) {
         PRINTF("Refused APDU while TIP-712 review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     if (personal_message_review_in_progress()) {
         PRINTF("Refused APDU while personal-message review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     if (gcs_review_in_progress()) {
         PRINTF("Refused APDU while GCS review is active\n");
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     /* Full TIP-712 owns its type tree, tmpCtx and accumulated UI fields from
      * the first struct definition, while appState may still be IDLE. Only the
@@ -218,7 +218,7 @@ int apdu_dispatcher(const command_t *cmd) {
         if (!tip712_build_command_allowed(cmd)) {
             PRINTF("Refused APDU outside the active TIP-712 build phase\n");
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
         if (!tip712_note_build_apdu()) {
             PRINTF("TIP-712 build APDU limit exceeded\n");
@@ -240,7 +240,7 @@ int apdu_dispatcher(const command_t *cmd) {
         if (!allowed) {
             PRINTF("Refused APDU outside the active GCS phase\n");
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
     }
 #ifdef HAVE_SWAP
@@ -393,7 +393,7 @@ int apdu_dispatcher(const command_t *cmd) {
             if ((sw == SWO_SUCCESS) && (tip712_context != NULL) &&
                 tip712_context->filtering_context_locked &&
                 !filtering_context_matches_live()) {
-                sw = SWO_CONDITIONS_NOT_SATISFIED;
+                sw = SWO_INCORRECT_DATA;
             }
             if ((sw != SWO_SUCCESS) && (tip712_context != NULL)) {
                 reset_app_context();

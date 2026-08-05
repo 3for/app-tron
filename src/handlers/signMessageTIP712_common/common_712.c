@@ -126,7 +126,7 @@ end:
         // A cryptographic helper failure is an internal/unclassified error, not
         // an unmet device security state such as a locked device or invalid
         // access rights.
-        io_send_sw(SWO_PARAMETER_ERROR_NO_INFO);
+        io_send_sw(SWO_UNKNOWN);
     }
 
     if (display_menu) {
@@ -144,7 +144,7 @@ end:
 bool ui_712_reject_cb(bool display_menu) {
     reset_app_context();
     // Send back the response, do not restart the event loop
-    io_send_sw(SWO_CONDITIONS_NOT_SATISFIED);
+    io_send_sw(E_USER_REJECTED);
     if (display_menu) {
         // Display back the original UX
         ui_idle();
@@ -197,7 +197,7 @@ uint16_t ui_712_start(e_tip712_filtering_mode filtering) {
     if (!tip712_full_session_in_progress() ||
         ((appState != APP_STATE_IDLE) &&
          (appState != APP_STATE_SIGNING_TIP712))) {
-        return SWO_CONDITIONS_NOT_SATISFIED;
+        return SWO_COMMAND_NOT_ALLOWED;
     }
     appState = APP_STATE_SIGNING_TIP712;
     explicit_bzero(&strings, sizeof(strings));

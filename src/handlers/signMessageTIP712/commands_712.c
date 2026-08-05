@@ -98,7 +98,7 @@ uint16_t handleTIP712StructDef(uint8_t p2, const uint8_t *cdata, uint8_t length)
         (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING) ||
         (struct_state == DEFINED) ||
         ((tip712_context != NULL) && tip712_context->schema_locked)) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
         ret = false;
     }
 
@@ -126,7 +126,7 @@ uint16_t handleTIP712Init(const uint8_t *cdata, uint8_t length) {
     if ((tip712_context != NULL) ||
         (tip712_get_phase() != TIP712_PHASE_NONE) ||
         (appState != APP_STATE_IDLE)) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
         apdu_reply(false);
         return apdu_response_code;
     }
@@ -157,7 +157,7 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
 
     if ((tip712_context == NULL) ||
         (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING)) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
     } else {
         switch (p2) {
             case P2_IMPL_NAME:
@@ -227,7 +227,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
     if ((tip712_context == NULL) ||
         (tip712_get_phase() != TIP712_PHASE_FULL_BUILDING)) {
         apdu_reply(false);
-        return SWO_CONDITIONS_NOT_SATISFIED;
+        return SWO_COMMAND_NOT_ALLOWED;
     }
     if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
         return SWO_SUCCESS;
@@ -235,7 +235,7 @@ uint16_t handleTIP712Filtering(uint8_t p1,
     switch (p2) {
         case P2_FILT_ACTIVATE:
             if (tip712_context->schema_locked) {
-                apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+                apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
                 ret = false;
                 break;
             }

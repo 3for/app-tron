@@ -1920,7 +1920,7 @@ def test_tip712_rejects_message_info_before_domain_completion(
     with pytest.raises(ExceptionRAPDU) as error:
         InputData.process_data(client, data, filters,
                                client.getAccount(0)["path"])
-    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert error.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
 
 def test_tip712_rejects_proxy_after_filter_context_lock(
@@ -1949,7 +1949,7 @@ def test_tip712_rejects_proxy_after_filter_context_lock(
     with pytest.raises(ExceptionRAPDU) as error:
         InputData.process_data(client, data, filters,
                                client.getAccount(0)["path"])
-    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
 def test_tip712_gondi(
@@ -2042,7 +2042,7 @@ def test_tip712_filtering_freezes_schema(
     with pytest.raises(ExceptionRAPDU) as exc_info:
         with client.tip712_send_struct_def_struct_name("Injected"):
             pass
-    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert exc_info.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
 
 def test_tip712_full_requires_path_initialization(
@@ -2055,7 +2055,7 @@ def test_tip712_full_requires_path_initialization(
     with pytest.raises(ExceptionRAPDU) as exc_info:
         with client.tip712_send_struct_def_struct_name("EIP712Domain"):
             pass
-    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert exc_info.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
 
 def test_tip712_final_path_must_match_locked_path(
@@ -2114,7 +2114,7 @@ def test_tip712_legacy_review_rejects_existing_full_context(
         with client.tip712_sign_legacy(signing_path,
                                        bytes(32), bytes(32)):
             pass
-    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert exc_info.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     # The rejected cross-mode command aborts the old session cleanly, so a new
     # full definition must be accepted without rebooting the app.
@@ -2140,7 +2140,7 @@ def test_tip712_definition_rejected_during_personal_message_reception(
     with pytest.raises(ExceptionRAPDU) as exc_info:
         with client.tip712_init_new(signing_path):
             pass
-    assert exc_info.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert exc_info.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     with client.tip712_init_new(signing_path):
         pass

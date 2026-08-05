@@ -318,7 +318,7 @@ static void rejectChoice(void) {
 }
 
 static void rejectStatusDismissed(void) {
-    io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, true);
+    io_seproxyhal_send_status(E_USER_REJECTED, 0, true, true);
 }
 
 // Verb-first action phrase for a contract type, so a review reads e.g. "Review
@@ -1505,7 +1505,7 @@ bool ux_flow_display(ui_approval_state_t state, bool data_warning) {
                     sw = SWO_INSUFFICIENT_MEMORY;
                     break;
                 case UI_PREPARE_FORMAT_ERROR:
-                    sw = E_INCORRECT_LENGTH;
+                    sw = SWO_INCORRECT_DATA;
                     break;
                 case UI_PREPARE_INVALID_DATA:
                 default:

@@ -160,6 +160,15 @@ static void abort_and_send_status(uint16_t sw) {
     io_send_sw(sw);
 }
 
+static uint16_t normalize_exception_status(uint32_t error) {
+    uint16_t sw = (uint16_t) error;
+
+    if ((sw & 0xF000U) != 0x6000U) {
+        sw = SWO_NOT_SUPPORTED_ERROR_NO_INFO | (sw & 0x07FFU);
+    }
+    return sw;
+}
+
 uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle) {
     uint16_t err = 0;
     if (reset) {
@@ -267,7 +276,7 @@ void app_main(void) {
                 THROW(EXCEPTION_IO_RESET);
             }
             CATCH_OTHER(e) {
-                abort_and_send_status(e);
+                abort_and_send_status(normalize_exception_status(e));
             }
             FINALLY {
             }

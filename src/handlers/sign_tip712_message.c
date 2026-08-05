@@ -47,7 +47,7 @@ uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t 
      * context (or any other signing session). */
     if ((appState != APP_STATE_IDLE) ||
         (tip712_get_phase() != TIP712_PHASE_NONE)) {
-        return E_CONDITIONS_OF_USE_NOT_SATISFIED;
+        return SWO_COMMAND_NOT_ALLOWED;
     }
     if (dataLength < 1) {
         return E_INCORRECT_DATA;
@@ -74,7 +74,7 @@ uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t 
     memmove(tmpCtx.messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
 
     if (!tip712_mark_legacy_reviewing()) {
-        return E_CONDITIONS_OF_USE_NOT_SATISFIED;
+        return SWO_COMMAND_NOT_ALLOWED;
     }
     LEDGER_ASSERT(appState == APP_STATE_IDLE, "idle required");
     appState = APP_STATE_SIGNING_TIP712;

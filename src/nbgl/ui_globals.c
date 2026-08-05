@@ -64,7 +64,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
     bool ret = true;
 
     if (signTransaction(&tmpCtx.transactionContext) != 0) {
-        io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        io_send_sw(SWO_UNKNOWN);
         ret = false;
     } else {
         io_send_response_pointer(tmpCtx.transactionContext.signature,
@@ -84,13 +84,13 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 bool ui_callback_tx_cancel(bool display_menu) {
 #ifdef HAVE_SWAP
     if (G_called_from_swap && G_swap_response_ready) {
-        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        io_send_sw(E_USER_REJECTED);
         swap_finalize_exchange_sign_transaction(false);
     }
 #endif  // HAVE_SWAP
 
     reset_app_context();
-    io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    io_send_sw(E_USER_REJECTED);
 
     if (display_menu) {
         // Display back the original UX
@@ -107,7 +107,7 @@ bool ui_callback_tx_ok(bool display_menu) {
 #endif  // HAVE_SWAP
 
     if (signTransaction(&tmpCtx.transactionContext) != 0) {
-        io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        io_send_sw(SWO_UNKNOWN);
         ret = false;
     } else {
         io_send_response_pointer(tmpCtx.transactionContext.signature,
@@ -140,7 +140,7 @@ unsigned int io_seproxyhal_touch_tx_ok(void) {
 }
 
 unsigned int io_seproxyhal_touch_tx_cancel(void) {
-    return io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, false);
+    return io_seproxyhal_send_status(E_USER_REJECTED, 0, true, false);
 }
 
 bool ui_callback_ecdh_ok(bool display_menu) {
@@ -180,7 +180,7 @@ end:
     if (err == CX_OK) {
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
     } else {
-        io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        io_send_sw(SWO_UNKNOWN);
     }
 
     if (display_menu) {

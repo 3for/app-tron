@@ -31,7 +31,7 @@ class Test_GET_PUBLIC_KEY():
         if mutation == "trailing_data":
             command[4] += 1
             command.append(0)
-            expected = StatusWord.INCORRECT_BIP32_PATH
+            expected = StatusWord.INVALID_DATA
         else:
             command[3] |= 0x40
             expected = StatusWord.INVALID_P1_P2
@@ -125,7 +125,7 @@ class Test_GET_PUBLIC_KEY():
                                         chaincode=True,
                                         bip32_path=TRX_PATH):
                 response = backend.exchange_raw(provide)
-                assert response.status == StatusWord.CONDITION_NOT_SATISFIED
+                assert response.status == StatusWord.COMMAND_NOT_ALLOWED
 
                 # Rejection must not reset or replace the active address page.
                 scenario_navigator.address_review_approve(
@@ -134,7 +134,7 @@ class Test_GET_PUBLIC_KEY():
             backend.raise_policy = previous_policy
 
         # Speculos/Ragger cannot correlate out-of-order responses from two
-        # concurrent APDUs: the immediate 0x6985 is also recorded as the outer
+        # concurrent APDUs: the immediate 0x6980 is also recorded as the outer
         # async exchange response.  Verify the approval callback and reset by
         # starting a fresh command instead of interpreting that stale response
         # as GET_PUBLIC_KEY data.

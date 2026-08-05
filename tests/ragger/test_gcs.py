@@ -310,10 +310,10 @@ def test_gcs_store_initialization_error_resets_state(backend: BackendInterface,
     client = TronClient(backend)
     if case == "invalid_path":
         payload = b"\x00"
-        expected_status = StatusWord.INCORRECT_BIP32_PATH
+        expected_status = StatusWord.INVALID_DATA
     else:
         payload = pack_derivation_path(client.getAccount(0)["path"]) + b"\x00" * 3
-        expected_status = StatusWord.INCORRECT_LENGTH
+        expected_status = StatusWord.INVALID_DATA
 
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST, P2_GCS_STORE, payload)
@@ -321,7 +321,24 @@ def test_gcs_store_initialization_error_resets_state(backend: BackendInterface,
 
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(CLA, InsType.SIGN_GCS, P1_MORE, P2_GCS_STORE, b"\x00")
-    assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert e.value.status == StatusWord.COMMAND_NOT_ALLOWED
+
+
+@pytest.mark.parametrize(
+    ("p1", "payload", "expected_status"),
+    [
+        (P1_MORE, b"", StatusWord.INVALID_P1_P2),
+        (P1_FIRST, b"\x00", StatusWord.WRONG_DATA_LENGTH),
+    ],
+)
+def test_gcs_start_flow_validates_parameters(backend: BackendInterface,
+                                             p1: int,
+                                             payload: bytes,
+                                             expected_status: StatusWord):
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, p1,
+                         P2_GCS_START_FLOW, payload)
+    assert error.value.status == expected_status
 
 
 def test_gcs_invalid_tx_info_resets_state(backend: BackendInterface):
@@ -342,7 +359,7 @@ def test_gcs_invalid_tx_info_resets_state(backend: BackendInterface):
     with pytest.raises(ExceptionRAPDU) as e:
         backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
                          P2_GCS_START_FLOW, b"")
-    assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+    assert e.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
 
 def test_gcs_descriptor_apdu_limit_resets_state(backend: BackendInterface,
@@ -510,7 +527,7 @@ def test_gcs_rejects_empty_continuation_and_resets(backend: BackendInterface):
     with pytest.raises(ExceptionRAPDU) as error:
         backend.exchange(CLA, InsType.SIGN_GCS, P1_MORE,
                          P2_GCS_STORE, b"")
-    assert error.value.status == StatusWord.INCORRECT_LENGTH
+    assert error.value.status == StatusWord.INVALID_DATA
 
     # The rejected continuation must have torn down the old stream completely.
     assert gcs_store_calldata(client, backend,

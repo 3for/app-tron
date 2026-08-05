@@ -590,7 +590,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     // Defense in depth for tests/direct callers that bypass apdu_dispatcher().
     // Never reset here: the active NBGL page still owns review allocations.
     if (sign_review_in_progress()) {
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     if (p2 != 0x00) {
@@ -600,7 +600,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     if (!first_apdu) {
         if ((sign_apdu_count == 0U) ||
             (sign_apdu_count >= INS_SIGN_MAX_APDUS)) {
-            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return send_sign_status(SWO_COMMAND_NOT_ALLOWED);
         }
         sign_apdu_count++;
     }
@@ -613,7 +613,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         appState = APP_STATE_SIGNING;
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
-            return send_sign_status(E_INCORRECT_BIP32_PATH);
+            return send_sign_status(SWO_INCORRECT_DATA);
         }
         workBuffer += ret;
         dataLength -= ret;
@@ -644,7 +644,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             }
             sign_phase = SIGN_PHASE_METADATA;
         } else if (sign_phase != SIGN_PHASE_METADATA) {
-            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return send_sign_status(SWO_COMMAND_NOT_ALLOWED);
         }
 
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
@@ -704,14 +704,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     if ((p1 == P1_MORE || p1 == P1_LAST) &&
         (appState != APP_STATE_SIGNING || sign_phase != SIGN_PHASE_RAW_DATA)) {
         PRINTF("Signature not initialized\n");
-        return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return send_sign_status(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // A zero-length MORE chunk cannot advance either the envelope parser or
     // the signing hash and would let an untrusted host pin this session
     // indefinitely. Keep an empty LAST valid as an explicit finalize command.
     if ((p1 == P1_MORE) && (dataLength == 0U)) {
-        return send_sign_status(E_INCORRECT_LENGTH);
+        return send_sign_status(SWO_INCORRECT_DATA);
     }
 
     // Context must be initialized first
@@ -723,7 +723,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     if (!metadata_apdu) {
         if (sign_phase != SIGN_PHASE_RAW_DATA || sign_stream == NULL) {
-            return send_sign_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return send_sign_status(SWO_COMMAND_NOT_ALLOWED);
         }
         // Parse before hashing so an oversized/malformed chunk cannot leave a
         // resumable partial hash. send_sign_status() resets all state on error.
@@ -857,7 +857,7 @@ handle_parser_result:
         case PARTICIPATEASSETISSUECONTRACT:
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             strlcpy(strings.common.fullContract,
                     txContent.tokenNames[0],
@@ -941,7 +941,7 @@ handle_parser_result:
                         if (!format_trx_amount(txContent.amount[0],
                                                (char *) G_io_apdu_buffer,
                                                100)) {
-                            return send_sign_status(E_INCORRECT_LENGTH);
+                            return send_sign_status(SWO_INCORRECT_DATA);
                         }
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
@@ -957,7 +957,7 @@ handle_parser_result:
                                        (char *) G_io_apdu_buffer +
                                            CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
                                        CUSTOM_CONTRACT_UINT64_SLOT_SIZE))) {
-                        return send_sign_status(E_INCORRECT_LENGTH);
+                        return send_sign_status(SWO_INCORRECT_DATA);
                     }
 
 #ifdef HAVE_GATING_SUPPORT
@@ -983,7 +983,7 @@ handle_parser_result:
                                     (char *) G_io_apdu_buffer,
                                     100,
                                     txContent.decimals[0])) {
-                    return send_sign_status(E_INCORRECT_LENGTH);
+                    return send_sign_status(SWO_INCORRECT_DATA);
                 }
             } else {
                 if (print_amount(
@@ -992,7 +992,7 @@ handle_parser_result:
                         100,
                         (txContent.contractType == TRANSFERCONTRACT) ? TRX_DECIMALS
                                                                     : txContent.decimals[0]) == 0) {
-                    return send_sign_status(E_INCORRECT_LENGTH);
+                    return send_sign_status(SWO_INCORRECT_DATA);
                 }
             }
 
@@ -1035,7 +1035,7 @@ handle_parser_result:
                     (strlcat((char *) G_io_apdu_buffer,
                              strings.common.fullContract,
                              sizeof(G_io_apdu_buffer)) >= sizeof(G_io_apdu_buffer))) {
-                    return send_sign_status(E_INCORRECT_LENGTH);
+                    return send_sign_status(SWO_INCORRECT_DATA);
                 }
             }
             start_sign_review(APPROVAL_TRANSFER, data_warning);
@@ -1056,7 +1056,7 @@ handle_parser_result:
                      (strncmp((const char *) txContent.tokenNames[1], "TRX", 3) == 0)
                          ? TRX_DECIMALS
                          : txContent.decimals[1]) == 0)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
 
             start_sign_review(APPROVAL_EXCHANGE_CREATE, data_warning);
@@ -1075,7 +1075,7 @@ handle_parser_result:
                      (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
                          ? TRX_DECIMALS
                          : txContent.decimals[0]) == 0)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             // write exchange contract type
             if (!setExchangeContractDetail(txContent.contractType,
@@ -1100,7 +1100,7 @@ handle_parser_result:
                               (void *) G_io_apdu_buffer + 100,
                               100,
                               txContent.decimals[1]) == 0)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
 
             start_sign_review(APPROVAL_EXCHANGE_TRANSACTION, data_warning);
@@ -1144,7 +1144,7 @@ handle_parser_result:
                                                            i);
 #endif
                 if (!vote_formatted) {
-                    return send_sign_status(E_INCORRECT_LENGTH);
+                    return send_sign_status(SWO_INCORRECT_DATA);
                 }
             }
 
@@ -1157,7 +1157,7 @@ handle_parser_result:
                                strings.common.fullContract + prefix_len,
                                (uint8_t) (sizeof(strings.common.fullContract) -
                                           (size_t) prefix_len))) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
 
             start_sign_review(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
@@ -1169,7 +1169,7 @@ handle_parser_result:
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             if (!allzeroes(txContent.destination, ADDRESS_SIZE)) {
                 getBase58FromAddress(txContent.destination, strings.common.toAddress);
@@ -1200,7 +1200,7 @@ handle_parser_result:
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
@@ -1212,7 +1212,7 @@ handle_parser_result:
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             getBase58FromAddress(txContent.account, strings.common.toAddress);
 
@@ -1231,7 +1231,7 @@ handle_parser_result:
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
 
@@ -1244,7 +1244,7 @@ handle_parser_result:
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             getBase58FromAddress(txContent.destination, strings.common.toAddress);
 
@@ -1388,7 +1388,7 @@ handle_parser_result:
                              (char *) G_io_apdu_buffer,
                              100,
                              0) == 0) {
-                return send_sign_status(E_INCORRECT_LENGTH);
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
             if (!setContractType(txContent.contractType,
                                  strings.common.fullContract,

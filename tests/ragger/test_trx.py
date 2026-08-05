@@ -2519,6 +2519,22 @@ class TestTRX():
         shared_key = client.getAccount(1)['dh'].exchange(ec.ECDH(), pubKeyDH)
         assert (shared_key.hex() == resp.data[1:33].hex())
 
+    @pytest.mark.parametrize(
+        ("ins", "p2", "payload"),
+        [
+            (InsType.SIGN_TXN_HASH, 0x00, b"\x11" * 31),
+            (InsType.GET_ECDH_SECRET, 0x01, b"\x04" + b"\x22" * 63),
+        ],
+    )
+    def test_sensitive_command_rejects_wrong_fixed_length(
+            self, backend, ins, p2, payload):
+        client = TronClient(backend)
+        path = pack_derivation_path(client.getAccount(0)['path'])
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, ins, 0x00, p2, path + payload)
+        assert error.value.status == StatusWord.WRONG_DATA_LENGTH
+
     @pytest.mark.parametrize("operation", ["sign_hash", "ecdh"])
     def test_sensitive_review_rejects_interleaved_provide(
             self, backend, device, operation):
@@ -2545,7 +2561,7 @@ class TestTRX():
                     0x00,
                     0x00,
                     b"")
-                assert response.status == StatusWord.CONDITION_NOT_SATISFIED
+                assert response.status == StatusWord.COMMAND_NOT_ALLOWED
 
                 # The rejected PROVIDE must not reset or replace the active
                 # operation review page.
@@ -2558,7 +2574,7 @@ class TestTRX():
         finally:
             backend.raise_policy = previous_policy
 
-        # Ragger records the immediate 0x6985 as the outer async response, so
+        # Ragger records the immediate 0x6980 as the outer async response, so
         # verify callback cleanup and re-entrancy with a fresh command.
         response = backend.exchange(
             CLA, InsType.GET_PUBLIC_KEY, 0x00, 0x00, path)
@@ -2728,7 +2744,7 @@ class TestTRX():
         # than leave a resumable partial hash or envelope parser.
         with pytest.raises(ExceptionRAPDU) as e:
             backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
-        assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+        assert e.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     @pytest.mark.parametrize(
         ("interleaved_ins", "interleaved_p1", "interleaved_p2", "payload_kind"),
@@ -2767,7 +2783,7 @@ class TestTRX():
                              interleaved_p1,
                              interleaved_p2,
                              payloads[payload_kind])
-        assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+        assert error.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
         # The rejected command must discard the old stream and make a fresh
         # P1_SIGN reach parsing, rather than leave the session non-reentrant.
@@ -2788,7 +2804,7 @@ class TestTRX():
         assert response.status == StatusWord.OK
         with pytest.raises(ExceptionRAPDU) as error:
             backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"")
-        assert error.value.status == StatusWord.INCORRECT_LENGTH
+        assert error.value.status == StatusWord.INVALID_DATA
 
         with pytest.raises(ExceptionRAPDU) as error:
             backend.exchange(CLA,
@@ -2842,7 +2858,7 @@ class TestTRX():
 
         with pytest.raises(ExceptionRAPDU) as e:
             backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
-        assert e.value.status == StatusWord.CONDITION_NOT_SATISFIED
+        assert e.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     def test_trx_freezeV2_balance_invalid_amount(self, backend):
         client = TronClient(backend)

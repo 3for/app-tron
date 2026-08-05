@@ -88,7 +88,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
     // Parse the derivation path
     off_t ret = read_bip32_path(*work_buffer, *data_length, &tmpCtx.transactionContext.bip32_path);
     if (ret < 0) {
-        return E_INCORRECT_BIP32_PATH;
+        return SWO_INCORRECT_DATA;
     }
 
     *work_buffer += ret;
@@ -96,7 +96,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 
     // Check if the length is valid
     if (*data_length < sizeof(uint32_t)) {
-        return E_INCORRECT_LENGTH;
+        return SWO_INCORRECT_DATA;
     }
 
     // Apply the real display/heap limit before doing key work or allocating.
@@ -105,14 +105,14 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
         PRINTF("Error: message too long (%u > %u)\n",
                msg_length,
                MAX_PERSONAL_MESSAGE_LENGTH);
-        return E_INCORRECT_LENGTH;
+        return SWO_INCORRECT_DATA;
     }
 
     publicKeyContext_t tmp_public_key_ctx;
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                              strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
+        return SWO_UNKNOWN;
     }
 
     if (APP_MEM_CALLOC((void **) &signMsgCtx, sizeof(signMsgCtx_t)) == false) {
@@ -151,7 +151,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
                           sizeof(SIGN_MAGIC) - 1,
                           NULL,
                           0) != CX_OK)) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
+        return SWO_UNKNOWN;
     }
 
     char length_str[11];
@@ -162,7 +162,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
                          strlen(length_str),
                          NULL,
                          0) != CX_OK) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
+        return SWO_UNKNOWN;
     }
 
     return E_OK;
@@ -178,7 +178,7 @@ static int first_apdu_data(uint8_t **work_buffer, uint16_t *data_length) {
 static int process_data(const uint8_t *data, uint16_t length) {
     // Hash the data
     if (cx_hash_no_throw((cx_hash_t *) g_msg_hash_ctx, 0, data, length, NULL, 0) != CX_OK) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
+        return SWO_UNKNOWN;
     }
 
     // Copy the data to the buffer
@@ -283,7 +283,7 @@ static int final_process(void) {
                          0,
                          tmpCtx.transactionContext.hash,
                          HASH_SIZE) != CX_OK) {
-        return E_SECURITY_STATUS_NOT_SATISFIED;
+        return SWO_UNKNOWN;
     }
 
     if (personal_message_format_for_display(signMsgCtx->message_buffer,
@@ -312,7 +312,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                                          uint8_t *workBuffer,
                                          uint16_t dataLength) {
     if (personal_message_review_in_progress()) {
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     if (p2 != 0) {
         if (appState != APP_STATE_IDLE) {
@@ -324,7 +324,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
         if (appState != APP_STATE_IDLE) {
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
         appState = APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY;
 
@@ -339,7 +339,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
     } else if (appState != APP_STATE_SIGNING_MESSAGE_FULL_DISPLAY) {
         PRINTF("Error: App not already in signing state!\n");
         reset_app_context();
-        return io_send_sw(E_INCORRECT_DATA);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // Check if the context is valid
@@ -353,7 +353,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
             ((dataLength == 0) &&
              (signMsgCtx->processed_size != signMsgCtx->msg_length))) {
             reset_app_context();
-            return io_send_sw(E_INCORRECT_LENGTH);
+            return io_send_sw(SWO_INCORRECT_DATA);
         }
         signMsgCtx->apdu_count++;
     }
@@ -364,7 +364,7 @@ int handleSignPersonalMessageFullDisplay(uint8_t p1,
                (dataLength + signMsgCtx->processed_size),
                signMsgCtx->msg_length);
         reset_app_context();
-        return io_send_sw(E_INCORRECT_LENGTH);
+        return io_send_sw(SWO_INCORRECT_DATA);
     }
 
     int sw = process_data(workBuffer, dataLength);

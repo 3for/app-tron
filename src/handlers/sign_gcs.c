@@ -280,8 +280,11 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     // before the streaming logic below.
     if (p2 == P2_GCS_START_FLOW) {
         (void) workBuffer;
-        if ((p1 != P1_FIRST) || (dataLength != 0)) {
-            return send_gcs_status(E_INCORRECT_LENGTH);
+        if (p1 != P1_FIRST) {
+            return send_gcs_status(SWO_WRONG_P1_P2);
+        }
+        if (dataLength != 0) {
+            return send_gcs_status(SWO_WRONG_DATA_LENGTH);
         }
         return handle_gcs_start_flow();
     }
@@ -293,25 +296,25 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
         if (appState != APP_STATE_IDLE) {
-            return send_gcs_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return send_gcs_status(SWO_COMMAND_NOT_ALLOWED);
         }
         appState = APP_STATE_SIGNING_GCS_STORE;
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
-            return send_gcs_status(E_INCORRECT_BIP32_PATH);
+            return send_gcs_status(SWO_INCORRECT_DATA);
         }
         workBuffer += ret;
         dataLength -= ret;
 
         if (dataLength < 4) {
-            return send_gcs_status(E_INCORRECT_LENGTH);
+            return send_gcs_status(SWO_INCORRECT_DATA);
         }
         uint32_t total_len = U4BE(workBuffer, 0);
         workBuffer += 4;
         dataLength -= 4;
 
         if ((total_len == 0U) || (total_len > GCS_MAX_RAW_DATA_SIZE)) {
-            return send_gcs_status(E_INCORRECT_LENGTH);
+            return send_gcs_status(SWO_INCORRECT_DATA);
         }
 
         /* Metadata is immutable once STORE starts. Include all tracked
@@ -340,7 +343,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     if (((p1 == P1_MORE) || (p1 == P1_LAST)) &&
         appState != APP_STATE_SIGNING_GCS_STORE) {
         PRINTF("Signature not initialized\n");
-        return send_gcs_status(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return send_gcs_status(SWO_COMMAND_NOT_ALLOWED);
     }
 
     // Context must be initialized first
@@ -352,11 +355,11 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
     if ((p1 == P1_MORE) || (p1 == P1_LAST)) {
         if ((dataLength == 0U) ||
             (++g_gcs.store_apdu_count > GCS_MAX_STORE_APDUS)) {
-            return send_gcs_status(E_INCORRECT_LENGTH);
+            return send_gcs_status(SWO_INCORRECT_DATA);
         }
     }
     if (dataLength > (g_gcs.raw_data_size - g_gcs.raw_data_received)) {
-        return send_gcs_status(E_INCORRECT_LENGTH);
+        return send_gcs_status(SWO_INCORRECT_DATA);
     }
 
     // hash data
@@ -366,7 +369,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          dataLength,
                          NULL,
                          0) != CX_OK) {
-        return send_gcs_status(E_SECURITY_STATUS_NOT_SATISFIED);
+        return send_gcs_status(SWO_UNKNOWN);
     }
 
     // process buffer
@@ -414,7 +417,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          sizeof(g_gcs.memo_hash)) != CX_OK) {
         tron_tx_stream_free();
         gcs_bridge_abort();
-        return send_gcs_status(E_SECURITY_STATUS_NOT_SATISFIED);
+        return send_gcs_status(SWO_UNKNOWN);
     }
     g_gcs.memo_hash_ready = true;
     g_gcs.tx = decoded;
@@ -438,7 +441,7 @@ int handleSignGcs(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLeng
                          0,
                          tmpCtx.transactionContext.hash,
                          32) != CX_OK) {
-        return send_gcs_status(E_SECURITY_STATUS_NOT_SATISFIED);
+        return send_gcs_status(SWO_UNKNOWN);
     }
     // Accept the incoming generic_tx_parser descriptors.
     appState = APP_STATE_SIGNING_TX;

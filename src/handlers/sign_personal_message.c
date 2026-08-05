@@ -43,7 +43,7 @@ bool personal_message_review_in_progress(void) {
 
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     if (personal_message_review_in_progress()) {
-        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
     if (p2 != 0) {
         if (appState != APP_STATE_IDLE) {
@@ -55,14 +55,14 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
         if (appState != APP_STATE_IDLE) {
             reset_app_context();
-            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
         }
         appState = APP_STATE_SIGNING_MESSAGE;
 
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
             reset_app_context();
-            return io_send_sw(E_INCORRECT_BIP32_PATH);
+            return io_send_sw(SWO_INCORRECT_DATA);
         }
         workBuffer += ret;
         dataLength -= ret;
@@ -70,12 +70,12 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
         // Message Length
         if (dataLength < sizeof(uint32_t)) {
             reset_app_context();
-            return io_send_sw(E_INCORRECT_LENGTH);
+            return io_send_sw(SWO_INCORRECT_DATA);
         }
         txContent.dataBytes = U4BE(workBuffer, 0);
         if (txContent.dataBytes > MAX_PERSONAL_MESSAGE_LENGTH) {
             reset_app_context();
-            return io_send_sw(E_INCORRECT_LENGTH);
+            return io_send_sw(SWO_INCORRECT_DATA);
         }
         workBuffer += 4;
         dataLength -= 4;
@@ -90,7 +90,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                               NULL,
                               0) != CX_OK)) {
             reset_app_context();
-            return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+            return io_send_sw(SWO_UNKNOWN);
         }
 
         char tmp[11];
@@ -102,7 +102,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                              NULL,
                              0) != CX_OK) {
             reset_app_context();
-            return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+            return io_send_sw(SWO_UNKNOWN);
         }
 
     } else if (p1 != P1_MORE) {
@@ -111,26 +111,26 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     } else if (appState != APP_STATE_SIGNING_MESSAGE) {
         PRINTF("Error: App not already in signing state!\n");
         reset_app_context();
-        return io_send_sw(E_INCORRECT_DATA);
+        return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
     }
 
     if (p1 == P1_MORE) {
         if ((g_personal_message_apdu_count >= MAX_PERSONAL_MESSAGE_APDUS) ||
             ((dataLength == 0) && (txContent.dataBytes != 0))) {
             reset_app_context();
-            return io_send_sw(E_INCORRECT_LENGTH);
+            return io_send_sw(SWO_INCORRECT_DATA);
         }
         g_personal_message_apdu_count++;
     }
     if (dataLength > txContent.dataBytes) {
         reset_app_context();
-        return io_send_sw(E_INCORRECT_LENGTH);
+        return io_send_sw(SWO_INCORRECT_DATA);
     }
 
     if (cx_hash_no_throw((cx_hash_t *) &global_sha3, 0, workBuffer, dataLength, NULL, 0) !=
         CX_OK) {
         reset_app_context();
-        return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        return io_send_sw(SWO_UNKNOWN);
     }
     txContent.dataBytes -= dataLength;
     if (txContent.dataBytes == 0) {
@@ -141,7 +141,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                              tmpCtx.transactionContext.hash,
                              HASH_SIZE) != CX_OK) {
             reset_app_context();
-            return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+            return io_send_sw(SWO_UNKNOWN);
         }
         format_hex(tmpCtx.transactionContext.hash,
                    sizeof(tmpCtx.transactionContext.hash),
@@ -152,7 +152,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                  strings.common.fromAddress,
                                  &tmp_public_key_ctx) != 0) {
             reset_app_context();
-            return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+            return io_send_sw(SWO_UNKNOWN);
         }
 
         LEDGER_ASSERT(appState == APP_STATE_SIGNING_MESSAGE, "signing msg required");

@@ -28,7 +28,7 @@ bool tip712_context_init(void) {
      * of tmpCtx/UI memory, and never replace an existing definition in place. */
     if ((tip712_context != NULL) || (tip712_phase != TIP712_PHASE_NONE) ||
         (appState != APP_STATE_IDLE)) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
         return false;
     }
     if (!gcs_budget_begin()) {
@@ -94,7 +94,7 @@ bool tip712_lock_signing_path(const uint8_t *data, size_t length) {
 
     if ((tip712_context == NULL) || tip712_context->signing_path_locked ||
         (tip712_phase != TIP712_PHASE_FULL_BUILDING) || (data == NULL)) {
-        apdu_response_code = SWO_CONDITIONS_NOT_SATISFIED;
+        apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
         return false;
     }
     parsed = read_bip32_path(data, length, &tip712_context->signing_path);
