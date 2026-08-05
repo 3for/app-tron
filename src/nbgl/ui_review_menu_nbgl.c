@@ -318,8 +318,7 @@ static void rejectChoice(void) {
 }
 
 static void rejectStatusDismissed(void) {
-    ui_idle();
-    io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, false);
+    io_seproxyhal_send_status(E_CONDITIONS_OF_USE_NOT_SATISFIED, 0, true, true);
 }
 
 // Verb-first action phrase for a contract type, so a review reads e.g. "Review
