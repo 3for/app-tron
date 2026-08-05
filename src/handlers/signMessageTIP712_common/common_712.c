@@ -25,7 +25,7 @@
 #include "ux.h"
 #include "crypto_helpers.h"
 #include "ui_idle_menu.h"   // ui_idle
-#include "app_errors.h"     // E_OK, E_SECURITY_STATUS_NOT_SATISFIED, SWO_SUCCESS
+#include "app_errors.h"     // E_OK, SWO_* status words
 #include "nbgl_use_case.h"  // BLIND_SIGNING_WARN
 #include "ui_logic.h"       // e_tip712_filtering_mode, ui_sign_712
 #include "ui_nbgl.h"        // warning
@@ -134,7 +134,10 @@ end:
         // Send back the response, do not restart the event loop
         io_send_response_pointer(G_io_apdu_buffer, tx, E_OK);
     } else {
-        io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+        // A cryptographic helper failure is an internal/unclassified error, not
+        // an unmet device security state such as a locked device or invalid
+        // access rights.
+        io_send_sw(SWO_PARAMETER_ERROR_NO_INFO);
     }
 
     if (display_menu) {
@@ -150,11 +153,9 @@ end:
 }
 
 bool ui_712_reject_cb(bool display_menu) {
-    G_io_apdu_buffer[0] = 0x69;
-    G_io_apdu_buffer[1] = 0x85;
     reset_app_context();
     // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
+    io_send_sw(SWO_CONDITIONS_NOT_SATISFIED);
     if (display_menu) {
         // Display back the original UX
         ui_idle();
