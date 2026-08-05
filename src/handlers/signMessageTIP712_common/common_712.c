@@ -31,10 +31,13 @@
 #include "ui_nbgl.h"        // warning
 #include "utils.h"          // SET_BIT
 #include "context_712.h"
-#include "der_signature.h"
 
 // TIP-712 (EIP-191 0x19 / version 0x01) signing prefix.
 static const uint8_t TIP_712_MAGIC[] = {0x19, 0x01};
+
+#define TIP712_ECDSA_COMPONENT_LENGTH 32U
+#define TIP712_SIGNATURE_RS_LENGTH    (2U * TIP712_ECDSA_COMPONENT_LENGTH)
+#define TIP712_SIGNATURE_LENGTH       (TIP712_SIGNATURE_RS_LENGTH + 1U)
 
 bool tip712_hash_to_sign(uint8_t hash[static INT256_LENGTH]) {
     cx_sha3_t sha3;
@@ -79,9 +82,7 @@ bool ui_712_approve_cb(bool display_menu) {
     uint32_t tx = 0;
     cx_err_t err = CX_INTERNAL_ERROR;
 
-    cx_ecfp_private_key_t privateKey = {0};
-    uint8_t signature[100] = {0};
-    unsigned int info = 0;
+    uint32_t info = 0;
     uint8_t hash[INT256_LENGTH] = {0};
 
     io_seproxyhal_io_heartbeat();
@@ -90,44 +91,32 @@ bool ui_712_approve_cb(bool display_menu) {
     }
 
     io_seproxyhal_io_heartbeat();
-    // Get private key
-    err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
-                                        tmpCtx.messageSigningContext712.bip32Path,
-                                        tmpCtx.messageSigningContext712.pathLength,
-                                        &privateKey,
-                                        NULL);
+    err = bip32_derive_ecdsa_sign_rs_hash_256(CX_CURVE_256K1,
+                                              tmpCtx.messageSigningContext712.bip32Path,
+                                              tmpCtx.messageSigningContext712.pathLength,
+                                              CX_RND_RFC6979 | CX_LAST,
+                                              CX_SHA256,
+                                              hash,
+                                              sizeof(hash),
+                                              G_io_apdu_buffer,
+                                              G_io_apdu_buffer + TIP712_ECDSA_COMPONENT_LENGTH,
+                                              &info);
     if (err != CX_OK) {
         goto end;
     }
 
-    io_seproxyhal_io_heartbeat();
-    unsigned int signatureLength = sizeof(signature);
-    err = cx_ecdsa_sign_no_throw(&privateKey,
-                                 CX_RND_RFC6979 | CX_LAST,
-                                 CX_SHA256,
-                                 hash,
-                                 sizeof(hash),
-                                 signature,
-                                 &signatureLength,
-                                 &info);
-    if (err != CX_OK) {
-        goto end;
-    }
-
-    if (!ecdsa_der_to_rs(signature, signatureLength, G_io_apdu_buffer)) {
-        err = CX_INTERNAL_ERROR;
-        goto end;
-    }
-    G_io_apdu_buffer[64] = 0;
+    G_io_apdu_buffer[TIP712_SIGNATURE_RS_LENGTH] = 0;
     if (info & CX_ECCINFO_PARITY_ODD) {
-        G_io_apdu_buffer[64]++;
+        G_io_apdu_buffer[TIP712_SIGNATURE_RS_LENGTH]++;
     }
-    tx = 65;
+    tx = TIP712_SIGNATURE_LENGTH;
 end:
-    // Clear tmp buffer data
-    explicit_bzero(&privateKey, sizeof(privateKey));
+    // The SDK signing helper clears its temporary private key on every path.
     explicit_bzero(hash, sizeof(hash));
-    explicit_bzero(signature, sizeof(signature));
+    if (err != CX_OK) {
+        // Do not leave a partial r/s output available to later code.
+        explicit_bzero(G_io_apdu_buffer, TIP712_SIGNATURE_LENGTH);
+    }
 
     reset_app_context();
     if (err == CX_OK) {
