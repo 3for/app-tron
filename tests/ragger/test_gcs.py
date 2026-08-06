@@ -901,19 +901,38 @@ def _client_from_scenario(scenario_navigator: NavigateWithScenario) -> TronClien
     return TronClient(scenario_navigator.backend)
 
 
+def _prepare_basic_gcs_review(client: TronClient,
+                              backend: BackendInterface) -> bytes:
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
+    amount_field = build_field_raw("Amount", 32,
+                                   data_path=build_data_path_static(1))
+    client.provide_transaction_info(
+        build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR,
+                      [amount_field], "transfer"))
+    client.provide_transaction_field_desc(amount_field.serialize())
+    return tx
+
+
 def _start_gcs_flow_and_assert(scenario_navigator: NavigateWithScenario,
                                client: TronClient, tx: bytes,
                                test_name: str | None = None,
-                               nb_warnings: int = 0) -> None:
+                               nb_warnings: int = 0,
+                               do_comparison: bool = True) -> None:
     backend = scenario_navigator.backend
     with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
                                 P2_GCS_START_FLOW, b""):
         if nb_warnings:
             scenario_navigator.review_approve_with_warning(
                 test_name=test_name,
-                nb_warnings=nb_warnings)
+                nb_warnings=nb_warnings,
+                do_comparison=do_comparison)
         else:
-            scenario_navigator.review_approve(test_name=test_name)
+            scenario_navigator.review_approve(test_name=test_name,
+                                               do_comparison=do_comparison)
 
     resp = backend.last_async_response
     assert resp.status == StatusWord.OK
@@ -976,6 +995,35 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                                tx,
                                nb_warnings=_gating_warnings(scenario_navigator,
                                                             gating_params))
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_gcs_review_cleanup_allows_reentry(
+        scenario_navigator: NavigateWithScenario, decision: str):
+    """A completed GCS review must release its nested tracked UI tree."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+    first_tx = _prepare_basic_gcs_review(client, backend)
+
+    if decision == "approve":
+        _start_gcs_flow_and_assert(scenario_navigator,
+                                   client,
+                                   first_tx,
+                                   do_comparison=False)
+    else:
+        with pytest.raises(ExceptionRAPDU) as error:
+            with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                        P2_GCS_START_FLOW, b""):
+                scenario_navigator.review_reject(do_comparison=False)
+        assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+    # The old cleanup order leaked the contract-info extension tree and made
+    # this second STORE fail permanently with SWO_INSUFFICIENT_MEMORY (0x6A84).
+    second_tx = _prepare_basic_gcs_review(client, backend)
+    _start_gcs_flow_and_assert(scenario_navigator,
+                               client,
+                               second_tx,
+                               do_comparison=False)
 
 
 def test_gcs_contract_address_without_name(

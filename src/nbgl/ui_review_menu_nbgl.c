@@ -30,6 +30,7 @@
 #include "ui_idle_menu.h"
 #include "ui_nbgl.h"
 #include "ui_callbacks.h"
+#include "common_ui.h"  // ui_gcs_owns_shared_ui
 #include "common_712.h"
 #include "trusted_name.h"
 #include "settings.h"
@@ -175,7 +176,12 @@ void ui_review_menu_cleanup(void) {
     proposal_fields_cleanup();
     asset_issue_display_cleanup();
     create_smart_contract_display_cleanup();
-    ui_pairs_cleanup();
+    /* g_pairs/g_pairsList are shared with GCS. A GCS review owns nested tracked
+     * extensions that must be destroyed before their shared pair container;
+     * leave that tree intact for the later gcs_cleanup() owner destructor. */
+    if (!ui_gcs_owns_shared_ui()) {
+        ui_pairs_cleanup();
+    }
     explicit_bzero(reviewDisplayBuffer, sizeof(reviewDisplayBuffer));
     explicit_bzero(&txInfos, sizeof(txInfos));
     explicit_bzero(&infoLongPress, sizeof(infoLongPress));

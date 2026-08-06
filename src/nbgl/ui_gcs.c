@@ -40,7 +40,15 @@
 // (0x41 prefix + 20 bytes). This buffer holds one such "T..." string.
 #define TRON_ADDR_STR_SIZE (BASE58CHECK_ADDRESS_SIZE + 1)
 
-static bool *index_allocated = NULL;
+static bool *item_value_owned = NULL;
+/* The generic pair and title buffers are shared with legacy signing and
+ * TIP-712. This flag gives GCS exclusive responsibility for destroying the
+ * shared containers while they hold GCS-owned nested allocations. */
+static bool gcs_ui_owns_shared_ui = false;
+
+bool ui_gcs_owns_shared_ui(void) {
+    return gcs_ui_owns_shared_ui;
+}
 
 /**
  * Format a 20-byte (EVM-style) contract address as a TRON Base58Check string.
@@ -116,7 +124,7 @@ static void free_pair(const nbgl_contentTagValueList_t *pair_list, int idx) {
     // - the first one, that leads to the contract infos
     // - the second to last one, that shows the Network (optional)
     // - the last one, that shows the TX fees
-    if ((index_allocated != NULL) && (index_allocated[idx] == true)) {
+    if ((item_value_owned != NULL) && (item_value_owned[idx] == true)) {
         APP_MEM_FREE((void *) pair_list->pairs[idx].item);
         APP_MEM_FREE((void *) pair_list->pairs[idx].value);
     }
@@ -304,13 +312,17 @@ static bool prepare_infos(nbgl_contentInfoList_t *infos) {
 }
 
 void ui_gcs_cleanup(void) {
+    if (!gcs_ui_owns_shared_ui) {
+        return;
+    }
     if ((g_pairsList != NULL) && (g_pairsList->pairs != NULL)) {
         for (int i = 0; i < g_pairsList->nbPairs; ++i) {
             free_pair(g_pairsList, i);
         }
     }
-    APP_MEM_FREE_AND_NULL((void *) &index_allocated);
+    APP_MEM_FREE_AND_NULL((void *) &item_value_owned);
     ui_all_cleanup();
+    gcs_ui_owns_shared_ui = false;
 }
 
 static nbgl_contentValueExt_t *get_infolist_extension(const char *title,
@@ -524,7 +536,13 @@ bool ui_gcs(void) {
     finish_len = strlen("Sign transaction") + 1U;
 #endif
     if ((title_len > UINT8_MAX) || (finish_len > UINT8_MAX) ||
-        !ui_buffers_init((uint8_t) title_len, 0U, (uint8_t) finish_len)) {
+        gcs_ui_owns_shared_ui) {
+        return false;
+    }
+    /* Claim every shared GCS UI allocation, including partial construction,
+     * before allocating the first title/finish buffer. */
+    gcs_ui_owns_shared_ui = true;
+    if (!ui_buffers_init((uint8_t) title_len, 0U, (uint8_t) finish_len)) {
         return false;
     }
     snprintf(g_titleMsg, title_len, "Review transaction to %s", operation);
@@ -558,12 +576,12 @@ bool ui_gcs(void) {
     if (!ui_pairs_init((uint8_t) nb_pairs)) {
         return false;
     }
-    if (APP_MEM_CALLOC((void **) &index_allocated, nb_pairs) == false) {
+    if (APP_MEM_CALLOC((void **) &item_value_owned, nb_pairs) == false) {
         return false;
     }
 
     // First pair: contract info, with an info-list alias.
-    index_allocated[pair] = true;
+    item_value_owned[pair] = true;
     if ((g_pairs[pair].item = APP_MEM_STRDUP("Interaction with")) == NULL) {
         return false;
     }
@@ -614,7 +632,7 @@ bool ui_gcs(void) {
                      "%u of %u",
                      (unsigned int) tx_idx,
                      (unsigned int) batch_nb_tx);
-            index_allocated[pair] = true;
+            item_value_owned[pair] = true;
             if (((g_pairs[pair].item = APP_MEM_STRDUP("Review transaction")) == NULL) ||
                 ((g_pairs[pair].value = APP_MEM_STRDUP(tmp_buf)) == NULL)) {
                 return false;
@@ -639,7 +657,7 @@ bool ui_gcs(void) {
 
     if (show_network) {
         if (pair >= nb_pairs) return false;
-        index_allocated[pair] = true;
+        item_value_owned[pair] = true;
         if ((g_pairs[pair].item = APP_MEM_STRDUP("Network")) == NULL) {
             return false;
         }
