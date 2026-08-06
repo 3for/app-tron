@@ -2519,6 +2519,31 @@ class TestTRX():
         shared_key = client.getAccount(1)['dh'].exchange(ec.ECDH(), pubKeyDH)
         assert (shared_key.hex() == resp.data[1:33].hex())
 
+    @pytest.mark.parametrize("case", ["wrong_prefix", "off_curve"])
+    def test_trx_ecdh_rejects_invalid_peer_public_key(self, backend, case):
+        client = TronClient(backend)
+        path = pack_derivation_path(client.getAccount(0)['path'])
+
+        if case == "wrong_prefix":
+            valid_coordinates = bytes.fromhex(client.getAccount(1)['publicKey'][2:])
+            peer_public_key = b"\x05" + valid_coordinates
+        else:
+            # SEC1 infinity has no uncompressed affine representation. (0, 0)
+            # is an unambiguous off-curve input and exercises the point check.
+            peer_public_key = b"\x04" + bytes(64)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA,
+                             InsType.GET_ECDH_SECRET,
+                             0x00,
+                             0x01,
+                             path + peer_public_key)
+        assert error.value.status == StatusWord.INVALID_DATA
+
+        # Rejecting an invalid peer key must leave the app ready for the next APDU.
+        response = backend.exchange(CLA, InsType.GET_PUBLIC_KEY, 0x00, 0x00, path)
+        assert response.status == StatusWord.OK
+
     @pytest.mark.parametrize(
         ("ins", "p2", "payload"),
         [
