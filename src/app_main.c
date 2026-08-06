@@ -67,7 +67,6 @@ txContext_t txContext;
 app_state_t appState;
 
 const chain_config_t *chainConfig;
-caller_app_t *caller_app = NULL;
 
 extern void roll_challenge(void);
 
@@ -330,35 +329,17 @@ static void tron_library_main(tron_libargs_t *args) {
 }
 #endif  // HAVE_SWAP
 
-// Common initialization for the application, both in Standalone or Library mode (Swap)
-static void app_init(bool library_mode) {
-    if (library_mode == false) {
-        // If we are not in library mode, 1st init is the dynamic memory
-        app_mem_init();
-    }
+// Initialize the standalone application.
+static void app_init(void) {
+    app_mem_init();
     reset_app_context();
     common_app_init();
     // storage_init();
-    if (library_mode == false) {
-        // If we are not in library mode, we need to initialize the UX
-        io_init();
-        ui_idle();
-    }
+    io_init();
+    ui_idle();
 
     // to prevent it from having a fixed value at boot
     roll_challenge();
-}
-
-void coin_main(tron_libargs_t *args) {
-    if (args) {
-        if ((caller_app = args->caller_app) != NULL) {
-            caller_app->type = CALLER_TYPE_PLUGIN;
-        }
-    }
-
-    app_init(false);
-
-    app_main();
 }
 
 void app_quit(void) {
@@ -375,7 +356,8 @@ int tron_main(tron_libargs_t *args) {
 
     if (args == NULL) {
         // called from dashboard as standalone tron app
-        coin_main(NULL);
+        app_init();
+        app_main();
         return 0;
     }
 
@@ -383,20 +365,13 @@ int tron_main(tron_libargs_t *args) {
         app_quit();
         return 0;
     }
-    switch (args->command) {
-        case RUN_APPLICATION:
-            // called as tron from altcoin or plugin
-            coin_main(args);
-            break;
-        default:
 #ifdef HAVE_SWAP
-            // called as tron or altcoin library
-            tron_library_main(args);
+    // Called as a library by app-exchange. Unsupported commands are ignored by
+    // tron_library_main() and returned to the caller through os_lib_end().
+    tron_library_main(args);
 #else
-            app_quit();
+    app_quit();
 #endif  // HAVE_SWAP
-            break;
-    }
     return 0;
 }
 

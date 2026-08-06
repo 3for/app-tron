@@ -10,7 +10,6 @@
 #include "asset_info.h"
 #include "tx_content.h"
 #include "bip32_utils.h"
-#include "caller_api.h"
 #include "swap_lib_calls.h"
 #include "main_std_app.h"
 #include "shared_context.h"  // application contexts (tmpCtx, txContext, strings, ...)
@@ -127,6 +126,5 @@ typedef struct tron_libargs_s {
         check_address_parameters_t *check_address;
         create_transaction_parameters_t *create_transaction;
         get_printable_amount_parameters_t *get_printable_amount;
-        caller_app_t *caller_app;
     };
 } tron_libargs_t;
