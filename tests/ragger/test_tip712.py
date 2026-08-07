@@ -2127,7 +2127,7 @@ def test_tip712_legacy_review_rejects_existing_full_context(
 
 def test_tip712_malformed_apdu_during_review_resets_cleanly(
         scenario_navigator: NavigateWithScenario):
-    """Malformed input must replace the review, reply 0x6700 and free its UI."""
+    """Malformed input must replace the review, reply 0x6A87 and free its UI."""
     backend = scenario_navigator.backend
     client = TronClient(backend, backend.device, scenario_navigator.navigator)
     input_dir = Path(tip712_json_path())
@@ -2145,7 +2145,7 @@ def test_tip712_malformed_apdu_during_review_resets_cleanly(
         with client.tip712_sign_new(signing_path):
             # CLA/INS/P1 only: the SDK APDU parser rejects this before dispatch.
             response = backend.exchange_raw(bytes([0xE0, 0x0C, 0x00]))
-            assert response.status == StatusWord.INCORRECT_LENGTH
+            assert response.status == StatusWord.WRONG_DATA_LENGTH
     finally:
         backend.raise_policy = previous_policy
 
