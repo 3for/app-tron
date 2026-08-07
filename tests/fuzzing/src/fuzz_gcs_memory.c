@@ -13,7 +13,8 @@
 #define GCS_ALLOC_ACCOUNTED_MASK   UINT32_C(0x80000000)
 #define GCS_ALLOC_CATEGORY_SHIFT   28U
 #define GCS_ALLOC_CATEGORY_MASK    UINT32_C(0x70000000)
-#define GCS_ALLOC_GENERATION_MASK  UINT32_C(0x0fffffff)
+#define GCS_ALLOC_MAGIC_TEST_BIT   UINT32_C(0x00010000)
+#define GCS_ALLOC_GENERATION_MASK  UINT32_C(0x0000ffff)
 
 typedef union {
     struct {
@@ -555,19 +556,29 @@ static void end_session_with_live_allocation(void) {
 static void free_stale_generation_allocation(void) {
     const size_t slot_idx = 0U;
     gcs_memory_fuzz_header_t *header;
+    uint32_t original_tag;
 
     begin_session_with_live_slot_zero();
     header = slot_header(slot_idx);
+    original_tag = header->fields.accounting_tag;
     header->fields.accounting_tag =
-        (header->fields.accounting_tag & ~GCS_ALLOC_GENERATION_MASK) |
-        ((header->fields.accounting_tag ^ 1U) & GCS_ALLOC_GENERATION_MASK);
+        (original_tag & ~GCS_ALLOC_GENERATION_MASK) |
+        ((original_tag ^ 1U) & GCS_ALLOC_GENERATION_MASK);
 
     gcs_mem_free(g_slots[slot_idx].ptr);
-    g_model.tracked_live_bytes -= g_slots[slot_idx].charged_size;
+    g_model.invariant_failed = true;
+    verify_model_state();
+
+    /* A rejected free must leave the allocation intact. Restore the header so
+     * the host fuzzer can release it without leaking across iterations. */
+    header->fields.accounting_tag = original_tag;
+    gcs_mem_free(g_slots[slot_idx].ptr);
+    model_free_update(g_slots[slot_idx].charged_size,
+                      g_slots[slot_idx].category,
+                      g_slots[slot_idx].charged_session);
     g_slots[slot_idx].ptr = NULL;
     g_slots[slot_idx].charged_size = 0U;
     g_slots[slot_idx].charged_session = false;
-    g_model.invariant_failed = true;
     verify_model_state();
     expect_active_budget_end_failure();
 }
@@ -575,20 +586,54 @@ static void free_stale_generation_allocation(void) {
 static void free_wrong_category_allocation(void) {
     const size_t slot_idx = 0U;
     gcs_memory_fuzz_header_t *header;
+    uint32_t original_tag;
 
     begin_session_with_live_slot_zero();
     header = slot_header(slot_idx);
+    original_tag = header->fields.accounting_tag;
     header->fields.accounting_tag =
-        (header->fields.accounting_tag & ~GCS_ALLOC_CATEGORY_MASK) |
+        (original_tag & ~GCS_ALLOC_CATEGORY_MASK) |
         (((uint32_t) GCS_MEM_CALLDATA << GCS_ALLOC_CATEGORY_SHIFT) &
          GCS_ALLOC_CATEGORY_MASK);
 
     gcs_mem_free(g_slots[slot_idx].ptr);
-    g_model.tracked_live_bytes -= g_slots[slot_idx].charged_size;
+    g_model.invariant_failed = true;
+    verify_model_state();
+
+    header->fields.accounting_tag = original_tag;
+    gcs_mem_free(g_slots[slot_idx].ptr);
+    model_free_update(g_slots[slot_idx].charged_size,
+                      g_slots[slot_idx].category,
+                      g_slots[slot_idx].charged_session);
     g_slots[slot_idx].ptr = NULL;
     g_slots[slot_idx].charged_size = 0U;
     g_slots[slot_idx].charged_session = false;
+    verify_model_state();
+    expect_active_budget_end_failure();
+}
+
+static void free_bad_magic_allocation(void) {
+    const size_t slot_idx = 0U;
+    gcs_memory_fuzz_header_t *header;
+    uint32_t original_tag;
+
+    begin_session_with_live_slot_zero();
+    header = slot_header(slot_idx);
+    original_tag = header->fields.accounting_tag;
+    header->fields.accounting_tag = original_tag ^ GCS_ALLOC_MAGIC_TEST_BIT;
+
+    gcs_mem_free(g_slots[slot_idx].ptr);
     g_model.invariant_failed = true;
+    verify_model_state();
+
+    header->fields.accounting_tag = original_tag;
+    gcs_mem_free(g_slots[slot_idx].ptr);
+    model_free_update(g_slots[slot_idx].charged_size,
+                      g_slots[slot_idx].category,
+                      g_slots[slot_idx].charged_session);
+    g_slots[slot_idx].ptr = NULL;
+    g_slots[slot_idx].charged_size = 0U;
+    g_slots[slot_idx].charged_session = false;
     verify_model_state();
     expect_active_budget_end_failure();
 }
@@ -714,10 +759,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                 free_wrong_category_allocation();
                 break;
             default:
-                if (gcs_mem_take_allocation_failure()) {
-                    fuzz_trap();
-                }
-                verify_model_state();
+                free_bad_magic_allocation();
                 break;
         }
         if (g_model.invariant_failed) {

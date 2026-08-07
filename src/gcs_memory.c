@@ -7,10 +7,12 @@
 #include "app_mem_utils.h"
 #include "gcs_limits.h"
 
-#define GCS_ALLOC_ACCOUNTED_MASK UINT32_C(0x80000000)
-#define GCS_ALLOC_CATEGORY_SHIFT 28U
-#define GCS_ALLOC_CATEGORY_MASK  UINT32_C(0x70000000)
-#define GCS_ALLOC_GENERATION_MASK UINT32_C(0x0fffffff)
+#define GCS_ALLOC_ACCOUNTED_MASK  UINT32_C(0x80000000)
+#define GCS_ALLOC_CATEGORY_SHIFT  28U
+#define GCS_ALLOC_CATEGORY_MASK   UINT32_C(0x70000000)
+#define GCS_ALLOC_MAGIC_MASK      UINT32_C(0x0fff0000)
+#define GCS_ALLOC_MAGIC_VALUE     UINT32_C(0x0a5c0000)
+#define GCS_ALLOC_GENERATION_MASK UINT32_C(0x0000ffff)
 
 /*
  * Keep the header exactly eight bytes. A natural struct containing size_t,
@@ -31,6 +33,12 @@ _Static_assert(_Alignof(gcs_alloc_header_t) >= _Alignof(intmax_t),
                "GCS allocation header must preserve heap alignment");
 _Static_assert(GCS_MEM_CATEGORY_COUNT <= 8U,
                "GCS allocation tag reserves three category bits");
+_Static_assert((GCS_ALLOC_ACCOUNTED_MASK | GCS_ALLOC_CATEGORY_MASK |
+                GCS_ALLOC_MAGIC_MASK | GCS_ALLOC_GENERATION_MASK) == UINT32_MAX,
+               "GCS allocation tag fields must cover exactly 32 bits");
+_Static_assert((GCS_ALLOC_MAGIC_VALUE & GCS_ALLOC_MAGIC_MASK) ==
+                   GCS_ALLOC_MAGIC_VALUE,
+               "GCS allocation magic must fit its 12-bit tag field");
 _Static_assert((GCS_MAX_TRACKED_LIVE_BYTES + GCS_HEAP_RESERVE_BYTES) ==
                    (16U * 1024U),
                "GCS tracked budget and reserve must cover the 16 KiB app heap");
@@ -50,8 +58,9 @@ static bool checked_add(size_t left, size_t right, size_t *out) {
 }
 
 static uint32_t make_accounting_tag(gcs_mem_category_t category) {
-    uint32_t tag = ((uint32_t) category << GCS_ALLOC_CATEGORY_SHIFT) &
-                   GCS_ALLOC_CATEGORY_MASK;
+    uint32_t tag = (((uint32_t) category << GCS_ALLOC_CATEGORY_SHIFT) &
+                    GCS_ALLOC_CATEGORY_MASK) |
+                   GCS_ALLOC_MAGIC_VALUE;
 
     if (g_budget_active) {
         tag |= GCS_ALLOC_ACCOUNTED_MASK | (g_generation & GCS_ALLOC_GENERATION_MASK);
@@ -171,23 +180,31 @@ void gcs_mem_free(void *ptr) {
     category = tag_category(tag);
     accounted = (tag & GCS_ALLOC_ACCOUNTED_MASK) != 0U;
 
-    if ((charged_size < sizeof(*header)) ||
+    /* The cookie is a lightweight corruption check, not an ownership proof:
+     * header has already been derived from ptr. Once any check fails, poison
+     * the current app session and avoid turning it into an invalid write/free. */
+    if (((tag & GCS_ALLOC_MAGIC_MASK) != GCS_ALLOC_MAGIC_VALUE) ||
+        (charged_size < sizeof(*header)) ||
         (charged_size > g_tracked_live_bytes) ||
-        (category >= GCS_MEM_CATEGORY_COUNT)) {
+        (category >= GCS_MEM_CATEGORY_COUNT) ||
+        (!accounted && ((tag & GCS_ALLOC_GENERATION_MASK) != 0U))) {
         g_invariant_failure = true;
-    } else {
-        g_tracked_live_bytes -= charged_size;
-        if (accounted) {
-            if (((tag & GCS_ALLOC_GENERATION_MASK) != g_generation) ||
-                (charged_size > g_session_live_bytes) ||
-                (charged_size > g_category_live_bytes[category])) {
-                /* Never refund a stale allocation into the current session. */
-                g_invariant_failure = true;
-            } else {
-                g_session_live_bytes -= charged_size;
-                g_category_live_bytes[category] -= charged_size;
-            }
-        }
+        return;
+    }
+    if (accounted &&
+        (((tag & GCS_ALLOC_GENERATION_MASK) != g_generation) ||
+         (charged_size > g_session_live_bytes) ||
+         (charged_size > g_category_live_bytes[category]))) {
+        /* Never refund or free a stale/corrupted allocation into the current
+         * session. The sticky invariant requires an app restart either way. */
+        g_invariant_failure = true;
+        return;
+    }
+
+    g_tracked_live_bytes -= charged_size;
+    if (accounted) {
+        g_session_live_bytes -= charged_size;
+        g_category_live_bytes[category] -= charged_size;
     }
     memset(header, 0, sizeof(*header));
     APP_MEM_FREE(header);

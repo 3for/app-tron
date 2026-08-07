@@ -15,6 +15,18 @@
 #include "transaction_trigger_decode.h"
 
 #define TRACKED_HEADER_SIZE 8U
+#define TRACKED_MAGIC_TEST_BIT UINT32_C(0x00010000)
+
+typedef union {
+    struct {
+        uint32_t charged_size;
+        uint32_t accounting_tag;
+    } fields;
+    intmax_t alignment;
+} tracked_test_header_t;
+
+_Static_assert(sizeof(tracked_test_header_t) == TRACKED_HEADER_SIZE,
+               "test header must match the allocator header");
 
 app_state_t appState;
 
@@ -137,6 +149,35 @@ static void test_nested_calldata_limit_is_state_independent(void **state) {
                                      selector));
 }
 
+static void test_corrupted_cookie_is_fail_stop(void **state) {
+    (void) state;
+    const size_t charged_size = 32U + TRACKED_HEADER_SIZE;
+    void *ptr;
+    tracked_test_header_t *header;
+    uint32_t original_tag;
+
+    assert_true(gcs_budget_begin());
+    ptr = gcs_mem_alloc(32U, GCS_MEM_GENERIC);
+    assert_non_null(ptr);
+    header = ((tracked_test_header_t *) ptr) - 1;
+    original_tag = header->fields.accounting_tag;
+    header->fields.accounting_tag ^= TRACKED_MAGIC_TEST_BIT;
+
+    gcs_mem_free(ptr);
+    assert_true(gcs_mem_invariant_failed());
+    assert_int_equal(gcs_mem_tracked_live_bytes(), charged_size);
+    assert_int_equal(gcs_mem_session_live_bytes(), charged_size);
+    assert_int_equal(gcs_mem_category_live_bytes(GCS_MEM_GENERIC), charged_size);
+
+    /* Restore the cookie to prove the rejected free left the allocation live,
+     * then release it before ending this intentionally poisoned session. */
+    header->fields.accounting_tag = original_tag;
+    gcs_mem_free(ptr);
+    assert_int_equal(gcs_mem_tracked_live_bytes(), 0U);
+    assert_int_equal(gcs_mem_session_live_bytes(), 0U);
+    assert_false(gcs_budget_end());
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_inactive_budget_end_clears_allocation_failure),
@@ -146,6 +187,8 @@ int main(void) {
         cmocka_unit_test(test_returned_pointer_preserves_intmax_alignment),
         cmocka_unit_test(test_incompressible_4096_bounded_root_fits_calldata_budget),
         cmocka_unit_test(test_nested_calldata_limit_is_state_independent),
+        /* Must remain last because invariant failure is intentionally sticky. */
+        cmocka_unit_test(test_corrupted_cookie_is_fail_stop),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

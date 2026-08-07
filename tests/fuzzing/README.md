@@ -426,8 +426,10 @@ an allocator op. It exercises `gcs_mem_alloc()`, `gcs_mem_calloc()`,
 `gcs_mem_reset_phase_peaks()` while checking the tracked, session, category,
 and peak counters against an independent host-side model. It also has
 expected-failure ops for live allocations at session end, stale generation
-frees, and category/session accounting mismatches, and verifies the sticky
-invariant-failure flag without treating those paths as fuzzer crashes.
+frees, corrupted allocation cookies, and category/session accounting
+mismatches. Invalid headers must leave their allocation intact while setting
+the sticky invariant-failure flag; those expected fail-stop paths are not
+treated as fuzzer crashes.
 
 ### External metadata
 
