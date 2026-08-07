@@ -25,8 +25,19 @@ typedef union {
     intmax_t alignment;
 } tracked_test_header_t;
 
+typedef struct {
+    size_t expected_size;
+    size_t received_size;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE];
+    s_calldata_chunk *chunks;
+    uint8_t chunk[CALLDATA_CHUNK_SIZE];
+    size_t chunk_size;
+} legacy_calldata_layout_t;
+
 _Static_assert(sizeof(tracked_test_header_t) == TRACKED_HEADER_SIZE,
                "test header must match the allocator header");
+_Static_assert(sizeof(s_calldata) == sizeof(legacy_calldata_layout_t),
+               "coverage mode must not grow the TIP-712 calldata base object");
 
 app_state_t appState;
 
@@ -144,9 +155,108 @@ static void test_nested_calldata_limit_is_state_independent(void **state) {
     s_calldata *maximum =
         calldata_init_nested(GCS_MAX_NESTED_CALLDATA_SIZE, selector);
     assert_non_null(maximum);
+    assert_false(calldata_tracks_coverage(maximum));
+    assert_false(calldata_is_fully_covered(maximum));
     calldata_delete(maximum);
     assert_null(calldata_init_nested(GCS_MAX_NESTED_CALLDATA_SIZE + 1U,
                                      selector));
+}
+
+static void test_gcs_nested_calldata_tracks_coverage(void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+    uint8_t args[CALLDATA_CHUNK_SIZE] = {0};
+
+    assert_true(gcs_budget_begin());
+    s_calldata *calldata = calldata_init_nested_gcs(sizeof(args), selector);
+    assert_non_null(calldata);
+    assert_true(calldata_tracks_coverage(calldata));
+    assert_true(calldata_append(calldata, args, sizeof(args)));
+    assert_false(calldata_is_fully_covered(calldata));
+    assert_true(calldata_claim_bytes(calldata, 0U, sizeof(args)));
+    assert_true(calldata_is_fully_covered(calldata));
+    calldata_delete(calldata);
+    assert_true(gcs_budget_end());
+}
+
+static void test_calldata_coverage_rejects_unclaimed_words(void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+    uint8_t args[3U * CALLDATA_CHUNK_SIZE];
+
+    memset(args, 0xa5, sizeof(args));
+    assert_true(gcs_budget_begin());
+    s_calldata *calldata = calldata_init_root(sizeof(args), selector);
+    assert_non_null(calldata);
+    assert_true(calldata_append(calldata, args, sizeof(args)));
+
+    assert_false(calldata_is_fully_covered(calldata));
+    assert_true(calldata_claim_bytes(calldata,
+                                     0U,
+                                     2U * CALLDATA_CHUNK_SIZE));
+    /* A descriptor for the first two ABI words must not authorize an aligned
+     * third word appended by the transaction host. */
+    assert_false(calldata_is_fully_covered(calldata));
+    assert_true(calldata_claim_bytes(calldata,
+                                     2U * CALLDATA_CHUNK_SIZE,
+                                     CALLDATA_CHUNK_SIZE));
+    assert_true(calldata_is_fully_covered(calldata));
+    assert_false(calldata_claim_bytes(calldata,
+                                      3U * CALLDATA_CHUNK_SIZE,
+                                      1U));
+    assert_false(calldata_claim_bytes(calldata, 0U, 1U));
+
+    calldata_delete(calldata);
+    assert_true(gcs_budget_end());
+}
+
+static void test_calldata_coverage_accepts_only_disjoint_claims(void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+    uint8_t args[CALLDATA_CHUNK_SIZE] = {0};
+
+    assert_true(gcs_budget_begin());
+    s_calldata *calldata = calldata_init_root(sizeof(args), selector);
+    assert_non_null(calldata);
+    assert_true(calldata_append(calldata, args, sizeof(args)));
+    assert_true(calldata_claim_bytes(calldata, 0U, 16U));
+    assert_false(calldata_claim_bytes(calldata, 8U, 16U));
+    assert_true(calldata_claim_bytes(calldata, 16U, 16U));
+    assert_true(calldata_is_fully_covered(calldata));
+    calldata_delete(calldata);
+    assert_true(gcs_budget_end());
+}
+
+static void test_canonical_zero_coverage_is_idempotent_but_not_a_leaf_alias(
+    void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+    uint8_t args[CALLDATA_CHUNK_SIZE] = {0};
+
+    assert_true(gcs_budget_begin());
+    s_calldata *calldata = calldata_init_root(sizeof(args), selector);
+    assert_non_null(calldata);
+    assert_true(calldata_append(calldata, args, sizeof(args)));
+    assert_true(calldata_cover_canonical_zero(calldata, 16U, 16U));
+    assert_true(calldata_cover_canonical_zero(calldata, 16U, 16U));
+    assert_false(calldata_claim_bytes(calldata, 16U, 1U));
+    assert_true(calldata_claim_bytes(calldata, 0U, 16U));
+    assert_true(calldata_is_fully_covered(calldata));
+    calldata_delete(calldata);
+    assert_true(gcs_budget_end());
+}
+
+static void test_empty_calldata_is_fully_covered(void **state) {
+    (void) state;
+    uint8_t selector[CALLDATA_SELECTOR_SIZE] = {0x12, 0x34, 0x56, 0x78};
+
+    assert_true(gcs_budget_begin());
+    s_calldata *calldata = calldata_init_root(0U, selector);
+    assert_non_null(calldata);
+    assert_true(calldata_append(calldata, NULL, 0U));
+    assert_true(calldata_is_fully_covered(calldata));
+    calldata_delete(calldata);
+    assert_true(gcs_budget_end());
 }
 
 static void test_corrupted_cookie_is_fail_stop(void **state) {
@@ -187,6 +297,12 @@ int main(void) {
         cmocka_unit_test(test_returned_pointer_preserves_intmax_alignment),
         cmocka_unit_test(test_incompressible_4096_bounded_root_fits_calldata_budget),
         cmocka_unit_test(test_nested_calldata_limit_is_state_independent),
+        cmocka_unit_test(test_gcs_nested_calldata_tracks_coverage),
+        cmocka_unit_test(test_calldata_coverage_rejects_unclaimed_words),
+        cmocka_unit_test(test_calldata_coverage_accepts_only_disjoint_claims),
+        cmocka_unit_test(
+            test_canonical_zero_coverage_is_idempotent_but_not_a_leaf_alias),
+        cmocka_unit_test(test_empty_calldata_is_fully_covered),
         /* Must remain last because invariant failure is intentionally sticky. */
         cmocka_unit_test(test_corrupted_cookie_is_fail_stop),
     };

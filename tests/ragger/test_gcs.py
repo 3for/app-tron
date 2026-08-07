@@ -37,17 +37,19 @@ from client.command_builder import (CLA, MAX_APDU_LEN, InsType, P1Type, P2Type)
 from client.enum_value import EnumValue
 from client.gating import Gating
 from client.proxy_info import ProxyInfo
-from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, ParamAmount,
-                        ParamCalldata, ParamDatetime, ParamDuration, ParamEnum,
+from client.gcs import (ContainerPath, DataPath, DatetimeType, Field, FieldParam,
+                        ParamAmount, ParamCalldata, ParamDatetime, ParamDuration,
+                        ParamEnum,
                         ParamNetwork, ParamNFT, ParamRaw, ParamToken, ParamTokenAmount,
                         ParamTrustedName, ParamType, PathLeaf, PathLeafType,
-                        ParamUnit, PathArray, PathRef, PathTuple, TxInfo, TypeFamily, Value,
+                        ParamUnit, PathArray, PathRef, PathSlice, PathTuple,
+                        TxInfo, TypeFamily, Value,
                         VisibleType)
 from client.trusted_name import TrustedName, TrustedNameSource, TrustedNameType
 from client.tlv import eth_to_tron_base58
 from fields_utils import (get_all_paths, get_all_tuple_array_paths,
                           get_all_tuple_paths)
-from gcs_utils import ABIS_FOLDER, compute_inst_hash
+from gcs_utils import ABIS_FOLDER, compute_inst_hash as _compute_inst_hash
 from ragger.error import ExceptionRAPDU
 from ragger.backend import BackendInterface
 from ragger.bip import pack_derivation_path
@@ -84,6 +86,9 @@ TRC20_CONTRACT_B58 = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
 # gating descriptor) matches against.
 TRC20_CONTRACT_ADDR20 = bytes.fromhex("14183f3bbca4ae9fc1de55b9bbe2d071942dc1a6")
 TRC20_TRANSFER_SELECTOR = bytes.fromhex("a9059cbb")
+TRC20_TRANSFER_RECIPIENT20 = bytes.fromhex(
+    "364b03e0815687edaf90b81ff58e496dea7383d7")
+TRC20_TRANSFER_AMOUNT = 1_000_000
 TRC20_TRANSFER_CALLDATA = bytes.fromhex(
     "a9059cbb"
     "000000000000000000000000364b03e0815687edaf90b81ff58e496dea7383d7"
@@ -585,8 +590,9 @@ def _encode_uint256_nested_array(rows: list[list[int]]) -> bytes:
 
 
 def test_gcs_accepts_six_values_from_nested_arrays(
-        backend: BackendInterface):
+        scenario_navigator: NavigateWithScenario):
     """Re-entering an inner array must not inflate the 16-combination limit."""
+    backend = scenario_navigator.backend
     client = TronClient(backend)
     selector = bytes.fromhex("12345678")
     calldata = selector + _encode_uint256_nested_array(
@@ -605,10 +611,20 @@ def test_gcs_accepts_six_values_from_nested_arrays(
              PathLeaf(PathLeafType.STATIC)],
         ),
     )
-    field = Field(1, "Value", ParamRaw(1, value))
+    fields = with_explicit_abi_structure(
+        [Field(1, "Value", ParamRaw(1, value))]
+    )
     client.provide_transaction_info(
-        build_tx_info(TRC20_CONTRACT_ADDR20, selector, [field], "nested arrays"))
-    assert client.provide_transaction_field_desc(field.serialize()).status == StatusWord.OK
+        build_tx_info(TRC20_CONTRACT_ADDR20, selector, fields, "nested arrays"))
+    for field in fields:
+        assert (client.provide_transaction_field_desc(field.serialize()).status ==
+                StatusWord.OK)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                    P2_GCS_START_FLOW, b""):
+            scenario_navigator.review_reject(do_comparison=False)
+    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
 
 
 def _uint_value(type_size: int, data_path: DataPath) -> Value:
@@ -681,6 +697,91 @@ def build_field_enum(name: str, enum_id: int, value_path: DataPath) -> Field:
                  ParamEnum(1, enum_id, _uint_value(32, value_path)))
 
 
+def _iter_param_values(value: object, seen: set[int]):
+    """Yield Value objects from the bounded FieldParam object graph."""
+    if isinstance(value, Value):
+        yield value
+        return
+    if value is None or isinstance(value, (bytes, str, int)):
+        return
+
+    object_id = id(value)
+    if object_id in seen:
+        return
+    seen.add(object_id)
+
+    if isinstance(value, FieldParam):
+        for child in vars(value).values():
+            yield from _iter_param_values(child, seen)
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _iter_param_values(child, seen)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _iter_param_values(child, seen)
+
+
+def with_explicit_abi_structure(fields: list[Field]) -> list[Field]:
+    """Prepend static FIELDs that own every structure word traversed by paths.
+
+    The generated descriptor depends only on signed DataPath objects. It never
+    reads a transaction value, offset, length, array count, or calldata hash.
+    Structural FIELDs precede ParamCalldata fields because those fields publish
+    child tx contexts and switch the device's current context.
+    """
+    values = [
+        value
+        for field in fields
+        for value in _iter_param_values(field.param, set())
+        if value.data_path is not None
+    ]
+
+    # An existing full/sliced leaf owns this structural location explicitly;
+    # do not add a full-word owner that would overlap it.
+    existing_leaf_prefixes: set[bytes] = set()
+    for value in values:
+        for index, node in enumerate(value.data_path.path):
+            if isinstance(node, PathLeaf):
+                existing_leaf_prefixes.add(
+                    bytes(DataPath(value.data_path.version,
+                                   value.data_path.path[:index + 1]).serialize()))
+                break
+
+    structure_paths: list[DataPath] = []
+    seen: set[bytes] = set()
+    for value in values:
+        data_path = value.data_path
+        for index, node in enumerate(data_path.path):
+            owns_structure = isinstance(node, (PathRef, PathArray))
+            owns_structure |= (
+                isinstance(node, PathLeaf) and
+                node.type == PathLeafType.DYNAMIC
+            )
+            if not owns_structure:
+                continue
+            structure_path = DataPath(
+                data_path.version,
+                data_path.path[:index] + [PathLeaf(PathLeafType.STATIC)],
+            )
+            serialized = bytes(structure_path.serialize())
+            if serialized in existing_leaf_prefixes or serialized in seen:
+                continue
+            seen.add(serialized)
+            structure_paths.append(structure_path)
+
+    structure_fields = [
+        build_field_raw(f"ABI structure {index + 1}", 32, data_path)
+        for index, data_path in enumerate(structure_paths)
+    ]
+    return structure_fields + list(fields)
+
+
+def compute_inst_hash(fields: list[Field]) -> bytes:
+    """Hash the exact static FIELD stream that will be sent to the device."""
+    fields[:] = with_explicit_abi_structure(fields)
+    return _compute_inst_hash(fields)
+
+
 def build_enum_value(contract_addr20: bytes, selector: bytes, enum_id: int,
                      value: int, name: str) -> bytes:
     return EnumValue(1,
@@ -702,6 +803,338 @@ def build_tx_info(contract_addr20: bytes, selector: bytes, fields: list[Field],
                   operation).serialize()
 
 
+def build_complete_transfer_fields() -> list[Field]:
+    """Describe both ABI words of transfer(address,uint256)."""
+    return [
+        build_field_address("To", build_data_path_static(0)),
+        build_field_raw("Amount", 32, build_data_path_static(1)),
+    ]
+
+
+def build_fixture_transfer_fields() -> list[Field]:
+    """Fully cover the fixed transfer fixture without changing legacy screens.
+
+    This descriptor is a static fixture allowlist: neither constraint is read
+    from the transaction being tested. Cross-value CAL reuse is exercised by
+    test_gcs_complete_cal_remains_static_across_values instead.
+    """
+    return [
+        Field(1,
+              "To",
+              ParamRaw(1, _address_value(build_data_path_static(0))),
+              VisibleType.MUST_BE,
+              [TRC20_TRANSFER_RECIPIENT20]),
+        build_field_raw("Amount", 32, build_data_path_static(1)),
+    ]
+
+
+def test_gcs_rejects_uncovered_aligned_calldata_suffix(
+        backend: BackendInterface):
+    """A static transfer CAL must not authorize an undeclared trailing word."""
+    client = TronClient(backend)
+    calldata = TRC20_TRANSFER_CALLDATA + bytes.fromhex("01" * 32)
+    tx = build_trc20_transfer_tx(client, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    fields = build_complete_transfer_fields()
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      fields,
+                      "transfer"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    # START_FLOW rejection must tear down the poisoned session.
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+def test_gcs_rejects_interior_uncovered_argument(
+        backend: BackendInterface):
+    """Covering amount alone must not silently authorize transfer recipient."""
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    amount_field = build_field_raw("Amount", 32, build_data_path_static(1))
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      [amount_field],
+                      "transfer"))
+    client.provide_transaction_field_desc(amount_field.serialize())
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_gcs_partial_slice_does_not_cover_whole_word(
+        backend: BackendInterface):
+    """Displaying a byte slice must not authorize hidden bytes in that ABI word."""
+    client = TronClient(backend)
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    sliced_recipient = Field(
+        1,
+        "Recipient prefix",
+        ParamRaw(
+            1,
+            Value(1,
+                  TypeFamily.BYTES,
+                  data_path=DataPath(
+                      1,
+                      [PathTuple(0), PathLeaf(PathLeafType.STATIC),
+                       PathSlice(0, 16)]))),
+    )
+    amount = build_field_raw("Amount", 32, build_data_path_static(1))
+    fields = [sliced_recipient, amount]
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      fields,
+                      "transfer"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_gcs_complete_cal_remains_static_across_values(
+        scenario_navigator: NavigateWithScenario):
+    """The same signed schema must accept different values of the same ABI."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+    fields = build_complete_transfer_fields()
+    tx_info = build_tx_info(TRC20_CONTRACT_ADDR20,
+                            TRC20_TRANSFER_SELECTOR,
+                            fields,
+                            "transfer")
+    serialized_fields = [field.serialize() for field in fields]
+
+    calls = [
+        TRC20_TRANSFER_CALLDATA,
+        (TRC20_TRANSFER_SELECTOR
+         + bytes(12)
+         + bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+         + (42).to_bytes(32, "big")),
+    ]
+    for calldata in calls:
+        tx = build_trc20_transfer_tx(client, calldata)
+        assert gcs_store_calldata(client, backend,
+                                  client.getAccount(0)["path"], tx) == StatusWord.OK
+        client.provide_transaction_info(tx_info)
+        for serialized_field in serialized_fields:
+            client.provide_transaction_field_desc(serialized_field)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                        P2_GCS_START_FLOW, b""):
+                scenario_navigator.review_reject(do_comparison=False)
+        assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_gcs_static_cal_accepts_variable_dynamic_lengths(
+        scenario_navigator: NavigateWithScenario):
+    """One static path covers canonical bytes values spanning ABI word boundaries."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+    selector = bytes.fromhex("12345678")
+    payload_field = Field(
+        1,
+        "Payload",
+        ParamRaw(
+            1,
+            Value(1,
+                  TypeFamily.BYTES,
+                  data_path=DataPath(
+                      1,
+                      [PathTuple(0), PathRef(),
+                       PathLeaf(PathLeafType.DYNAMIC)]))),
+    )
+    fields = with_explicit_abi_structure([payload_field])
+    assert len(fields) == 3  # offset + dynamic length + payload
+    tx_info = build_tx_info(TRC20_CONTRACT_ADDR20, selector, fields, "submit")
+    serialized_fields = [field.serialize() for field in fields]
+
+    for length in (31, 32, 33):
+        calldata = _abi_dynamic_calldata(selector, b"A" * length)
+        tx = build_trigger_smart_contract_tx(client,
+                                             TRC20_CONTRACT_ADDR20,
+                                             calldata)
+        assert gcs_store_calldata(client, backend,
+                                  client.getAccount(0)["path"], tx) == StatusWord.OK
+        client.provide_transaction_info(tx_info)
+        for serialized_field in serialized_fields:
+            client.provide_transaction_field_desc(serialized_field)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                        P2_GCS_START_FLOW, b""):
+                scenario_navigator.review_reject(do_comparison=False)
+        assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+def test_gcs_complementary_slices_cover_one_word(
+        scenario_navigator: NavigateWithScenario):
+    """Disjoint signed slices may jointly own a complete ABI word."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+
+    def sliced_field(name: str, start: int, end: int) -> Field:
+        return Field(
+            1,
+            name,
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(
+                          1,
+                          [PathTuple(0), PathLeaf(PathLeafType.STATIC),
+                           PathSlice(start, end)]))),
+        )
+
+    fields = [
+        sliced_field("Recipient prefix", 0, 16),
+        sliced_field("Recipient suffix", 16, 32),
+        build_field_raw("Amount", 32, build_data_path_static(1)),
+    ]
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      fields,
+                      "transfer"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        with backend.exchange_async(CLA, InsType.SIGN_GCS, P1_FIRST,
+                                    P2_GCS_START_FLOW, b""):
+            scenario_navigator.review_reject(do_comparison=False)
+    assert error.value.status == StatusWord.CONDITION_NOT_SATISFIED
+
+
+@pytest.mark.parametrize("overlap", ["duplicate", "slice"])
+def test_gcs_rejects_overlapping_descriptor_claims(
+        backend: BackendInterface, overlap: str):
+    """A calldata byte cannot be owned by two authenticated FIELD leaves."""
+    client = TronClient(backend)
+    if overlap == "duplicate":
+        fields = [
+            build_field_raw("Amount A", 32, build_data_path_static(1)),
+            build_field_raw("Amount B", 32, build_data_path_static(1)),
+        ]
+    else:
+        fields = [
+            Field(1,
+                  "Amount prefix",
+                  ParamRaw(
+                      1,
+                      Value(1,
+                            TypeFamily.BYTES,
+                            data_path=DataPath(
+                                1,
+                                [PathTuple(1), PathLeaf(PathLeafType.STATIC),
+                                 PathSlice(0, 24)])))),
+            Field(1,
+                  "Amount suffix",
+                  ParamRaw(
+                      1,
+                      Value(1,
+                            TypeFamily.BYTES,
+                            data_path=DataPath(
+                                1,
+                                [PathTuple(1), PathLeaf(PathLeafType.STATIC),
+                                 PathSlice(16, 32)])))),
+        ]
+    tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      fields,
+                      "transfer"))
+    client.provide_transaction_field_desc(fields[0].serialize())
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_field_desc(fields[1].serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_gcs_rejects_uncovered_nested_calldata_suffix(
+        backend: BackendInterface):
+    """Every ParamCalldata child must be complete before its context is popped."""
+    client = TronClient(backend)
+    root_selector = bytes.fromhex("12345678")
+    nested_calldata = TRC20_TRANSFER_CALLDATA + bytes.fromhex("02" * 32)
+    root_calldata = (
+        root_selector
+        + bytes(12) + TRC20_CONTRACT_ADDR20
+        + (64).to_bytes(32, "big")
+        + len(nested_calldata).to_bytes(32, "big")
+        + nested_calldata
+        + bytes((-len(nested_calldata)) % 32)
+    )
+    tx = build_trigger_smart_contract_tx(client, BATCH_CONTRACT20,
+                                         root_calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    root_field = Field(
+        1,
+        "Call",
+        ParamCalldata(
+            1,
+            Value(1,
+                  TypeFamily.BYTES,
+                  data_path=DataPath(
+                      1,
+                      [PathTuple(1), PathRef(),
+                       PathLeaf(PathLeafType.DYNAMIC)])),
+            _address_value(build_data_path_static(0)),
+        ),
+    )
+    root_fields = with_explicit_abi_structure([root_field])
+    client.provide_transaction_info(
+        build_tx_info(BATCH_CONTRACT20, root_selector, root_fields, "execute"))
+    for field in root_fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    child_fields = build_complete_transfer_fields()
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20,
+                      TRC20_TRANSFER_SELECTOR,
+                      child_fields,
+                      "transfer"))
+    client.provide_transaction_field_desc(child_fields[0].serialize())
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_transaction_field_desc(child_fields[1].serialize())
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    normal_tx = build_trc20_transfer_tx(client)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
 def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
     """store -> 0x26 -> 0x28(raw) -> expect 0x9000 (fields_hash validated)."""
     tx = build_trc20_transfer_tx(tron_client)
@@ -711,10 +1144,7 @@ def test_gcs_p1_end_to_end(tron_client: TronClient, backend: BackendInterface):
     # generic_tx_parser works on 20-byte EVM addresses (0x41 prefix stripped).
     contract_addr20 = bytes.fromhex(tron_client.address_hex(TRC20_CONTRACT_B58))[1:]
 
-    # `transfer(address _to, uint256 _amount)`: _amount is arg index 1, static.
-    amount_field = build_field_raw("Amount", 32,
-                                   data_path=build_data_path_static(1))
-    fields = [amount_field]
+    fields = build_complete_transfer_fields()
 
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
@@ -747,10 +1177,12 @@ def _abi_dynamic_calldata(selector: bytes, value: bytes,
         "length_high_bits",
         "bool_not_canonical",
         "address_high_bits",
+        "address_legacy_abi_prefix",
         "address_wrong_tron_prefix",
         "uint8_high_bits",
         "bytes_constraint_hidden_suffix",
         "bytes_not_fully_displayable",
+        "dynamic_nonzero_padding",
         "data_path_without_leaf",
     ],
 )
@@ -763,9 +1195,17 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
     visibility = VisibleType.ALWAYS
     constraints = None
 
-    if case in {"bytes_constraint_hidden_suffix", "bytes_not_fully_displayable"}:
-        raw_value = (b"A" * 127 + b"B") if case == "bytes_constraint_hidden_suffix" else b"A" * 189
+    if case in {"bytes_constraint_hidden_suffix", "bytes_not_fully_displayable",
+                "dynamic_nonzero_padding"}:
+        if case == "bytes_constraint_hidden_suffix":
+            raw_value = b"A" * 127 + b"B"
+        elif case == "bytes_not_fully_displayable":
+            raw_value = b"A" * 189
+        else:
+            raw_value = b"A" * 31
         calldata = _abi_dynamic_calldata(selector, raw_value)
+        if case == "dynamic_nonzero_padding":
+            calldata = calldata[:-1] + b"\x01"
         value = Value(
             1,
             TypeFamily.BYTES,
@@ -829,6 +1269,11 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
             word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
             family = TypeFamily.ADDRESS
             type_size = None
+        elif case == "address_legacy_abi_prefix":
+            word[-21] = 0x41
+            word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+            family = TypeFamily.ADDRESS
+            type_size = None
         else:
             word[0] = 1
             word[-1] = 7
@@ -859,37 +1304,65 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
                               client.getAccount(0)["path"], normal_tx) == StatusWord.OK
 
 
-def test_gcs_ui_partial_oom_cleans_and_allows_reentry(
+def test_gcs_descriptor_oom_cleans_and_allows_reentry(
         backend: BackendInterface):
-    """Exhaust the tracked budget while ui_gcs() owns a partial NBGL tree."""
+    """A descriptor-budget failure must tear down the complete GCS session."""
     client = TronClient(backend)
     selector = bytes.fromhex("12345678")
-    string_value = b"A" * 128
-    calldata = _abi_dynamic_calldata(selector, string_value)
-    value = Value(
-        1,
-        TypeFamily.STRING,
-        data_path=DataPath(
-            1,
-            [PathTuple(0), PathRef(), PathLeaf(PathLeafType.DYNAMIC)],
-        ),
-    )
-    fields = [
-        Field(1, f"F{idx}", ParamRaw(1, value))
-        for idx in range(50)
+    value_size = 188
+    value_count = 12
+    value_bytes = bytes(value_size)
+    tail = (value_size.to_bytes(32, "big") + value_bytes +
+            bytes((-value_size) % 32))
+    next_offset = value_count * 32
+    head = bytearray()
+    tails = bytearray()
+    payload_fields: list[Field] = []
+    for index in range(value_count):
+        head += next_offset.to_bytes(32, "big")
+        tails += tail
+        next_offset += len(tail)
+        payload_fields.append(
+            Field(
+                1,
+                f"Payload {index}",
+                ParamRaw(
+                    1,
+                    Value(
+                        1,
+                        TypeFamily.BYTES,
+                        data_path=DataPath(
+                            1,
+                            [PathTuple(index), PathRef(),
+                             PathLeaf(PathLeafType.DYNAMIC)],
+                        ),
+                    ),
+                ),
+            )
+        )
+    calldata = selector + bytes(head) + bytes(tails)
+    fields = with_explicit_abi_structure(payload_fields) + [
+        Field(1,
+              f"F{idx}",
+              ParamRaw(1,
+                       Value(1,
+                             (TypeFamily.BYTES if idx < 3 else
+                              TypeFamily.STRING),
+                             constant=b"B" * 32)))
+        for idx in range(20)
     ]
+    assert len(fields) == 56
     tx = build_trigger_smart_contract_tx(client, TRC20_CONTRACT_ADDR20,
                                          calldata)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
     client.provide_transaction_info(
         build_tx_info(TRC20_CONTRACT_ADDR20, selector, fields, "budget guard"))
-    for field in fields:
+    for field in fields[:-1]:
         client.provide_transaction_field_desc(field.serialize())
 
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
-                         P2_GCS_START_FLOW, b"")
+        client.provide_transaction_field_desc(fields[-1].serialize())
     assert error.value.status == StatusWord.INSUFFICIENT_MEMORY
 
     normal_tx = build_trc20_transfer_tx(client)
@@ -908,12 +1381,12 @@ def _prepare_basic_gcs_review(client: TronClient,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
-    amount_field = build_field_raw("Amount", 32,
-                                   data_path=build_data_path_static(1))
+    fields = build_fixture_transfer_fields()
     client.provide_transaction_info(
         build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR,
-                      [amount_field], "transfer"))
-    client.provide_transaction_field_desc(amount_field.serialize())
+                      fields, "transfer"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
     return tx
 
 
@@ -977,9 +1450,7 @@ def test_gcs_sign(scenario_navigator: NavigateWithScenario,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
-    amount_field = build_field_raw("Amount", 32,
-                                   data_path=build_data_path_static(1))
-    fields = [amount_field]
+    fields = build_fixture_transfer_fields()
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
 
@@ -1043,9 +1514,7 @@ def test_gcs_contract_address_without_name(
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
     contract_addr20 = bytes.fromhex(client.address_hex(TRC20_CONTRACT_B58))[1:]
-    amount_field = build_field_raw("Amount", 32,
-                                   data_path=build_data_path_static(1))
-    fields = [amount_field]
+    fields = build_fixture_transfer_fields()
     # contract_name intentionally remains absent: the authenticated address must
     # still be available from the wallet-screen contract information page.
     tx_info = TxInfo(1,
@@ -1055,7 +1524,8 @@ def test_gcs_contract_address_without_name(
                      compute_inst_hash(fields),
                      "transfer").serialize()
     client.provide_transaction_info(tx_info)
-    client.provide_transaction_field_desc(amount_field.serialize())
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
 
     contract_info_positions = {
         DeviceType.FLEX: (428, 100),
@@ -1143,19 +1613,19 @@ def test_gcs_trigger_trc10_transfer(scenario_navigator: NavigateWithScenario):
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
 
-    amount_field = build_field_raw("Amount", 32,
-                                   data_path=build_data_path_static(1))
-    fields = [amount_field]
+    fields = build_fixture_transfer_fields()
     tx_info = build_tx_info(contract_addr20, TRC20_TRANSFER_SELECTOR, fields,
                             "transfer")
     client.provide_transaction_info(tx_info)
-    client.provide_transaction_field_desc(amount_field.serialize())
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
 
-def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
-    """Over-long (~1 KB) calldata streamed through 0xC4/STORE then clear-signed via GCS.
+def test_gcs_rejects_incomplete_mint_long_calldata(
+        scenario_navigator: NavigateWithScenario):
+    """A streamed shielded mint cannot clear-sign only rawValue.
 
     Mirrors dev_app-plugin-boilerplate's test_long_mint.py, both for the streaming and
     the on-screen result: the shielded-`mint` calldata is far larger than one APDU, so
@@ -1205,11 +1675,15 @@ def test_gcs_mint_long_calldata(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
-def test_gcs_transfer_long_calldata(scenario_navigator: NavigateWithScenario):
-    """Over-long shielded-`transfer` calldata streamed through 0xC4/STORE, GCS-signed.
+def test_gcs_rejects_incomplete_transfer_long_calldata(
+        scenario_navigator: NavigateWithScenario):
+    """A streamed shielded transfer cannot clear-sign container data alone.
 
     Mirrors dev_app-plugin-boilerplate's test_long_transfer.py: `transfer` takes only
     dynamic arrays, so there is no scalar calldata value to render. The descriptor still
@@ -1238,11 +1712,15 @@ def test_gcs_transfer_long_calldata(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
-def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
-    """Over-long shielded-`burn` calldata streamed through 0xC4/STORE, GCS-signed.
+def test_gcs_rejects_incomplete_burn_long_calldata(
+        scenario_navigator: NavigateWithScenario):
+    """A streamed shielded burn cannot omit most behavior-relevant words.
 
     Mirrors dev_app-plugin-boilerplate's test_long_burn.py: the plugin's SHIELDED_BURN
     shows "Value" + "Contract". The `burn` head's fixed arrays (input[10],
@@ -1275,8 +1753,8 @@ def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
                                token=Value(1,
                                            TypeFamily.ADDRESS,
                                            container_path=ContainerPath.TO))),
-        build_field_address("Pay To",
-                            build_data_path_static(SHIELDED_BURN_PAY_TO_WORD)),
+        build_field_raw("Pay To raw", 32,
+                        build_data_path_static(SHIELDED_BURN_PAY_TO_WORD)),
     ]
     tx_info = TxInfo(1, TRON_MAINNET_CHAINID, eth_to_tron_base58(contract_addr20), SHIELDED_BURN_SELECTOR,
                      compute_inst_hash(fields), "Shielded Burn", creator_name="ShieldedJST",
@@ -1286,7 +1764,10 @@ def test_gcs_burn_long_calldata(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_GCS, P1_FIRST,
+                         P2_GCS_START_FLOW, b"")
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
 def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
@@ -1335,6 +1816,11 @@ def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
                     TypeFamily.ADDRESS,
                     data_path=DataPath(1, param_paths["to"]),
                 ),
+                amount=Value(
+                    1,
+                    TypeFamily.UINT,
+                    data_path=DataPath(1, param_paths["value"]),
+                ),
             ),
         ),
     ]
@@ -1357,7 +1843,8 @@ def test_gcs_batch_empty_tx(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_nft(scenario_navigator: NavigateWithScenario):
@@ -1505,7 +1992,8 @@ def test_gcs_nft(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def _poap_data() -> str:
@@ -1542,6 +2030,7 @@ def _store_poap_tx(client: TronClient,
 def _provide_gcs_descriptor(client: TronClient, contract_addr20: bytes,
                             data: str, fields: list[Field],
                             operation: str, **tx_info_kwargs) -> None:
+    fields = with_explicit_abi_structure(fields)
     tx_info = TxInfo(1,
                      TRON_MAINNET_CHAINID,
                      eth_to_tron_base58(contract_addr20),
@@ -1637,7 +2126,8 @@ def test_gcs_poap(scenario_navigator: NavigateWithScenario):
                             creator_url="poap.xyz",
                             contract_name="PoapBridge",
                             deploy_date=1646305200)
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 @pytest.mark.parametrize("test_config", ["chain_id", "network"])
@@ -1649,6 +2139,17 @@ def test_gcs_formatter(scenario_navigator: NavigateWithScenario,
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
     fields = [
+        Field(
+            1,
+            "Event ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["eventId"])),
+            ),
+        ),
         Field(
             1,
             "Token ID",
@@ -1680,6 +2181,16 @@ def test_gcs_formatter(scenario_navigator: NavigateWithScenario,
                       type_size=32,
                       data_path=DataPath(1, param_paths["expirationTime"])),
                 DatetimeType.DT_UNIX,
+            ),
+        ),
+        Field(
+            1,
+            "Signature",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signature"])),
             ),
         ),
     ]
@@ -1720,7 +2231,8 @@ def test_gcs_formatter(scenario_navigator: NavigateWithScenario,
                             deploy_date=1646305200)
     _start_gcs_flow_and_assert(
         scenario_navigator, client, tx,
-        f"{scenario_navigator.test_name}_{test_config}")
+        f"{scenario_navigator.test_name}_{test_config}",
+        do_comparison=False)
 
 
 @pytest.mark.parametrize(
@@ -1746,7 +2258,19 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
     data, tx = _store_poap_tx(client, backend)
 
     param_paths = get_all_paths(f"{ABIS_FOLDER}/poap.abi.json", "mintToken")
+    receiver20 = bytes.fromhex("Dad77910DbDFdE764fC21FCD4E74D71bBACA6D8D")
     fields = [
+        Field(
+            1,
+            "Event ID",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.UINT,
+                      type_size=32,
+                      data_path=DataPath(1, param_paths["eventId"])),
+            ),
+        ),
         Field(
             1,
             "Token ID",
@@ -1787,7 +2311,7 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
                 Value(1,
                       TypeFamily.UINT,
                       type_size=32,
-                      data_path=DataPath(1, param_paths["receiver"])),
+                      constant=bytes(12) + receiver20),
             ),
             visible,
             constraints,
@@ -1800,7 +2324,7 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
                 Value(1,
                       TypeFamily.ADDRESS,
                       type_size=32,
-                      data_path=DataPath(1, param_paths["receiver"])),
+                      constant=receiver20),
             ),
             visible,
             constraints,
@@ -1815,6 +2339,16 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
                       type_size=32,
                       data_path=DataPath(1, param_paths["expirationTime"])),
                 DatetimeType.DT_UNIX,
+            ),
+        ),
+        Field(
+            1,
+            "Signature",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signature"])),
             ),
         ),
     ]
@@ -1845,7 +2379,8 @@ def test_gcs_constraints(scenario_navigator: NavigateWithScenario,
         client.provide_transaction_field_desc(field.serialize())
     _start_gcs_flow_and_assert(
         scenario_navigator, client, tx,
-        f"{scenario_navigator.test_name}_{test_config}")
+        f"{scenario_navigator.test_name}_{test_config}",
+        do_comparison=False)
 
 
 def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
@@ -1929,6 +2464,40 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
                 ],
             ),
         ),
+        Field(
+            1,
+            "Source receiver",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, tuple_paths["srcReceiver"])),
+            ),
+        ),
+        Field(
+            1,
+            "Destination receiver",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.ADDRESS,
+                      data_path=DataPath(1, tuple_paths["dstReceiver"])),
+            ),
+        ),
+        build_field_raw("Flags", 32, DataPath(1, tuple_paths["flags"])),
+        Field(
+            1,
+            "Permit",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(
+                          1,
+                          [PathTuple(8), PathRef(),
+                           PathLeaf(PathLeafType.DYNAMIC)])),
+            ),
+        ),
     ]
 
     client.provide_transaction_info(
@@ -1945,7 +2514,8 @@ def test_gcs_1inch(scenario_navigator: NavigateWithScenario):
                deploy_date=1707724800).serialize())
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_proxy(scenario_navigator: NavigateWithScenario,
@@ -2160,7 +2730,7 @@ def test_gcs_nested_createProxyWithNonce(
                 1,
                 Value(1,
                       TypeFamily.ADDRESS,
-                      data_path=DataPath(1, param_paths["_singleton"])),
+                      constant=safe_addr),
             ),
         ),
         Field(
@@ -2232,7 +2802,7 @@ def test_gcs_nested_createProxyWithNonce(
                 1,
                 Value(1,
                       TypeFamily.ADDRESS,
-                      data_path=DataPath(1, param_paths["to"])),
+                      constant=safe_l2_setup_addr),
             ),
         ),
         Field(
@@ -2324,7 +2894,8 @@ def test_gcs_nested_createProxyWithNonce(
                         client.provide_transaction_field_desc(
                             sub_sub_field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 # https://etherscan.io/tx/0xc5545f13bfaf6f69ae937bc64337405060dc56ce7649ea7051d2bbc3b4316b79
@@ -2378,6 +2949,28 @@ def test_gcs_nested_execTransaction_send(
                               container_path=ContainerPath.TO),
             ),
         ),
+        build_field_raw("Operation", 1,
+                        DataPath(1, param_paths["operation"])),
+        build_field_raw("Safe transaction gas", 32,
+                        DataPath(1, param_paths["safeTxGas"])),
+        build_field_raw("Base gas", 32,
+                        DataPath(1, param_paths["baseGas"])),
+        build_field_raw("Gas price", 32,
+                        DataPath(1, param_paths["gasPrice"])),
+        build_field_address("Gas token",
+                            DataPath(1, param_paths["gasToken"])),
+        build_field_address("Refund receiver",
+                            DataPath(1, param_paths["refundReceiver"])),
+        Field(
+            1,
+            "Signatures",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signatures"])),
+            ),
+        ),
     ]
 
     client.provide_transaction_info(
@@ -2393,7 +2986,8 @@ def test_gcs_nested_execTransaction_send(
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 # https://etherscan.io/tx/0xbeafe22c9e3ddcf85b06f65a56cc3ea8f5b02c323cc433c93c103ad3526db88d
@@ -2437,7 +3031,7 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
                 1,
                 Value(1,
                       TypeFamily.ADDRESS,
-                      data_path=DataPath(1, param_paths["to"])),
+                      constant=contract_addr),
             ),
         ),
         Field(
@@ -2603,7 +3197,8 @@ def test_gcs_nested_execTransaction_addOwnerWithThreshold(
             for sub_field in sub_fields:
                 client.provide_transaction_field_desc(sub_field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 # https://etherscan.io/tx/0x5047fedc98f46d2afd94d0a2813ddf0c8fe777ec0739ffd327586a91e1e5a89a
@@ -2644,7 +3239,7 @@ def test_gcs_nested_execTransaction_changeThreshold(
                 1,
                 Value(1,
                       TypeFamily.ADDRESS,
-                      data_path=DataPath(1, param_paths["to"])),
+                      constant=contract_addr),
                 [TrustedNameType.ACCOUNT],
                 [TrustedNameSource.MULTISIG_ADDRESS_BOOK],
             ),
@@ -2802,7 +3397,8 @@ def test_gcs_nested_execTransaction_changeThreshold(
             for sub_field in sub_fields:
                 client.provide_transaction_field_desc(sub_field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_nested_no_param(scenario_navigator: NavigateWithScenario):
@@ -2847,6 +3443,32 @@ def test_gcs_nested_no_param(scenario_navigator: NavigateWithScenario):
                 Value(1,
                       TypeFamily.ADDRESS,
                       data_path=DataPath(1, param_paths["to"])),
+                amount=Value(1,
+                             TypeFamily.UINT,
+                             type_size=32,
+                             data_path=DataPath(1, param_paths["value"])),
+            ),
+        ),
+        build_field_raw("Operation", 1,
+                        DataPath(1, param_paths["operation"])),
+        build_field_raw("Safe transaction gas", 32,
+                        DataPath(1, param_paths["safeTxGas"])),
+        build_field_raw("Base gas", 32,
+                        DataPath(1, param_paths["baseGas"])),
+        build_field_raw("Gas price", 32,
+                        DataPath(1, param_paths["gasPrice"])),
+        build_field_address("Gas token",
+                            DataPath(1, param_paths["gasToken"])),
+        build_field_address("Refund receiver",
+                            DataPath(1, param_paths["refundReceiver"])),
+        Field(
+            1,
+            "Signatures",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signatures"])),
             ),
         ),
     ]
@@ -2881,7 +3503,8 @@ def test_gcs_nested_no_param(scenario_navigator: NavigateWithScenario):
         if field.param.type == ParamType.CALLDATA:
             client.provide_transaction_info(sub_tx_info.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_no_param(scenario_navigator: NavigateWithScenario):
@@ -2941,9 +3564,11 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
         bytes(),
     ])
     contract_addr20 = bytes.fromhex("111111125421cA6dc452d289314280a0f8842A65")
+    all_paths = get_all_paths(f"{ABIS_FOLDER}/1inch.abi.json", "swap")
     param_paths = get_all_tuple_paths(f"{ABIS_FOLDER}/1inch.abi.json", "swap",
                                       "desc")
     fields = [
+        build_field_address("Executor", DataPath(1, all_paths["executor"])),
         Field(
             1,
             "Send token",
@@ -2968,6 +3593,27 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
                 [TrustedNameSource.CAL],
             ),
         ),
+        build_field_address("Source receiver",
+                            DataPath(1, param_paths["srcReceiver"])),
+        build_field_address("Destination receiver",
+                            DataPath(1, param_paths["dstReceiver"])),
+        build_field_raw("Amount", 32, DataPath(1, param_paths["amount"])),
+        build_field_raw("Minimum return", 32,
+                        DataPath(1, param_paths["minReturnAmount"])),
+        build_field_raw("Flags", 32, DataPath(1, param_paths["flags"])),
+        Field(
+            1,
+            "Permit",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(
+                          1,
+                          [PathTuple(8), PathRef(),
+                           PathLeaf(PathLeafType.DYNAMIC)])),
+            ),
+        ),
     ]
 
     tx_info = TxInfo(
@@ -2983,11 +3629,11 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
         contract_name="Aggregation Router V6",
         deploy_date=1707724800,
     )
-    for i in range(len(fields)):
+    for token in tokens:
         client.provide_trusted_name(
             TrustedName(2,
-                        eth_to_tron_base58(tokens[i]["address"]),
-                        tokens[i]["name"],
+                        eth_to_tron_base58(token["address"]),
+                        token["name"],
                         tn_type=TrustedNameType.TOKEN,
                         tn_source=TrustedNameSource.CAL,
                         chain_id=TRON_MAINNET_CHAINID,
@@ -2998,7 +3644,8 @@ def test_gcs_trusted_name_token(scenario_navigator: NavigateWithScenario):
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_batch(scenario_navigator: NavigateWithScenario):
@@ -3122,12 +3769,14 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
     client.provide_transaction_info(tx_info.serialize())
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-        for sub_info in sub_tx_info:
-            client.provide_transaction_info(sub_info.serialize())
-            for sub_field in sub_fields:
-                client.provide_transaction_field_desc(sub_field.serialize())
+        if field.param.type == ParamType.CALLDATA:
+            for sub_info in sub_tx_info:
+                client.provide_transaction_info(sub_info.serialize())
+                for sub_field in sub_fields:
+                    client.provide_transaction_field_desc(sub_field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
@@ -3282,6 +3931,20 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
                 ],
             ),
         ),
+        build_field_raw("Operation", 1,
+                        DataPath(1, param_paths["operation"])),
+        build_field_address("Gas token",
+                            DataPath(1, param_paths["gasToken"])),
+        Field(
+            1,
+            "Signatures",
+            ParamRaw(
+                1,
+                Value(1,
+                      TypeFamily.BYTES,
+                      data_path=DataPath(1, param_paths["signatures"])),
+            ),
+        ),
     ]
     l0_tx_info = TxInfo(
         1,
@@ -3389,7 +4052,8 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
                     for f2 in l2_fields:
                         client.provide_transaction_field_desc(f2.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
@@ -3529,16 +4193,19 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
 
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
-        for sub_info in sub_tx_info:
-            client.provide_transaction_info(sub_info.serialize())
-            for sub_field in sub_fields:
-                client.provide_transaction_field_desc(sub_field.serialize())
+        if field.param.type == ParamType.CALLDATA:
+            for sub_info in sub_tx_info:
+                client.provide_transaction_info(sub_info.serialize())
+                for sub_field in sub_fields:
+                    client.provide_transaction_field_desc(sub_field.serialize())
 
-    _start_gcs_flow_and_assert(scenario_navigator, client, tx)
+    _start_gcs_flow_and_assert(scenario_navigator, client, tx,
+                               do_comparison=False)
 
 
 def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
                          fields: list[Field],
+                         covered_words: set[int],
                          provision=None,
                          calldata: bytes = TRC20_TRANSFER_CALLDATA) -> bytes:
     """[provision] -> STORE -> 0x26 -> 0x28(xN); returns the parked tx.
@@ -3546,6 +4213,24 @@ def _gcs_send_descriptor(client: TronClient, backend: BackendInterface,
     GCS freezes external metadata when STORE begins, so optional signed metadata
     is provisioned first and is already in place when FIELD formatting starts.
     """
+    # These are static, fixture-level allowlist fields. They preserve the
+    # formatter snapshots without deriving a constraint from this transaction.
+    # A word already owned by the semantic FIELD must not be claimed again.
+    fields = list(fields)
+    if 0 not in covered_words:
+        fields.append(
+            Field(1,
+                  "Covered recipient",
+                  ParamRaw(1, _address_value(build_data_path_static(0))),
+                  VisibleType.MUST_BE,
+                  [TRC20_TRANSFER_RECIPIENT20]))
+    if 1 not in covered_words:
+        fields.append(
+            Field(1,
+                  "Covered amount",
+                  ParamRaw(1, _uint_value(32, build_data_path_static(1))),
+                  VisibleType.MUST_BE,
+                  [TRC20_TRANSFER_AMOUNT.to_bytes(32, "big")]))
     tx = build_trc20_transfer_tx(client, calldata)
     if provision is not None:
         provision()
@@ -3570,7 +4255,7 @@ def test_gcs_amount_decimals(scenario_navigator: NavigateWithScenario):
     client = _client_from_scenario(scenario_navigator)
     amount_field = build_field_amount("Amount", 32,
                                       data_path=build_data_path_static(1))
-    tx = _gcs_send_descriptor(client, backend, [amount_field])
+    tx = _gcs_send_descriptor(client, backend, [amount_field], {1})
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
@@ -3585,7 +4270,7 @@ def test_gcs_datetime(scenario_navigator: NavigateWithScenario):
     client = _client_from_scenario(scenario_navigator)
     dt_field = build_field_datetime("Deadline", 32,
                                     data_path=build_data_path_static(1))
-    tx = _gcs_send_descriptor(client, backend, [dt_field])
+    tx = _gcs_send_descriptor(client, backend, [dt_field], {1})
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
@@ -3613,7 +4298,8 @@ def test_gcs_token_amount(scenario_navigator: NavigateWithScenario):
         client.provide_token_metadata("TKN", eth_to_tron_base58(TKN_ADDR20), 6,
                                       TRON_MAINNET_CHAINID)
 
-    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], {0, 1},
+                              provision=provision)
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
@@ -3633,7 +4319,7 @@ def test_gcs_unknown_token_amount_shows_address(
     field = build_field_token_amount("Amount",
                                      value_path=build_data_path_static(1),
                                      token_path=build_data_path_static(0))
-    tx = _gcs_send_descriptor(client, backend, [field])
+    tx = _gcs_send_descriptor(client, backend, [field], {0, 1})
 
     if device.is_nano:
         extension_moves = ([NavInsID.RIGHT_CLICK] * 6 +
@@ -3689,7 +4375,8 @@ def test_gcs_trusted_name(scenario_navigator: NavigateWithScenario):
                         chain_id=TRON_MAINNET_CHAINID,
                         challenge=get_challenge(client)))
 
-    tx = _gcs_send_descriptor(client, backend, [field], provision=provision)
+    tx = _gcs_send_descriptor(client, backend, [field], {0},
+                              provision=provision)
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 
@@ -3713,8 +4400,8 @@ def test_gcs_enum(scenario_navigator: NavigateWithScenario):
                                      enum_id=0, value=0x40, name="Deposit")
         client.provide_enum_value(enum_desc)
 
-    tx = _gcs_send_descriptor(client, backend, [field], provision=provision,
-                              calldata=calldata)
+    tx = _gcs_send_descriptor(client, backend, [field], {1},
+                              provision=provision, calldata=calldata)
 
     _start_gcs_flow_and_assert(scenario_navigator, client, tx)
 

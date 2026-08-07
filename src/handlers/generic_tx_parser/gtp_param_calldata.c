@@ -135,7 +135,10 @@ static bool process_nested_calldata(const s_param_calldata *param,
         if ((calldata_length % CALLDATA_CHUNK_SIZE) != 0U) {
             return false;
         }
-        if ((new_calldata = calldata_init_nested(calldata_length, selector_buf)) == NULL) {
+        if ((new_calldata =
+                 (calldata_tracks_coverage(get_current_calldata())
+                      ? calldata_init_nested_gcs(calldata_length, selector_buf)
+                      : calldata_init_nested(calldata_length, selector_buf))) == NULL) {
             return false;
         }
         if (!calldata_append(new_calldata, calldata_buf, calldata_length)) {

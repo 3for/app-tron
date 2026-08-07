@@ -251,16 +251,24 @@ bool parsed_value_to_address(const s_parsed_value *value, uint8_t out[static ADD
         }
         addr += 1U;
     } else if (value->length == INT256_LENGTH) {
-        const size_t prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
+        const size_t tron_prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
         const size_t address_index = INT256_LENGTH - ADDRESS_LENGTH;
 
-        for (size_t i = 0U; i < prefix_index; ++i) {
+        /* Calldata uses canonical EVM ABI address words: twelve zero bytes
+         * followed by the 20-byte address. The 0x41-prefixed TRON form remains
+         * accepted only as an explicit 21-byte GCS value. Preserve the legacy
+         * generic-parser behavior for non-GCS/TIP-712 contexts. */
+        const bool gcs_calldata =
+            calldata_tracks_coverage(get_current_calldata());
+        const size_t zero_prefix_size =
+            gcs_calldata ? address_index : tron_prefix_index;
+        for (size_t i = 0U; i < zero_prefix_size; ++i) {
             if (addr[i] != 0U) {
                 return false;
             }
         }
-        if ((addr[prefix_index] != 0U) &&
-            (addr[prefix_index] != TRON_MAINNET_ADDRESS_PREFIX)) {
+        if (!gcs_calldata && (addr[tron_prefix_index] != 0U) &&
+            (addr[tron_prefix_index] != TRON_MAINNET_ADDRESS_PREFIX)) {
             return false;
         }
         addr += address_index;

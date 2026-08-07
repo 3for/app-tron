@@ -27,6 +27,13 @@ int handle_gcs_start_flow(void) {
         PRINTF("GCS start flow: fields hash mismatch!\n");
         return send_gcs_flow_status(E_INCORRECT_DATA);
     }
+    /* TX_INFO authenticates the selector and FIELD stream. Require that the
+     * authenticated FIELD paths also account for every post-selector ABI byte
+     * before the original transaction can reach review/signing. */
+    if (!validate_calldata_coverage()) {
+        PRINTF("GCS start flow: calldata is not fully covered!\n");
+        return send_gcs_flow_status(E_INCORRECT_DATA);
+    }
     // Drain any trailing empty sub-transactions (no-op for the single-tx P1 case).
     if (!process_empty_txs_after()) {
         return send_gcs_flow_status(gcs_mem_take_allocation_failure()

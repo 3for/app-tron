@@ -112,6 +112,8 @@ static bool data_path_common_handler(const tlv_data_t *data, s_data_path_context
 bool handle_data_path_struct(const buffer_t *buf, s_data_path_context *context) {
     TLV_reception_t received_tags = {0};
     bool leaf_seen = false;
+    const bool enforce_coverage_path =
+        calldata_tracks_coverage(get_current_calldata());
 
     if ((context == NULL) || (context->data_path == NULL) ||
         !data_path_tlv_parser(buf, context, &received_tags) ||
@@ -121,8 +123,16 @@ bool handle_data_path_struct(const buffer_t *buf, s_data_path_context *context) 
     }
     for (size_t i = 0U; i < context->data_path->size; ++i) {
         if (context->data_path->elements[i].type == ELEMENT_TYPE_LEAF) {
+            if (enforce_coverage_path && leaf_seen) {
+                return false;
+            }
             leaf_seen = true;
-            break;
+        } else if (enforce_coverage_path &&
+                   ((context->data_path->elements[i].type == ELEMENT_TYPE_SLICE) !=
+                    leaf_seen)) {
+            /* A path has one unambiguous leaf. Slices may only refine that
+             * leaf and no offset-producing element may follow it. */
+            return false;
         }
     }
     return leaf_seen;
@@ -149,6 +159,13 @@ static bool abi_word_to_u16(const uint8_t *word, uint16_t *value) {
     return true;
 }
 
+static bool word_to_byte_offset(size_t word, size_t *byte_offset) {
+    return (byte_offset != NULL) &&
+           !__builtin_mul_overflow(word,
+                                  (size_t) CALLDATA_CHUNK_SIZE,
+                                  byte_offset);
+}
+
 static bool path_ref(uint32_t *offset, uint32_t *ref_offset) {
     uint16_t raw_offset;
     const uint8_t *chunk;
@@ -167,26 +184,72 @@ static bool path_ref(uint32_t *offset, uint32_t *ref_offset) {
     return !__builtin_add_overflow(*offset, *ref_offset, offset);
 }
 
+static bool validate_and_cover_dynamic_padding(s_calldata *calldata,
+                                               size_t first_word,
+                                               size_t value_size) {
+    const size_t used_in_last_word = value_size % CALLDATA_CHUNK_SIZE;
+    const uint8_t *chunk;
+    size_t last_word;
+    size_t last_word_byte;
+    size_t padding_byte;
+
+    if (used_in_last_word == 0U) {
+        return true;
+    }
+    if (__builtin_add_overflow(first_word,
+                               value_size / CALLDATA_CHUNK_SIZE,
+                               &last_word) ||
+        ((chunk = calldata_get_chunk(calldata, last_word)) == NULL)) {
+        return false;
+    }
+    for (size_t i = used_in_last_word; i < CALLDATA_CHUNK_SIZE; ++i) {
+        if (chunk[i] != 0U) {
+            return false;
+        }
+    }
+    return word_to_byte_offset(last_word, &last_word_byte) &&
+           !__builtin_add_overflow(last_word_byte,
+                                   used_in_last_word,
+                                   &padding_byte) &&
+           calldata_cover_canonical_zero(
+               calldata,
+               padding_byte,
+               CALLDATA_CHUNK_SIZE - used_in_last_word);
+}
+
+typedef struct {
+    size_t first_byte;
+    size_t byte_count;
+} s_leaf_coverage;
+
 static bool path_leaf(const s_leaf_args *leaf,
                       uint32_t *offset,
-                      s_parsed_value_collection *collection) {
+                      s_parsed_value_collection *collection,
+                      s_leaf_coverage *coverage) {
     const uint8_t *chunk;
     uint8_t *leaf_buf = NULL;
     uint8_t cpy_length;
     size_t total_allocated = 0U;
     size_t next_total;
+    s_calldata *calldata = get_current_calldata();
 
-    if (collection->size >= MAX_VALUE_COLLECTION_SIZE) {
+    if ((calldata == NULL) || (coverage == NULL) ||
+        (collection->size >= MAX_VALUE_COLLECTION_SIZE)) {
         return false;
     }
 
     switch (leaf->type) {
         case LEAF_TYPE_STATIC:
             collection->value[collection->size].size = CALLDATA_CHUNK_SIZE;
+            if (!word_to_byte_offset((size_t) *offset,
+                                     &coverage->first_byte)) {
+                return false;
+            }
+            coverage->byte_count = CALLDATA_CHUNK_SIZE;
             break;
 
         case LEAF_TYPE_DYNAMIC:
-            if ((chunk = calldata_get_chunk(get_current_calldata(), (size_t) *offset)) == NULL) {
+            if ((chunk = calldata_get_chunk(calldata, (size_t) *offset)) == NULL) {
                 return false;
             }
             if (!abi_word_to_u16(chunk, &collection->value[collection->size].size)) {
@@ -196,6 +259,18 @@ static bool path_leaf(const s_leaf_args *leaf,
                 return false;
             }
             if (__builtin_add_overflow(*offset, 1U, offset)) {
+                return false;
+            }
+            if (!word_to_byte_offset((size_t) *offset,
+                                     &coverage->first_byte)) {
+                return false;
+            }
+            coverage->byte_count = collection->value[collection->size].size;
+            if (calldata_tracks_coverage(calldata) &&
+                !validate_and_cover_dynamic_padding(
+                    calldata,
+                    (size_t) *offset,
+                    collection->value[collection->size].size)) {
                 return false;
             }
             break;
@@ -228,7 +303,7 @@ static bool path_leaf(const s_leaf_args *leaf,
              ++chunk_idx) {
             size_t chunk_offset;
             if (__builtin_add_overflow((size_t) *offset, (size_t) chunk_idx, &chunk_offset) ||
-                (chunk = calldata_get_chunk(get_current_calldata(), chunk_offset)) == NULL) {
+                (chunk = calldata_get_chunk(calldata, chunk_offset)) == NULL) {
                 gcs_mem_free(leaf_buf);
                 return false;
             }
@@ -243,12 +318,14 @@ static bool path_leaf(const s_leaf_args *leaf,
     return true;
 }
 
-static bool path_slice(const s_slice_args *slice, s_parsed_value_collection *collection) {
+static bool path_slice(const s_slice_args *slice,
+                       s_parsed_value_collection *collection,
+                       s_leaf_coverage *coverage) {
     int32_t start;
     int32_t end;
     uint16_t value_length;
 
-    if (collection->size == 0) {
+    if ((coverage == NULL) || (collection->size == 0)) {
         return false;
     }
 
@@ -272,6 +349,12 @@ static bool path_slice(const s_slice_args *slice, s_parsed_value_collection *col
     collection->value[collection->size - 1].ptr += (size_t) start;
     collection->value[collection->size - 1].length = (uint16_t) (end - start);
     collection->value[collection->size - 1].offset += (uint16_t) start;
+    if (__builtin_add_overflow(coverage->first_byte,
+                               (size_t) start,
+                               &coverage->first_byte)) {
+        return false;
+    }
+    coverage->byte_count = (size_t) (end - start);
     return true;
 }
 
@@ -364,7 +447,13 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
     uint8_t combinations_processed = 0U;
     s_arrays_info arinf = {0};
 
+    if ((data_path == NULL) || (collection == NULL)) {
+        return false;
+    }
+
     do {
+        s_leaf_coverage leaf_coverage = {0};
+
         arinf.index = 0;
         offset = 0;
         ref_offset = offset;
@@ -383,11 +472,16 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
                     break;
 
                 case ELEMENT_TYPE_LEAF:
-                    ret = path_leaf(&data_path->elements[i].leaf, &offset, collection);
+                    ret = path_leaf(&data_path->elements[i].leaf,
+                                    &offset,
+                                    collection,
+                                    &leaf_coverage);
                     break;
 
                 case ELEMENT_TYPE_SLICE:
-                    ret = path_slice(&data_path->elements[i].slice, collection);
+                    ret = path_slice(&data_path->elements[i].slice,
+                                     collection,
+                                     &leaf_coverage);
                     break;
 
                 default:
@@ -395,6 +489,12 @@ bool data_path_get(const s_data_path *data_path, s_parsed_value_collection *coll
             }
 
             if (!ret) return false;
+        }
+        if (calldata_tracks_coverage(get_current_calldata()) &&
+            !calldata_claim_bytes(get_current_calldata(),
+                                  leaf_coverage.first_byte,
+                                  leaf_coverage.byte_count)) {
+            return false;
         }
         combinations_processed += 1U;
         arrays_update(&arinf);
