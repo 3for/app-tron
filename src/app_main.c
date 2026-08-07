@@ -32,6 +32,7 @@
 #include "parse.h"
 #include "app_errors.h"
 #include "ui_globals.h"
+#include "ui_utils.h"
 #include "trusted_name.h"
 #include "tx_ctx.h"        // gcs_cleanup (Generic Clear Signing)
 #include "tron_tx_stream.h"  // tron_tx_stream_free
@@ -84,6 +85,10 @@ void reset_app_context() {
     // Free any Generic Clear Signing state (tx contexts, field table, parked
     // calldata) so it never leaks across signing sessions.
     gcs_cleanup();
+    /* GCS must destroy its nested extensions before this shared-UI fallback.
+     * The fallback is also the reset-level owner for TIP-712 title buffers,
+     * whose normal approve/reject callbacks usually release them first. */
+    ui_all_cleanup();
     // Free the cached proxy<->implementation mapping (INS_PROVIDE_PROXY_INFO).
     proxy_cleanup();
 #ifdef HAVE_GATING_SUPPORT
@@ -140,9 +145,11 @@ static void abort_active_context(void) {
     // by it. During swap there is no standalone app home screen to restore.
 #ifdef HAVE_SWAP
     if (!G_called_from_swap) {
+        appState = APP_STATE_IDLE;
         ui_idle();
     }
 #else
+    appState = APP_STATE_IDLE;
     ui_idle();
 #endif
     reset_app_context();

@@ -16,6 +16,7 @@ from ctypes import c_uint64
 from typing import Optional, Callable
 
 from ragger.error import ExceptionRAPDU
+from ragger.backend.interface import RaisePolicy
 from pathlib import Path
 from Crypto.Hash import keccak
 from tron import TronClient
@@ -2122,6 +2123,38 @@ def test_tip712_legacy_review_rejects_existing_full_context(
         pass
     with client.tip712_send_struct_def_struct_name("EIP712Domain"):
         pass
+
+
+def test_tip712_malformed_apdu_during_review_resets_cleanly(
+        scenario_navigator: NavigateWithScenario):
+    """Malformed input must replace the review, reply 0x6700 and free its UI."""
+    backend = scenario_navigator.backend
+    client = TronClient(backend, backend.device, scenario_navigator.navigator)
+    input_dir = Path(tip712_json_path())
+    signing_path = client.getAccount(0)["path"]
+
+    with open(input_dir / "00-simple_mail-data.json", encoding="utf-8") as data_file:
+        data = json.load(data_file)
+    with open(input_dir / "00-simple_mail-filter.json", encoding="utf-8") as filter_file:
+        filters = json.load(filter_file)
+
+    assert InputData.process_data(client, data, filters, signing_path)
+    previous_policy = backend.raise_policy
+    backend.raise_policy = RaisePolicy.RAISE_NOTHING
+    try:
+        with client.tip712_sign_new(signing_path):
+            # CLA/INS/P1 only: the SDK APDU parser rejects this before dispatch.
+            response = backend.exchange_raw(bytes([0xE0, 0x0C, 0x00]))
+            assert response.status == StatusWord.INCORRECT_LENGTH
+    finally:
+        backend.raise_policy = previous_policy
+
+    # The aborted review owned tracked shared UI buffers. A second full session
+    # in the same App instance proves cleanup did not poison the GCS budget.
+    assert InputData.process_data(client, data, filters, signing_path)
+    with client.tip712_sign_new(signing_path):
+        scenario_navigator.review_approve(do_comparison=False)
+    assert client.response().status == StatusWord.OK
 
 
 def test_tip712_definition_rejected_during_personal_message_reception(
