@@ -595,8 +595,11 @@ def test_gcs_accepts_six_values_from_nested_arrays(
     backend = scenario_navigator.backend
     client = TronClient(backend)
     selector = bytes.fromhex("12345678")
+    # Distinct inner lengths keep consecutive structural review pages visually
+    # distinct on Nano. Their sticky product is still 3*1*2*3 > 16, while the
+    # legitimate number of leaf values remains exactly six.
     calldata = selector + _encode_uint256_nested_array(
-        [[1, 2], [3, 4], [5, 6]])
+        [[1], [2, 3], [4, 5, 6]])
     tx = build_trigger_smart_contract_tx(client, TRC20_CONTRACT_ADDR20, calldata)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], tx) == StatusWord.OK
@@ -774,6 +777,34 @@ def with_explicit_abi_structure(fields: list[Field]) -> list[Field]:
         for index, data_path in enumerate(structure_paths)
     ]
     return structure_fields + list(fields)
+
+
+_BATCH_TUPLE_DATA_OFFSET = 3 * 32
+_ERC20_TRANSFER_CALLDATA_SIZE = 4 + (2 * 32)
+
+
+def with_hidden_static_structure_guards(
+        fields: list[Field],
+        guards: dict[str, tuple[int, ...]]) -> list[Field]:
+    """Constrain schema-fixed ABI words without adding duplicate Nano pages."""
+    expanded = with_explicit_abi_structure(fields)
+    found: set[str] = set()
+
+    for field in expanded:
+        if field.name not in guards:
+            continue
+        assert field.name not in found
+        assert isinstance(field.param, ParamRaw)
+        assert field.param.value.type_family == TypeFamily.UINT
+        assert field.param.value.type_size == 32
+        field.visible = VisibleType.MUST_BE
+        field.constraints = [
+            value.to_bytes(32, "big") for value in guards[field.name]
+        ]
+        found.add(field.name)
+
+    assert found == set(guards)
+    return expanded
 
 
 def compute_inst_hash(fields: list[Field]) -> bytes:
@@ -3710,7 +3741,7 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
 
     param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json",
                                             "batchExecute", "calls")
-    fields = [
+    fields = with_hidden_static_structure_guards([
         Field(
             1,
             "Destination",
@@ -3727,7 +3758,10 @@ def test_gcs_batch(scenario_navigator: NavigateWithScenario):
                              data_path=DataPath(1, param_paths["value"])),
             ),
         ),
-    ]
+    ], {
+        "ABI structure 4": (_BATCH_TUPLE_DATA_OFFSET,),
+        "ABI structure 5": (_ERC20_TRANSFER_CALLDATA_SIZE,),
+    })
 
     tx_info = TxInfo(
         1,
@@ -3961,7 +3995,7 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
 
     param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json",
                                             "batchExecute", "calls")
-    l1_fields = [
+    l1_fields = with_hidden_static_structure_guards([
         Field(
             1,
             "Transaction",
@@ -3978,7 +4012,10 @@ def test_gcs_batch_2(scenario_navigator: NavigateWithScenario):
                              data_path=DataPath(1, param_paths["value"])),
             ),
         ),
-    ]
+    ], {
+        "ABI structure 4": (_BATCH_TUPLE_DATA_OFFSET,),
+        "ABI structure 5": (_ERC20_TRANSFER_CALLDATA_SIZE,),
+    })
     l1_hash = compute_inst_hash(l1_fields)
     l1_tx_info = [
         TxInfo(1,
@@ -4124,7 +4161,7 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
 
     param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json",
                                             "batchExecute", "calls")
-    fields = [
+    fields = with_hidden_static_structure_guards([
         Field(
             1,
             "Destination",
@@ -4141,7 +4178,9 @@ def test_gcs_batch_complex(scenario_navigator: NavigateWithScenario) -> None:
                              data_path=DataPath(1, param_paths["value"])),
             ),
         ),
-    ]
+    ], {
+        "ABI structure 4": (_BATCH_TUPLE_DATA_OFFSET,),
+    })
 
     tx_info = TxInfo(
         1,
