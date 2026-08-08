@@ -2451,9 +2451,14 @@ class TestTRX():
 
         with backend.exchange_async(CLA, InsType.SIGN_PERSONAL_MESSAGE, 0x00,
                                     0x00, data):
+            review_screen = str(backend.get_current_screen_content()).lower()
+            assert "blind signing" in review_screen
             self.review_approve(
                 currentframe().f_code.co_name,
-                custom_screen_text=self.NANO_MESSAGE_SIGN_PATTERN if device.is_nano else None)
+                warning=True,
+                # The warning text is asserted above; keep this regression
+                # semantic instead of duplicating it across device snapshots.
+                do_comparison=False)
 
         resp = backend.last_async_response
 

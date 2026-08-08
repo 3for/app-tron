@@ -56,7 +56,7 @@ if size == 65:
     publicKey = result[1:1 + size].hex()
 
 result = dongle.exchange(
-    apduMessage(0x08, 0x00, 0x00, donglePath, encodedTx.hex()))
+    apduMessage(0xC8, 0x00, 0x00, donglePath, encodedTx.hex()))
 
 signedMessage = SIGN_MAGIC + str(len(args.message)).encode() + args.message
 keccak_hash = keccak.new(digest_bits=256)

@@ -7,17 +7,21 @@ from ragger.error import ExceptionRAPDU
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from client.status_word import StatusWord
-from client.command_builder import CommandBuilder
+from client.command_builder import CommandBuilder, P1Type
 from tron import TronClient
 import response_parser as ResponseParser
+from settings import SettingID, get_enabled_settings, settings_toggle
 
 BIP32_PATH = "m/44'/195'/0'/0/0"
 
 
 @pytest.mark.parametrize("full_display", [False, True])
-def test_personal_message_reception_rejects_cross_ins(backend, full_display):
+def test_personal_message_reception_rejects_cross_ins(backend, device, navigator,
+                                                      full_display):
     builder = CommandBuilder()
     message = b"A" * 300
+    if not full_display:
+        settings_toggle(device, navigator, [SettingID.SIGN_BY_HASH])
     chunks = (builder.personal_sign_full_display(BIP32_PATH, message)
               if full_display else builder.personal_sign(BIP32_PATH, message))
     assert len(chunks) > 1
@@ -36,11 +40,34 @@ def test_personal_message_reception_rejects_cross_ins(backend, full_display):
     assert response.status == StatusWord.OK
 
 
+@pytest.mark.parametrize("first_p1", [P1Type.SIGN_FIRST_CHUNK, P1Type.SIGN])
+def test_personal_sign_hash_only_requires_blind_signing(backend, device, first_p1):
+    builder = CommandBuilder()
+    chunks = builder.personal_sign(BIP32_PATH, b"A" * 300)
+    assert len(chunks) > 1
+    first_chunk = bytearray(chunks[0])
+    first_chunk[2] = first_p1
+    assert SettingID.SIGN_BY_HASH not in get_enabled_settings(backend, device)
+
+    # Blind signing is disabled on a fresh app instance. The legacy command
+    # must reject its first chunk before retaining any message or session state.
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange_raw(first_chunk)
+    assert error.value.status == StatusWord.MISSING_SETTING_SIGN_BY_HASH
+
+    # The rejected command must leave the app ready for an unrelated command.
+    response = backend.exchange_raw(
+        builder.get_public_addr(False, False, BIP32_PATH, None))
+    assert response.status == StatusWord.OK
+
+
 def common(scenario_navigator: NavigateWithScenario, test_name: str,
            msg: str | bytes):
 
     backend = scenario_navigator.backend
     app_client = TronClient(backend)
+    assert SettingID.SIGN_BY_HASH not in get_enabled_settings(
+        backend, scenario_navigator.device)
 
     with app_client.get_public_addr(display=False):
         pass

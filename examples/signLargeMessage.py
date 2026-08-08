@@ -37,7 +37,11 @@ SIGN_MAGIC = b'\x19TRON Signed Message:\n'
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help="BIP 32 path to sign with", default=None)
 parser.add_argument('--message', help="Message to sign", default='Hello Tron! ' * 64)
-parser.add_argument('--fulldisplay', help="Enable full display mode", default='disable')
+parser.add_argument('--fulldisplay',
+                    help=("Enable full display mode (default: enable). The legacy "
+                          "hash-only mode requires Blind signing in device settings."),
+                    choices=('enable', 'disable'),
+                    default='enable')
 args = parser.parse_args()
 
 args.message = args.message.encode()

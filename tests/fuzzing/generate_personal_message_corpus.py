@@ -10,6 +10,9 @@ INS_PERSONAL_MESSAGE_FULL_DISPLAY = 0xC8
 P1_FIRST = 0x00
 P1_MORE = 0x80
 
+CONTROL_PUBLIC_KEY_FAILURE = 1 << 0
+CONTROL_SIGN_BY_HASH = 1 << 1
+
 BIP32_PATH = [0x8000002C, 0x800000C3, 0x80000000, 0, 0]
 
 
@@ -44,8 +47,9 @@ def declared_length_stream(ins: int, declared_length: int) -> bytes:
     )
 
 
-def write_seed(name: str, stream: bytes, public_key_status: int = 0) -> None:
-    (OUT_DIR / name).write_bytes(bytes([public_key_status]) + stream)
+def write_seed(name: str, stream: bytes,
+               control: int = CONTROL_SIGN_BY_HASH) -> None:
+    (OUT_DIR / name).write_bytes(bytes([control]) + stream)
 
 
 def main() -> None:
@@ -100,7 +104,7 @@ def main() -> None:
     write_seed(
         "08-public-key-failure.bin",
         message_stream(INS_PERSONAL_MESSAGE_FULL_DISPLAY, b"key failure"),
-        public_key_status=1,
+        control=CONTROL_SIGN_BY_HASH | CONTROL_PUBLIC_KEY_FAILURE,
     )
     write_seed(
         "09-continuation-after-complete.bin",
@@ -147,6 +151,11 @@ def main() -> None:
         "17-zero-length-continuation.bin",
         declared_length_stream(INS_PERSONAL_MESSAGE, 1)
         + record(INS_PERSONAL_MESSAGE, P1_MORE, b""),
+    )
+    write_seed(
+        "18-legacy-disabled.bin",
+        message_stream(INS_PERSONAL_MESSAGE, b"blind signing disabled"),
+        control=0,
     )
 
 

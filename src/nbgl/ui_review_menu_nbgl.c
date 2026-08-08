@@ -66,6 +66,11 @@ static const char *stringLabelTxHash = "Tx hash";
 #endif
 static const char *stringLabelUrl = "Url";
 static const char *stringLabelGain = "Gain";
+#ifdef SCREEN_SIZE_WALLET
+static const char *stringLabelBlindSignMessage = "Accept risk and sign message?";
+#else
+static const char *stringLabelBlindSignMessage = "Accept risk and sign message";
+#endif
 
 // Enums and structs
 enum {
@@ -229,15 +234,18 @@ static void displayTransaction(void) {
         operationType = TYPE_MESSAGE;
     }
 
-    if ((txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
+    if ((txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) ||
+        (txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
         (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION)) {
-        // The blind-signing review's finish title must convey the accepted risk,
-        // mirroring app-ethereum's "Accept risk and sign" (ui_tx_simulation_finish_str),
-        // rather than the plain "Sign transaction".
-        const char *finish_title =
-            (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN))
-                ? "Accept risk and sign transaction"
-                : infoLongPress.text;
+        // Hash-only reviews must use the advanced flow so the blind-signing
+        // warning is explicit. Keep the transaction wording for custom-contract
+        // reviews and use message wording for the legacy personal-message path.
+        const char *finish_title = infoLongPress.text;
+        if (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN)) {
+            finish_title = (txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE)
+                               ? stringLabelBlindSignMessage
+                               : "Accept risk and sign transaction";
+        }
         nbgl_useCaseAdvancedReview(operationType,
                                    g_pairsList,
                                    txInfos.flowIcon,
@@ -1268,6 +1276,8 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
+            explicit_bzero(&warning, sizeof(warning));
+            warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
             txInfos.fields[0].item = "Message hash";
             txInfos.fields[0].value = strings.common.fullHash;
             txInfos.fields[1].item = "Sign with";

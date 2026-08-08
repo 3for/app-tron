@@ -403,11 +403,12 @@ payloads, and contract-specific validation through production `handleSign()`.
 
 ### Personal messages
 
-`fuzz_personal_message` interprets the first byte as public-key status. Each
-following record contains `ins`, `p1`, `p2`, one-byte payload length, and the
-payload. It dispatches legacy and full-display personal-message instructions,
-including fragmentation, instruction interleaving, invalid continuation,
-binary messages, and public-key failures.
+`fuzz_personal_message` interprets the first byte as controls: bit 0 makes
+public-key setup fail and bit 1 enables legacy hash-only signing. Each following
+record contains `ins`, `p1`, `p2`, one-byte payload length, and the payload. It
+dispatches legacy and full-display personal-message instructions, including the
+disabled-legacy policy boundary, fragmentation, instruction interleaving,
+invalid continuation, binary messages, and public-key failures.
 
 ### Generic Clear Signing
 

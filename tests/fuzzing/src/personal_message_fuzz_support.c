@@ -7,8 +7,12 @@
 #include "helpers.h"
 #include "io.h"
 #include "parse.h"
+#include "settings.h"
 #include "ui_globals.h"
 #include "ui_review_menu.h"
+
+internalStorage_t g_fuzz_storage;
+const internalStorage_t N_storage_real = {0};
 
 tmpCtx_t tmpCtx;
 txContent_t txContent;
@@ -64,6 +68,8 @@ void fuzz_personal_message_init(uint8_t control) {
     reset_app_context();
     assert_distinct_personal_message_displays();
     g_fail_public_key_init = (control & 1U) != 0U;
+    memset(&g_fuzz_storage, 0, sizeof(g_fuzz_storage));
+    g_fuzz_storage.signByHash = (control & 2U) != 0U;
     g_display_checksum = 0U;
 }
 

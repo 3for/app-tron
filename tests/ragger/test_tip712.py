@@ -2210,6 +2210,8 @@ def test_tip712_definition_rejected_during_personal_message_reception(
     client = TronClient(scenario_navigator.backend,
                         scenario_navigator.backend.device,
                         scenario_navigator.navigator)
+    settings_toggle(scenario_navigator.device, scenario_navigator.navigator,
+                    [SettingID.SIGN_BY_HASH])
     path = pack_derivation_path(client.getAccount(0)['path'])
     first_chunk = (bytes([0xE0, 0x08, 0x00, 0x00, len(path) + 5]) +
                    path + (2).to_bytes(4, "big") + b"A")

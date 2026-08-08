@@ -9,7 +9,8 @@ void fuzz_personal_message_init(uint8_t control);
 
 /*
  * Byte stream format:
- *   public-key status control (1 byte), followed by zero or more APDU records:
+ *   control (1 byte: bit 0 fails public-key setup, bit 1 enables legacy
+ *   hash-only signing), followed by zero or more APDU records:
  *   ins (1), p1 (1), p2 (1), payload length (1), payload (length).
  *
  * Both TIP-191 instructions share this stream so the fuzzer can exercise the

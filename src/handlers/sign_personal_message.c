@@ -27,6 +27,7 @@
 #include "app_errors.h"
 #include "apdu_constants.h"
 #include "parse.h"
+#include "settings.h"
 #include "ui_globals.h"
 
 extern void reset_app_context();
@@ -53,6 +54,12 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     }
 
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
+        // This legacy command retains only the message digest for review. Treat
+        // it like every other blind/hash-only signing path: the user must have
+        // explicitly enabled blind signing before any session state is created.
+        if (!N_storage.signByHash) {
+            return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+        }
         if (appState != APP_STATE_IDLE) {
             reset_app_context();
             return io_send_sw(SWO_COMMAND_NOT_ALLOWED);
