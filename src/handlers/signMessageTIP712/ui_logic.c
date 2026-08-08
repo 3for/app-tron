@@ -289,7 +289,11 @@ static bool ui_712_field_shown(void) {
         }
 #endif
     } else {  // TIP712_FILTERING_FULL
-        if (ui_ctx->field_flags & UI_712_FIELD_SHOWN) {
+        /* The CAL signature context does not bind the complete domain
+         * separator. Always review every domain field so a descriptor cannot
+         * be replayed across domains without changing the trusted display. */
+        if ((path_get_root_type() == ROOT_DOMAIN) ||
+            (ui_ctx->field_flags & UI_712_FIELD_SHOWN)) {
             ret = true;
         }
     }

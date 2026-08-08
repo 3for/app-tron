@@ -1924,6 +1924,53 @@ def test_tip712_rejects_message_info_before_domain_completion(
     assert error.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
 
+def test_tip712_full_filter_reviews_complete_domain(
+        scenario_navigator: NavigateWithScenario):
+    """A reusable filter must not hide a domain that changes the signature."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    with open(f"{tip712_json_path()}/00-simple_mail-data.json",
+              encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{tip712_json_path()}/00-simple_mail-filter.json",
+              encoding="utf-8") as file:
+        filters = json.load(file)
+
+    # The CAL signature context is otherwise unchanged by this value. It
+    # therefore has to be independently committed by trusted display.
+    data["domain"]["version"] = "domain-v2"
+    domain_v1 = dict(data["domain"])
+    domain_v1["version"] = "1"
+    InputData.init_signature_context(data["types"], domain_v1, filters)
+    context_v1 = bytes(InputData.start_signature_payload(InputData.sig_ctx, 183))
+    InputData.init_signature_context(data["types"], data["domain"], filters)
+    context_v2 = bytes(InputData.start_signature_payload(InputData.sig_ctx, 183))
+    assert context_v1 == context_v2
+
+    signing_path = client.getAccount(0)["path"]
+    assert InputData.process_data(client, data, filters, signing_path)
+
+    with client.tip712_sign_new(signing_path):
+        navigator.navigate_until_text(
+            navigate_instruction=(NavInsID.RIGHT_CLICK if device.is_nano else
+                                  NavInsID.SWIPE_CENTER_TO_LEFT),
+            validation_instructions=[],
+            text="domain-v2",
+            screen_change_after_last_instruction=False)
+        approve = NavigationScenarioData(device, backend, UseCase.TX_REVIEW,
+                                         True)
+        navigator.navigate_until_text(
+            navigate_instruction=approve.navigation,
+            validation_instructions=approve.validation,
+            text=approve.pattern,
+            screen_change_before_first_instruction=False)
+
+    signature = ResponseParser.signature(client.response().data)
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
 def test_tip712_rejects_proxy_after_filter_context_lock(
         backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
     client = TronClient(backend)
