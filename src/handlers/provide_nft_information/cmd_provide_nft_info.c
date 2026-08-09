@@ -133,10 +133,10 @@ int handleProvideNFTInformation(uint8_t p1,
     PRINTF("Address: %.*s\n", TRON_BASE58CHECK_ADDRESS_SIZE, workBuffer + offset);
     offset += TRON_BASE58CHECK_ADDRESS_SIZE;
 
-    // --- Chain ID parsing and compatibility check ---
+    // --- Chain ID parsing and exact app-network check ---
     chain_id = u64_from_BE(workBuffer + offset, CHAIN_ID_SIZE);
     PRINTF("ChainID: %llu\n", chain_id);
-    if (!app_compatible_with_chain_id(&chain_id)) {
+    if (chain_id != chainConfig->chainId) {
         UNSUPPORTED_CHAIN_ID_MSG(chain_id);
         return io_send_sw(E_INCORRECT_DATA);
     }

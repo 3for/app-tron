@@ -15,6 +15,7 @@ from client.tlv import eth_to_tron_base58
 
 
 CHAIN_ID = 728126428
+NILE_CHAIN_ID = 3448148188
 CONTRACT = bytes.fromhex("1111111111111111111111111111111111111111")
 IMPLEMENTATION = bytes.fromhex("2222222222222222222222222222222222222222")
 SELECTOR = bytes.fromhex("a9059cbb")
@@ -162,3 +163,15 @@ def test_nft_rejects_ambiguous_collection(
     with pytest.raises(ExceptionRAPDU) as error:
         client.provide_nft_metadata(collection, CONTRACT, CHAIN_ID)
     assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_nft_metadata_requires_exact_transaction_chain(
+        backend: BackendInterface):
+    client = TronClient(backend)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.provide_nft_metadata("Nile Collection", CONTRACT, NILE_CHAIN_ID)
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    assert client.provide_nft_metadata(
+        "Mainnet Collection", CONTRACT, CHAIN_ID).status == StatusWord.OK
