@@ -9,6 +9,7 @@ import functools
 import os
 import web3
 import hashlib
+import zlib
 
 from contextlib import nullcontext
 from ctypes import c_uint64
@@ -1892,6 +1893,128 @@ def test_tip712_proxy(
 
     addr = recover_message(data, vrs)
     assert addr == get_wallet_addr(client)
+
+
+def test_tip712_filtering_rejects_conflicting_duplicate_path(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/00-simple_mail-data.json",
+              encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{tip712_json_path()}/00-simple_mail-filter.json",
+              encoding="utf-8") as file:
+        filters = json.load(file)
+    filters["fields"] = {"from.name": filters["fields"]["from.name"]}
+    original_send_filter = InputData.send_filter
+
+    def send_filter_then_conflicting_filter(path, discarded):
+        callback = original_send_filter(path, discarded)
+        InputData.send_filtering_raw(path, "Conflicting label", discarded)
+        return callback
+
+    monkeypatch.setattr(InputData, "send_filter",
+                        send_filter_then_conflicting_filter)
+    signing_path = client.getAccount(0)["path"]
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters, signing_path)
+    assert error.value.status == StatusWord.INVALID_DATA
+
+    # A rejected conflicting descriptor must leave a clean context, and the
+    # original single descriptor remains a valid static filter.
+    monkeypatch.setattr(InputData, "send_filter", original_send_filter)
+    assert InputData.process_data(client, data, filters, signing_path)
+
+
+def test_tip712_filtering_same_occurrence_replay_is_idempotent(
+        scenario_navigator: NavigateWithScenario,
+        monkeypatch: pytest.MonkeyPatch):
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    with open(f"{tip712_json_path()}/00-simple_mail-data.json",
+              encoding="utf-8") as file:
+        data = json.load(file)
+    with open(f"{tip712_json_path()}/00-simple_mail-filter.json",
+              encoding="utf-8") as file:
+        filters = json.load(file)
+    filters["fields"] = {"from.name": filters["fields"]["from.name"]}
+    original_send_filter = InputData.send_filter
+
+    def send_identical_filter_twice(path, discarded):
+        callback = original_send_filter(path, discarded)
+        original_send_filter(path, discarded)
+        return callback
+
+    monkeypatch.setattr(InputData, "send_filter", send_identical_filter_twice)
+    signing_path = client.getAccount(0)["path"]
+    assert InputData.process_data(client, data, filters, signing_path)
+
+    with client.tip712_sign_new(signing_path):
+        navigator.navigate_until_text(
+            navigate_instruction=(NavInsID.RIGHT_CLICK if device.is_nano else
+                                  NavInsID.SWIPE_CENTER_TO_LEFT),
+            validation_instructions=[],
+            text="From",
+            screen_change_after_last_instruction=False)
+        assert "Cow" in current_screen_texts(backend)
+        approve = NavigationScenarioData(device, backend, UseCase.TX_REVIEW,
+                                         True)
+        navigator.navigate_until_text(
+            navigate_instruction=approve.navigation,
+            validation_instructions=approve.validation,
+            text=approve.pattern,
+            screen_change_before_first_instruction=False)
+
+    signature = ResponseParser.signature(client.response().data)
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
+def test_tip712_filtering_rejects_crc32_path_collision(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
+    client = TronClient(backend)
+    colliding_paths = ("f6bD3yshlon_", "fv8wqTGKR44H")
+    assert zlib.crc32(colliding_paths[0].encode()) == zlib.crc32(
+        colliding_paths[1].encode())
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Message": [
+                {"name": colliding_paths[0], "type": "string"},
+                {"name": colliding_paths[1], "type": "string"},
+            ],
+        },
+        "primaryType": "Message",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
+        },
+        "message": {
+            colliding_paths[0]: "first",
+            colliding_paths[1]: "second",
+        },
+    }
+    filters = {
+        "name": "CRC collision",
+        "fields": {
+            colliding_paths[0]: {"type": "raw", "name": "First"},
+            colliding_paths[1]: {"type": "raw", "name": "Second"},
+        },
+    }
+    original_message_info = InputData.send_filtering_message_info
+
+    def send_message_info_with_one_slot(display_name, _filters_count):
+        original_message_info(display_name, 1)
+
+    monkeypatch.setattr(InputData, "send_filtering_message_info",
+                        send_message_info_with_one_slot)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
 def test_tip712_rejects_message_info_before_domain_completion(

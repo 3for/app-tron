@@ -3,7 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define MAX_FILTERS 50
+#define MAX_FILTERS           50
+#define TIP712_FILTER_ID_SIZE 32U
 
 bool filtering_message_info(const uint8_t *payload, uint8_t length);
 bool filtering_context_matches_live(void);

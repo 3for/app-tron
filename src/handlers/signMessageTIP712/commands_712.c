@@ -192,6 +192,9 @@ uint16_t handleTIP712StructImpl(uint8_t p1,
                 break;
             case P2_IMPL_ARRAY:
                 ret = path_new_array_depth(cdata, length);
+                if (ret) {
+                    ui_712_note_filter_occurrence();
+                }
                 break;
             default:
                 PRINTF("Unknown P2 0x%x\n", p2);
@@ -305,11 +308,6 @@ uint16_t handleTIP712Filtering(uint8_t p1,
             PRINTF("Unknown P2 0x%x\n", p2);
             apdu_response_code = SWO_WRONG_P1_P2;
             ret = false;
-    }
-    if ((p2 > P2_FILT_MESSAGE_INFO) && (p2 != P2_FILT_CALLDATA_INFO) && ret) {
-        if (!ui_712_push_new_filter_path(path_crc)) {
-            ret = false;
-        }
     }
     if (reply_apdu) {
         apdu_reply(ret);

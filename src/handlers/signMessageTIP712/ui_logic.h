@@ -11,6 +11,12 @@
 
 typedef enum { TIP712_FILTERING_BASIC, TIP712_FILTERING_FULL } e_tip712_filtering_mode;
 
+typedef enum {
+    TIP712_FILTER_REJECT = 0,
+    TIP712_FILTER_APPLY,
+    TIP712_FILTER_REPLAY,
+} e_tip712_filter_action;
+
 typedef struct ui_712_pair {
     flist_node_t _list;
     char *key;
@@ -91,10 +97,11 @@ void ui_712_flag_field(bool show,
                        bool trusted_name,
                        bool calldata);
 void ui_712_field_flags_reset(void);
+void ui_712_note_filter_occurrence(void);
 void ui_712_finalize_field(void);
 void ui_712_set_filtering_mode(e_tip712_filtering_mode mode);
 e_tip712_filtering_mode ui_712_get_filtering_mode(void);
-void ui_712_set_filters_count(uint8_t count);
+bool ui_712_set_filters_count(uint8_t count);
 uint8_t ui_712_remaining_filters(void);
 bool ui_712_message_info_received(void);
 void ui_712_queue_struct_to_review(void);
@@ -102,7 +109,8 @@ void ui_712_token_join_prepare_addr_check(uint8_t index);
 bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t name_length);
 bool amount_join_set_token_received(void);
 bool ui_712_show_raw_key(const s_struct_712_field *field_ptr);
-bool ui_712_push_new_filter_path(uint32_t path_crc);
+e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
+                                              const uint8_t *filter_id);
 bool ui_712_set_discarded_path(const char *path, uint8_t length);
 const char *ui_712_get_discarded_path(void);
 void ui_712_clear_discarded_path(void);

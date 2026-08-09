@@ -35,6 +35,9 @@
 #define AMOUNT_JOIN_FLAG_VALUE  (1 << 1)
 #define AMOUNT_JOIN_NAME_LENGTH TIP712_MAX_AMOUNT_LABEL_LENGTH
 
+_Static_assert(TIP712_MAX_BUILD_APDUS <= UINT16_MAX,
+               "TIP-712 filter occurrence must not wrap during a build session");
+
 typedef struct amount_join {
     flist_node_t _list;
     // display name, NULL-terminated
@@ -67,20 +70,23 @@ typedef struct {
     e_amount_join_state state;
 } s_amount_context;
 
-typedef struct filter_crc {
-    flist_node_t _list;
-    uint32_t value;
-} s_filter_crc;
+typedef struct {
+    uint32_t path_crc;
+    uint8_t filter_id[TIP712_FILTER_ID_SIZE];
+    uint16_t last_occurrence;
+} s_filter_identity;
 
 typedef struct {
     bool end_reached;
     e_tip712_filtering_mode filtering_mode;
     uint8_t filters_to_process;
     bool message_info_received;
+    uint8_t filters_processed;
+    uint16_t filter_occurrence;
     uint8_t field_flags;
     uint8_t structs_to_review;
     s_amount_context amount;
-    s_filter_crc *filters_crc;
+    s_filter_identity *filter_identities;
     char *discarded_path;
     uint8_t tn_type_count;
     uint8_t tn_source_count;
@@ -96,11 +102,6 @@ typedef struct {
 } t_ui_context;
 
 static t_ui_context *ui_ctx = NULL;
-
-// to be used as a \ref f_list_node_del
-static void delete_filter_crc(s_filter_crc *fcrc) {
-    gcs_mem_free(fcrc);
-}
 
 // to be used as a \ref f_list_node_del
 static void delete_ui_pair(s_ui_712_pair *pair) {
@@ -1450,10 +1451,7 @@ static void delete_calldata_info(s_eip712_calldata_info *node) {
  */
 void ui_712_deinit(void) {
     if (ui_ctx != NULL) {
-        if (ui_ctx->filters_crc != NULL) {
-            flist_clear((flist_node_t **) &ui_ctx->filters_crc,
-                        (f_list_node_del) &delete_filter_crc);
-        }
+        gcs_mem_free(ui_ctx->filter_identities);
         if (ui_ctx->ui_pairs != NULL) {
             flist_clear((flist_node_t **) &ui_ctx->ui_pairs, (f_list_node_del) &delete_ui_pair);
         }
@@ -1544,10 +1542,19 @@ e_tip712_filtering_mode ui_712_get_filtering_mode(void) {
  * Set the number of filters this message should process
  *
  * @param[in] count number of filters
+ * @return whether the identity table was initialized
  */
-void ui_712_set_filters_count(uint8_t count) {
+bool ui_712_set_filters_count(uint8_t count) {
+    if ((count > 0U) &&
+        ((ui_ctx->filter_identities =
+              gcs_mem_calloc(count * sizeof(*ui_ctx->filter_identities),
+                             GCS_MEM_GENERIC)) == NULL)) {
+        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
+        return false;
+    }
     ui_ctx->filters_to_process = count;
     ui_ctx->message_info_received = true;
+    return true;
 }
 
 /**
@@ -1556,7 +1563,7 @@ void ui_712_set_filters_count(uint8_t count) {
  * @return number of filters
  */
 uint8_t ui_712_remaining_filters(void) {
-    return ui_ctx->filters_to_process - flist_size((flist_node_t **) &ui_ctx->filters_crc);
+    return ui_ctx->filters_to_process - ui_ctx->filters_processed;
 }
 
 bool ui_712_message_info_received(void) {
@@ -1568,6 +1575,14 @@ bool ui_712_message_info_received(void) {
  */
 void ui_712_field_flags_reset(void) {
     ui_ctx->field_flags = 0;
+    ui_712_note_filter_occurrence();
+}
+
+/** Record the build-APDU boundary for the current filter occurrence. */
+void ui_712_note_filter_occurrence(void) {
+    if ((ui_ctx != NULL) && (tip712_context != NULL)) {
+        ui_ctx->filter_occurrence = tip712_context->build_apdu_count;
+    }
 }
 
 /**
@@ -1625,41 +1640,61 @@ bool ui_712_show_raw_key(const s_struct_712_field *field_ptr) {
 }
 
 /**
- * Push a new filter path
+ * Register an authenticated filter identity for a path.
  *
- * @param[in] path_crc CRC of the filter path
- * @return whether it was successful or not
+ * Replaying the exact same descriptor is required for repeated array elements.
+ * A different descriptor with the same path CRC is rejected, so neither a
+ * conflicting effect nor a CRC32 collision can reuse an authenticated count
+ * slot.
+ *
+ * @param[in] path_crc CRC of the canonical filter path
+ * @param[in] filter_id authenticated digest of the descriptor and wire parameters
+ * @return whether the effect must be applied, skipped as an idempotent replay,
+ *         or rejected
  */
-bool ui_712_push_new_filter_path(uint32_t path_crc) {
-    s_filter_crc *tmp;
-    s_filter_crc *new_crc;
-    uint8_t filter_count = 0;
-
-    // check if already present
-    for (tmp = ui_ctx->filters_crc; tmp != NULL;
-         tmp = (s_filter_crc *) ((flist_node_t *) tmp)->next) {
-        if (tmp->value == path_crc) {
-            PRINTF("TIP-712 path CRC (%x) already found!\n", path_crc);
-            return true;
-        }
-        filter_count += 1;
-    }
-
-    if (filter_count >= ui_ctx->filters_to_process) {
+e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
+                                              const uint8_t *filter_id) {
+    if ((ui_ctx == NULL) || (filter_id == NULL)) {
         apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
+        return TIP712_FILTER_REJECT;
     }
-    // allocate it
-    new_crc = gcs_mem_calloc(sizeof(*new_crc), GCS_MEM_GENERIC);
-    if (new_crc == NULL) {
-        apdu_response_code = SWO_INSUFFICIENT_MEMORY;
-        return false;
-    }
-    new_crc->value = path_crc;
 
-    PRINTF("Pushing new TIP-712 path CRC (%x)\n", path_crc);
-    flist_push_back((flist_node_t **) &ui_ctx->filters_crc, (flist_node_t *) new_crc);
-    return true;
+    for (uint8_t i = 0U; i < ui_ctx->filters_processed; i++) {
+        s_filter_identity *identity = &ui_ctx->filter_identities[i];
+
+        if (identity->path_crc == path_crc) {
+            if (memcmp(identity->filter_id,
+                       filter_id,
+                       sizeof(identity->filter_id)) == 0) {
+                if (identity->last_occurrence == ui_ctx->filter_occurrence) {
+                    PRINTF("TIP-712 filter for path CRC (%x) replayed in current field\n",
+                           path_crc);
+                    return TIP712_FILTER_REPLAY;
+                }
+                identity->last_occurrence = ui_ctx->filter_occurrence;
+                PRINTF("TIP-712 filter for path CRC (%x) applied to next field\n",
+                       path_crc);
+                return TIP712_FILTER_APPLY;
+            }
+            PRINTF("Conflicting TIP-712 filter for path CRC (%x)\n", path_crc);
+            apdu_response_code = SWO_INCORRECT_DATA;
+            return TIP712_FILTER_REJECT;
+        }
+    }
+
+    if ((ui_ctx->filters_processed >= ui_ctx->filters_to_process) ||
+        (ui_ctx->filter_identities == NULL)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return TIP712_FILTER_REJECT;
+    }
+
+    s_filter_identity *identity =
+        &ui_ctx->filter_identities[ui_ctx->filters_processed++];
+    identity->path_crc = path_crc;
+    memcpy(identity->filter_id, filter_id, sizeof(identity->filter_id));
+    identity->last_occurrence = ui_ctx->filter_occurrence;
+    PRINTF("Registering TIP-712 filter for path CRC (%x)\n", path_crc);
+    return TIP712_FILTER_APPLY;
 }
 
 /**

@@ -34,6 +34,9 @@
 #define FILT_MAGIC_TRUSTED_NAME      44
 #define FILT_MAGIC_RAW_FIELD         72
 
+_Static_assert(TIP712_FILTER_ID_SIZE == INT256_LENGTH,
+               "TIP-712 filter identity must retain the complete SHA-256 digest");
+
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
 
 /**
@@ -186,26 +189,95 @@ bool filtering_context_matches_live(void) {
  * @param[in] hash_ctx hashing context
  * @param[in] sig signature
  * @param[in] sig_length signature length
+ * @param[in] identity_payload canonical descriptor payload excluding the signature
+ * @param[in] identity_payload_length identity payload length
+ * @param[out] filter_id authenticated descriptor identity, or NULL when not needed
  * @return whether the signature verification worked or not
  */
-static bool sig_verif_end(cx_sha256_t *hash_ctx, const uint8_t *sig, uint8_t sig_length) {
+static bool sig_verif_end(cx_sha256_t *hash_ctx,
+                          const uint8_t *sig,
+                          uint8_t sig_length,
+                          const uint8_t *identity_payload,
+                          size_t identity_payload_length,
+                          uint8_t *filter_id) {
     uint8_t hash[INT256_LENGTH];
+    bool valid;
 
     if (finalize_hash((cx_hash_t *) hash_ctx, hash, sizeof(hash)) != true) {
         return false;
     }
 
-    if (check_signature_with_pubkey(hash,
-                                    sizeof(hash),
-                                    LEDGER_SIGNATURE_PUBLIC_KEY,
-                                    sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
-                                    CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
-                                    (uint8_t *) sig,
-                                    sig_length) != true) {
+    valid = check_signature_with_pubkey(hash,
+                                        sizeof(hash),
+                                        LEDGER_SIGNATURE_PUBLIC_KEY,
+                                        sizeof(LEDGER_SIGNATURE_PUBLIC_KEY),
+                                        CERTIFICATE_PUBLIC_KEY_USAGE_COIN_META,
+                                        (uint8_t *) sig,
+                                        sig_length);
+    if (valid && (filter_id != NULL)) {
+        cx_sha256_t identity_ctx;
+
+        if ((identity_payload == NULL) && (identity_payload_length != 0U)) {
+            valid = false;
+        } else {
+            // The signed preimage binds the descriptor type, context and path.
+            // Hash the canonical wire parameters as well so their length/count
+            // delimiters are retained, while excluding the randomized signature.
+            cx_sha256_init(&identity_ctx);
+            hash_nbytes(hash, sizeof(hash), (cx_hash_t *) &identity_ctx);
+            if (identity_payload_length > 0U) {
+                hash_nbytes(identity_payload,
+                            identity_payload_length,
+                            (cx_hash_t *) &identity_ctx);
+            }
+            valid = finalize_hash((cx_hash_t *) &identity_ctx,
+                                  filter_id,
+                                  TIP712_FILTER_ID_SIZE);
+        }
+    }
+    explicit_bzero(hash, sizeof(hash));
+    return valid;
+}
+
+/**
+ * Verify and register a count-bearing filter before applying its effect.
+ *
+ * @param[in] hash_ctx signed descriptor hashing context
+ * @param[in] sig descriptor signature
+ * @param[in] sig_length signature length
+ * @param[in] identity_payload canonical descriptor payload excluding the signature
+ * @param[in] identity_payload_length identity payload length
+ * @param[in] path_crc CRC32 of the canonical path
+ * @param[out] replayed whether this descriptor was already applied to the current field
+ * @return whether the descriptor is authenticated and accepted by the registry
+ */
+static bool sig_verif_filter_end(cx_sha256_t *hash_ctx,
+                                 const uint8_t *sig,
+                                 uint8_t sig_length,
+                                 const uint8_t *identity_payload,
+                                 size_t identity_payload_length,
+                                 uint32_t path_crc,
+                                 bool *replayed) {
+    uint8_t filter_id[TIP712_FILTER_ID_SIZE] = {0};
+    e_tip712_filter_action action = TIP712_FILTER_REJECT;
+
+    if (replayed == NULL) {
         return false;
     }
-
-    return true;
+    *replayed = false;
+    if (sig_verif_end(hash_ctx,
+                      sig,
+                      sig_length,
+                      identity_payload,
+                      identity_payload_length,
+                      filter_id)) {
+        action = ui_712_register_filter(path_crc, filter_id);
+    }
+    explicit_bzero(filter_id, sizeof(filter_id));
+    if (action == TIP712_FILTER_REPLAY) {
+        *replayed = true;
+    }
+    return action != TIP712_FILTER_REJECT;
 }
 
 /**
@@ -322,11 +394,13 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
 
     hash_byte(filters_count, (cx_hash_t *) &hash_ctx);
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_end(&hash_ctx, sig, sig_len, NULL, 0U, NULL)) {
         return false;
     }
     // Handling
-    ui_712_set_filters_count(filters_count);
+    if (!ui_712_set_filters_count(filters_count)) {
+        return false;
+    }
     if (!N_storage.verbose_tip712) {
         if (!ui_712_set_title("Contract", 8) || !ui_712_set_value(name, name_len) ||
             !ui_712_redraw_generic_step()) {
@@ -435,6 +509,7 @@ bool filtering_calldata_spender(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -463,9 +538,16 @@ bool filtering_calldata_spender(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -494,6 +576,7 @@ bool filtering_calldata_amount(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -522,9 +605,16 @@ bool filtering_calldata_amount(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -553,6 +643,7 @@ bool filtering_calldata_selector(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -581,9 +672,16 @@ bool filtering_calldata_selector(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_BYTES_FIX, true, CALLDATA_SELECTOR_SIZE)) {
@@ -612,6 +710,7 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -640,9 +739,16 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -671,6 +777,7 @@ bool filtering_calldata_callee(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -699,9 +806,16 @@ bool filtering_calldata_callee(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -730,6 +844,7 @@ bool filtering_calldata_value(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -758,9 +873,16 @@ bool filtering_calldata_value(const uint8_t *payload,
         return false;
     }
     hash_byte(index, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_BYTES_DYN, false, 0U)) {
@@ -876,7 +998,7 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     hash_byte(selector_flag, (cx_hash_t *) &hash_ctx);
     hash_byte(amount_flag, (cx_hash_t *) &hash_ctx);
     hash_byte(spender_flag, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_end(&hash_ctx, sig, sig_len, NULL, 0U, NULL)) {
         return false;
     }
     calldata_info = gcs_mem_calloc(sizeof(*calldata_info), GCS_MEM_TX_CONTEXT);
@@ -965,6 +1087,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1046,9 +1169,16 @@ bool filtering_trusted_name(const uint8_t *payload,
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     hash_nbytes(type_bytes, type_count, (cx_hash_t *) &hash_ctx);
     hash_nbytes(source_bytes, source_count, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -1080,6 +1210,7 @@ bool filtering_date_time(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1120,9 +1251,16 @@ bool filtering_date_time(const uint8_t *payload,
         return false;
     }
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -1152,6 +1290,7 @@ bool filtering_amount_join_token(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1181,9 +1320,16 @@ bool filtering_amount_join_token(const uint8_t *payload,
         return false;
     }
     hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U) ||
@@ -1214,6 +1360,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1259,9 +1406,16 @@ bool filtering_amount_join_value(const uint8_t *payload,
     }
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
@@ -1305,6 +1459,7 @@ bool filtering_raw_field(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
+    bool replayed;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1344,9 +1499,16 @@ bool filtering_raw_field(const uint8_t *payload,
         return false;
     }
     hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len)) {
+    if (!sig_verif_filter_end(&hash_ctx,
+                              sig,
+                              sig_len,
+                              payload,
+                              offset - sizeof(sig_len),
+                              *path_crc,
+                              &replayed)) {
         return false;
     }
+    if (replayed) return true;
 
     if (!discarded) {
         // Handling
