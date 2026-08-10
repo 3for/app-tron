@@ -1128,7 +1128,7 @@ static bool update_calldata_value(const uint8_t *data,
                 apdu_response_code = SWO_INCORRECT_DATA;
                 return false;
             }
-            calldata_info->pending_calldata = calldata_init_nested(calldata_size, selector);
+            calldata_info->pending_calldata = calldata_init_nested_gcs(calldata_size, selector);
             if (calldata_info->pending_calldata == NULL) {
                 apdu_response_code = SWO_INSUFFICIENT_MEMORY;
                 return false;
@@ -1185,8 +1185,7 @@ static bool update_calldata_selector(const uint8_t *data,
     calldata_info->selector_state = CALLDATA_INFO_PARAM_SET;
     if (calldata_info->value_state == CALLDATA_INFO_PARAM_SET) {
         if (calldata_info->pending_calldata == NULL) {
-            calldata_info->pending_calldata =
-                calldata_init_nested(0U, calldata_info->selector);
+            calldata_info->pending_calldata = calldata_init_nested_gcs(0U, calldata_info->selector);
             if (calldata_info->pending_calldata == NULL) {
                 apdu_response_code = SWO_INSUFFICIENT_MEMORY;
                 return false;

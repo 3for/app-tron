@@ -39,8 +39,7 @@ static bool handle_tlv_payload(const buffer_t *buf) {
     }
     while (((appState == APP_STATE_SIGNING_EIP712) || !tx_ctx_is_root()) &&
            validate_instruction_hash()) {
-        if ((appState == APP_STATE_SIGNING_TX) &&
-            !validate_calldata_coverage()) {
+        if (calldata_tracks_coverage(get_current_calldata()) && !validate_calldata_coverage()) {
             PRINTF("Error: nested descriptor leaves calldata uncovered!\n");
             return false;
         }

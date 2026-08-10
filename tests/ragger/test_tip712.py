@@ -40,10 +40,11 @@ from client.trusted_name import TrustedName, TrustedNameType, TrustedNameSource
 from client.gating import Gating
 from client.status_word import StatusWord
 from client.proxy_info import ProxyInfo
-from client.gcs import (Field, ParamRaw, Value, TypeFamily, DataPath, PathTuple,
-                        ParamTokenAmount, ParamCalldata, ContainerPath, PathLeaf,
-                        PathLeafType, TxInfo)
-from gcs_utils import ABIS_FOLDER, compute_inst_hash
+from client.gcs import (Field, FieldParam, ParamRaw, Value, TypeFamily,
+                        DataPath, PathTuple, ParamTokenAmount, ParamCalldata,
+                        ContainerPath, PathArray, PathRef, PathLeaf,
+                        PathLeafType, TxInfo, VisibleType)
+from gcs_utils import ABIS_FOLDER, compute_inst_hash as _compute_inst_hash
 from fields_utils import get_all_paths, get_all_tuple_array_paths
 from ledgered.devices import Device
 from address import to_tvm_address
@@ -485,8 +486,175 @@ def filt_tn_types_fixture(request) -> list[TrustedNameType]:
 # gcs_handler* in test_eip712.py.
 
 
-def gcs_handler(client: TronClient, json_data: dict) -> None:
-    fields = [
+_SAFE_TRANSFER_RECIPIENT = bytes.fromhex(
+    "23f8abfc2824c397ccb3da89ae772984107ddb99")
+_TRC_TOKEN_RECIPIENT = bytes.fromhex(
+    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+_TRC_TOKEN_VALUE = 1_000_000
+
+
+def _static_word(index: int) -> DataPath:
+    return DataPath(
+        1,
+        [PathTuple(index), PathLeaf(PathLeafType.STATIC)],
+    )
+
+
+def _raw_static_field(name: str, index: int,
+                      type_family: TypeFamily = TypeFamily.UINT,
+                      visible: Optional[VisibleType] = None,
+                      constraints: Optional[list[bytes]] = None) -> Field:
+    return Field(
+        1,
+        name,
+        ParamRaw(
+            1,
+            Value(
+                1,
+                type_family,
+                type_size=32,
+                data_path=_static_word(index),
+            ),
+        ),
+        visible,
+        constraints,
+    )
+
+
+def _iter_gcs_values(value: object, seen: set[int]):
+    """Yield Value objects from the bounded FieldParam object graph."""
+    if isinstance(value, Value):
+        yield value
+        return
+    if value is None or isinstance(value, (bytes, str, int)):
+        return
+
+    object_id = id(value)
+    if object_id in seen:
+        return
+    seen.add(object_id)
+
+    if isinstance(value, FieldParam):
+        for child in vars(value).values():
+            yield from _iter_gcs_values(child, seen)
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _iter_gcs_values(child, seen)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _iter_gcs_values(child, seen)
+
+
+def _with_explicit_abi_structure(fields: list[Field]) -> list[Field]:
+    """Own every ABI structure word traversed by a signed static DataPath.
+
+    The generated descriptors depend only on the DataPath schema. They never
+    read offsets, lengths, counts, or other values from the calldata under test.
+    Structural fields precede ParamCalldata because that field switches to the
+    child transaction context.
+    """
+    values = [
+        value
+        for field in fields
+        for value in _iter_gcs_values(field.param, set())
+        if value.data_path is not None
+    ]
+
+    existing_leaf_prefixes: set[bytes] = set()
+    for value in values:
+        for index, node in enumerate(value.data_path.path):
+            if isinstance(node, PathLeaf):
+                existing_leaf_prefixes.add(
+                    bytes(DataPath(value.data_path.version,
+                                   value.data_path.path[:index + 1]).serialize()))
+                break
+
+    structure_paths: list[DataPath] = []
+    seen: set[bytes] = set()
+    for value in values:
+        data_path = value.data_path
+        for index, node in enumerate(data_path.path):
+            owns_structure = isinstance(node, (PathRef, PathArray))
+            owns_structure |= (
+                isinstance(node, PathLeaf) and
+                node.type == PathLeafType.DYNAMIC
+            )
+            if not owns_structure:
+                continue
+            structure_path = DataPath(
+                data_path.version,
+                data_path.path[:index] + [PathLeaf(PathLeafType.STATIC)],
+            )
+            serialized = bytes(structure_path.serialize())
+            if serialized in existing_leaf_prefixes or serialized in seen:
+                continue
+            seen.add(serialized)
+            structure_paths.append(structure_path)
+
+    structure_fields = [
+        Field(
+            1,
+            f"ABI structure {index + 1}",
+            ParamRaw(
+                1,
+                Value(
+                    1,
+                    TypeFamily.UINT,
+                    type_size=32,
+                    data_path=data_path,
+                ),
+            ),
+        )
+        for index, data_path in enumerate(structure_paths)
+    ]
+    return structure_fields + list(fields)
+
+
+def _with_hidden_static_structure_guards(
+        fields: list[Field],
+        guards: dict[str, tuple[int, ...]]) -> list[Field]:
+    """Hide fixture-static ABI words while still claiming their byte ranges."""
+    expanded = _with_explicit_abi_structure(fields)
+    found: set[str] = set()
+
+    for field in expanded:
+        if field.name not in guards:
+            continue
+        assert field.name not in found
+        assert isinstance(field.param, ParamRaw)
+        assert field.param.value.type_family == TypeFamily.UINT
+        assert field.param.value.type_size == 32
+        field.visible = VisibleType.MUST_BE
+        field.constraints = [
+            value.to_bytes(32, "big") for value in guards[field.name]
+        ]
+        found.add(field.name)
+
+    assert found == set(guards)
+    return expanded
+
+
+def compute_inst_hash(fields: list[Field]) -> bytes:
+    """Hash the exact complete FIELD stream sent to the device."""
+    fields[:] = _with_explicit_abi_structure(fields)
+    return _compute_inst_hash(fields)
+
+
+def _safe_transfer_fields(include_recipient: bool = True) -> list[Field]:
+    fields = []
+    if include_recipient:
+        # This fixed certificate is for the checked-in safe.json recipient; the
+        # constraint is static test metadata, not copied from the runtime value.
+        fields.append(
+            _raw_static_field(
+                "To",
+                0,
+                TypeFamily.ADDRESS,
+                VisibleType.MUST_BE,
+                [_SAFE_TRANSFER_RECIPIENT],
+            )
+        )
+    fields.append(
         Field(
             1,
             "Amount",
@@ -496,13 +664,7 @@ def gcs_handler(client: TronClient, json_data: dict) -> None:
                     1,
                     TypeFamily.UINT,
                     type_size=32,
-                    data_path=DataPath(
-                        1,
-                        [
-                            PathTuple(1),
-                            PathLeaf(PathLeafType.STATIC),
-                        ]
-                    ),
+                    data_path=_static_word(1),
                 ),
                 token=Value(
                     1,
@@ -510,9 +672,14 @@ def gcs_handler(client: TronClient, json_data: dict) -> None:
                     container_path=ContainerPath.TO,
                 ),
             )
-        ),
-    ]
-    # compute instructions hash
+        )
+    )
+    return fields
+
+
+def _provide_safe_transfer_descriptor(client: TronClient, json_data: dict,
+                                      include_recipient: bool = True) -> None:
+    fields = _safe_transfer_fields(include_recipient)
     inst_hash = compute_inst_hash(fields)
     tx_info = TxInfo(
         1,
@@ -523,12 +690,36 @@ def gcs_handler(client: TronClient, json_data: dict) -> None:
         "Token transfer",
         contract_name="USDC",
     )
-    client.provide_token_metadata(tx_info.contract_name, tx_info.contract_addr, 6, tx_info.chain_id)
-
+    client.provide_token_metadata(tx_info.contract_name, tx_info.contract_addr,
+                                  6, tx_info.chain_id)
     client.provide_transaction_info(tx_info.serialize())
-
     for field in fields:
         client.provide_transaction_field_desc(field.serialize())
+
+
+def gcs_handler(client: TronClient, json_data: dict) -> None:
+    _provide_safe_transfer_descriptor(client, json_data)
+
+
+def gcs_handler_incomplete_transfer(client: TronClient,
+                                    json_data: dict) -> None:
+    """Legacy descriptor that leaves transfer(address,...) word 0 uncovered."""
+    _provide_safe_transfer_descriptor(client, json_data,
+                                      include_recipient=False)
+
+
+def gcs_handler_empty_fields(client: TronClient, json_data: dict) -> None:
+    """Authenticate an empty FIELD stream for non-empty transfer calldata."""
+    tx_info = TxInfo(
+        1,
+        json_data["domain"]["chainId"],
+        to_tvm_address(json_data["message"]["to"]),
+        get_selector_from_data(json_data["message"]["data"]),
+        hashlib.sha3_256().digest(),
+        "Token transfer",
+        contract_name="USDC",
+    )
+    client.provide_transaction_info(tx_info.serialize())
 
 
 def gcs_handler_trctoken(client: TronClient, json_data: dict) -> None:
@@ -536,6 +727,20 @@ def gcs_handler_trctoken(client: TronClient, json_data: dict) -> None:
     # tokenId) via TypeFamily.TRC_TOKEN, exercising the TF_TRC_TOKEN family through the
     # TIP-712 nested-calldata field formatting.
     fields = [
+        _raw_static_field(
+            "To",
+            0,
+            TypeFamily.ADDRESS,
+            VisibleType.MUST_BE,
+            [_TRC_TOKEN_RECIPIENT],
+        ),
+        _raw_static_field(
+            "Token value",
+            1,
+            TypeFamily.UINT,
+            VisibleType.MUST_BE,
+            [_TRC_TOKEN_VALUE.to_bytes(32, "big")],
+        ),
         Field(
             1,
             "Token id",
@@ -571,7 +776,8 @@ def gcs_handler_trctoken(client: TronClient, json_data: dict) -> None:
         client.provide_transaction_field_desc(field.serialize())
 
 
-def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
+def gcs_handler_batch(client: TronClient, json_data: dict,
+                      first_child_complete: bool = True) -> None:
     # Load TIP-712 JSON data
     with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
         data = json.load(file)
@@ -625,7 +831,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
 
     # Top level transaction fields definition
     param_paths = get_all_tuple_array_paths(f"{ABIS_FOLDER}/batch.json", "batchExecute", "calls")
-    L0_fields = [
+    L0_fields = _with_hidden_static_structure_guards([
         Field(
             1,
             "Transaction",
@@ -657,7 +863,16 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
                 ),
             )
         ),
-    ]
+    ], {
+        # batchExecute has one dynamic parameter, two fixture calls, and each
+        # tuple is (address,uint256,bytes) with a 68-byte nested transfer call.
+        # These are signed fixture constants, never copied from batchData.
+        "ABI structure 1": (32,),
+        "ABI structure 2": (2,),
+        "ABI structure 3": (64, 288),
+        "ABI structure 4": (96,),
+        "ABI structure 5": (68,),
+    })
     # compute instructions hash
     L0_hash = compute_inst_hash(L0_fields)
 
@@ -715,8 +930,12 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
             )
         ),
     ]
-    # compute instructions hash
-    L1_hash = compute_inst_hash(L1_fields)
+    L1_field_sets = [list(L1_fields), list(L1_fields)]
+    if not first_child_complete:
+        # Keep the first child's authenticated FIELD stream internally valid,
+        # but omit its recipient word so coverage must reject it.
+        L1_field_sets[0] = L1_fields[:1]
+    L1_hashes = [compute_inst_hash(fields) for fields in L1_field_sets]
 
     # Define lower batchExecute transaction info
     L1_tx_info = [
@@ -725,7 +944,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
             data["domain"]["chainId"],
             tokens[0]["address"],
             get_selector_from_data(tokenData0),
-            L1_hash,
+            L1_hashes[0],
             "Send",
             contract_name="USD_Coin",
         ),
@@ -734,7 +953,7 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
             data["domain"]["chainId"],
             tokens[1]["address"],
             get_selector_from_data(tokenData1),
-            L1_hash,
+            L1_hashes[1],
             "Send",
             contract_name="USD_Coin",
         )
@@ -764,9 +983,14 @@ def gcs_handler_batch(client: TronClient, json_data: dict) -> None:
                                       tokens[idx]["address"],
                                       tokens[idx]["decimals"],
                                       data["domain"]["chainId"])
-        for f1 in L1_fields:
+        for f1 in L1_field_sets[idx]:
             # Send lower batchExecute fields description
             client.provide_transaction_field_desc(f1.serialize())
+
+
+def gcs_handler_batch_incomplete_first_child(client: TronClient,
+                                             json_data: dict) -> None:
+    gcs_handler_batch(client, json_data, first_child_complete=False)
 
 
 def gcs_handler_no_param(client: TronClient, json_data: dict) -> None:
@@ -1382,20 +1606,8 @@ def test_tip712_advanced_trusted_name(
     assert addr == get_wallet_addr(client)
 
 
-def _tip712_calldata_common(
-                            scenario_navigator: NavigateWithScenario,
-                            test_name: str,
-                            filename: str,
-                            handler: Optional[Callable] = None):
-    backend = scenario_navigator.backend
-    device = scenario_navigator.backend.device
-    navigator = scenario_navigator.navigator
-    client = TronClient(backend, device, navigator)
-
-    with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
-        data = json.load(file)
-
-    filters = {
+def _tip712_calldata_filters(handler: Optional[Callable]) -> dict:
+    return {
         "name": "Calldata test",
         "calldatas": [
             {
@@ -1425,11 +1637,105 @@ def _tip712_calldata_common(
         }
     }
 
+
+def _tip712_calldata_common(
+                            scenario_navigator: NavigateWithScenario,
+                            test_name: str,
+                            filename: str,
+                            handler: Optional[Callable] = None):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = _tip712_calldata_filters(handler)
+
     vrs = tip712_new_common(scenario_navigator, client, data, filters,
                             snapshots_dirname=test_name)
 
     addr = recover_message(data, vrs)
     assert addr == get_wallet_addr(client)
+
+
+@pytest.mark.parametrize(
+    "filename,handler",
+    [
+        pytest.param("safe", gcs_handler, id="complete-two-word-call"),
+        pytest.param("safe_calldata_no_param", gcs_handler_no_param,
+                     id="empty-post-selector-calldata"),
+    ],
+)
+def test_tip712_accepts_complete_nested_calldata_descriptor(
+        backend: BackendInterface, filename: str, handler: Callable):
+    """Full coverage and a zero-byte argument area remain valid controls."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/{filename}.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = _tip712_calldata_filters(handler)
+    assert InputData.process_data(client, data, filters,
+                                  client.getAccount(0)["path"])
+
+
+def test_tip712_rejects_partially_described_nested_calldata(
+        backend: BackendInterface):
+    """An amount-only descriptor must not authorize an unseen recipient word."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = _tip712_calldata_filters(gcs_handler_incomplete_transfer)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_tip712_rejects_empty_field_stream_for_nonempty_nested_calldata(
+        backend: BackendInterface):
+    """An empty FIELD hash must fail immediately when TX_INFO is installed."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = _tip712_calldata_filters(gcs_handler_empty_fields)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_tip712_rejects_uncovered_nested_calldata_suffix(
+        backend: BackendInterface):
+    """A complete transfer descriptor must not authorize an extra ABI word."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe.json", encoding="utf-8") as file:
+        data = json.load(file)
+    data["message"]["data"] += "a5" * 32
+
+    filters = _tip712_calldata_filters(gcs_handler)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+def test_tip712_rejects_partially_described_batch_child(
+        backend: BackendInterface):
+    """A complete L0 descriptor must not hide the first child's recipient."""
+    client = TronClient(backend)
+    with open(f"{tip712_json_path()}/safe_batch.json", encoding="utf-8") as file:
+        data = json.load(file)
+
+    filters = _tip712_calldata_filters(
+        gcs_handler_batch_incomplete_first_child)
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
 
 
 @pytest.mark.parametrize("fill", [0x00, 0xA5])
@@ -1619,26 +1925,7 @@ def test_tip712_calldata_trctoken(
         + (1002000).to_bytes(32, "big")   # word 2: trcToken tokenId
     ).hex()
 
-    filters = {
-        "name": "Calldata test",
-        "calldatas": [
-            {
-                "index": 0,
-                "handler": gcs_handler_trctoken,
-                "value_flag": True,
-                "callee_flag": EIP712CalldataParamPresence.PRESENT_FILTERED,
-                "chain_id_flag": False,
-                "selector_flag": False,
-                "amount_flag": True,
-                "spender_flag": EIP712CalldataParamPresence.NONE,
-            },
-        ],
-        "fields": {
-            "to": {"type": "calldata_callee", "index": 0},
-            "value": {"type": "calldata_amount", "index": 0},
-            "data": {"type": "calldata_value", "index": 0},
-        }
-    }
+    filters = _tip712_calldata_filters(gcs_handler_trctoken)
 
     vrs = tip712_new_common(scenario_navigator, client, data, filters,
                             snapshots_dirname=test_name)

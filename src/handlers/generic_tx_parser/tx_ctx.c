@@ -273,11 +273,9 @@ bool set_tx_info_into_tx_ctx(s_tx_info *tx_info) {
             return false;
         }
         if (memcmp(hash, tx_info->fields_hash, sizeof(hash)) == 0) {
-            /* TIP-712 retains its existing descriptor semantics. For ordinary
-             * GCS, a nested context with an authenticated empty FIELD stream is
-             * complete only when it has no ABI argument words to account for. */
-            if ((appState == APP_STATE_SIGNING_TX) &&
-                !validate_calldata_coverage()) {
+            /* A tracked context with an authenticated empty FIELD stream is
+             * complete only when it has no calldata bytes left to account for. */
+            if (calldata_tracks_coverage(get_current_calldata()) && !validate_calldata_coverage()) {
                 PRINTF("Error: empty nested descriptor leaves calldata uncovered!\n");
                 return false;
             }
