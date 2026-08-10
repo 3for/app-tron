@@ -351,7 +351,8 @@ static bool sig_verif_end(cx_sha256_t *hash_ctx,
  * @param[in] descriptor_body canonical APDU descriptor body excluding the signature
  * @param[in] descriptor_body_length descriptor body length
  * @param[in] path_crc CRC32 of the canonical path
- * @param[out] replayed whether this descriptor was already applied to the current field
+ * @param[in] discarded whether the authenticated path has no live field occurrence
+ * @param[out] skip_effect whether this descriptor must not affect the current field
  * @return whether the descriptor is authenticated and accepted by the registry
  */
 static bool sig_verif_filter_end(cx_sha256_t *hash_ctx,
@@ -360,26 +361,25 @@ static bool sig_verif_filter_end(cx_sha256_t *hash_ctx,
                                  const uint8_t *descriptor_body,
                                  size_t descriptor_body_length,
                                  uint32_t path_crc,
-                                 bool *replayed) {
+                                 bool discarded,
+                                 bool *skip_effect) {
     uint8_t filter_id[TIP712_FILTER_ID_SIZE] = {0};
     e_tip712_filter_action action = TIP712_FILTER_REJECT;
 
-    if (replayed == NULL) {
+    if (skip_effect == NULL) {
         return false;
     }
-    *replayed = false;
+    *skip_effect = false;
     if (sig_verif_end(hash_ctx,
                       sig,
                       sig_length,
                       descriptor_body,
                       descriptor_body_length,
                       filter_id)) {
-        action = ui_712_register_filter(path_crc, filter_id);
+        action = ui_712_register_filter(path_crc, filter_id, discarded);
     }
     explicit_bzero(filter_id, sizeof(filter_id));
-    if (action == TIP712_FILTER_REPLAY) {
-        *replayed = true;
-    }
+    *skip_effect = (action == TIP712_FILTER_REPLAY) || (action == TIP712_FILTER_DISCARD);
     return action != TIP712_FILTER_REJECT;
 }
 
@@ -615,7 +615,7 @@ bool filtering_calldata_spender(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -649,10 +649,11 @@ bool filtering_calldata_spender(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -681,7 +682,7 @@ bool filtering_calldata_amount(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -715,10 +716,11 @@ bool filtering_calldata_amount(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -747,7 +749,7 @@ bool filtering_calldata_selector(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -781,10 +783,11 @@ bool filtering_calldata_selector(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_BYTES_FIX, true, CALLDATA_SELECTOR_SIZE)) {
@@ -813,7 +816,7 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -847,10 +850,11 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -879,7 +883,7 @@ bool filtering_calldata_callee(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -913,10 +917,11 @@ bool filtering_calldata_callee(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -945,7 +950,7 @@ bool filtering_calldata_value(const uint8_t *payload,
     uint8_t index;
     uint8_t sig_len;
     const uint8_t *sig;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -979,10 +984,11 @@ bool filtering_calldata_value(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     if ((get_calldata_info(index) == NULL) ||
         !check_field_shape(TYPE_SOL_BYTES_DYN, false, 0U)) {
@@ -1186,7 +1192,7 @@ bool filtering_trusted_name(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1271,10 +1277,11 @@ bool filtering_trusted_name(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U)) {
@@ -1306,7 +1313,7 @@ bool filtering_date_time(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1352,10 +1359,11 @@ bool filtering_date_time(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_UINT, false, 0U)) {
@@ -1385,7 +1393,7 @@ bool filtering_amount_join_token(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1420,10 +1428,11 @@ bool filtering_amount_join_token(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     // Handling
     if (!check_field_shape(TYPE_SOL_ADDRESS, false, 0U) ||
@@ -1454,7 +1463,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1504,10 +1513,11 @@ bool filtering_amount_join_value(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
     // Handling
     if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
@@ -1551,7 +1561,7 @@ bool filtering_raw_field(const uint8_t *payload,
     uint8_t sig_len;
     const uint8_t *sig;
     uint8_t offset = 0;
-    bool replayed;
+    bool skip_effect;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1596,17 +1606,16 @@ bool filtering_raw_field(const uint8_t *payload,
                               payload,
                               offset - sizeof(sig_len),
                               *path_crc,
-                              &replayed)) {
+                              discarded,
+                              &skip_effect)) {
         return false;
     }
-    if (replayed) return true;
+    if (skip_effect) return true;
 
-    if (!discarded) {
-        // Handling
-        if (name_len > 0) {  // don't substitute for an empty name
-            if (!ui_712_set_title(name, name_len)) return false;
-        }
-        ui_712_flag_field(true, name_len > 0, false, false, false, false);
+    // Handling
+    if (name_len > 0) {  // don't substitute for an empty name
+        if (!ui_712_set_title(name, name_len)) return false;
     }
+    ui_712_flag_field(true, name_len > 0, false, false, false, false);
     return true;
 }

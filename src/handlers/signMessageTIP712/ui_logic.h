@@ -15,6 +15,7 @@ typedef enum {
     TIP712_FILTER_REJECT = 0,
     TIP712_FILTER_APPLY,
     TIP712_FILTER_REPLAY,
+    TIP712_FILTER_DISCARD,
 } e_tip712_filter_action;
 
 typedef struct ui_712_pair {
@@ -110,7 +111,8 @@ bool ui_712_token_join_prepare_amount(uint8_t index, const char *name, uint8_t n
 bool amount_join_set_token_received(void);
 bool ui_712_show_raw_key(const s_struct_712_field *field_ptr);
 e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
-                                              const uint8_t *filter_id);
+                                              const uint8_t *filter_id,
+                                              bool discarded);
 bool ui_712_set_discarded_path(const char *path, uint8_t length);
 const char *ui_712_get_discarded_path(void);
 void ui_712_clear_discarded_path(void);

@@ -1335,6 +1335,7 @@ def test_tip712_filtering_empty_array(
                 {"name": "to", "type": "Person[]"},
             ],
             "Root": [
+                {"name": "timestamps", "type": "uint64[]"},
                 {"name": "text", "type": "string"},
                 {"name": "subtext", "type": "string[]"},
                 {"name": "msg_list1", "type": "Message[]"},
@@ -1349,6 +1350,7 @@ def test_tip712_filtering_empty_array(
             "chainId": 728126428,
         },
         "message": {
+            "timestamps": [],
             "text": "This is a test",
             "subtext": [],
             "msg_list1": [
@@ -1363,6 +1365,13 @@ def test_tip712_filtering_empty_array(
     filters = {
         "name": "Empty array filtering",
         "fields": {
+            # A discarded non-raw filter is authenticated for this absent
+            # array element. It must not inspect or format the following
+            # active field ("text") as a datetime.
+            "timestamps.[]": {
+                "type": "datetime",
+                "name": "Timestamp",
+            },
             "text": {
                 "type": "raw",
                 "name": "Text",
@@ -1387,6 +1396,82 @@ def test_tip712_filtering_empty_array(
 
     addr = recover_message(data, vrs)
     assert addr == get_wallet_addr(client)
+
+
+def test_tip712_discarded_filter_does_not_suppress_live_occurrence(
+        scenario_navigator: NavigateWithScenario,
+        monkeypatch: pytest.MonkeyPatch):
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Root": [
+                {"name": "values", "type": "string[][]"},
+            ],
+        },
+        "primaryType": "Root",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+        },
+        "message": {
+            "values": [[], ["visible"]],
+        },
+    }
+    filter_path = "values.[].[]"
+    filters = {
+        "name": "Discarded occurrence",
+        "fields": {
+            filter_path: {"type": "raw", "name": "Visible item"},
+        },
+    }
+    original_send_filter = InputData.send_filter
+    delayed_discard = False
+
+    def send_delayed_discard_then_live(path, discarded):
+        nonlocal delayed_discard
+
+        assert path == filter_path
+        if discarded:
+            # Keep the empty-array discarded-path declaration pending; defer
+            # its signed descriptor until the same path has a live occurrence.
+            delayed_discard = True
+            return None
+        assert delayed_discard
+        original_send_filter(path, True)
+        delayed_discard = False
+        return original_send_filter(path, False)
+
+    monkeypatch.setattr(InputData, "send_filter",
+                        send_delayed_discard_then_live)
+    signing_path = client.getAccount(0)["path"]
+    assert InputData.process_data(client, data, filters, signing_path)
+    assert not delayed_discard
+
+    with client.tip712_sign_new(signing_path):
+        navigator.navigate_until_text(
+            navigate_instruction=(NavInsID.RIGHT_CLICK if device.is_nano else
+                                  NavInsID.SWIPE_CENTER_TO_LEFT),
+            validation_instructions=[],
+            text="Visible item",
+            screen_change_after_last_instruction=False)
+        assert "visible" in current_screen_texts(backend)
+        approve = NavigationScenarioData(device, backend, UseCase.TX_REVIEW,
+                                         True)
+        navigator.navigate_until_text(
+            navigate_instruction=approve.navigation,
+            validation_instructions=approve.validation,
+            text=approve.pattern,
+            screen_change_before_first_instruction=False)
+
+    signature = ResponseParser.signature(client.response().data)
+    assert recover_message(data, signature) == get_wallet_addr(client)
 
 
 def test_tip712_advanced_missing_token(

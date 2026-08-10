@@ -74,6 +74,7 @@ typedef struct {
     uint32_t path_crc;
     uint8_t filter_id[TIP712_FILTER_ID_SIZE];
     uint16_t last_occurrence;
+    bool occurrence_recorded;
 } s_filter_identity;
 
 typedef struct {
@@ -1648,11 +1649,13 @@ bool ui_712_show_raw_key(const s_struct_712_field *field_ptr) {
  *
  * @param[in] path_crc CRC of the canonical filter path
  * @param[in] filter_id authenticated digest of the descriptor and wire parameters
+ * @param[in] discarded whether the authenticated path has no live field occurrence
  * @return whether the effect must be applied, skipped as an idempotent replay,
- *         or rejected
+ *         skipped for a discarded path, or rejected
  */
 e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
-                                              const uint8_t *filter_id) {
+                                              const uint8_t *filter_id,
+                                              bool discarded) {
     if ((ui_ctx == NULL) || (filter_id == NULL)) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return TIP712_FILTER_REJECT;
@@ -1665,12 +1668,17 @@ e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
             if (memcmp(identity->filter_id,
                        filter_id,
                        sizeof(identity->filter_id)) == 0) {
-                if (identity->last_occurrence == ui_ctx->filter_occurrence) {
+                if (discarded) {
+                    return TIP712_FILTER_DISCARD;
+                }
+                if (identity->occurrence_recorded &&
+                    (identity->last_occurrence == ui_ctx->filter_occurrence)) {
                     PRINTF("TIP-712 filter for path CRC (%x) replayed in current field\n",
                            path_crc);
                     return TIP712_FILTER_REPLAY;
                 }
                 identity->last_occurrence = ui_ctx->filter_occurrence;
+                identity->occurrence_recorded = true;
                 PRINTF("TIP-712 filter for path CRC (%x) applied to next field\n",
                        path_crc);
                 return TIP712_FILTER_APPLY;
@@ -1691,8 +1699,12 @@ e_tip712_filter_action ui_712_register_filter(uint32_t path_crc,
         &ui_ctx->filter_identities[ui_ctx->filters_processed++];
     identity->path_crc = path_crc;
     memcpy(identity->filter_id, filter_id, sizeof(identity->filter_id));
-    identity->last_occurrence = ui_ctx->filter_occurrence;
     PRINTF("Registering TIP-712 filter for path CRC (%x)\n", path_crc);
+    if (discarded) {
+        return TIP712_FILTER_DISCARD;
+    }
+    identity->last_occurrence = ui_ctx->filter_occurrence;
+    identity->occurrence_recorded = true;
     return TIP712_FILTER_APPLY;
 }
 
