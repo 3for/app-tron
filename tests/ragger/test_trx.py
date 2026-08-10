@@ -622,6 +622,54 @@ class TestTRX():
 
         self.sign_and_validate(client, device, 1, tx, tokenSignature)
 
+    def test_trx_exchange_create_trx_prefix_name_uses_signed_precision(
+            self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeCreateContract,
+            contract.ExchangeCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                first_token_id=b"1001610",
+                first_token_balance=1_000_000,
+                second_token_id=b"_",
+                second_token_balance=1_000_000))
+        # Mainnet-signed TRXLite metadata: its authenticated precision is zero.
+        # A display-name prefix must never make the app reinterpret it as TRX.
+        token_signature = [
+            "0a075452584c69746510001a46304402204d1d6ebfe7ed85a0fef9c949e191ec7"
+            "2afe4b35eac6b5019f755c190eac2e80802203b4f34d049bb0e04088ad700a32"
+            "a17eb724bcd8e23c40746209de76ea549679a"
+        ]
+
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               token_signature,
+                               do_comparison=False,
+                               required_review_text="1000000")
+
+    def test_trx_exchange_transaction_native_trx_uses_six_decimals_without_metadata(
+            self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeTransactionContract,
+            contract.ExchangeTransactionContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                exchange_id=6,
+                token_id=b"_",
+                quant=1_234_567,
+                expected=100))
+
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               do_comparison=False,
+                               required_review_text="1.234567")
+
     def test_trx_exchange_inject(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -635,6 +683,33 @@ class TestTRX():
             "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
         ]
         self.sign_and_validate(client, device, 0, tx, exchangeSignature)
+
+    def test_trx_exchange_inject_trx_prefix_name_uses_signed_precision(
+            self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeInjectContract,
+            contract.ExchangeInjectContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                exchange_id=108,
+                token_id=b"1001610",
+                quant=1_000_000))
+        # Mainnet-signed Exchange 108 metadata binds TRXLite to precision zero.
+        exchange_signature = [
+            "086c1207313030313631301a075452584c69746520002a015f3203545258380642"
+            "46304402206b6d0347bb1acf8b10cb9562ec321b9f04342e058e29fde29186746b"
+            "4537ad35022028126d1859b7ff1aba658d6c27547ff67447c7257c1a2b7457315"
+            "1c5cd4770b1"
+        ]
+
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               exchange_signature,
+                               do_comparison=False,
+                               required_review_text="1000000")
 
     @pytest.mark.parametrize("invalid_byte", [0x00, 0x09, 0x0a, 0x0d, 0x20, 0x7f])
     def test_trx_exchange_rejects_invalid_name_byte(self, backend,

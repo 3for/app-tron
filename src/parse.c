@@ -461,8 +461,9 @@ static bool printTokenFromID(char *out,
                              size_t outlen,
                              const uint8_t *data,
                              size_t size,
-                             bool allow_trx) {
-    if ((out == NULL) || !is_valid_token_id(data, size, allow_trx)) {
+                             bool allow_trx,
+                             uint8_t *decimals) {
+    if ((out == NULL) || (decimals == NULL) || !is_valid_token_id(data, size, allow_trx)) {
         return false;
     }
 
@@ -471,6 +472,7 @@ static bool printTokenFromID(char *out,
             return false;
         }
         memcpy(out, "TRX", sizeof("TRX"));
+        *decimals = TRX_DECIMALS;
         return true;
     }
 
@@ -479,6 +481,8 @@ static bool printTokenFromID(char *out,
     }
     memcpy(out, data, size);
     out[size] = '\0';
+    // TRC10 precision is unknown until authenticated metadata is provided.
+    *decimals = 0;
     return true;
 }
 
@@ -798,7 +802,8 @@ static bool participate_asset_issue_contract(txContent_t *content, pb_istream_t 
                           sizeof(content->tokenNames[0]),
                           contract->asset_name.bytes,
                           contract->asset_name.size,
-                          false)) {
+                          false,
+                          &content->decimals[0])) {
         return false;
     }
 
@@ -861,6 +866,7 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
 
     content->tokenNamesLength[0] = strlen("TRX");
     strcpy(content->tokenNames[0], "TRX");
+    content->decimals[0] = TRX_DECIMALS;
     return true;
 }
 
@@ -882,7 +888,8 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
                           sizeof(content->tokenNames[0]),
                           msg.transfer_asset_contract.asset_name.bytes,
                           msg.transfer_asset_contract.asset_name.size,
-                          false)) {
+                          false,
+                          &content->decimals[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -1607,7 +1614,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
                           sizeof(content->tokenNames[0]),
                           msg.exchange_create_contract.first_token_id.bytes,
                           msg.exchange_create_contract.first_token_id.size,
-                          true)) {
+                          true,
+                          &content->decimals[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -1616,7 +1624,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
                           sizeof(content->tokenNames[1]),
                           msg.exchange_create_contract.second_token_id.bytes,
                           msg.exchange_create_contract.second_token_id.size,
-                          true)) {
+                          true,
+                          &content->decimals[1])) {
         return false;
     }
     content->tokenNamesLength[1] = strlen(content->tokenNames[1]);
@@ -1642,7 +1651,8 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
                           sizeof(content->tokenNames[0]),
                           msg.exchange_inject_contract.token_id.bytes,
                           msg.exchange_inject_contract.token_id.size,
-                          true)) {
+                          true,
+                          &content->decimals[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -1669,7 +1679,8 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
                           sizeof(content->tokenNames[0]),
                           msg.exchange_withdraw_contract.token_id.bytes,
                           msg.exchange_withdraw_contract.token_id.size,
-                          true)) {
+                          true,
+                          &content->decimals[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -1697,7 +1708,8 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
                           sizeof(content->tokenNames[0]),
                           msg.exchange_transaction_contract.token_id.bytes,
                           msg.exchange_transaction_contract.token_id.size,
-                          true)) {
+                          true,
+                          &content->decimals[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);

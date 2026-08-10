@@ -986,12 +986,10 @@ handle_parser_result:
                     return send_sign_status(SWO_INCORRECT_DATA);
                 }
             } else {
-                if (print_amount(
-                        txContent.amount[0],
-                        (void *) G_io_apdu_buffer,
-                        100,
-                        (txContent.contractType == TRANSFERCONTRACT) ? TRX_DECIMALS
-                                                                    : txContent.decimals[0]) == 0) {
+                if (print_amount(txContent.amount[0],
+                                 (void *) G_io_apdu_buffer,
+                                 100,
+                                 txContent.decimals[0]) == 0) {
                     return send_sign_status(SWO_INCORRECT_DATA);
                 }
             }
@@ -1042,20 +1040,14 @@ handle_parser_result:
 
             break;
         case EXCHANGECREATECONTRACT:
-            if ((print_amount(
-                     txContent.amount[0],
-                     (void *) G_io_apdu_buffer,
-                     100,
-                     (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                         ? TRX_DECIMALS
-                         : txContent.decimals[0]) == 0) ||
-                (print_amount(
-                     txContent.amount[1],
-                     (void *) G_io_apdu_buffer + 100,
-                     100,
-                     (strncmp((const char *) txContent.tokenNames[1], "TRX", 3) == 0)
-                         ? TRX_DECIMALS
-                         : txContent.decimals[1]) == 0)) {
+            if ((print_amount(txContent.amount[0],
+                              (void *) G_io_apdu_buffer,
+                              100,
+                              txContent.decimals[0]) == 0) ||
+                (print_amount(txContent.amount[1],
+                              (void *) G_io_apdu_buffer + 100,
+                              100,
+                              txContent.decimals[1]) == 0)) {
                 return send_sign_status(SWO_INCORRECT_DATA);
             }
 
@@ -1068,13 +1060,10 @@ handle_parser_result:
                               (void *) strings.common.toAddress,
                               sizeof(strings.common.toAddress),
                               0) == 0) ||
-                (print_amount(
-                     txContent.amount[0],
-                     (void *) G_io_apdu_buffer,
-                     100,
-                     (strncmp((const char *) txContent.tokenNames[0], "TRX", 3) == 0)
-                         ? TRX_DECIMALS
-                         : txContent.decimals[0]) == 0)) {
+                (print_amount(txContent.amount[0],
+                              (void *) G_io_apdu_buffer,
+                              100,
+                              txContent.decimals[0]) == 0)) {
                 return send_sign_status(SWO_INCORRECT_DATA);
             }
             // write exchange contract type
