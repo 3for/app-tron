@@ -94,7 +94,8 @@ static bool tip712_struct_impl_p1_valid(uint8_t p1, uint8_t p2) {
 
 static bool tip712_filtering_p1_valid(uint8_t p1, uint8_t p2) {
     switch (p2) {
-        case 0x00: /* activate */
+        case 0x00: /* legacy activation (explicitly rejected by handler) */
+        case 0x02: /* V2 activation */
         case 0x01: /* discarded path */
         case 0x0F: /* message info */
         case 0xFA: /* calldata info */

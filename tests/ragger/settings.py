@@ -28,6 +28,7 @@ SETTING_BITS = {
 APP_CLA = 0xE0
 GET_APP_CONFIGURATION_INS = 0x06
 RESERVED_TRUNCATE_ADDRESS_MASK = 1 << 2
+TIP712_FILTER_V2_CAPABILITY_MASK = 1 << 6
 
 # Settings Positions per device. Returns the tuple (page, x, y)
 SETTINGS_POSITIONS = {

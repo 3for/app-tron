@@ -32,6 +32,7 @@ from ragger.navigator.navigation_scenario import (NavigateWithScenario,
                                                    UseCase)
 
 from settings import settings_toggle, SettingID, get_device_settings
+from client import keychain
 from client.command_builder import CommandBuilder, InsType, P1Type, P2Type
 import response_parser as ResponseParser
 from client.tip712 import InputData as InputData, EIP712CalldataParamPresence
@@ -858,6 +859,95 @@ def test_tip712_legacy_host_apdu_remains_single_step():
     assert command[:5] == bytes([0xE0, 0x0C, 0x00, 0x00,
                                  len(expected_payload)])
     assert command[5:] == expected_payload
+
+
+def test_tip712_filter_v2_canonical_preimage_kat():
+    """Pin V2 framing independently of the dynamic CAL test signer."""
+    context = {
+        "chainid": bytes.fromhex("0102030405060708"),
+        "caddr": bytes(range(0x10, 0x24)),
+        "schema_hash": bytes(range(0x40, 0x5c)),
+    }
+    body = CommandBuilder.tip712_filtering_name_body("bc")
+
+    preimage = InputData.build_filter_signature_payload(
+        context, InputData.FILT_MAGIC_RAW_FIELD, "a", body)
+
+    expected_preimage = bytes.fromhex(
+        "4c45444745522f54524f4e2f5449503731322f46494c5445520248"
+        "0100080102030405060708"
+        "020014101112131415161718191a1b1c1d1e1f20212223"
+        "03001c404142434445464748494a4b4c4d4e4f505152535455565758595a5b"
+        "04000161"
+        "050003026263")
+    assert preimage == expected_preimage
+    assert hashlib.sha256(preimage).hexdigest() == (
+        "ccfdb169bcf9efb2259277e4b0c4a88eea98bc7a04b30f8015386e196672a752"
+    )
+
+    # BODY is shared by the signer and APDU serializer; only sig_len || sig is
+    # excluded from the preimage.
+    signature = b"\xaa\xbb"
+    command = CommandBuilder().tip712_filtering_raw("bc", signature, False)
+    assert command[5:] == body + bytes([len(signature)]) + signature
+    assert CommandBuilder().tip712_filtering_activate() == bytes(
+        [0xE0, 0x1E, 0x00, 0x02, 0x00])
+
+
+def test_tip712_filter_v2_separates_trusted_name_counts():
+    """V2 authenticates type/source counts that V1 concatenated ambiguously."""
+    context = {
+        "chainid": bytes.fromhex("0102030405060708"),
+        "caddr": bytes(range(0x10, 0x24)),
+        "schema_hash": bytes(range(0x40, 0x5c)),
+    }
+    legacy_prefix = b"".join((
+        bytes([InputData.FILT_MAGIC_TRUSTED_NAME]),
+        context["chainid"],
+        context["caddr"],
+        context["schema_hash"],
+        b"ownerOwner",
+    ))
+    legacy_one_type = legacy_prefix + bytes([1]) + bytes([2, 3])
+    legacy_two_types = legacy_prefix + bytes([1, 2]) + bytes([3])
+    assert legacy_one_type == legacy_two_types
+
+    body_one_type = CommandBuilder.tip712_filtering_trusted_name_body(
+        "Owner", [1], [2, 3])
+    body_two_types = CommandBuilder.tip712_filtering_trusted_name_body(
+        "Owner", [1, 2], [3])
+    preimage_one_type = InputData.build_filter_signature_payload(
+        context, InputData.FILT_MAGIC_TRUSTED_NAME, "owner", body_one_type)
+    preimage_two_types = InputData.build_filter_signature_payload(
+        context, InputData.FILT_MAGIC_TRUSTED_NAME, "owner", body_two_types)
+
+    assert body_one_type != body_two_types
+    assert preimage_one_type != preimage_two_types
+    assert hashlib.sha256(preimage_one_type).digest() != hashlib.sha256(
+        preimage_two_types).digest()
+
+
+def test_tip712_filtering_rejects_legacy_activation(
+        backend: BackendInterface):
+    """P2=00 cannot silently select the legacy filter-signature protocol."""
+    client = TronClient(backend)
+    signing_path = client.getAccount(0)["path"]
+    legacy_activation = bytes(
+        [0xE0, InsType.TIP712_SEND_FILTERING, 0x00, 0x00, 0x00])
+
+    with client.tip712_init_new(signing_path):
+        pass
+    with pytest.raises(ExceptionRAPDU) as error:
+        client.exchange_raw(legacy_activation)
+    assert error.value.status == StatusWord.INVALID_P1_P2
+
+    # Rejection resets the session. A fresh V2 activation remains valid.
+    with client.tip712_init_new(signing_path):
+        pass
+    with client.tip712_send_struct_def_struct_name("EIP712Domain"):
+        pass
+    with client.tip712_filtering_activate():
+        pass
 
 
 def test_tip712_input_driver_isolates_filtered_unfiltered_sequence(monkeypatch):
@@ -2017,6 +2107,79 @@ def test_tip712_filtering_rejects_crc32_path_collision(
     assert error.value.status == StatusWord.INVALID_DATA
 
 
+def test_tip712_filtering_v2_rejects_v1_segmentation_collision(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
+    """A CAL-signed V1 path/name collision cannot authenticate a V2 filter."""
+    client = TronClient(backend)
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Message": [
+                {"name": "a", "type": "string"},
+                {"name": "ab", "type": "string"},
+            ],
+        },
+        "primaryType": "Message",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "TUe6BwpA7sVTDKaJQoia7FWZpC9sK8WM2t",
+        },
+        "message": {"a": "first", "ab": "second"},
+    }
+    filters = {
+        "name": "V2 framing",
+        "fields": {"ab": {"type": "raw", "name": "c"}},
+    }
+    original_send_raw = InputData.send_filtering_raw
+    attempted_v1 = False
+
+    def send_v1_collision(path, display_name, discarded):
+        nonlocal attempted_v1
+        attempted_v1 = True
+        assert (path, display_name) == ("ab", "c")
+
+        context = InputData.sig_ctx
+        legacy_prefix = b"".join((
+            bytes([InputData.FILT_MAGIC_RAW_FIELD]),
+            bytes(context["chainid"]),
+            bytes(context["caddr"]),
+            bytes(context["schema_hash"]),
+        ))
+        approved_v1 = legacy_prefix + b"a" + b"bc"
+        reinterpreted_v1 = legacy_prefix + path.encode() + display_name.encode()
+        assert approved_v1 == reinterpreted_v1
+
+        approved_v2 = InputData.build_filter_signature_payload(
+            context, InputData.FILT_MAGIC_RAW_FIELD, "a",
+            CommandBuilder.tip712_filtering_name_body("bc"))
+        reinterpreted_v2 = InputData.build_filter_signature_payload(
+            context, InputData.FILT_MAGIC_RAW_FIELD, path,
+            CommandBuilder.tip712_filtering_name_body(display_name))
+        assert approved_v2 != reinterpreted_v2
+        assert hashlib.sha256(approved_v2).digest() != hashlib.sha256(
+            reinterpreted_v2).digest()
+
+        v1_signature = keychain.sign_data(keychain.Key.CAL, approved_v1)
+        with InputData.app_client.tip712_filtering_raw(
+                display_name, v1_signature, discarded):
+            pass
+        pytest.fail("V1 filter signature unexpectedly accepted in V2 mode")
+
+    monkeypatch.setattr(InputData, "send_filtering_raw", send_v1_collision)
+    signing_path = client.getAccount(0)["path"]
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters, signing_path)
+    assert error.value.status == StatusWord.ERROR_NO_INFO
+    assert attempted_v1
+
+    # The same descriptor, signed over the V2 preimage, remains accepted.
+    monkeypatch.setattr(InputData, "send_filtering_raw", original_send_raw)
+    assert InputData.process_data(client, data, filters, signing_path)
+
+
 def test_tip712_rejects_message_info_before_domain_completion(
         backend: BackendInterface, monkeypatch: pytest.MonkeyPatch):
     client = TronClient(backend)
@@ -2066,10 +2229,16 @@ def test_tip712_full_filter_reviews_complete_domain(
     data["domain"]["version"] = "domain-v2"
     domain_v1 = dict(data["domain"])
     domain_v1["version"] = "1"
+    message_info_body = CommandBuilder.tip712_filtering_message_info_body(
+        filters["name"], len(filters["fields"]))
     InputData.init_signature_context(data["types"], domain_v1, filters)
-    context_v1 = bytes(InputData.start_signature_payload(InputData.sig_ctx, 183))
+    context_v1 = InputData.build_filter_signature_payload(
+        InputData.sig_ctx, InputData.FILT_MAGIC_MESSAGE_INFO, "",
+        message_info_body)
     InputData.init_signature_context(data["types"], data["domain"], filters)
-    context_v2 = bytes(InputData.start_signature_payload(InputData.sig_ctx, 183))
+    context_v2 = InputData.build_filter_signature_payload(
+        InputData.sig_ctx, InputData.FILT_MAGIC_MESSAGE_INFO, "",
+        message_info_body)
     assert context_v1 == context_v2
 
     signing_path = client.getAccount(0)["path"]

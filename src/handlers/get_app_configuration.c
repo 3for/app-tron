@@ -41,6 +41,7 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     resp[0] |= (N_storage.signByHash ? APP_FLAG_SIGN_BY_HASH : 0x00);
     resp[0] |= (N_storage.verbose_tip712 ? APP_FLAG_VERBOSE_TIP712 : 0x00);
     resp[0] |= (N_storage.displayHash ? APP_FLAG_DISPLAY_HASH : 0x00);
+    resp[0] |= APP_FLAG_TIP712_FILTER_V2;
     resp[1] = MAJOR_VERSION;
     resp[2] = MINOR_VERSION;
     resp[3] = PATCH_VERSION;

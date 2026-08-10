@@ -62,7 +62,9 @@ class P2Type(IntEnum):
     ARRAY = 0x0f
     LEGACY_IMPLEM = 0x00
     NEW_IMPLEM = 0x01
-    FILTERING_ACTIVATE = 0x00
+    # TIP-712 filter-signature V2 activation. The legacy P2=0x00 activation
+    # is intentionally not exposed: V2 is a clean protocol cut.
+    FILTERING_ACTIVATE = 0x02
     FILTERING_MESSAGE_INFO = 0x0f
     FILTERING_DATETIME = 0xfc
     FILTERING_TOKEN_ADDR_CHECK = 0xfd
@@ -179,13 +181,21 @@ class CommandBuilder:
                                P1Type.COMPLETE_SEND, P2Type.FILTERING_ACTIVATE,
                                bytearray())
 
-    def _tip712_filtering_send_name(self, name: str, sig: bytes) -> bytes:
+    @staticmethod
+    def tip712_filtering_name_body(name: str) -> bytes:
+        """Return the canonical unsigned BODY for a name-only filter."""
+        encoded_name = name.encode("ascii")
         data = bytearray()
-        data.append(len(name))
-        data += name.encode()
+        data.append(len(encoded_name))
+        data += encoded_name
+        return bytes(data)
+
+    @staticmethod
+    def _tip712_filtering_signed_body(body: bytes, sig: bytes) -> bytes:
+        data = bytearray(body)
         data.append(len(sig))
         data += sig
-        return data
+        return bytes(data)
 
     def tip712_filtering_discarded_path(self, path: str):
         data = bytearray()
@@ -197,65 +207,89 @@ class CommandBuilder:
 
     def tip712_filtering_message_info(self, name: str, filters_count: int,
                                       sig: bytes) -> bytes:
-        data = bytearray()
-        data.append(len(name))
-        data += name.encode()
-        data.append(filters_count)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_message_info_body(name, filters_count)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING,
                                P1Type.COMPLETE_SEND,
                                P2Type.FILTERING_MESSAGE_INFO, data)
 
+    @staticmethod
+    def tip712_filtering_message_info_body(name: str,
+                                           filters_count: int) -> bytes:
+        encoded_name = name.encode("ascii")
+        data = bytearray()
+        data.append(len(encoded_name))
+        data += encoded_name
+        data.append(filters_count)
+        return bytes(data)
+
     def tip712_filtering_amount_join_token(self, token_idx: int, sig: bytes,
                                            discarded: bool) -> bytes:
-        data = bytearray()
-        data.append(token_idx)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_amount_join_token_body(token_idx)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_TOKEN_ADDR_CHECK, data)
+
+    @staticmethod
+    def tip712_filtering_amount_join_token_body(token_idx: int) -> bytes:
+        return bytes([token_idx])
 
     def tip712_filtering_amount_join_value(self, token_idx: int, name: str,
                                            sig: bytes,
                                            discarded: bool) -> bytes:
-        data = bytearray()
-        data.append(len(name))
-        data += name.encode()
-        data.append(token_idx)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_amount_join_value_body(token_idx, name)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_AMOUNT_FIELD, data)
 
+    @staticmethod
+    def tip712_filtering_amount_join_value_body(token_idx: int,
+                                                name: str) -> bytes:
+        encoded_name = name.encode("ascii")
+        data = bytearray()
+        data.append(len(encoded_name))
+        data += encoded_name
+        data.append(token_idx)
+        return bytes(data)
+
     def tip712_filtering_datetime(self, name: str, sig: bytes,
                                   discarded: bool) -> bytes:
+        body = self.tip712_filtering_name_body(name)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_DATETIME,
-                               self._tip712_filtering_send_name(name, sig))
+                               self._tip712_filtering_signed_body(body, sig))
 
     def tip712_filtering_trusted_name(self, name: str, name_types: list[int],
                                       name_sources: list[int], sig: bytes,
                                       discarded: bool):
+        body = self.tip712_filtering_trusted_name_body(name, name_types,
+                                                       name_sources)
+        data = self._tip712_filtering_signed_body(body, sig)
+        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
+                               P2Type.FILTERING_TRUSTED_NAME, data)
+
+    @staticmethod
+    def tip712_filtering_trusted_name_body(name: str,
+                                           name_types: list[int],
+                                           name_sources: list[int]) -> bytes:
+        encoded_name = name.encode("ascii")
         data = bytearray()
-        data.append(len(name))
-        data += name.encode()
+        data.append(len(encoded_name))
+        data += encoded_name
         data.append(len(name_types))
         for t in name_types:
             data.append(t)
         data.append(len(name_sources))
         for s in name_sources:
             data.append(s)
-        data.append(len(sig))
-        data += sig
-        return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
-                               P2Type.FILTERING_TRUSTED_NAME, data)
+        return bytes(data)
 
     def tip712_filtering_raw(self, name: str, sig: bytes,
                              discarded: bool) -> bytes:
+        body = self.tip712_filtering_name_body(name)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_RAW,
-                               self._tip712_filtering_send_name(name, sig))
+                               self._tip712_filtering_signed_body(body, sig))
 
     def tip712_filtering_calldata_info(self, index: int,
                                        value_filter_flag: bool,
@@ -265,6 +299,23 @@ class CommandBuilder:
                                        amount_filter_flag: bool,
                                        spender_filter_flag: int,
                                        sig: bytes) -> bytes:
+        body = self.tip712_filtering_calldata_info_body(
+            index, value_filter_flag, callee_filter_flag,
+            chain_id_filter_flag, selector_filter_flag, amount_filter_flag,
+            spender_filter_flag)
+        data = self._tip712_filtering_signed_body(body, sig)
+        return self._serialize(InsType.TIP712_SEND_FILTERING,
+                               P1Type.COMPLETE_SEND,
+                               P2Type.FILTERING_CALLDATA_INFO, data)
+
+    @staticmethod
+    def tip712_filtering_calldata_info_body(index: int,
+                                            value_filter_flag: bool,
+                                            callee_filter_flag: int,
+                                            chain_id_filter_flag: bool,
+                                            selector_filter_flag: bool,
+                                            amount_filter_flag: bool,
+                                            spender_filter_flag: int) -> bytes:
         data = bytearray()
         data += struct.pack(">B", index)
         data += struct.pack(">B", value_filter_flag)
@@ -273,65 +324,53 @@ class CommandBuilder:
         data += struct.pack(">B", selector_filter_flag)
         data += struct.pack(">B", amount_filter_flag)
         data += struct.pack(">?", spender_filter_flag)
-        data.append(len(sig))
-        data += sig
-        return self._serialize(InsType.TIP712_SEND_FILTERING,
-                               P1Type.COMPLETE_SEND,
-                               P2Type.FILTERING_CALLDATA_INFO, data)
+        return bytes(data)
 
     def tip712_filtering_calldata_value(self, index: int, sig: bytes,
                                         discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_VALUE, data)
 
     def tip712_filtering_calldata_callee(self, index: int, sig: bytes,
                                          discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_CALLEE, data)
 
     def tip712_filtering_calldata_chain_id(self, index: int, sig: bytes,
                                            discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_CHAIN_ID, data)
 
     def tip712_filtering_calldata_selector(self, index: int, sig: bytes,
                                            discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_SELECTOR, data)
 
     def tip712_filtering_calldata_amount(self, index: int, sig: bytes,
                                          discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_AMOUNT, data)
 
     def tip712_filtering_calldata_spender(self, index: int, sig: bytes,
                                           discarded: bool) -> bytes:
-        data = bytearray()
-        data += struct.pack(">B", index)
-        data.append(len(sig))
-        data += sig
+        body = self.tip712_filtering_calldata_field_body(index)
+        data = self._tip712_filtering_signed_body(body, sig)
         return self._serialize(InsType.TIP712_SEND_FILTERING, int(discarded),
                                P2Type.FILTERING_CALLDATA_SPENDER, data)
+
+    @staticmethod
+    def tip712_filtering_calldata_field_body(index: int) -> bytes:
+        return struct.pack(">B", index)
 
     def sign(self, bip32_path: str, rlp_data: bytes, vrs: list) -> list[bytes]:
         apdus = list()

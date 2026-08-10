@@ -34,10 +34,96 @@
 #define FILT_MAGIC_TRUSTED_NAME      44
 #define FILT_MAGIC_RAW_FIELD         72
 
+#define FILTER_SIGNATURE_VERSION 2U
+
+#define FILTER_SIGNATURE_TAG_CHAIN_ID    0x01U
+#define FILTER_SIGNATURE_TAG_CONTRACT    0x02U
+#define FILTER_SIGNATURE_TAG_SCHEMA_HASH 0x03U
+#define FILTER_SIGNATURE_TAG_PATH        0x04U
+#define FILTER_SIGNATURE_TAG_BODY        0x05U
+
+static const uint8_t FILTER_SIGNATURE_DOMAIN[] = "LEDGER/TRON/TIP712/FILTER";
+
+_Static_assert(sizeof(FILTER_SIGNATURE_DOMAIN) - 1U == 25U,
+               "TIP-712 filter signature domain must remain stable");
+_Static_assert(ADDRESS_LENGTH == 20U,
+               "TIP-712 filter signature contract must be 20 bytes");
+_Static_assert(CX_SHA224_SIZE == 28U,
+               "TIP-712 filter signature schema hash must be 28 bytes");
 _Static_assert(TIP712_FILTER_ID_SIZE == INT256_LENGTH,
                "TIP-712 filter identity must retain the complete SHA-256 digest");
 
 #define TOKEN_IDX_ADDR_IN_DOMAIN 0xff
+
+static bool hash_filtering_tlv_header(cx_hash_t *hash_ctx, uint8_t tag, size_t length) {
+    uint8_t header[3];
+
+    if ((hash_ctx == NULL) || (length > UINT16_MAX)) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    header[0] = tag;
+    header[1] = (uint8_t) (length >> 8);
+    header[2] = (uint8_t) length;
+    hash_nbytes(header, sizeof(header), hash_ctx);
+    return true;
+}
+
+static bool hash_filtering_tlv(cx_hash_t *hash_ctx,
+                               uint8_t tag,
+                               const uint8_t *value,
+                               size_t length) {
+    if (((value == NULL) && (length != 0U)) ||
+        !hash_filtering_tlv_header(hash_ctx, tag, length)) {
+        return false;
+    }
+    if (length != 0U) {
+        hash_nbytes(value, length, hash_ctx);
+    }
+    return true;
+}
+
+static bool get_filtering_path_length(bool discarded, uint16_t *path_length) {
+    const s_struct_712_field *field_ptr;
+    const char *key;
+    const char *path;
+    size_t length = 0U;
+
+    if (path_length == NULL) {
+        return false;
+    }
+    if (discarded) {
+        if ((path = ui_712_get_discarded_path()) == NULL) {
+            return false;
+        }
+        length = strlen(path);
+    } else {
+        for (uint8_t i = 0; i < path_get_depth_count(); ++i) {
+            if (i > 0U) {
+                length += 1U;
+            }
+            if ((field_ptr = path_get_nth_field(i + 1U)) == NULL) {
+                return false;
+            }
+            if ((key = field_ptr->key_name) != NULL) {
+                length += strlen(key);
+                if (field_ptr->type_is_array) {
+                    length += (size_t) field_ptr->array_level_count * 3U;
+                }
+            }
+            if (length > UINT16_MAX) {
+                apdu_response_code = SWO_INCORRECT_DATA;
+                return false;
+            }
+        }
+    }
+    if (length > UINT16_MAX) {
+        apdu_response_code = SWO_INCORRECT_DATA;
+        return false;
+    }
+    *path_length = (uint16_t) length;
+    return true;
+}
 
 /**
  * Reconstruct the field path and hash it for the signature and the CRC
@@ -51,13 +137,17 @@ static bool hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
     const s_struct_712_field *field_ptr;
     const char *key;
     const char *path;
-    uint8_t path_len;
+    uint16_t path_len;
+
+    if (!get_filtering_path_length(discarded, &path_len) ||
+        !hash_filtering_tlv_header(hash_ctx, FILTER_SIGNATURE_TAG_PATH, path_len)) {
+        return false;
+    }
 
     if (discarded) {
         if ((path = ui_712_get_discarded_path()) == NULL) {
             return false;
         }
-        path_len = strlen(path);
         hash_nbytes((uint8_t *) path, path_len, hash_ctx);
         *path_crc = cx_crc32_update(*path_crc, path, path_len);
     } else {
@@ -89,6 +179,10 @@ static bool hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
     return true;
 }
 
+static bool hash_empty_filtering_path(cx_hash_t *hash_ctx) {
+    return hash_filtering_tlv_header(hash_ctx, FILTER_SIGNATURE_TAG_PATH, 0U);
+}
+
 /**
  * Begin the hashing for signature verification
  *
@@ -98,6 +192,7 @@ static bool hash_filtering_path(cx_hash_t *hash_ctx, bool discarded, uint32_t *p
  */
 static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
     uint64_t chain_id;
+    uint8_t chain_id_be[sizeof(chain_id)];
 
     if ((tip712_context == NULL) ||
         !tip712_context->filtering_context_locked) {
@@ -107,23 +202,42 @@ static bool sig_verif_start(cx_sha256_t *hash_ctx, uint8_t magic) {
 
     cx_sha256_init(hash_ctx);
 
-    // Magic number, makes it so a signature of one type can't be used as another
+    // Versioned domain separation prevents cross-app, cross-protocol and legacy
+    // filter signatures from being reused as TIP-712 filter descriptors.
+    hash_nbytes(FILTER_SIGNATURE_DOMAIN,
+                sizeof(FILTER_SIGNATURE_DOMAIN) - 1U,
+                (cx_hash_t *) hash_ctx);
+    hash_byte(FILTER_SIGNATURE_VERSION, (cx_hash_t *) hash_ctx);
+
+    // Magic number, makes it so a signature of one type can't be used as another.
     hash_byte(magic, (cx_hash_t *) hash_ctx);
 
     // Chain ID
-    chain_id = __builtin_bswap64(tip712_context->filtering_chain_id);
-    hash_nbytes((uint8_t *) &chain_id, sizeof(chain_id), (cx_hash_t *) hash_ctx);
+    chain_id = tip712_context->filtering_chain_id;
+    for (size_t i = sizeof(chain_id_be); i > 0U; --i) {
+        chain_id_be[i - 1U] = (uint8_t) chain_id;
+        chain_id >>= 8U;
+    }
+    if (!hash_filtering_tlv((cx_hash_t *) hash_ctx,
+                            FILTER_SIGNATURE_TAG_CHAIN_ID,
+                            chain_id_be,
+                            sizeof(chain_id_be))) {
+        return false;
+    }
 
     // Contract and schema remain identical for every descriptor in the review.
-    hash_nbytes(tip712_context->filtering_contract_addr,
-                sizeof(tip712_context->filtering_contract_addr),
-                (cx_hash_t *) hash_ctx);
+    if (!hash_filtering_tlv((cx_hash_t *) hash_ctx,
+                            FILTER_SIGNATURE_TAG_CONTRACT,
+                            tip712_context->filtering_contract_addr,
+                            sizeof(tip712_context->filtering_contract_addr))) {
+        return false;
+    }
 
     // Schema hash
-    hash_nbytes(tip712_context->filtering_schema_hash,
-                sizeof(tip712_context->filtering_schema_hash),
-                (cx_hash_t *) hash_ctx);
-    return true;
+    return hash_filtering_tlv((cx_hash_t *) hash_ctx,
+                              FILTER_SIGNATURE_TAG_SCHEMA_HASH,
+                              tip712_context->filtering_schema_hash,
+                              sizeof(tip712_context->filtering_schema_hash));
 }
 
 static bool filtering_context_lock(void) {
@@ -189,21 +303,27 @@ bool filtering_context_matches_live(void) {
  * @param[in] hash_ctx hashing context
  * @param[in] sig signature
  * @param[in] sig_length signature length
- * @param[in] identity_payload canonical descriptor payload excluding the signature
- * @param[in] identity_payload_length identity payload length
+ * @param[in] descriptor_body canonical APDU descriptor body excluding the signature
+ * @param[in] descriptor_body_length descriptor body length
  * @param[out] filter_id authenticated descriptor identity, or NULL when not needed
  * @return whether the signature verification worked or not
  */
 static bool sig_verif_end(cx_sha256_t *hash_ctx,
                           const uint8_t *sig,
                           uint8_t sig_length,
-                          const uint8_t *identity_payload,
-                          size_t identity_payload_length,
+                          const uint8_t *descriptor_body,
+                          size_t descriptor_body_length,
                           uint8_t *filter_id) {
     uint8_t hash[INT256_LENGTH];
     bool valid;
 
-    if (finalize_hash((cx_hash_t *) hash_ctx, hash, sizeof(hash)) != true) {
+    // Authenticate the exact canonical APDU descriptor body. Its existing
+    // length/count bytes are therefore part of the signed preimage.
+    if (!hash_filtering_tlv((cx_hash_t *) hash_ctx,
+                            FILTER_SIGNATURE_TAG_BODY,
+                            descriptor_body,
+                            descriptor_body_length) ||
+        (finalize_hash((cx_hash_t *) hash_ctx, hash, sizeof(hash)) != true)) {
         return false;
     }
 
@@ -215,25 +335,8 @@ static bool sig_verif_end(cx_sha256_t *hash_ctx,
                                         (uint8_t *) sig,
                                         sig_length);
     if (valid && (filter_id != NULL)) {
-        cx_sha256_t identity_ctx;
-
-        if ((identity_payload == NULL) && (identity_payload_length != 0U)) {
-            valid = false;
-        } else {
-            // The signed preimage binds the descriptor type, context and path.
-            // Hash the canonical wire parameters as well so their length/count
-            // delimiters are retained, while excluding the randomized signature.
-            cx_sha256_init(&identity_ctx);
-            hash_nbytes(hash, sizeof(hash), (cx_hash_t *) &identity_ctx);
-            if (identity_payload_length > 0U) {
-                hash_nbytes(identity_payload,
-                            identity_payload_length,
-                            (cx_hash_t *) &identity_ctx);
-            }
-            valid = finalize_hash((cx_hash_t *) &identity_ctx,
-                                  filter_id,
-                                  TIP712_FILTER_ID_SIZE);
-        }
+        // The authenticated V2 digest is the descriptor identity.
+        memcpy(filter_id, hash, TIP712_FILTER_ID_SIZE);
     }
     explicit_bzero(hash, sizeof(hash));
     return valid;
@@ -245,8 +348,8 @@ static bool sig_verif_end(cx_sha256_t *hash_ctx,
  * @param[in] hash_ctx signed descriptor hashing context
  * @param[in] sig descriptor signature
  * @param[in] sig_length signature length
- * @param[in] identity_payload canonical descriptor payload excluding the signature
- * @param[in] identity_payload_length identity payload length
+ * @param[in] descriptor_body canonical APDU descriptor body excluding the signature
+ * @param[in] descriptor_body_length descriptor body length
  * @param[in] path_crc CRC32 of the canonical path
  * @param[out] replayed whether this descriptor was already applied to the current field
  * @return whether the descriptor is authenticated and accepted by the registry
@@ -254,8 +357,8 @@ static bool sig_verif_end(cx_sha256_t *hash_ctx,
 static bool sig_verif_filter_end(cx_sha256_t *hash_ctx,
                                  const uint8_t *sig,
                                  uint8_t sig_length,
-                                 const uint8_t *identity_payload,
-                                 size_t identity_payload_length,
+                                 const uint8_t *descriptor_body,
+                                 size_t descriptor_body_length,
                                  uint32_t path_crc,
                                  bool *replayed) {
     uint8_t filter_id[TIP712_FILTER_ID_SIZE] = {0};
@@ -268,8 +371,8 @@ static bool sig_verif_filter_end(cx_sha256_t *hash_ctx,
     if (sig_verif_end(hash_ctx,
                       sig,
                       sig_length,
-                      identity_payload,
-                      identity_payload_length,
+                      descriptor_body,
+                      descriptor_body_length,
                       filter_id)) {
         action = ui_712_register_filter(path_crc, filter_id);
     }
@@ -391,10 +494,13 @@ bool filtering_message_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_MESSAGE_INFO)) {
         return false;
     }
-
-    hash_byte(filters_count, (cx_hash_t *) &hash_ctx);
-    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len, NULL, 0U, NULL)) {
+    if (!hash_empty_filtering_path((cx_hash_t *) &hash_ctx) ||
+        !sig_verif_end(&hash_ctx,
+                       sig,
+                       sig_len,
+                       payload,
+                       offset - sizeof(sig_len),
+                       NULL)) {
         return false;
     }
     // Handling
@@ -537,7 +643,6 @@ bool filtering_calldata_spender(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -604,7 +709,6 @@ bool filtering_calldata_amount(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -671,7 +775,6 @@ bool filtering_calldata_selector(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -738,7 +841,6 @@ bool filtering_calldata_chain_id(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -805,7 +907,6 @@ bool filtering_calldata_callee(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -872,7 +973,6 @@ bool filtering_calldata_value(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -991,14 +1091,13 @@ bool filtering_calldata_info(const uint8_t *payload, uint8_t length) {
     if (!sig_verif_start(&hash_ctx, FILT_MAGIC_CALLDATA_INFO)) {
         return false;
     }
-    hash_byte(index, (cx_hash_t *) &hash_ctx);
-    hash_byte(value_flag, (cx_hash_t *) &hash_ctx);
-    hash_byte(callee_flag, (cx_hash_t *) &hash_ctx);
-    hash_byte(chain_id_flag, (cx_hash_t *) &hash_ctx);
-    hash_byte(selector_flag, (cx_hash_t *) &hash_ctx);
-    hash_byte(amount_flag, (cx_hash_t *) &hash_ctx);
-    hash_byte(spender_flag, (cx_hash_t *) &hash_ctx);
-    if (!sig_verif_end(&hash_ctx, sig, sig_len, NULL, 0U, NULL)) {
+    if (!hash_empty_filtering_path((cx_hash_t *) &hash_ctx) ||
+        !sig_verif_end(&hash_ctx,
+                       sig,
+                       sig_len,
+                       payload,
+                       offset - sizeof(sig_len),
+                       NULL)) {
         return false;
     }
     calldata_info = gcs_mem_calloc(sizeof(*calldata_info), GCS_MEM_TX_CONTEXT);
@@ -1166,9 +1265,6 @@ bool filtering_trusted_name(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    hash_nbytes(type_bytes, type_count, (cx_hash_t *) &hash_ctx);
-    hash_nbytes(source_bytes, source_count, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -1250,7 +1346,6 @@ bool filtering_date_time(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -1319,7 +1414,6 @@ bool filtering_amount_join_token(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -1404,8 +1498,6 @@ bool filtering_amount_join_value(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
-    hash_byte(token_idx, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,
@@ -1498,7 +1590,6 @@ bool filtering_raw_field(const uint8_t *payload,
     if (!hash_filtering_path((cx_hash_t *) &hash_ctx, discarded, path_crc)) {
         return false;
     }
-    hash_nbytes((uint8_t *) name, sizeof(char) * name_len, (cx_hash_t *) &hash_ctx);
     if (!sig_verif_filter_end(&hash_ctx,
                               sig,
                               sig_len,

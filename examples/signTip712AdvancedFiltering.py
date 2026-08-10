@@ -6,6 +6,9 @@ Send the same TIP-712 advanced filtering payload as
 tests/ragger/test_trx.py::TestTRX::test_trx_tip712_advanced_filtering[data_set0-...]
 to a real Ledger device.
 
+The filter descriptors use the version-2 canonical signing preimage and the
+version-2 activation command; legacy filtering firmware is not supported.
+
 Prerequisites on device:
 - `Data allowed` enabled
 - `Sign by hash` enabled
@@ -61,7 +64,7 @@ P2_STRUCT_NAME = 0x00
 P2_STRUCT_FIELD = 0xFF
 P2_ARRAY = 0x0F
 P2_NEW_IMPLEM = 0x01
-P2_FILTERING_ACTIVATE = 0x00
+P2_FILTERING_ACTIVATE_V2 = 0x02
 P2_FILTERING_DISCARDED_PATH = 0x01
 P2_FILTERING_MESSAGE_INFO = 0x0F
 P2_FILTERING_TRUSTED_NAME = 0xFB
@@ -79,6 +82,14 @@ TIP712_TYPE_STRING = 5
 TIP712_TYPE_FIX_BYTES = 6
 TIP712_TYPE_DYN_BYTES = 7
 TIP712_TYPE_TRCTOKEN = 8
+
+FILTER_SIGNATURE_DOMAIN = b"LEDGER/TRON/TIP712/FILTER"
+FILTER_SIGNATURE_VERSION = 0x02
+FILTER_SIGNATURE_TLV_CHAIN_ID = 0x01
+FILTER_SIGNATURE_TLV_CONTRACT = 0x02
+FILTER_SIGNATURE_TLV_SCHEMA_HASH = 0x03
+FILTER_SIGNATURE_TLV_PATH = 0x04
+FILTER_SIGNATURE_TLV_BODY = 0x05
 
 
 ADVANCED_DATA = {
@@ -228,7 +239,11 @@ def apdu_tip712_send_struct_impl_field(data: bytes) -> List[bytes]:
 
 
 def apdu_tip712_filtering_activate() -> bytes:
-    return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_COMPLETE, P2_FILTERING_ACTIVATE, b"")
+    return serialize_apdu(CLA,
+                          INS_TIP712_FILTERING,
+                          P1_COMPLETE,
+                          P2_FILTERING_ACTIVATE_V2,
+                          b"")
 
 
 def apdu_tip712_filtering_discarded_path(path: str) -> bytes:
@@ -237,35 +252,54 @@ def apdu_tip712_filtering_discarded_path(path: str) -> bytes:
                           payload)
 
 
+def filtering_message_info_body(name: str, filters_count: int) -> bytes:
+    encoded_name = name.encode("ascii")
+    return bytes([len(encoded_name)]) + encoded_name + bytes([filters_count])
+
+
 def apdu_tip712_filtering_message_info(name: str, filters_count: int, sig: bytes) -> bytes:
-    payload = bytes([len(name)]) + name.encode() + bytes([filters_count, len(sig)]) + sig
+    payload = filtering_message_info_body(name, filters_count) + bytes([len(sig)]) + sig
     return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_COMPLETE, P2_FILTERING_MESSAGE_INFO,
                           payload)
 
 
+def filtering_amount_join_token_body(token_idx: int) -> bytes:
+    return bytes([token_idx])
+
+
 def apdu_tip712_filtering_amount_join_token(token_idx: int, sig: bytes, discarded: bool) -> bytes:
-    payload = bytes([token_idx, len(sig)]) + sig
+    payload = filtering_amount_join_token_body(token_idx) + bytes([len(sig)]) + sig
     return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_DISCARDED if discarded else P1_COMPLETE,
                           P2_FILTERING_TOKEN_ADDR_CHECK, payload)
+
+
+def filtering_amount_join_value_body(token_idx: int, name: str) -> bytes:
+    encoded_name = name.encode("ascii")
+    return bytes([len(encoded_name)]) + encoded_name + bytes([token_idx])
 
 
 def apdu_tip712_filtering_amount_join_value(token_idx: int,
                                             name: str,
                                             sig: bytes,
                                             discarded: bool) -> bytes:
-    payload = bytes([len(name)]) + name.encode() + bytes([token_idx, len(sig)]) + sig
+    payload = filtering_amount_join_value_body(token_idx, name) + bytes([len(sig)]) + sig
     return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_DISCARDED if discarded else P1_COMPLETE,
                           P2_FILTERING_AMOUNT_FIELD, payload)
 
 
+def filtering_label_body(name: str) -> bytes:
+    encoded_name = name.encode("ascii")
+    return bytes([len(encoded_name)]) + encoded_name
+
+
 def apdu_tip712_filtering_datetime(name: str, sig: bytes, discarded: bool) -> bytes:
-    payload = bytes([len(name)]) + name.encode() + bytes([len(sig)]) + sig
+    payload = filtering_label_body(name) + bytes([len(sig)]) + sig
     return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_DISCARDED if discarded else P1_COMPLETE,
                           P2_FILTERING_DATETIME, payload)
 
 
 def apdu_tip712_filtering_raw(name: str, sig: bytes, discarded: bool) -> bytes:
-    payload = bytes([len(name)]) + name.encode() + bytes([len(sig)]) + sig
+    payload = filtering_label_body(name) + bytes([len(sig)]) + sig
     return serialize_apdu(CLA, INS_TIP712_FILTERING, P1_DISCARDED if discarded else P1_COMPLETE,
                           P2_FILTERING_RAW, payload)
 
@@ -418,13 +452,28 @@ def compute_signature_context(data: dict) -> Dict[str, bytes]:
     }
 
 
-def start_filter_signature_payload(sig_ctx: Dict[str, bytes], magic: int) -> bytearray:
-    payload = bytearray()
-    payload.append(magic)
-    payload += sig_ctx["chainid"]
-    payload += sig_ctx["caddr"]
-    payload += sig_ctx["schema_hash"]
-    return payload
+def encode_filter_signature_tlv(tag: int, value: bytes) -> bytes:
+    if len(value) > 0xFFFF:
+        raise ValueError("TIP-712 filter signature TLV value is too long")
+    return bytes([tag]) + struct.pack(">H", len(value)) + value
+
+
+def build_filter_signature_payload(sig_ctx: Dict[str, bytes],
+                                   magic: int,
+                                   path: str,
+                                   body: bytes) -> bytes:
+    canonical_path = path.encode("ascii")
+    payload = bytearray(FILTER_SIGNATURE_DOMAIN)
+    payload += bytes([FILTER_SIGNATURE_VERSION, magic])
+    payload += encode_filter_signature_tlv(FILTER_SIGNATURE_TLV_CHAIN_ID,
+                                           sig_ctx["chainid"])
+    payload += encode_filter_signature_tlv(FILTER_SIGNATURE_TLV_CONTRACT,
+                                           sig_ctx["caddr"])
+    payload += encode_filter_signature_tlv(FILTER_SIGNATURE_TLV_SCHEMA_HASH,
+                                           sig_ctx["schema_hash"])
+    payload += encode_filter_signature_tlv(FILTER_SIGNATURE_TLV_PATH, canonical_path)
+    payload += encode_filter_signature_tlv(FILTER_SIGNATURE_TLV_BODY, body)
+    return bytes(payload)
 
 
 def send_coin_meta_certificate(dongle, device: str) -> None:
@@ -466,9 +515,8 @@ def provide_token_metadata(dongle, token: dict) -> None:
 
 def send_filtering_message_info(dongle, sig_ctx: Dict[str, bytes], display_name: str,
                                 filters_count: int) -> None:
-    payload = start_filter_signature_payload(sig_ctx, 183)
-    payload.append(filters_count)
-    payload += display_name.encode()
+    body = filtering_message_info_body(display_name, filters_count)
+    payload = build_filter_signature_payload(sig_ctx, 183, "", body)
     sig = keychain.sign_data(keychain.Key.CAL, payload)
     exchange(dongle,
              apdu_tip712_filtering_message_info(display_name, filters_count, sig),
@@ -490,19 +538,16 @@ def send_filter(dongle,
             sent_tokens.add(token_idx)
 
         if filter_type.endswith("_token"):
-            payload = start_filter_signature_payload(sig_ctx, 11)
-            payload += field_path.encode()
-            payload.append(token_idx)
+            body = filtering_amount_join_token_body(token_idx)
+            payload = build_filter_signature_payload(sig_ctx, 11, field_path, body)
             sig = keychain.sign_data(keychain.Key.CAL, payload)
             exchange(dongle,
                      apdu_tip712_filtering_amount_join_token(token_idx, sig, discarded),
                      f"filtering:{field_path}")
             return
 
-        payload = start_filter_signature_payload(sig_ctx, 22)
-        payload += field_path.encode()
-        payload += filter_rule["name"].encode()
-        payload.append(token_idx)
+        body = filtering_amount_join_value_body(token_idx, filter_rule["name"])
+        payload = build_filter_signature_payload(sig_ctx, 22, field_path, body)
         sig = keychain.sign_data(keychain.Key.CAL, payload)
         exchange(dongle,
                  apdu_tip712_filtering_amount_join_value(token_idx,
@@ -513,9 +558,8 @@ def send_filter(dongle,
         return
 
     if filter_type == "datetime":
-        payload = start_filter_signature_payload(sig_ctx, 33)
-        payload += field_path.encode()
-        payload += filter_rule["name"].encode()
+        body = filtering_label_body(filter_rule["name"])
+        payload = build_filter_signature_payload(sig_ctx, 33, field_path, body)
         sig = keychain.sign_data(keychain.Key.CAL, payload)
         exchange(dongle,
                  apdu_tip712_filtering_datetime(filter_rule["name"], sig, discarded),
@@ -523,9 +567,8 @@ def send_filter(dongle,
         return
 
     if filter_type == "raw":
-        payload = start_filter_signature_payload(sig_ctx, 72)
-        payload += field_path.encode()
-        payload += filter_rule["name"].encode()
+        body = filtering_label_body(filter_rule["name"])
+        payload = build_filter_signature_payload(sig_ctx, 72, field_path, body)
         sig = keychain.sign_data(keychain.Key.CAL, payload)
         exchange(dongle,
                  apdu_tip712_filtering_raw(filter_rule["name"], sig, discarded),

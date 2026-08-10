@@ -11,7 +11,8 @@ from ragger.utils.misc import get_current_app_name_and_version
 
 from client.status_word import StatusWord
 from settings import (APP_CLA, GET_APP_CONFIGURATION_INS,
-                      RESERVED_TRUNCATE_ADDRESS_MASK, SettingID,
+                      RESERVED_TRUNCATE_ADDRESS_MASK,
+                      TIP712_FILTER_V2_CAPABILITY_MASK, SettingID,
                       get_settings_moves)
 
 
@@ -56,6 +57,11 @@ def test_truncate_address_flag_is_reserved(backend: BackendInterface):
     """The deprecated truncate-address wire bit must remain clear."""
     response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
     assert response.data[0] & RESERVED_TRUNCATE_ADDRESS_MASK == 0
+
+
+def test_tip712_filter_v2_capability_is_advertised(backend: BackendInterface):
+    response = backend.exchange(APP_CLA, GET_APP_CONFIGURATION_INS, 0x00, 0x00)
+    assert response.data[0] & TIP712_FILTER_V2_CAPABILITY_MASK != 0
 
 
 @pytest.mark.parametrize(

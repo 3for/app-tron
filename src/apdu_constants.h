@@ -38,6 +38,7 @@
 #define APP_FLAG_SIGN_BY_HASH     0x08
 #define APP_FLAG_VERBOSE_TIP712   0x10
 #define APP_FLAG_DISPLAY_HASH     0x20
+#define APP_FLAG_TIP712_FILTER_V2 0x40  // Capability bit; always set by V2-only firmware.
 
 #define INS_GET_PUBLIC_KEY                     0x02
 #define INS_SIGN                               0x04

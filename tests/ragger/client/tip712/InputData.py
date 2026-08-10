@@ -10,6 +10,7 @@ import struct
 from client.ledger_pki import PKIPubKeyUsage
 from client.status_word import StatusWord
 from client.tip712 import TIP712FieldType
+from client.command_builder import CommandBuilder
 from client import keychain
 import base58
 from pathlib import Path
@@ -25,6 +26,29 @@ filtering_tokens: list[dict] = []
 filtering_calldatas: list[dict] = []
 current_path: list[str] = []
 sig_ctx: dict[str, Any] = {}
+
+FILTER_SIGNATURE_DOMAIN = b"LEDGER/TRON/TIP712/FILTER"
+FILTER_SIGNATURE_VERSION = 0x02
+
+FILTER_CONTEXT_TAG_CHAIN_ID = 0x01
+FILTER_CONTEXT_TAG_CONTRACT = 0x02
+FILTER_CONTEXT_TAG_SCHEMA_HASH = 0x03
+FILTER_CONTEXT_TAG_PATH = 0x04
+FILTER_CONTEXT_TAG_BODY = 0x05
+
+FILT_MAGIC_MESSAGE_INFO = 183
+FILT_MAGIC_CALLDATA_INFO = 55
+FILT_MAGIC_CALLDATA_VALUE = 66
+FILT_MAGIC_CALLDATA_CALLEE = 77
+FILT_MAGIC_CALLDATA_CHAIN_ID = 88
+FILT_MAGIC_CALLDATA_SELECTOR = 99
+FILT_MAGIC_CALLDATA_AMOUNT = 110
+FILT_MAGIC_CALLDATA_SPENDER = 121
+FILT_MAGIC_AMOUNT_JOIN_TOKEN = 11
+FILT_MAGIC_AMOUNT_JOIN_VALUE = 22
+FILT_MAGIC_DATETIME = 33
+FILT_MAGIC_TRUSTED_NAME = 44
+FILT_MAGIC_RAW_FIELD = 72
 
 
 def _reset_process_context() -> None:
@@ -377,24 +401,51 @@ def send_struct_impl(structs, data, structname):
     return True
 
 
-def start_signature_payload(ctx: dict, magic: int) -> bytearray:
-    to_sign = bytearray()
-    # magic number so that signature for one type of filter can't possibly be
-    # valid for another, defined in APDU specs
-    to_sign.append(magic)
-    to_sign += ctx["chainid"]
-    to_sign += ctx["caddr"]
-    to_sign += ctx["schema_hash"]
-    return to_sign
+def _filter_signature_tlv(tag: int, value: bytes) -> bytes:
+    if not 0 <= tag <= 0xff:
+        raise ValueError("filter signature TLV tag is not a byte")
+    if len(value) > 0xffff:
+        raise ValueError("filter signature TLV value is too long")
+    return bytes([tag]) + struct.pack(">H", len(value)) + value
+
+
+def build_filter_signature_payload(ctx: dict, kind: int, path: str,
+                                   body: bytes) -> bytes:
+    """Build the canonical TIP-712 filter-signature V2 preimage."""
+    if not 0 <= kind <= 0xff:
+        raise ValueError("filter signature kind is not a byte")
+
+    chain_id = bytes(ctx["chainid"])
+    contract = bytes(ctx["caddr"])
+    schema_hash = bytes(ctx["schema_hash"])
+    if len(chain_id) != 8:
+        raise ValueError("filter signature chain ID must be 8 bytes")
+    if len(contract) != 20:
+        raise ValueError("filter signature contract must be 20 bytes")
+    if len(schema_hash) != 28:
+        raise ValueError("filter signature schema hash must be 28 bytes")
+
+    path_bytes = path.encode("ascii")
+    body_bytes = bytes(body)
+    return b"".join((
+        FILTER_SIGNATURE_DOMAIN,
+        bytes([FILTER_SIGNATURE_VERSION, kind]),
+        _filter_signature_tlv(FILTER_CONTEXT_TAG_CHAIN_ID, chain_id),
+        _filter_signature_tlv(FILTER_CONTEXT_TAG_CONTRACT, contract),
+        _filter_signature_tlv(FILTER_CONTEXT_TAG_SCHEMA_HASH, schema_hash),
+        _filter_signature_tlv(FILTER_CONTEXT_TAG_PATH, path_bytes),
+        _filter_signature_tlv(FILTER_CONTEXT_TAG_BODY, body_bytes),
+    ))
 
 
 # ledgerjs doesn't actually sign anything, and instead uses already pre-computed signatures
 def send_filtering_message_info(display_name: str, filters_count: int):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 183)
-    to_sign.append(filters_count)
-    to_sign += display_name.encode()
+    body = CommandBuilder.tip712_filtering_message_info_body(
+        display_name, filters_count)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_MESSAGE_INFO, "", body)
 
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_message_info(display_name, filters_count,
@@ -406,9 +457,9 @@ def send_filtering_amount_join_token(path: str, token_idx: int,
                                      discarded: bool):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 11)
-    to_sign += path.encode()
-    to_sign.append(token_idx)
+    body = CommandBuilder.tip712_filtering_amount_join_token_body(token_idx)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_AMOUNT_JOIN_TOKEN, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_amount_join_token(token_idx, sig,
                                                        discarded):
@@ -419,10 +470,10 @@ def send_filtering_amount_join_value(path: str, token_idx: int,
                                      display_name: str, discarded: bool):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 22)
-    to_sign += path.encode()
-    to_sign += display_name.encode()
-    to_sign.append(token_idx)
+    body = CommandBuilder.tip712_filtering_amount_join_value_body(
+        token_idx, display_name)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_AMOUNT_JOIN_VALUE, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_amount_join_value(token_idx, display_name,
                                                        sig, discarded):
@@ -432,9 +483,9 @@ def send_filtering_amount_join_value(path: str, token_idx: int,
 def send_filtering_datetime(path: str, display_name: str, discarded: bool):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 33)
-    to_sign += path.encode()
-    to_sign += display_name.encode()
+    body = CommandBuilder.tip712_filtering_name_body(display_name)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_DATETIME, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_datetime(display_name, sig, discarded):
         pass
@@ -445,13 +496,10 @@ def send_filtering_trusted_name(path: str, display_name: str,
                                 discarded: bool):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 44)
-    to_sign += path.encode()
-    to_sign += display_name.encode()
-    for t in name_type:
-        to_sign.append(t)
-    for s in name_source:
-        to_sign.append(s)
+    body = CommandBuilder.tip712_filtering_trusted_name_body(
+        display_name, name_type, name_source)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_TRUSTED_NAME, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_trusted_name(display_name, name_type,
                                                   name_source, sig, discarded):
@@ -462,9 +510,9 @@ def send_filtering_trusted_name(path: str, display_name: str,
 def send_filtering_raw(path: str, display_name: str, discarded: bool):
     global sig_ctx
 
-    to_sign = start_signature_payload(sig_ctx, 72)
-    to_sign += path.encode()
-    to_sign += display_name.encode()
+    body = CommandBuilder.tip712_filtering_name_body(display_name)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_RAW_FIELD, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     with app_client.tip712_filtering_raw(display_name, sig, discarded):
         pass
@@ -477,14 +525,11 @@ def send_filtering_calldata_info(index: int,
                                  selector_filter_flag: bool,
                                  amount_filter_flag: bool,
                                  spender_filter_flag: int):
-    to_sign = start_signature_payload(sig_ctx, 55)
-    to_sign.append(index)
-    to_sign.append(value_filter_flag)
-    to_sign.append(int(callee_filter_flag))
-    to_sign.append(chain_id_filter_flag)
-    to_sign.append(selector_filter_flag)
-    to_sign.append(amount_filter_flag)
-    to_sign.append(int(spender_filter_flag))
+    body = CommandBuilder.tip712_filtering_calldata_info_body(
+        index, value_filter_flag, callee_filter_flag, chain_id_filter_flag,
+        selector_filter_flag, amount_filter_flag, spender_filter_flag)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_INFO, "", body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_info(index,
                                                          value_filter_flag,
@@ -499,9 +544,9 @@ def send_filtering_calldata_info(index: int,
 
 
 def send_filtering_calldata_value(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 66)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_VALUE, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_value(index, sig, discarded)
     assert response.status == StatusWord.OK, \
@@ -509,9 +554,9 @@ def send_filtering_calldata_value(path: str, index: int, discarded: bool):
 
 
 def send_filtering_calldata_callee(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 77)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_CALLEE, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_callee(index, sig, discarded)
     assert response.status == StatusWord.OK, \
@@ -519,9 +564,9 @@ def send_filtering_calldata_callee(path: str, index: int, discarded: bool):
 
 
 def send_filtering_calldata_chain_id(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 88)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_CHAIN_ID, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_chain_id(index, sig, discarded)
     assert response.status == StatusWord.OK, \
@@ -529,9 +574,9 @@ def send_filtering_calldata_chain_id(path: str, index: int, discarded: bool):
 
 
 def send_filtering_calldata_selector(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 99)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_SELECTOR, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_selector(index, sig, discarded)
     assert response.status == StatusWord.OK, \
@@ -539,9 +584,9 @@ def send_filtering_calldata_selector(path: str, index: int, discarded: bool):
 
 
 def send_filtering_calldata_amount(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 110)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_AMOUNT, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_amount(index, sig, discarded)
     assert response.status == StatusWord.OK, \
@@ -549,9 +594,9 @@ def send_filtering_calldata_amount(path: str, index: int, discarded: bool):
 
 
 def send_filtering_calldata_spender(path: str, index: int, discarded: bool):
-    to_sign = start_signature_payload(sig_ctx, 121)
-    to_sign += path.encode()
-    to_sign.append(index)
+    body = CommandBuilder.tip712_filtering_calldata_field_body(index)
+    to_sign = build_filter_signature_payload(
+        sig_ctx, FILT_MAGIC_CALLDATA_SPENDER, path, body)
     sig = keychain.sign_data(keychain.Key.CAL, to_sign)
     response = app_client.tip712_filtering_calldata_spender(index, sig, discarded)
     assert response.status == StatusWord.OK, \

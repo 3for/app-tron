@@ -24,8 +24,9 @@
 #define P2_IMPL_NAME              P2_DEF_NAME
 #define P2_IMPL_ARRAY             0x0F
 #define P2_IMPL_FIELD             P2_DEF_FIELD
-#define P2_FILT_ACTIVATE          0x00
+#define P2_FILT_ACTIVATE_V1       0x00
 #define P2_FILT_DISCARDED_PATH    0x01
+#define P2_FILT_ACTIVATE_V2       0x02
 #define P2_FILT_MESSAGE_INFO      0x0F
 #define P2_FILT_CALLDATA_SPENDER  0xF4
 #define P2_FILT_CALLDATA_AMOUNT   0xF5
@@ -232,11 +233,23 @@ uint16_t handleTIP712Filtering(uint8_t p1,
         apdu_reply(false);
         return SWO_COMMAND_NOT_ALLOWED;
     }
-    if ((p2 != P2_FILT_ACTIVATE) && (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
+    if (p2 == P2_FILT_ACTIVATE_V1) {
+        apdu_response_code = SWO_WRONG_P1_P2;
+        apdu_reply(false);
+        return apdu_response_code;
+    }
+    if ((p2 != P2_FILT_ACTIVATE_V2) &&
+        (ui_712_get_filtering_mode() != TIP712_FILTERING_FULL)) {
         return SWO_SUCCESS;
     }
     switch (p2) {
-        case P2_FILT_ACTIVATE:
+        case P2_FILT_ACTIVATE_V2:
+            if ((p1 != P1_COMPLETE) || (length != 0U)) {
+                apdu_response_code = (p1 != P1_COMPLETE) ? SWO_WRONG_P1_P2
+                                                         : SWO_INCORRECT_DATA;
+                ret = false;
+                break;
+            }
             if (tip712_context->schema_locked) {
                 apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
                 ret = false;
