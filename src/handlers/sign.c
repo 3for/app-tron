@@ -488,12 +488,28 @@ bool sign_reception_command_allowed(uint8_t p1, uint8_t p2) {
 }
 
 static bool start_sign_review(ui_approval_state_t state, bool data_warning) {
+#ifdef HAVE_SWAP
+    // ux_flow_display() completes and resets the pending APDU itself when UI
+    // preparation fails.  Remember the library context before that reset so
+    // Exchange is still released with a failed result instead of being left
+    // blocked in os_lib_call().
+    const bool finalize_failed_swap = G_called_from_swap && G_swap_response_ready;
+#endif  // HAVE_SWAP
+
     // Mark the session non-resumable before handing control to asynchronous UI.
     // A preparation failure sends an error and resets this phase via
     // reset_app_context()/sign_cleanup().
     LEDGER_ASSERT(appState == APP_STATE_SIGNING, "signing required");
     sign_phase = SIGN_PHASE_REVIEW;
-    return ux_flow_display(state, data_warning);
+    const bool review_started = ux_flow_display(state, data_warning);
+
+#ifdef HAVE_SWAP
+    if (!review_started && finalize_failed_swap) {
+        swap_finalize_exchange_sign_transaction(false);
+    }
+#endif  // HAVE_SWAP
+
+    return review_started;
 }
 
 static void create_parameter_begin(void *ctx, size_t parameter_len) {
@@ -1001,8 +1017,12 @@ handle_parser_result:
                     txContent.tokenNames[0],
                     sizeof(strings.common.fullContract));
 #ifdef HAVE_SWAP
-            // If we are in swap context, do not redisplay the message data
-            // Instead, ensure they are identical with what was previously displayed.
+            // The legacy Exchange ABI does not carry the source account or signing
+            // path that was checked earlier in the flow.  First enforce the fields
+            // that Exchange did bind, then keep going through the regular transfer
+            // review so the actual owner/permission parsed from the transaction is
+            // explicitly approved before this independently supplied path is used.
+            //
             // Swap consumes the amount and token name as separate strings, so this
             // must run before the two are merged for display below.
             if (G_called_from_swap) {
@@ -1010,13 +1030,11 @@ handle_parser_result:
                                         strings.common.fullContract,               // Token name
                                         strings.common.TRC20ActionSendAllow,       // "Send To"
                                         strings.common.toAddress)) {
-                    PRINTF("Signing valid swap transaction\n");
-                    ui_callback_tx_ok(false);
+                    PRINTF("Swap fields valid; reviewing source account\n");
                 } else {
                     PRINTF("Refused signing incorrect Swap transaction\n");
                     finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
                 }
-                break;
             }
 #endif  // HAVE_SWAP
 
