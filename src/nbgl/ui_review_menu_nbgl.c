@@ -38,10 +38,6 @@
 #include "ui_utils.h"
 #include "parse.h"
 
-#ifdef HAVE_SWAP
-#include "swap.h"
-#endif  // HAVE_SWAP
-
 // Macros
 #define WARNING_TYPES_NUMBER 1
 #define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1)
@@ -318,16 +314,6 @@ static void reviewChoice(bool confirm) {
 
 static void rejectChoice(void) {
     nbgl_reviewStatusType_t reject_status = STATUS_TYPE_TRANSACTION_REJECTED;
-
-#ifdef HAVE_SWAP
-    // A swap review owns an Exchange library call.  The normal rejection path
-    // only resets the Tron context; it would neither set the Exchange result
-    // nor return from os_lib_call().
-    if (G_called_from_swap && G_swap_response_ready) {
-        ui_callback_tx_cancel(false);
-        return;
-    }
-#endif  // HAVE_SWAP
 
     if (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION) {
         // TIP-712 is the one review that completes its own reset in

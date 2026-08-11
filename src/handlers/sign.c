@@ -488,28 +488,12 @@ bool sign_reception_command_allowed(uint8_t p1, uint8_t p2) {
 }
 
 static bool start_sign_review(ui_approval_state_t state, bool data_warning) {
-#ifdef HAVE_SWAP
-    // ux_flow_display() completes and resets the pending APDU itself when UI
-    // preparation fails.  Remember the library context before that reset so
-    // Exchange is still released with a failed result instead of being left
-    // blocked in os_lib_call().
-    const bool finalize_failed_swap = G_called_from_swap && G_swap_response_ready;
-#endif  // HAVE_SWAP
-
     // Mark the session non-resumable before handing control to asynchronous UI.
     // A preparation failure sends an error and resets this phase via
     // reset_app_context()/sign_cleanup().
     LEDGER_ASSERT(appState == APP_STATE_SIGNING, "signing required");
     sign_phase = SIGN_PHASE_REVIEW;
-    const bool review_started = ux_flow_display(state, data_warning);
-
-#ifdef HAVE_SWAP
-    if (!review_started && finalize_failed_swap) {
-        swap_finalize_exchange_sign_transaction(false);
-    }
-#endif  // HAVE_SWAP
-
-    return review_started;
+    return ux_flow_display(state, data_warning);
 }
 
 static void create_parameter_begin(void *ctx, size_t parameter_len) {
@@ -1017,24 +1001,21 @@ handle_parser_result:
                     txContent.tokenNames[0],
                     sizeof(strings.common.fullContract));
 #ifdef HAVE_SWAP
-            // The legacy Exchange ABI does not carry the source account or signing
-            // path that was checked earlier in the flow.  First enforce the fields
-            // that Exchange did bind, then keep going through the regular transfer
-            // review so the actual owner/permission parsed from the transaction is
-            // explicitly approved before this independently supplied path is used.
-            //
-            // Swap consumes the amount and token name as separate strings, so this
-            // must run before the two are merged for display below.
+            // Exchange V1 already approved the amount, token and destination. Match
+            // those bound fields and sign a valid simple transfer without a second
+            // coin-app review. This must run before amount and token are merged below.
             if (G_called_from_swap) {
                 if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
                                         strings.common.fullContract,               // Token name
                                         strings.common.TRC20ActionSendAllow,       // "Send To"
                                         strings.common.toAddress)) {
-                    PRINTF("Swap fields valid; reviewing source account\n");
+                    PRINTF("Signing valid swap transaction\n");
+                    ui_callback_tx_ok(false);
                 } else {
                     PRINTF("Refused signing incorrect Swap transaction\n");
                     finalize_swap_with_error(E_SWAP_CHECKING_FAIL);
                 }
+                break;
             }
 #endif  // HAVE_SWAP
 
