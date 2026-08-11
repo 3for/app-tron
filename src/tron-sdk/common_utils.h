@@ -298,6 +298,24 @@ bool tronBase58ToBinary(const char *in, uint8_t *out20);
 bool tronBase58ToBinaryLen(const char *in, size_t len, uint8_t *out20);
 
 /**
+ * @brief Decodes a 32-byte TVM ABI address word into its 20-byte form.
+ *
+ * Accepts both address encodings used by the TRON ecosystem:
+ * - twelve zero bytes followed by the 20-byte address;
+ * - eleven zero bytes followed by the 0x41 mainnet prefix and the 20-byte
+ *   address, as emitted by java-tron's native ABI helpers.
+ *
+ * Any other non-zero high byte is rejected so normalization cannot change the
+ * reviewed destination.
+ *
+ * @param word The complete 32-byte ABI word.
+ * @param out20 Output buffer for the normalized 20-byte address.
+ * @return true on success, false on an invalid high-byte encoding.
+ */
+bool tronAbiAddressToBinary(const uint8_t word[static INT256_LENGTH],
+                            uint8_t out20[static ADDRESS_LENGTH]);
+
+/**
  * @brief Checks if a buffer is entirely filled with zeroes.
  *
  * This function examines the first `n` bytes of the buffer pointed to by `buf`

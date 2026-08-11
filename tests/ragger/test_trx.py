@@ -1966,6 +1966,27 @@ class TestTRX():
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_trc20_accepts_tron_prefixed_abi_address(self, backend, device):
+        client = TronClient(backend)
+        calldata = bytearray(build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000)))
+        # java-tron's native ABI helpers right-align the complete 21-byte TRON
+        # address, yielding eleven zero bytes followed by 0x41 and addr20.
+        calldata[4 + 11] = 0x41
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=bytes(calldata)))
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               do_comparison=False,
+                               required_review_text="TEvHMZWy")
+
     def test_trx_trc20_send_with_fee_limit(self, backend, device):
         client = TronClient(backend)
         tx_calldata = build_trc20_calldata(
@@ -2013,11 +2034,15 @@ class TestTRX():
             client.sign_sync(client.getAccount(0)["path"], tx)
         assert error.value.status == StatusWord.INVALID_DATA
 
-    def test_trx_trc20_rejects_noncanonical_abi_address(self, backend):
+    @pytest.mark.parametrize("case", ["high_bits", "wrong_tron_prefix"])
+    def test_trx_trc20_rejects_unsupported_abi_address(self, backend, case):
         client = TronClient(backend)
         calldata = bytearray(build_trc20_calldata(
             "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000)))
-        calldata[4] = 1  # non-zero byte in the address word's 12-byte high padding
+        if case == "high_bits":
+            calldata[4] = 1
+        else:
+            calldata[4 + 11] = 0x42
         tx = client.packContract(
             tron.Transaction.Contract.TriggerSmartContract,
             contract.TriggerSmartContract(

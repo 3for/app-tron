@@ -1208,7 +1208,6 @@ def _abi_dynamic_calldata(selector: bytes, value: bytes,
         "length_high_bits",
         "bool_not_canonical",
         "address_high_bits",
-        "address_legacy_abi_prefix",
         "address_wrong_tron_prefix",
         "uint8_high_bits",
         "bytes_constraint_hidden_suffix",
@@ -1300,11 +1299,6 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
             word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
             family = TypeFamily.ADDRESS
             type_size = None
-        elif case == "address_legacy_abi_prefix":
-            word[-21] = 0x41
-            word[-20:] = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
-            family = TypeFamily.ADDRESS
-            type_size = None
         else:
             word[0] = 1
             word[-1] = 7
@@ -1333,6 +1327,40 @@ def test_gcs_rejects_ambiguous_or_noncanonical_raw_values(
     normal_tx = build_trc20_transfer_tx(client)
     assert gcs_store_calldata(client, backend,
                               client.getAccount(0)["path"], normal_tx) == StatusWord.OK
+
+
+def test_gcs_accepts_tron_prefixed_abi_address(
+        scenario_navigator: NavigateWithScenario):
+    """A GCS address field accepts java-tron's legacy 21-byte ABI form."""
+    backend = scenario_navigator.backend
+    client = _client_from_scenario(scenario_navigator)
+    selector = bytes.fromhex("12345678")
+    recipient20 = bytes.fromhex("23f8abfc2824c397ccb3da89ae772984107ddb99")
+    word = bytearray(32)
+    word[-21] = TRON_MAINNET_ADDRESS_PREFIX
+    word[-20:] = recipient20
+    calldata = selector + bytes(word)
+    tx = build_trigger_smart_contract_tx(client, TRC20_CONTRACT_ADDR20, calldata)
+    assert gcs_store_calldata(client, backend,
+                              client.getAccount(0)["path"], tx) == StatusWord.OK
+
+    fields = [
+        Field(1,
+              "Recipient",
+              ParamRaw(1,
+                       Value(1,
+                             TypeFamily.ADDRESS,
+                             data_path=build_data_path_static(0))))
+    ]
+    client.provide_transaction_info(
+        build_tx_info(TRC20_CONTRACT_ADDR20, selector, fields, "legacy address"))
+    for field in fields:
+        client.provide_transaction_field_desc(field.serialize())
+
+    _start_gcs_flow_and_assert(scenario_navigator,
+                               client,
+                               tx,
+                               do_comparison=False)
 
 
 def test_gcs_descriptor_oom_cleans_and_allows_reentry(

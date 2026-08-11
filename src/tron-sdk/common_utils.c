@@ -432,6 +432,22 @@ bool tronBase58ToBinary(const char *in, uint8_t *out20) {
     return tronBase58ToBinaryLen(in, strnlen(in, TRON_BASE58CHECK_ADDRESS_SIZE + 1), out20);
 }
 
+bool tronAbiAddressToBinary(const uint8_t word[static INT256_LENGTH],
+                            uint8_t out20[static ADDRESS_LENGTH]) {
+    const size_t tron_prefix_index = INT256_LENGTH - TRON_ADDRESS_SIZE;
+    const size_t address_index = INT256_LENGTH - ADDRESS_LENGTH;
+
+    if ((word == NULL) || (out20 == NULL) ||
+        !allzeroes(word, tron_prefix_index) ||
+        ((word[tron_prefix_index] != 0U) &&
+         (word[tron_prefix_index] != TRON_MAINNET_ADDRESS_PREFIX))) {
+        return false;
+    }
+
+    memcpy(out20, word + address_index, ADDRESS_LENGTH);
+    return true;
+}
+
 bool ethToTronBase58(const char *ethAddress, char *out58, size_t out58_len) {
     uint8_t eth20[ADDRESS_LENGTH];
     const char *hex;

@@ -1441,14 +1441,9 @@ bool pb_decode_trigger_smart_contract_data(pb_istream_t *stream,
     if (!pb_read(stream, buf, 32)) {
         return false;
     }
-    /* A canonical ABI address word is twelve zero bytes followed by the
-     * twenty-byte EVM address. Silently discarding non-zero high bytes would
-     * make the reviewed address differ from the signed calldata. */
-    if (!allzeroes(buf, 12U)) {
+    if (!tronAbiAddressToBinary(buf, content->destination + 1U)) {
         return false;
     }
-    memcpy(content->destination, buf + (32 - 21), ADDRESS_SIZE);
-    // fix address prefix 0x41: mainnet
     content->destination[0] = ADD_PRE_FIX_BYTE_MAINNET;
 
     // amount
