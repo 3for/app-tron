@@ -29,6 +29,7 @@ typedef struct {
 typedef struct {
     list_node_t _list;
     cx_sha3_t hash;
+    bool has_data;  // hash.blen is only the current partial-block length.
 } s_hash_ctx;
 
 bool path_set_root(const char *const struct_name, uint8_t length);

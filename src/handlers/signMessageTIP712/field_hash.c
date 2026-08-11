@@ -197,6 +197,7 @@ static bool field_hash_feed_parent(e_type field_type, const uint8_t *hash) {
         apdu_response_code = SWO_INCORRECT_DATA;
         return false;
     }
+    hash_ctx->has_data = true;
     return true;
 }
 

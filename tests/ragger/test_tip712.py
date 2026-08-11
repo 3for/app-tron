@@ -2720,6 +2720,49 @@ def test_tip712_gondi(
     assert addr == get_wallet_addr(client)
 
 
+def test_tip712_block_aligned_child_struct_hashes_into_parent(
+        scenario_navigator: NavigateWithScenario):
+    """A full Keccak rate block is still non-empty struct data.
+
+    The child preimage is its 32-byte type hash plus sixteen 32-byte field
+    values: 544 bytes, exactly four Keccak-256 rate blocks.
+    """
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    client = TronClient(backend, device, navigator)
+
+    toggle_settings(backend, device, navigator, [SettingID.SIGN_BY_HASH])
+
+    child_fields = [
+        {"name": f"field{i}", "type": "uint256"}
+        for i in range(16)
+    ]
+    child_values = {f"field{i}": i + 1 for i in range(16)}
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+            ],
+            "Root": [
+                {"name": "child", "type": "Child"},
+            ],
+            "Child": child_fields,
+        },
+        "primaryType": "Root",
+        "domain": {"chainId": 728126428},
+        "message": {"child": child_values},
+    }
+
+    signature = tip712_new_common(scenario_navigator,
+                                  client,
+                                  data,
+                                  None,
+                                  nb_warnings=1)
+
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
 def test_tip712_bs_not_activated_error(
         scenario_navigator: NavigateWithScenario):
     # Blind signing is disabled by default, so an unfiltered payload must be

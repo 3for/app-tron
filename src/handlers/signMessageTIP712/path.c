@@ -200,18 +200,16 @@ static void remove_last_hash_ctx(void) {
  */
 static bool finalize_hash_depth(uint8_t *hash, bool *has_data) {
     const s_hash_ctx *hash_ctx;
-    size_t hashed_bytes;
 
     if ((hash == NULL) || (has_data == NULL) || ((hash_ctx = get_last_hash_ctx()) == NULL)) {
         return false;
     }
-    hashed_bytes = hash_ctx->hash.blen;
+    *has_data = hash_ctx->has_data;
     // finalize hash
     if (finalize_hash((cx_hash_t *) &hash_ctx->hash, hash, KECCAK256_HASH_BYTESIZE) != true) {
         return false;
     }
     remove_last_hash_ctx();
-    *has_data = hashed_bytes > 0;
     return true;
 }
 
@@ -221,7 +219,7 @@ static bool finalize_hash_depth(uint8_t *hash, bool *has_data) {
  * @param[in] hash pointer to given hash
  */
 static bool feed_last_hash_depth(const uint8_t *hash) {
-    const s_hash_ctx *hash_ctx;
+    s_hash_ctx *hash_ctx;
 
     if ((hash_ctx = get_last_hash_ctx()) == NULL) {
         return false;
@@ -231,6 +229,7 @@ static bool feed_last_hash_depth(const uint8_t *hash) {
         CX_OK) {
         return false;
     }
+    hash_ctx->has_data = true;
     return true;
 }
 
@@ -675,16 +674,19 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
 
             if (array_size > 0) {
                 memcpy(&hash_ctx->hash, &prev_ctx->hash, sizeof(prev_ctx->hash));
+                hash_ctx->has_data = prev_ctx->has_data;
             } else {
                 if (cx_keccak_init_no_throw((cx_sha3_t *) &hash_ctx->hash, 256) != CX_OK) {
                     remove_last_hash_ctx();
                     return false;
                 }
+                hash_ctx->has_data = false;
             }
             if (cx_keccak_init_no_throw((cx_sha3_t *) &prev_ctx->hash, 256) != CX_OK) {
                 remove_last_hash_ctx();
                 return false;
             }
+            prev_ctx->has_data = false;
 
             hash_ctx = prev_ctx;
             prev_ctx = get_previous_hash_ctx(hash_ctx);
@@ -693,6 +695,7 @@ bool path_new_array_depth(const uint8_t *data, uint8_t length) {
             remove_last_hash_ctx();
             return false;
         }
+        hash_ctx->has_data = false;
     }
     if (array_size == 0) {
         do {
