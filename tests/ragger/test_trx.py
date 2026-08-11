@@ -2712,11 +2712,16 @@ class TestTRX():
 
                 # The rejected PROVIDE must not reset or replace the active
                 # operation review page.
+                if operation == "sign_hash":
+                    review_screen = str(
+                        backend.get_current_screen_content()).lower()
+                    assert "blind signing" in review_screen
                 self.review_approve(
                     test_name=None,
+                    warning=(operation == "sign_hash"),
                     custom_screen_text=(
                         self.NANO_TRANSACTION_SIGN_PATTERN
-                        if device.is_nano else None),
+                        if device.is_nano and operation != "sign_hash" else None),
                     do_comparison=False)
         finally:
             backend.raise_policy = previous_policy
