@@ -62,7 +62,6 @@ static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
 static const char *stringLabelTxAmount = "Amount";
 static const char *stringLabelResource = "Resource";
-static const char *stringLabelHash = "Hash";
 #ifdef SCREEN_SIZE_WALLET
 static const char *stringLabelTxHash = "Transaction hash";
 #else
@@ -239,6 +238,7 @@ static void displayTransaction(void) {
     }
 
     if ((txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) ||
+        (txInfos.state == APPROVAL_SIMPLE_TRANSACTION) ||
         (txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
         (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION)) {
         // Hash-only reviews must use the advanced flow so the blind-signing
@@ -776,9 +776,15 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
+            // SIMPLE_TRANSACTION only exposes a digest, so require an explicit
+            // blind-signing risk acknowledgement on every invocation. Reset the
+            // shared warning object to avoid carrying gating/prelude state from a
+            // previous review.
+            explicit_bzero(&warning, sizeof(warning));
+            warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
             txInfos.fields[0].item = stringLabelSenderAddress;
             txInfos.fields[0].value = strings.common.fromAddress;
-            txInfos.fields[1].item = stringLabelHash;
+            txInfos.fields[1].item = stringLabelTxHash;
             txInfos.fields[1].value = strings.common.fullHash;
             // This catch-all state is shared by several blind-hash-signed contract
             // types, so derive the title from the actual contract type rather than

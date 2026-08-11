@@ -63,8 +63,14 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
                            tmpCtx.transactionContext.hash,
                            HASH_SIZE);
 
-    // Contract Type = Unknown Type
-    setContractType(UNKNOWN_CONTRACT, strings.common.fullContract, sizeof(strings.common.fullContract));
+    // This command signs an opaque digest: do not let the zero-initialized
+    // contract type (AccountCreateContract) leak into the review semantics.
+    txContent.contractType = UNKNOWN_CONTRACT;
+    if (!setContractType(txContent.contractType,
+                         strings.common.fullContract,
+                         sizeof(strings.common.fullContract))) {
+        return io_send_sw(E_INTERNAL_ERROR);
+    }
 
     // Keep the path and hash isolated until the asynchronous review callback
     // completes. ux_flow_display replies and resets the session itself if UI

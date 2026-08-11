@@ -2547,6 +2547,7 @@ class TestTRX():
 
     def test_trx_sign_hash(self, backend, device):
         client = TronClient(backend)
+        test_name = currentframe().f_code.co_name
         hash_to_sign = bytes.fromhex("000102030405060708090a0b0c0d0e0f"
                                      "101112131415161718191a1b1c1d1e1f")
         data = pack_derivation_path(client.getAccount(0)['path'])
@@ -2554,9 +2555,25 @@ class TestTRX():
 
         with backend.exchange_async(CLA, InsType.SIGN_TXN_HASH, 0x00, 0x00,
                                     data):
-            self.review_approve(
-                currentframe().f_code.co_name,
-                custom_screen_text=self.NANO_TRANSACTION_SIGN_PATTERN if device.is_nano else None)
+            warning_screen = str(backend.get_current_screen_content()).lower()
+            assert "blind signing" in warning_screen
+
+            scenario = NavigationScenarioData(device, backend,
+                                              UseCase.TX_REVIEW, True)
+            self.scenario_navigator._navigate_warning(
+                scenario, test_name, True, "warning")
+            backend.wait_for_text_on_screen("Review transaction")
+            review_screen = str(backend.get_current_screen_content()).lower()
+            assert "review transaction" in review_screen
+            assert "create account" not in review_screen
+
+            self.scenario_navigator.navigator.navigate_until_text_and_compare(
+                navigate_instruction=scenario.navigation,
+                validation_instructions=scenario.validation,
+                text=scenario.pattern,
+                path=self.scenario_navigator.screenshot_path,
+                test_case_name=test_name,
+                screen_change_before_first_instruction=False)
 
         resp = backend.last_async_response
 
