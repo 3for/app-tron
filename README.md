@@ -1,5 +1,7 @@
 # app-tron
 
+[![Build and run functional tests](https://github.com/LedgerHQ/app-tron/actions/workflows/build_and_functional_tests.yml/badge.svg?branch=develop)](https://github.com/LedgerHQ/app-tron/actions/workflows/build_and_functional_tests.yml)
+
 Tron wallet application for Ledger Nano S Plus, Nano X, Flex, Stax, Apex P.
 
 # Quick start guide
@@ -145,6 +147,10 @@ python3 -m pip install ledgerblue
 # Load the app.
 python3 -m ledgerblue.runScript --scp --fileName bin/app.apdu --elfFile bin/app.elf
 ```
+
+# APDUs
+
+Supported commands are listed in the [APDU protocol documentation](docs/APDU.md).
 
 # Tests
 

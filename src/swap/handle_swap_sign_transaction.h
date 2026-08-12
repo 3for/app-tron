@@ -20,9 +20,9 @@
 
 #define MAX_SWAP_TOKEN_LENGTH 15
 
-bool swap_check_validity(const char* amount,
-                         const char* tokenName,
-                         const char* action,
-                         const char* toAddress);
+bool swap_check_validity(const char *amount,
+                         const char *tokenName,
+                         const char *action,
+                         const char *toAddress);
 // Terminal swap exit path: sends the final response and does not return.
 void __attribute__((noreturn)) swap_finalize_exchange_sign_transaction(bool is_success);
