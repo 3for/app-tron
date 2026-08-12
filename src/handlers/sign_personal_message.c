@@ -76,7 +76,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
             reset_app_context();
-            return io_send_sw(SWO_INCORRECT_DATA);
+            return io_send_sw(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;
@@ -138,7 +138,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     }
     if (dataLength > txContent.dataBytes) {
         reset_app_context();
-        return io_send_sw(SWO_INCORRECT_DATA);
+        return io_send_sw(E_INCORRECT_LENGTH);
     }
 
     if (cx_hash_no_throw((cx_hash_t *) &global_sha3, 0, workBuffer, dataLength, NULL, 0) !=
@@ -166,7 +166,7 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                  strings.common.fromAddress,
                                  &tmp_public_key_ctx) != 0) {
             reset_app_context();
-            return io_send_sw(E_INTERNAL_ERROR);
+            return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }
 
         LEDGER_ASSERT(appState == APP_STATE_SIGNING_MESSAGE, "signing msg required");

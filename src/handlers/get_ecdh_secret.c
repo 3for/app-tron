@@ -107,13 +107,13 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
 
     off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
     if (ret < 0) {
-        return io_send_sw(SWO_INCORRECT_DATA);
+        return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
     workBuffer += ret;
     dataLength -= ret;
     if (dataLength != PUBLIC_KEY_SIZE) {
         PRINTF("Public key length error!");
-        return io_send_sw(SWO_WRONG_DATA_LENGTH);
+        return io_send_sw(E_INCORRECT_LENGTH);
     }
 
     switch (validate_ecdh_public_key(workBuffer)) {
@@ -130,7 +130,7 @@ int handleECDHSecret(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
     if (initPublicKeyContext(&tmpCtx.transactionContext.bip32_path,
                              strings.common.fromAddress,
                              &tmp_public_key_ctx) != 0) {
-        return io_send_sw(E_INTERNAL_ERROR);
+        return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
     // Load raw Data

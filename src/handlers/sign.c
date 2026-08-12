@@ -613,7 +613,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         appState = APP_STATE_SIGNING;
         off_t ret = read_bip32_path(workBuffer, dataLength, &tmpCtx.transactionContext.bip32_path);
         if (ret < 0) {
-            return send_sign_status(SWO_INCORRECT_DATA);
+            return send_sign_status(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;

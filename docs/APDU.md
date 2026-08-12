@@ -115,6 +115,13 @@ Derives the secp256k1 public key and Base58Check Tron address for a BIP32 path.
 
 > In Swap mode, `P1_CONFIRM` is rejected with `0x6A8E`.
 
+**Legacy error compatibility**
+
+- A malformed BIP32 path returns `0x6A8A`.
+- Extra bytes after an otherwise valid path return `0x6A80`; exact payload
+  consumption is a newer validation rule and is not reported as a path error.
+- A device-key derivation failure returns `0x6982`.
+
 ---
 
 ### `0x04` — SIGN (transaction)
@@ -145,6 +152,9 @@ For `P1_TRC10_NAME` the low nibble encodes the slot and a "last" flag:
 - `P1_MORE` / `P1_LAST`: `[protobuf transaction bytes]`
 - `P1_TRC10_NAME`: token name(s) for TRC10 transfers / exchange-create, or the trading pair for
   exchange inject/withdraw/transaction contracts.
+
+A malformed BIP32 path in the first command chunk returns the legacy status
+`0x6A8A`.
 
 **Response**
 
@@ -189,6 +199,9 @@ it requires the **Sign by hash** setting to be enabled.
 ```
 
 If the *Sign by hash* setting is disabled, returns `0x6A8C`.
+A malformed BIP32 path returns `0x6A8A`, a payload that does not contain
+exactly one 32-byte hash returns `0x6700`, and a device-key derivation failure
+returns `0x6982`.
 
 ---
 
@@ -248,6 +261,8 @@ across multiple chunks. This legacy hash-only review requires the **Sign by hash
 - `P1_MORE`: `[message data]`
 
 The cumulative data must not exceed the announced length (`0x6700` otherwise).
+A malformed BIP32 path returns `0x6A8A`, and a device-key derivation failure
+returns `0x6982`.
 
 **Response**
 
@@ -275,6 +290,12 @@ peer public key. The operation is shown for user approval.
 ```
 [65 bytes] ECDH shared point (0x04 || X || Y)   (after user approval)
 ```
+
+A malformed BIP32 path returns `0x6A8A`, a peer key with a length other than
+65 bytes returns `0x6700`, and a device-key derivation failure returns `0x6982`.
+A 65-byte peer key with an invalid SEC1 prefix or an invalid secp256k1 point is
+rejected with `0x6A80`; this is a newer validation rule rather than a legacy
+length error.
 
 ---
 
@@ -308,12 +329,22 @@ If the *Sign by hash* setting is disabled, returns `0x6A8C`.
 
 Defined in [`src/app_errors.h`](../src/app_errors.h).
 
+Status words are part of the public APDU interface. Existing instructions keep
+their historical status for an error condition that existed in the legacy
+protocol. New instructions and newly introduced validation rules use the
+current SDK status-word semantics. In particular, `0x6700`, `0x6982`, and
+`0x6A8A` remain compatibility statuses for legacy commands; the SDK-wide
+`SWO_*` definitions are not remapped.
+
 | SW       | Constant                            | Meaning                                           |
 | -------- | ----------------------------------- | ------------------------------------------------- |
 | `0x9000` | `E_OK`                              | Success                                           |
-| `0x6700` | `E_WRONG_DATA_LENGTH`               | Wrong data length                                 |
+| `0x6700` | `E_INCORRECT_LENGTH`                 | Legacy command length mismatch                    |
+| `0x6982` | `E_SECURITY_STATUS_NOT_SATISFIED`   | Legacy device-key derivation failure              |
 | `0x6985` | `E_USER_REJECTED`                   | User rejected the operation                       |
 | `0x6A80` | `E_INCORRECT_DATA`                  | Malformed/invalid command data                    |
+| `0x6A87` | `E_WRONG_DATA_LENGTH`               | Current SDK/new-command data length mismatch      |
+| `0x6A8A` | `E_INCORRECT_BIP32_PATH`            | Malformed BIP32 path in a legacy command          |
 | `0x6B00` | `E_INCORRECT_P1_P2`                 | Invalid `P1`/`P2`                                 |
 | `0x6A8B` | `E_MISSING_SETTING_DATA_ALLOWED`    | "Data allowed" setting required                   |
 | `0x6A8C` | `E_MISSING_SETTING_SIGN_BY_HASH`    | "Sign by hash" setting required                   |

@@ -12,6 +12,13 @@
 #define E_INCORRECT_DATA                  SWO_INCORRECT_DATA
 #define E_INCORRECT_P1_P2                 SWO_WRONG_P1_P2
 
+// Stable status words returned by legacy public APDUs. Keep these explicit
+// instead of changing the SDK-wide SWO_* aliases: new commands and validation
+// rules use the current SDK status-word semantics.
+#define E_INCORRECT_LENGTH                 0x6700
+#define E_SECURITY_STATUS_NOT_SATISFIED    0x6982
+#define E_INCORRECT_BIP32_PATH             0x6a8a
+
 // TRON defined:
 #define E_MISSING_SETTING_DATA_ALLOWED    0x6a8b
 #define E_MISSING_SETTING_SIGN_BY_HASH    0x6a8c

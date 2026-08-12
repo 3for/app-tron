@@ -2746,7 +2746,37 @@ class TestTRX():
 
         with pytest.raises(ExceptionRAPDU) as error:
             backend.exchange(CLA, ins, 0x00, p2, path + payload)
-        assert error.value.status == StatusWord.WRONG_DATA_LENGTH
+        assert error.value.status == StatusWord.INCORRECT_LENGTH
+
+    @pytest.mark.parametrize(
+        ("ins", "p1", "p2"),
+        [
+            (InsType.GET_PUBLIC_KEY, 0x00, 0x00),
+            (InsType.SIGN, P1Type.SIGN, 0x00),
+            (InsType.SIGN_TXN_HASH, 0x00, 0x00),
+            (InsType.SIGN_PERSONAL_MESSAGE, P1Type.FIRST, 0x00),
+            (InsType.GET_ECDH_SECRET, 0x00, 0x01),
+        ],
+    )
+    def test_legacy_command_rejects_malformed_path_with_legacy_status(
+            self, backend, ins, p1, p2):
+        # A zero-element path has always been malformed. Legacy clients use
+        # the TRON-specific status word to distinguish it from other bad data.
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, ins, p1, p2, b"\x00")
+        assert error.value.status == StatusWord.INCORRECT_BIP32_PATH
+
+    def test_legacy_personal_message_rejects_data_overrun_with_legacy_status(
+            self, backend):
+        client = TronClient(backend)
+        path = pack_derivation_path(client.getAccount(0)['path'])
+        # Announce one byte but include two in the same first chunk.
+        data = path + struct.pack(">I", 1) + b"ab"
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE,
+                             P1Type.FIRST, 0x00, data)
+        assert error.value.status == StatusWord.INCORRECT_LENGTH
 
     @pytest.mark.parametrize("operation", ["sign_hash", "ecdh"])
     def test_sensitive_review_rejects_interleaved_provide(

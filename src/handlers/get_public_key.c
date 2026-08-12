@@ -60,15 +60,20 @@ int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dat
 
     // Add requested BIP path to tmp array
     off_t parsed = read_bip32_path(dataBuffer, dataLength, &bip32_path);
-    if ((parsed < 0) || ((size_t) parsed != dataLength)) {
+    if (parsed < 0) {
         PRINTF("read_bip32_path failed\n");
+        return send_public_key_status(E_INCORRECT_BIP32_PATH);
+    }
+    // Exact payload consumption is a newer hardening rule, not a legacy path
+    // parsing failure. Keep the current SDK status for trailing bytes.
+    if ((size_t) parsed != dataLength) {
         return send_public_key_status(SWO_INCORRECT_DATA);
     }
 
     if (initPublicKeyContext(&bip32_path,
                              tmpCtx.publicKeyContext.address58,
                              &tmpCtx.publicKeyContext) != 0) {
-        return send_public_key_status(E_INTERNAL_ERROR);
+        return send_public_key_status(E_SECURITY_STATUS_NOT_SATISFIED);
     }
 
     memcpy(strings.common.toAddress, tmpCtx.publicKeyContext.address58, BASE58CHECK_ADDRESS_SIZE + 1);
