@@ -4,6 +4,7 @@ from Crypto.Hash import keccak
 from pathlib import Path
 from eth_keys import keys
 from ragger.error import ExceptionRAPDU
+from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
 from client.status_word import StatusWord
@@ -41,7 +42,11 @@ def test_personal_message_reception_rejects_cross_ins(backend, device, navigator
 
 
 @pytest.mark.parametrize("first_p1", [P1Type.SIGN_FIRST_CHUNK, P1Type.SIGN])
-def test_personal_sign_hash_only_requires_blind_signing(backend, device, first_p1):
+def test_personal_sign_hash_only_requires_blind_signing(
+        scenario_navigator: NavigateWithScenario, first_p1):
+    backend = scenario_navigator.backend
+    device = scenario_navigator.device
+    navigator = scenario_navigator.navigator
     builder = CommandBuilder()
     chunks = builder.personal_sign(BIP32_PATH, b"A" * 300)
     assert len(chunks) > 1
@@ -49,10 +54,24 @@ def test_personal_sign_hash_only_requires_blind_signing(backend, device, first_p
     first_chunk[2] = first_p1
     assert SettingID.SIGN_BY_HASH not in get_enabled_settings(backend, device)
 
-    # Blind signing is disabled on a fresh app instance. The legacy command
-    # must reject its first chunk before retaining any message or session state.
+    # Blind signing is disabled on a fresh app instance. Surface the setting
+    # prompt and keep the signing APDU pending until the user dismisses it.
+    moves = ([NavInsID.BOTH_CLICK]
+             if device.is_nano else [NavInsID.USE_CASE_CHOICE_REJECT])
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange_raw(first_chunk)
+        with backend.exchange_async_raw(first_chunk):
+            screen = str(backend.get_current_screen_content()).lower()
+            assert "blind signing" in screen
+            if first_p1 == P1Type.SIGN_FIRST_CHUNK:
+                navigator.navigate_and_compare(
+                    Path(__file__).parent.resolve(),
+                    "test_personal_sign_hash_only_requires_blind_signing",
+                    moves,
+                    screen_change_before_first_instruction=False,
+                    screen_change_after_last_instruction=False)
+            else:
+                navigator.navigate(
+                    moves, screen_change_before_first_instruction=False)
     assert error.value.status == StatusWord.MISSING_SETTING_SIGN_BY_HASH
 
     # The rejected command must leave the app ready for an unrelated command.

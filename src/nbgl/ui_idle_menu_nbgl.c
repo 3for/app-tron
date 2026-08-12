@@ -187,6 +187,15 @@ static void ui_error_setting_disabled_choice(bool confirm) {
     }
 }
 
+static void ui_error_blind_signing_pending_choice(bool confirm) {
+    io_seproxyhal_send_status(E_MISSING_SETTING_SIGN_BY_HASH, 0, true, false);
+    if (confirm) {
+        ui_settings();
+    } else {
+        ui_idle();
+    }
+}
+
 static void ui_error_custom_contract_choice(bool confirm) {
     // Complete the pending signing APDU and release its state before leaving
     // the choice page. Both branches terminate the same rejected request.
@@ -199,19 +208,44 @@ static void ui_error_custom_contract_choice(bool confirm) {
 }
 #endif
 
-void ui_error_blind_signing(void) {
+#ifndef SCREEN_SIZE_WALLET
+static void ui_error_blind_signing_pending_dismissed(void) {
+    io_seproxyhal_send_status(E_MISSING_SETTING_SIGN_BY_HASH, 0, true, false);
+    ui_idle();
+}
+#endif
+
 #ifdef SCREEN_SIZE_WALLET
+static void ui_error_blind_signing_with_callback(nbgl_choiceCallback_t callback) {
     nbgl_useCaseChoice(&ICON_APP_WARNING,
                        "This transaction cannot be clear-signed",
                        "Enable blind signing in the settings to sign this transaction.",
                        "Go to settings",
                        "Reject transaction",
-                       ui_error_setting_disabled_choice);
+                       callback);
+}
 #else
+static void ui_error_blind_signing_with_callback(nbgl_callback_t callback) {
     nbgl_useCaseAction(&C_Alert_circle_14px,
                        "Blind signing must\nbe enabled in\nsettings",
                        NULL,
-                       ui_idle);
+                       callback);
+}
+#endif
+
+void ui_error_blind_signing(void) {
+#ifdef SCREEN_SIZE_WALLET
+    ui_error_blind_signing_with_callback(ui_error_setting_disabled_choice);
+#else
+    ui_error_blind_signing_with_callback(ui_idle);
+#endif
+}
+
+void ui_error_blind_signing_pending(void) {
+#ifdef SCREEN_SIZE_WALLET
+    ui_error_blind_signing_with_callback(ui_error_blind_signing_pending_choice);
+#else
+    ui_error_blind_signing_with_callback(ui_error_blind_signing_pending_dismissed);
 #endif
 }
 

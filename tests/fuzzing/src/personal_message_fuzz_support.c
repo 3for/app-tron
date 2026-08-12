@@ -124,3 +124,5 @@ void ui_191_start(const char *message) {
 void ui_191_cleanup(void) {
     g_review_message = NULL;
 }
+
+void ui_error_blind_signing_pending(void) {}

@@ -89,4 +89,8 @@ void ui_191_cleanup(void);
 // ui_typed_message_review_choice() is declared in ui_message_signing.h.
 
 void ui_error_blind_signing(void);
+// Show the blind-signing setting prompt for an APDU that must remain pending
+// until the user dismisses the page. The callback replies with 0x6A8C and resets
+// the active session before returning to the home/settings screen.
+void ui_error_blind_signing_pending(void);
 void ui_error_custom_contract(void);
