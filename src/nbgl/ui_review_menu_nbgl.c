@@ -37,6 +37,7 @@
 #include "utils.h"  // SET_BIT
 #include "ui_utils.h"
 #include "parse.h"
+#include "helpers.h"
 
 // Macros
 #define WARNING_TYPES_NUMBER 1
@@ -691,6 +692,17 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.fields[idx].item = stringLabelTxAmount;
             txInfos.fields[idx].value = (const char *) reviewDisplayBuffer;
             idx++;
+
+            // Ticker and decimals are presentation metadata, not a unique asset
+            // identity. Bind every clear-signed TRC20 transfer/approval review to
+            // the exact contract address committed by the transaction hash.
+            if ((txContent.contractType == TRIGGERSMARTCONTRACT) &&
+                ((txContent.TRC20Method == 1U) || (txContent.TRC20Method == 2U))) {
+                getBase58FromAddress(txContent.contractAddress, strings.common.contractAddress);
+                txInfos.fields[idx].item = "Token contract";
+                txInfos.fields[idx].value = strings.common.contractAddress;
+                idx++;
+            }
 
             if ((txContent.contractType == TRIGGERSMARTCONTRACT) &&
                 (txContent.feeLimit != 0U)) {

@@ -2105,7 +2105,9 @@ class TestTRX():
     def test_trx_trc20_approve(self, backend, device):
         client = TronClient(backend)
         tx_calldata = build_trc20_calldata(
-            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000))
+            "364b03e0815687edaf90b81ff58e496dea7383d7",
+            Decimal(1000000),
+            selector="095ea7b3")
         tx = client.packContract(
             tron.Transaction.Contract.TriggerSmartContract,
             contract.TriggerSmartContract(
@@ -2115,6 +2117,37 @@ class TestTRX():
                     client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
                 data=tx_calldata))
         self.sign_and_validate(client, device, 0, tx)
+
+    @pytest.mark.parametrize("selector", ["a9059cbb", "095ea7b3"],
+                             ids=["transfer", "approve"])
+    @pytest.mark.parametrize("token_contract", [
+        "TB5tqtXHxGJQoT1YF6wAG8VktFYrguGTcA",
+        "TEkPSyZbUUp5SQrbXuXVXmkmyVt7c3QZLV",
+    ], ids=["tlt-contract-1", "tlt-contract-2"])
+    def test_trx_trc20_review_disambiguates_duplicate_contracts(
+            self, backend, device, selector, token_contract):
+        """Same ticker/decimals must not hide the signed token contract."""
+        client = TronClient(backend)
+        tx_calldata = build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7",
+            Decimal(1000000),
+            selector=selector)
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(client.getAccount(0)["addressHex"]),
+                contract_address=bytes.fromhex(client.address_hex(token_contract)),
+                data=tx_calldata))
+
+        # Speculos emits each wrapped address line as a separate OCR event.
+        # The distinct prefix proves which colliding contract is being reviewed;
+        # baseline golden flows retain the complete address rendering.
+        self.sign_and_validate(client,
+                               device,
+                               0,
+                               tx,
+                               do_comparison=False,
+                               required_review_text=token_contract[:8])
 
     def create_smart_contract_tx(self,
                                  client,

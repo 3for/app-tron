@@ -31,7 +31,7 @@
 #include "../swap/handle_swap_sign_transaction.h"
 #endif  // HAVE_SWAP
 
-// The transaction display strings (fromAddress, toAddress, addressSummary,
+// The transaction display strings (fromAddress, toAddress, contractAddress,
 // fullContract, url, TRC20Action, TRC20ActionSendAllow, fullHash) now live in
 // txStringProperties_t and are accessed via `strings.common.*`, mirroring
 // app-ethereum's shared_context.h layout.

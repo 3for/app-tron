@@ -60,9 +60,14 @@ def get_selector_from_data(data: str) -> bytes:
     return raw_data[:4]
 
 
-def build_trc20_calldata(to_address_hex: str, amount: Decimal):
-    # Function selector for transfer(address,uint256)
-    selector = bytes.fromhex("a9059cbb")
+def build_trc20_calldata(to_address_hex: str,
+                         amount: Decimal,
+                         selector: str = "a9059cbb"):
+    # transfer(address,uint256) by default; callers can select another
+    # compatible two-argument TRC20 method such as approve(address,uint256).
+    selector_bytes = bytes.fromhex(selector)
+    if len(selector_bytes) != 4:
+        raise ValueError("TRC20 selector must be exactly 4 bytes")
 
     # Remove '41' prefix if present, then pad to 32 bytes
     clean_address = to_address_hex[2:] if to_address_hex.startswith(
@@ -73,7 +78,7 @@ def build_trc20_calldata(to_address_hex: str, amount: Decimal):
     amount_int = int(amount)
     amount_bytes = amount_int.to_bytes(32, 'big')
 
-    return selector + address_bytes + amount_bytes
+    return selector_bytes + address_bytes + amount_bytes
 
 
 def recover_message(msg, vrs: tuple) -> bytes:

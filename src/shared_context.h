@@ -119,7 +119,7 @@ typedef union {
 typedef struct txStringProperties_s {
     char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
     char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
-    char addressSummary[40];
+    char contractAddress[BASE58CHECK_ADDRESS_SIZE + 1];
     char fullContract[TOKEN_DISPLAY_BUFFER_SIZE];
     char url[MAX_URL_SIZE + 1];  // +1 for NUL terminator at max length (256)
     char TRC20Action[9];

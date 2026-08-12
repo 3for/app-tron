@@ -63,7 +63,7 @@ extern char (*perm_field_values)[PERM_VAL_LEN];
 #endif
 
 extern volatile uint8_t customContractField;
-// The transaction display strings (fromAddress, toAddress, addressSummary,
+// The transaction display strings (fromAddress, toAddress, contractAddress,
 // fullContract, url, TRC20Action, TRC20ActionSendAllow, fullHash) live in
 // txStringProperties_t (shared_context.h) and are accessed via `strings.common.*`,
 // mirroring app-ethereum.
