@@ -2650,6 +2650,39 @@ class TestTRX():
                 amount=100000000), None, 2)
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_send_permissioned_maximum_active_id(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000), None, 9)
+        self.sign_and_validate(client, device, 0, tx, do_comparison=False)
+
+    @pytest.mark.parametrize("permission_id", [10, 255])
+    def test_trx_rejects_unsupported_permission_id(self, backend, permission_id):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000), None, permission_id)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign_sync(client.getAccount(0)['path'], tx)
+        assert error.value.status == StatusWord.INVALID_DATA
+
+        # Parser rejection must reset the signing session for the next APDU.
+        path = pack_derivation_path(client.getAccount(0)['path'])
+        response = backend.exchange(CLA, InsType.GET_PUBLIC_KEY, 0x00, 0x00, path)
+        assert response.status == StatusWord.OK
+
     def test_trx_ecdh_key(self, backend, device):
         client = TronClient(backend)
         # get ledger public key

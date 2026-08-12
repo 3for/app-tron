@@ -23,6 +23,10 @@
 
 #define ADD_PRE_FIX_BYTE_MAINNET TRON_MAINNET_ADDRESS_PREFIX
 
+// TRON assigns permission IDs 0 (owner), 1 (witness), and 2..9 (up to eight active
+// permissions). Reject larger IDs instead of signing them without a reviewable prefix.
+#define MAX_PERMISSION_ID 9
+
 typedef union {
     protocol_AccountCreateContract account_create_contract;
     protocol_AssetIssueContract asset_issue_contract;

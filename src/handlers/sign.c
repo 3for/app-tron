@@ -43,10 +43,6 @@
 
 extern void reset_app_context();
 
-// TRON permission model: owner=0, witness=1, active=2..9 (max 8 active permissions).
-// The review buffer only has room for the single-digit "Px - " prefix.
-#define MAX_PERMISSION_ID 9
-
 #ifdef HAVE_SWAP
 static void __attribute__((noreturn)) finalize_swap_with_error(uint16_t sw) {
     io_send_sw(sw);

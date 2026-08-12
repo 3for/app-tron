@@ -1911,7 +1911,7 @@ static parserStatus_e prepare_contract_context(
     int64_t fee_limit,
     uint64_t custom_data_len,
     txContent_t *content) {
-    if (content == NULL || permission_id < 0 || permission_id > UINT8_MAX) {
+    if (content == NULL || permission_id < 0 || permission_id > MAX_PERMISSION_ID) {
         return USTREAM_FAULT;
     }
     if (((type == protocol_Transaction_Contract_ContractType_CreateSmartContract) ||
