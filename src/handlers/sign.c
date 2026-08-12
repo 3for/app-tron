@@ -29,6 +29,7 @@
 #include "ui_globals.h"
 #include "uint256.h"
 #include "app_errors.h"
+#include "common_utils.h"
 #include "legacy_tx_stream.h"
 #include "create_smart_contract_stream.h"
 #include "parse.h"
@@ -1399,12 +1400,11 @@ handle_parser_result:
             if (!N_storage.signByHash) {
                 return send_sign_status(E_MISSING_SETTING_SIGN_BY_HASH);  // reject
             }
-            // Write strings.common.fullHash ("0x" + lowercase hex)
-            strlcpy(strings.common.fullHash, "0x", 3);
-            bytes_to_lowercase_hex(strings.common.fullHash + 2,
-                                   sizeof(strings.common.fullHash) - 2,
-                                   tmpCtx.transactionContext.hash,
-                                   HASH_SIZE);
+            if (!format_tron_txid(strings.common.fullHash,
+                                  sizeof(strings.common.fullHash),
+                                  tmpCtx.transactionContext.hash)) {
+                return send_sign_status(E_INTERNAL_ERROR);
+            }
             // write contract type
             if (!setContractType(txContent.contractType, strings.common.fullContract, sizeof(strings.common.fullContract))) {
                 return send_sign_status(E_INCORRECT_DATA);

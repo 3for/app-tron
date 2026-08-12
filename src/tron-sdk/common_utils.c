@@ -70,6 +70,19 @@ err:
     return -1;
 }
 
+bool format_tron_txid(char *out,
+                      size_t out_len,
+                      const uint8_t txid[static KECCAK256_HASH_BYTESIZE]) {
+    if ((out == NULL) || (txid == NULL) || (out_len < (TRON_TXID_HEX_SIZE + 1U))) {
+        return false;
+    }
+
+    return bytes_to_lowercase_hex(out,
+                                  out_len,
+                                  txid,
+                                  KECCAK256_HASH_BYTESIZE) == 0;
+}
+
 uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
     uint8_t i = 0;
     uint64_t res = 0;

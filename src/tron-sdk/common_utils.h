@@ -67,6 +67,10 @@
 // The byte size of a Keccak-256 hash.
 #define KECCAK256_HASH_BYTESIZE 32
 
+// A TRON transaction ID is conventionally rendered as 64 lowercase hexadecimal
+// characters, without an Ethereum-style "0x" prefix.
+#define TRON_TXID_HEX_SIZE (KECCAK256_HASH_BYTESIZE * 2U)
+
 // Hexadecimal digits for formatting and parsing purposes.
 static const char HEXDIGITS[] = "0123456789abcdef";
 
@@ -89,6 +93,18 @@ static const char HEXDIGITS[] = "0123456789abcdef";
  * @return 0 on success, or -1 if an error occurs (e.g., buffer too small).
  */
 int array_bytes_string(char *out, size_t outl, const void *value, size_t len);
+
+/**
+ * @brief Formats a TRON transaction ID using its canonical display form.
+ *
+ * @param out Output buffer for 64 lowercase hexadecimal characters and NUL.
+ * @param out_len Size of the output buffer.
+ * @param txid The 32-byte transaction ID.
+ * @return true on success, false for invalid pointers or an undersized buffer.
+ */
+bool format_tron_txid(char *out,
+                      size_t out_len,
+                      const uint8_t txid[static KECCAK256_HASH_BYTESIZE]);
 
 /**
  * @brief Converts a big-endian byte array to a 64-bit unsigned integer.

@@ -24,6 +24,7 @@
 #include "helpers.h"
 #include "ui_review_menu.h"
 #include "app_errors.h"
+#include "common_utils.h"
 #include "settings.h"
 #include "ui_globals.h"
 
@@ -56,12 +57,13 @@ int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataL
         return io_send_sw(E_INCORRECT_LENGTH);
     }
     memcpy(tmpCtx.transactionContext.hash, workBuffer, HASH_SIZE);
-    // Write strings.common.fullHash ("0x" + lowercase hex)
-    strlcpy(strings.common.fullHash, "0x", 3);
-    bytes_to_lowercase_hex(strings.common.fullHash + 2,
-                           sizeof(strings.common.fullHash) - 2,
-                           tmpCtx.transactionContext.hash,
-                           HASH_SIZE);
+    // Display TRON txIDs as bare lowercase hexadecimal, matching java-tron
+    // and explorer conventions rather than Ethereum's 0x-prefixed form.
+    if (!format_tron_txid(strings.common.fullHash,
+                          sizeof(strings.common.fullHash),
+                          tmpCtx.transactionContext.hash)) {
+        return io_send_sw(E_INTERNAL_ERROR);
+    }
 
     // This command signs an opaque digest: do not let the zero-initialized
     // contract type (AccountCreateContract) leak into the review semantics.

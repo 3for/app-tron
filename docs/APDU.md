@@ -192,6 +192,9 @@ it requires the **Sign by hash** setting to be enabled.
 [32 bytes] transaction hash
 ```
 
+The review renders the transaction hash as 64 lowercase hexadecimal characters
+without a `0x` prefix, matching TRON txID conventions.
+
 **Response**
 
 ```

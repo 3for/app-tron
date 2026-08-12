@@ -31,6 +31,7 @@
 #include "ui_nbgl.h"
 #include "ui_callbacks.h"
 #include "common_ui.h"  // ui_gcs_owns_shared_ui
+#include "common_utils.h"
 #include "common_712.h"
 #include "trusted_name.h"
 #include "settings.h"
@@ -1496,11 +1497,11 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
                       (state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION);
     if ((N_storage.displayHash || blind_sign) && state_shows_tx_hash(state) &&
         (g_pairsList->nbPairs < MAX_TX_FIELDS)) {
-        strlcpy(strings.common.fullHash, "0x", 3);
-        bytes_to_lowercase_hex(strings.common.fullHash + 2,
-                               sizeof(strings.common.fullHash) - 2,
-                               tmpCtx.transactionContext.hash,
-                               HASH_SIZE);
+        if (!format_tron_txid(strings.common.fullHash,
+                              sizeof(strings.common.fullHash),
+                              tmpCtx.transactionContext.hash)) {
+            return UI_PREPARE_INVALID_DATA;
+        }
         txInfos.fields[g_pairsList->nbPairs].item = stringLabelTxHash;
         txInfos.fields[g_pairsList->nbPairs].value = strings.common.fullHash;
         g_pairsList->nbPairs++;
