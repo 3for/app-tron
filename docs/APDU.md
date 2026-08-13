@@ -338,6 +338,26 @@ If the *Sign by hash* setting is disabled, returns `0x6A8C`.
 
 ---
 
+### Full TIP-712 streaming conventions
+
+The full structured-data flow uses `INS_TIP712_STRUCT_DEF` (`0x1A`),
+`INS_TIP712_STRUCT_IMPL` (`0x1C`), and optionally `INS_TIP712_FILTERING`
+(`0x1E`). The following wire-level limits and encoding rules apply:
+
+- An array-size implementation command (`INS_TIP712_STRUCT_IMPL`, `P2=0x0F`)
+  carries exactly one unsigned byte. Each array dimension can therefore contain
+  between 0 and 255 elements.
+- Integer field values are packed, big-endian byte strings no wider than their
+  declared Solidity type. A value shorter than the declared width is
+  zero-extended and represents a non-negative integer, even when its first byte
+  has bit 7 set. For example, the one-byte value `FF` represents
+  `int256(255)`.
+- Negative signed integers must use the full declared type width in two's
+  complement form. Consequently, `int256(-1)` is encoded as 32 bytes of `FF`,
+  not as a one-byte `FF` value.
+
+---
+
 ## App specific status words
 
 Defined in [`src/app_errors.h`](../src/app_errors.h).

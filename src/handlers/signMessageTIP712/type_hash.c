@@ -36,11 +36,10 @@ static bool encode_and_hash_field(const s_struct_712_field *field_ptr) {
 }
 
 /**
- * Encode & hash the a given structure type
+ * Encode and hash a given structure type into the active Keccak context
  *
  * @param[in] struct_ptr pointer to the structure we want the typestring of
- * @param[in] str_length length of the formatted string in memory
- * @return pointer of the string in memory, \ref NULL in case of an error
+ * @return \ref true on success, \ref false on error
  */
 static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
     const char *struct_name;
@@ -69,7 +68,7 @@ static bool encode_and_hash_type(const s_struct_712 *struct_ptr) {
         }
 
         if (encode_and_hash_field(field_ptr) == false) {
-            return NULL;
+            return false;
         }
     }
     // closing struct parentheses

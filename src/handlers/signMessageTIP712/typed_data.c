@@ -116,6 +116,9 @@ const s_struct_712 *get_structn(const char *name, uint8_t length) {
     return NULL;
 }
 
+_Static_assert(TIP712_MAX_STRUCTS <= 16U,
+               "TIP712 dependency bitmask only supports 16 structs");
+
 bool typed_data_schema_is_acyclic(void) {
     const s_struct_712 *structs[TIP712_MAX_STRUCTS];
     uint16_t dependencies[TIP712_MAX_STRUCTS] = {0};

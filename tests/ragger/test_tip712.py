@@ -1879,6 +1879,71 @@ def test_tip712_filtering_rejects_recursive_schema(backend: BackendInterface):
     assert error.value.status == StatusWord.INVALID_DATA
 
 
+@pytest.mark.parametrize("verbose", [False, True], ids=["basic", "verbose"])
+def test_tip712_unfiltered_rejects_recursive_schema(
+        scenario_navigator: NavigateWithScenario, verbose: bool):
+    """Basic and verbose reviews must reject recursion before processing values."""
+    backend = scenario_navigator.backend
+    device = backend.device
+    navigator = scenario_navigator.navigator
+    if verbose:
+        toggle_settings(backend, device, navigator,
+                        [SettingID.VERBOSE_TIP712])
+
+    client = TronClient(backend, device, navigator)
+    data = {
+        "types": {
+            "EIP712Domain": [{"name": "self", "type": "EIP712Domain"}],
+            "Message": [{"name": "value", "type": "uint256"}],
+        },
+        "primaryType": "Message",
+        "domain": {"self": {}},
+        "message": {"value": 1},
+    }
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, None,
+                               client.getAccount(0)["path"])
+    assert error.value.status == StatusWord.INVALID_DATA
+
+
+@pytest.mark.parametrize(
+    "value,expected_wire",
+    [
+        pytest.param(255, bytes.fromhex("ff"), id="compact-positive"),
+        pytest.param(-1, bytes.fromhex("ff" * 32), id="full-width-negative"),
+    ])
+def test_tip712_signed_integer_wire_convention(
+        scenario_navigator: NavigateWithScenario, value: int,
+        expected_wire: bytes):
+    """Compact positives and full-width negatives must match EIP-712 hashes."""
+    backend = scenario_navigator.backend
+    client = TronClient(backend, backend.device, scenario_navigator.navigator)
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Message": [{"name": "value", "type": "int256"}],
+        },
+        "primaryType": "Message",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "0x0000000000000000000000000000000000000000",
+        },
+        "message": {"value": value},
+    }
+    filters = {
+        "name": "Signed integer encoding",
+        "fields": {"value": {"type": "raw", "name": "Value"}},
+    }
+
+    assert InputData.encode_int(value, 32) == expected_wire
+    signature = tip712_new_common(scenario_navigator, client, data, filters)
+    assert recover_message(data, signature) == get_wallet_addr(client)
+
+
 def test_tip712_rejects_empty_dynamic_continuation(
         scenario_navigator: NavigateWithScenario,
         monkeypatch: pytest.MonkeyPatch):
