@@ -1608,6 +1608,71 @@ def test_tip712_rejects_incomplete_amount_join(
     assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
 
 
+@pytest.mark.parametrize("join_mode", ["field", "permit"])
+@pytest.mark.parametrize("metadata_timing", ["before_domain", "after_domain"])
+def test_tip712_rejects_amount_join_metadata_from_another_chain(
+        backend: BackendInterface, monkeypatch: pytest.MonkeyPatch,
+        join_mode: str, metadata_timing: str):
+    """Amount joins must not reuse authenticated metadata from another chain."""
+    client = TronClient(backend)
+    signing_path = client.getAccount(0)["path"]
+    token_address = "TTcQoDJ881H3Aq3N6qYoKGjZfLNoFw4Jrh"
+    message_fields = [{"name": "amount", "type": "uint256"}]
+    message = {"amount": 1_000_000}
+    filters = {
+        "name": "Cross-chain amount join",
+        "tokens": [{
+            "addr": token_address,
+            "ticker": "MAINNET",
+            "decimals": 6,
+            "chain_id": 728126428,
+        }],
+        "fields": {
+            "amount": {"type": "amount_join_value", "name": "Amount"},
+        },
+    }
+
+    if join_mode == "field":
+        message_fields.insert(0, {"name": "token", "type": "address"})
+        message["token"] = token_address
+        filters["fields"]["token"] = {
+            "type": "amount_join_token",
+            "token": 0,
+        }
+        filters["fields"]["amount"]["token"] = 0
+
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Message": message_fields,
+        },
+        "primaryType": "Message",
+        "domain": {
+            "chainId": 31337,
+            "verifyingContract": (token_address if join_mode == "permit" else
+                                  "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
+        },
+        "message": message,
+    }
+
+    if metadata_timing == "before_domain":
+        original_send_certificate = InputData.send_coin_meta_certificate
+
+        def send_certificate_and_token(app_client):
+            original_send_certificate(app_client)
+            InputData.send_filtering_token(0)
+
+        monkeypatch.setattr(InputData, "send_coin_meta_certificate",
+                            send_certificate_and_token)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        InputData.process_data(client, data, filters, signing_path)
+    assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
+
+
 def test_tip712_amount_join_survives_asset_slot_wraparound(
         scenario_navigator: NavigateWithScenario,
         monkeypatch: pytest.MonkeyPatch):

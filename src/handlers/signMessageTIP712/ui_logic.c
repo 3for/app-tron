@@ -841,6 +841,18 @@ static bool amount_join_snapshot_token(s_amount_join *amount_join,
     if (amount_join == NULL) {
         return false;
     }
+    /* Dynamic token metadata is authenticated only for chainConfig->chainId.
+     * Asset slots do not retain that provenance, so bind it to the frozen
+     * TIP-712 filtering context before any trusted ticker/decimals can be
+     * snapshotted. If multi-chain metadata is supported in the future, its
+     * chain ID must instead be retained and compared per asset slot. */
+    if ((tip712_context == NULL) || (chainConfig == NULL) ||
+        !tip712_context->filtering_context_locked || !tip712_context->chain_id_seen ||
+        !tip712_context->chain_id_fits_u64 ||
+        (tip712_context->filtering_chain_id != chainConfig->chainId)) {
+        apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
+        return false;
+    }
     if ((amount_join->flags & AMOUNT_JOIN_FLAG_TOKEN) != 0U) {
         if ((expected_address != NULL) &&
             (memcmp(expected_address,
