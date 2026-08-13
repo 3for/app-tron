@@ -1464,6 +1464,7 @@ bool filtering_amount_join_value(const uint8_t *payload,
     const uint8_t *sig;
     uint8_t offset = 0;
     bool skip_effect;
+    bool token_from_domain;
 
     if (path_get_root_type() != ROOT_MESSAGE) {
         apdu_response_code = SWO_COMMAND_NOT_ALLOWED;
@@ -1520,7 +1521,8 @@ bool filtering_amount_join_value(const uint8_t *payload,
     if (skip_effect) return true;
 
     // Handling
-    if (token_idx == TOKEN_IDX_ADDR_IN_DOMAIN) {
+    token_from_domain = token_idx == TOKEN_IDX_ADDR_IN_DOMAIN;
+    if (token_from_domain) {
         // Permit (TRC-2612)
         int resolved_idx = get_token_index_by_addr(tip712_context->contract_addr);
 
@@ -1529,15 +1531,18 @@ bool filtering_amount_join_value(const uint8_t *payload,
             return false;
         }
         token_idx = (uint8_t) resolved_idx;
-        // simulate as if we had received a token-join addr
-        ui_712_token_join_prepare_addr_check(token_idx);
-        if (!amount_join_set_token_received()) {
-            return false;
-        }
     }
     if (!check_field_shape(TYPE_SOL_UINT, false, 0U) ||
         !check_token_index(token_idx)) {
         return false;
+    }
+    if (token_from_domain) {
+        // Simulate as if we had received a token-join address only after all
+        // descriptor and live-field checks have succeeded.
+        ui_712_token_join_prepare_addr_check(token_idx);
+        if (!amount_join_set_token_received()) {
+            return false;
+        }
     }
     ui_712_flag_field(false, false, true, false, false, false);
     return ui_712_token_join_prepare_amount(token_idx, name, name_len);

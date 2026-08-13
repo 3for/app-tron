@@ -1545,6 +1545,69 @@ def test_tip712_advanced_missing_token(
     assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
 
 
+@pytest.mark.parametrize("discarded_part", ["token", "value"])
+def test_tip712_rejects_incomplete_amount_join(
+        backend: BackendInterface, discarded_part: str):
+    """A discarded half of an amount join must make final signing fail closed."""
+    client = TronClient(backend)
+    signing_path = client.getAccount(0)["path"]
+    token_address = "TKjTFaKheJ8BGrMSeY6FKcYdCoD2GMXFDW"
+    discarded_field = "token" if discarded_part == "token" else "amount"
+    live_field = "amount" if discarded_part == "token" else "token"
+    discarded_type = "address" if discarded_part == "token" else "uint256"
+    live_type = "uint256" if discarded_part == "token" else "address"
+    discarded_filter = ({"type": "amount_join_token", "token": 0}
+                        if discarded_part == "token" else {
+                            "type": "amount_join_value",
+                            "name": "Amount",
+                            "token": 0,
+                        })
+    live_filter = ({"type": "amount_join_value", "name": "Amount", "token": 0}
+                   if discarded_part == "token" else {
+                       "type": "amount_join_token",
+                       "token": 0,
+                   })
+    live_value = 1_000_000 if discarded_part == "token" else token_address
+    data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "DiscardedItem": [{"name": discarded_field, "type": discarded_type}],
+            "Message": [
+                {"name": "discarded", "type": "DiscardedItem[]"},
+                {"name": live_field, "type": live_type},
+            ],
+        },
+        "primaryType": "Message",
+        "domain": {
+            "chainId": 728126428,
+            "verifyingContract": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+        },
+        "message": {"discarded": [], live_field: live_value},
+    }
+    filters = {
+        "name": "Incomplete amount join",
+        "tokens": [{
+            "addr": token_address,
+            "ticker": "DAI",
+            "decimals": 6,
+            "chain_id": 728126428,
+        }],
+        "fields": {
+            f"discarded.[].{discarded_field}": discarded_filter,
+            live_field: live_filter,
+        },
+    }
+
+    assert InputData.process_data(client, data, filters, signing_path)
+    with pytest.raises(ExceptionRAPDU) as error:
+        with client.tip712_sign_new(signing_path):
+            pass
+    assert error.value.status == StatusWord.REFERENCED_DATA_NOT_FOUND
+
+
 def test_tip712_amount_join_survives_asset_slot_wraparound(
         scenario_navigator: NavigateWithScenario,
         monkeypatch: pytest.MonkeyPatch):

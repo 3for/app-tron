@@ -1570,6 +1570,10 @@ bool ui_712_message_info_received(void) {
     return ui_ctx->message_info_received;
 }
 
+bool ui_712_all_amount_joins_processed(void) {
+    return (ui_ctx != NULL) && (ui_ctx->amount.joins == NULL);
+}
+
 /**
  * Reset all the UI struct field flags
  */

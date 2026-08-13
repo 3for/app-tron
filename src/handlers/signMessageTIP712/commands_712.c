@@ -359,8 +359,9 @@ uint16_t handleTIP712Sign(const uint8_t *cdata, uint8_t length, uint32_t *flags)
                 (ui_712_remaining_filters() != 0))) {
         PRINTF("%d TIP712 filters are missing\n", ui_712_remaining_filters());
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
-    } else if (!all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
-        PRINTF("Unprocessed calldata\n");
+    } else if (!ui_712_all_amount_joins_processed() ||
+               !all_calldata_info_processed() || (get_tx_ctx_count() != 0)) {
+        PRINTF("Unprocessed filtered data\n");
         apdu_response_code = SWO_REFERENCED_DATA_NOT_FOUND;
     } else if (!tip712_context->signing_path_locked ||
                ((path_length = read_bip32_path(cdata, length, &final_path)) < 0) ||
