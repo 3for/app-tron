@@ -156,6 +156,16 @@ For `P1_TRC10_NAME` the low nibble encodes the slot and a "last" flag:
 A malformed BIP32 path in the first command chunk returns the legacy status
 `0x6A8A`.
 
+**Streaming limits**
+
+- The complete serialized `Transaction.raw` stream is limited to 500 KiB,
+  matching java-tron's maximum serialized transaction size.
+- For contracts other than `CreateSmartContract`, the serialized
+  `Contract.parameter.value` is limited to 4096 bytes. A larger parameter is
+  rejected with `0x6A80`.
+- `CreateSmartContract` parameters use a dedicated streaming decoder and are
+  not subject to the 4096-byte parameter-retention limit.
+
 **Response**
 
 - Non-final chunk accepted: status `0x9000`, no data.

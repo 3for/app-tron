@@ -123,11 +123,15 @@ static bool parse_struct_version(const tlv_data_t *data, s_gating_ctx *context) 
  *  - schema hash (28 bytes for tip712)
  */
 static bool parse_hash_selector(const tlv_data_t *data, s_gating_ctx *context) {
-    if (data->value.size > sizeof(context->gating->hash_selector)) {
+    if ((data == NULL) ||
+        ((data->value.size != CALLDATA_SELECTOR_SIZE) && (data->value.size != CX_SHA224_SIZE))) {
         PRINTF("HASH/SELECTOR: invalid size\n");
         return false;
     }
-    if (!tlv_get_hash(data, context->gating->hash_selector, data->value.size)) {
+    if (!tlv_get_hash(data,
+                      context->gating->hash_selector,
+                      sizeof(context->gating->hash_selector),
+                      data->value.size)) {
         return false;
     }
     context->hash_selector_size = data->value.size;

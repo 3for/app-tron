@@ -38,6 +38,11 @@ bool check_signature_with_pubkey(uint8_t *hash,
 
         case CHECK_SIGNATURE_WITH_PKI_MISSING_CERTIFICATE:
         case CHECK_SIGNATURE_WITH_PKI_WRONG_CERTIFICATE_USAGE:
+            if ((PubKey == NULL) || (keyLen == 0U)) {
+                PRINTF("No legacy verification key available\n");
+                ret = false;
+                break;
+            }
             PRINTF("********** No certificate loaded. Using legacy path **********\n");
             if (cx_ecfp_init_public_key_no_throw(expected_curve, PubKey, keyLen, &verif_key) !=
                 CX_OK) {

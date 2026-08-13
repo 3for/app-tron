@@ -96,7 +96,6 @@ typedef struct txContent_t {
     uint8_t decimals[2];
     uint8_t url[MAX_URL_SIZE + 1];  // +1 for NUL terminator at max length (256)
     char accountName[MAX_ACCOUNT_NAME_DISPLAY_SIZE];
-    uint16_t accountNameLength;
     // Raw token IDs/tickers, optionally resolved to "name[id]" for review.
     char tokenNames[2][TOKEN_DISPLAY_BUFFER_SIZE];
     uint8_t tokenNamesLength[2];

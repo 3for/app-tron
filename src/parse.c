@@ -1311,7 +1311,6 @@ static bool account_name_is_printable(const uint8_t *name, size_t name_len) {
 }
 
 static bool set_account_name_display(txContent_t *content, const uint8_t *name, size_t name_len) {
-    content->accountNameLength = name_len;
     if (name_len == 0) {
         strlcpy(content->accountName, "(empty)", sizeof(content->accountName));
         return true;
@@ -1346,7 +1345,6 @@ static bool pb_decode_account_name(pb_istream_t *stream, const pb_field_t *field
 
 static bool account_update_contract(txContent_t *content, pb_istream_t *stream) {
     content->accountName[0] = '\0';
-    content->accountNameLength = 0;
     msg.account_update_contract.account_name.funcs.decode = pb_decode_account_name;
     msg.account_update_contract.account_name.arg = content;
 
@@ -1390,7 +1388,6 @@ static bool set_account_id_contract(txContent_t *content, pb_istream_t *stream) 
     // so reuse the existing display buffer instead of increasing txContent_t.
     memcpy(content->accountName, contract->account_id.bytes, contract->account_id.size);
     content->accountName[contract->account_id.size] = '\0';
-    content->accountNameLength = contract->account_id.size;
     COPY_ADDRESS(content->account, &contract->owner_address);
     return true;
 }

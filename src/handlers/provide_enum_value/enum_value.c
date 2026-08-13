@@ -56,11 +56,10 @@ static bool handle_contract_addr(const tlv_data_t *data, s_enum_value_ctx *conte
  * @return whether the handling was successful
  */
 static bool handle_selector(const tlv_data_t *data, s_enum_value_ctx *context) {
-    if ((data == NULL) || (data->value.size != SELECTOR_SIZE)) {
-        PRINTF("SELECTOR: invalid size\n");
-        return false;
-    }
-    return tlv_get_hash(data, context->entry.selector, sizeof(context->entry.selector));
+    return tlv_get_hash(data,
+                        context->entry.selector,
+                        sizeof(context->entry.selector),
+                        SELECTOR_SIZE);
 }
 
 /**
