@@ -96,9 +96,9 @@ uint64_t u64_from_BE(const uint8_t *in, uint8_t size) {
     return res;
 }
 
-bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size) {
+bool u64_to_string(uint64_t src, char *dst, size_t dst_size) {
     // Copy the numbers in ASCII format.
-    uint8_t i = 0;
+    size_t i = 0;
     do {
         // Checking `i + 1` to make sure we have enough space for '\0'.
         if (i + 1 >= dst_size) {
@@ -114,7 +114,7 @@ bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size) {
 
     // Revert the string
     i--;
-    uint8_t j = 0;
+    size_t j = 0;
     while (j < i) {
         char tmp = dst[i];
         dst[i] = dst[j];

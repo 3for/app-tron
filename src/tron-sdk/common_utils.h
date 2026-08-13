@@ -133,7 +133,7 @@ uint64_t u64_from_BE(const uint8_t *in, uint8_t size);
  * @return true if the conversion was successful and the output buffer contains
  * the resulting string, false if the buffer is too small or an error occurs.
  */
-bool u64_to_string(uint64_t src, char *dst, uint8_t dst_size);
+bool u64_to_string(uint64_t src, char *dst, size_t dst_size);
 
 /**
  * @brief Converts a uint256 value to its decimal string representation.

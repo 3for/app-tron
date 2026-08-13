@@ -196,7 +196,7 @@ bool gcs_add_forced_fields(void) {
         return false;
     }
     if (g_gcs.tx.has_permission_id && (g_gcs.tx.permission_id != 0U)) {
-        if (!u64_to_string(g_gcs.tx.permission_id, buf, UINT8_MAX) ||
+        if (!u64_to_string(g_gcs.tx.permission_id, buf, buf_size) ||
             !add_to_field_table(PARAM_TYPE_RAW, "Permission ID", buf, NULL)) {
             return false;
         }
@@ -211,12 +211,12 @@ bool gcs_add_forced_fields(void) {
         (g_gcs.tx.has_token_id && (g_gcs.tx.token_id != 0))) {
         if (!u64_to_string((uint64_t) (g_gcs.tx.has_token_id ? g_gcs.tx.token_id : 0),
                            buf,
-                           UINT8_MAX) ||
+                           buf_size) ||
             !add_to_field_table(PARAM_TYPE_RAW, "TRC10 ID", buf, NULL) ||
             !u64_to_string(
                 (uint64_t) (g_gcs.tx.has_call_token_value ? g_gcs.tx.call_token_value : 0),
                 buf,
-                UINT8_MAX) ||
+                buf_size) ||
             !add_to_field_table(PARAM_TYPE_RAW, "TRC10 amount", buf, NULL)) {
             return false;
         }
