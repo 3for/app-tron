@@ -473,6 +473,7 @@ static bool path_update(bool skip_if_array, bool stop_at_array, bool do_typehash
  */
 bool path_set_root(const char *struct_name, uint8_t name_length) {
     const s_struct_712 *new_root;
+    e_root_type new_root_type;
     uint8_t hash[KECCAK256_HASH_BYTESIZE];
 
     if (path_struct == NULL) {
@@ -487,17 +488,25 @@ bool path_set_root(const char *struct_name, uint8_t name_length) {
         PRINTF("Error: already at that root struct!\n");
         return false;
     }
-    path_struct->root_struct = new_root;
 
-    if (path_struct->root_struct == NULL) {
-        PRINTF("Error: struct name not found (");
-        for (int i = 0; i < name_length; ++i) {
-            PRINTF("%c", struct_name[i]);
+    if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
+        (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
+        new_root_type = ROOT_DOMAIN;
+        if (path_struct->root_type != ROOT_NONE) {
+            return false;
         }
-        PRINTF(")!\n");
-        apdu_response_code = SWO_INCORRECT_DATA;
-        return false;
+    } else {
+        new_root_type = ROOT_MESSAGE;
+        if (path_struct->root_type != ROOT_DOMAIN) {
+            return false;
+        }
     }
+
+    // Commit the new root only after its place in the Domain -> Message state
+    // machine has been validated.
+    path_struct->root_struct = new_root;
+    path_struct->root_type = new_root_type;
+
     if (push_new_hash_depth(true) == false) {
         return false;
     }
@@ -520,20 +529,6 @@ bool path_set_root(const char *struct_name, uint8_t name_length) {
 
     // init array levels at 0
     path_struct->array_depth_count = 0;
-    if ((name_length == strlen(DOMAIN_STRUCT_NAME)) &&
-        (strncmp(struct_name, DOMAIN_STRUCT_NAME, name_length) == 0)) {
-        if (path_struct->root_type != ROOT_NONE) {
-            remove_last_hash_ctx();
-            return false;
-        }
-        path_struct->root_type = ROOT_DOMAIN;
-    } else {
-        if (path_struct->root_type != ROOT_DOMAIN) {
-            remove_last_hash_ctx();
-            return false;
-        }
-        path_struct->root_type = ROOT_MESSAGE;
-    }
 
     struct_state = DEFINED;
 
