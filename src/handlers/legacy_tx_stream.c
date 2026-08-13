@@ -182,7 +182,7 @@ static bool handle_varint_value(legacy_tx_stream_t *stream, uint64_t value) {
     const legacy_tx_context_t context = current_context(stream);
     if (context == LEGACY_TX_CTX_RAW &&
         stream->pending_tag == protocol_Transaction_raw_fee_limit_tag) {
-        if (stream->fee_limit_seen) {
+        if (stream->fee_limit_seen || value > INT64_MAX) {
             return false;
         }
         stream->fee_limit_seen = true;

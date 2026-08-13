@@ -38,6 +38,13 @@
 #define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 124
 #define CUSTOM_CONTRACT_UINT64_SLOT_SIZE     24
 
+// Stable G_io_apdu_buffer/reviewDisplayBuffer slots used by Delegate Resource.
+// The lock value must not overlap the adjacent lock-period representation.
+#define DELEGATE_RESOURCE_LOCK_OFFSET        100U
+#define DELEGATE_RESOURCE_LOCK_SLOT_SIZE     6U
+#define DELEGATE_RESOURCE_LOCK_PERIOD_OFFSET \
+    (DELEGATE_RESOURCE_LOCK_OFFSET + DELEGATE_RESOURCE_LOCK_SLOT_SIZE)
+
 // AccountPermissionUpdate clear-sign display. Expanded fields:
 // name, operations, threshold, and each authorized key/weight.
 #define PERM_MAX_FIELDS 80

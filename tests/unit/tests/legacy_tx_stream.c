@@ -126,11 +126,12 @@ static test_buffer_t build_contract(size_t parameter_len, bool reordered, const 
     return contract;
 }
 
-static test_buffer_t build_raw(size_t memo_len,
-                               size_t parameter_len,
-                               bool reordered,
-                               const char *type_url,
-                               unsigned contract_count) {
+static test_buffer_t build_raw_with_fee(size_t memo_len,
+                                        size_t parameter_len,
+                                        bool reordered,
+                                        const char *type_url,
+                                        unsigned contract_count,
+                                        uint64_t fee_limit) {
     test_buffer_t raw = {0};
     test_buffer_t contract = build_contract(parameter_len, reordered, type_url);
 
@@ -145,9 +146,22 @@ static test_buffer_t build_raw(size_t memo_len,
                                   contract.data,
                                   contract.len);
     }
-    buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 123456U);
+    buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, fee_limit);
     buffer_free(&contract);
     return raw;
+}
+
+static test_buffer_t build_raw(size_t memo_len,
+                               size_t parameter_len,
+                               bool reordered,
+                               const char *type_url,
+                               unsigned contract_count) {
+    return build_raw_with_fee(memo_len,
+                              parameter_len,
+                              reordered,
+                              type_url,
+                              contract_count,
+                              123456U);
 }
 
 static bool feed_in_chunks(legacy_tx_stream_t *stream,
@@ -276,6 +290,38 @@ static void test_large_memo_and_reordered_fields(void **state) {
 
     free(stream);
     buffer_free(&raw);
+}
+
+static void test_fee_limit_signed_range(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    test_buffer_t accepted = build_raw_with_fee(0U,
+                                                8U,
+                                                false,
+                                                type_url,
+                                                1U,
+                                                INT64_MAX);
+    test_buffer_t rejected = build_raw_with_fee(0U,
+                                                8U,
+                                                false,
+                                                type_url,
+                                                1U,
+                                                (uint64_t) INT64_MAX + 1U);
+    legacy_tx_stream_t *stream = calloc(1U, sizeof(*stream));
+    legacy_tx_stream_result_t result;
+    assert_non_null(stream);
+
+    legacy_tx_stream_init(stream, NULL);
+    assert_true(feed_in_chunks(stream, &accepted, 3U));
+    assert_true(legacy_tx_stream_finish(stream, &result));
+    assert_int_equal(result.fee_limit, INT64_MAX);
+
+    legacy_tx_stream_init(stream, NULL);
+    assert_false(feed_in_chunks(stream, &rejected, 3U));
+
+    free(stream);
+    buffer_free(&accepted);
+    buffer_free(&rejected);
 }
 
 static void test_parameter_limit(void **state) {
@@ -435,6 +481,7 @@ int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_matches_whole_nanopb_decode),
         cmocka_unit_test(test_large_memo_and_reordered_fields),
+        cmocka_unit_test(test_fee_limit_signed_range),
         cmocka_unit_test(test_parameter_limit),
         cmocka_unit_test(test_rejects_incomplete_and_second_contract),
         cmocka_unit_test(test_rejects_mismatched_type_url),

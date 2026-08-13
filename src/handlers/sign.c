@@ -1218,10 +1218,12 @@ handle_parser_result:
                 return send_sign_status(E_INCORRECT_DATA);
             }
 
-            if (!txContent.lock) {
-                strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
-            } else {
-                strlcpy((char *) G_io_apdu_buffer + 100, "True", sizeof(G_io_apdu_buffer) - 100);
+            const char *lock_value = txContent.lock ? "True" : "False";
+            if (strlcpy((char *) G_io_apdu_buffer + DELEGATE_RESOURCE_LOCK_OFFSET,
+                        lock_value,
+                        DELEGATE_RESOURCE_LOCK_SLOT_SIZE) >=
+                DELEGATE_RESOURCE_LOCK_SLOT_SIZE) {
+                return send_sign_status(SWO_INCORRECT_DATA);
             }
 
             if (!format_trx_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100)) {

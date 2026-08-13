@@ -1412,15 +1412,20 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.fields[2].item = stringLabelTxAmount;
             txInfos.fields[2].value = (const char *) reviewDisplayBuffer;
             txInfos.fields[3].item = "Lock";
-            txInfos.fields[3].value = (const char *) reviewDisplayBuffer + 100;
+            txInfos.fields[3].value =
+                (const char *) reviewDisplayBuffer + DELEGATE_RESOURCE_LOCK_OFFSET;
             if (txContent.lock) {
                 if (!format_int64_value(txContent.lockPeriod,
-                                        (char *) reviewDisplayBuffer + 106,
-                                        sizeof(reviewDisplayBuffer) - 106)) {
+                                        (char *) reviewDisplayBuffer +
+                                            DELEGATE_RESOURCE_LOCK_PERIOD_OFFSET,
+                                        sizeof(reviewDisplayBuffer) -
+                                            DELEGATE_RESOURCE_LOCK_PERIOD_OFFSET)) {
                     return UI_PREPARE_FORMAT_ERROR;
                 }
                 txInfos.fields[idx].item = "Lock period (blocks)";
-                txInfos.fields[idx].value = (const char *) reviewDisplayBuffer + 106;
+                txInfos.fields[idx].value =
+                    (const char *) reviewDisplayBuffer +
+                    DELEGATE_RESOURCE_LOCK_PERIOD_OFFSET;
                 idx++;
             }
             txInfos.fields[idx].item = stringLabelRecipientAddress;

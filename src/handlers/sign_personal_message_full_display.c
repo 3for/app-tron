@@ -43,7 +43,11 @@ typedef struct {
     char *message_buffer;
 } signMsgCtx_t;
 
+#define PERSONAL_MESSAGE_HEX_PREFIX       "\\hex:0x"
 #define PERSONAL_MESSAGE_DISPLAY_OVERHEAD 8U
+
+_Static_assert(PERSONAL_MESSAGE_DISPLAY_OVERHEAD >= sizeof(PERSONAL_MESSAGE_HEX_PREFIX),
+               "personal-message display overhead must include hex prefix and terminator");
 
 static cx_sha3_t *g_msg_hash_ctx = NULL;
 static signMsgCtx_t *signMsgCtx = NULL;
@@ -204,7 +208,7 @@ int personal_message_format_for_display(char *buffer, size_t raw_length, size_t 
     static const char HEX_DIGITS[] = "0123456789abcdef";
     // Raw backslashes are doubled in the text path, so no text message can
     // collide with this single-backslash binary marker.
-    static const char HEX_PREFIX[] = "\\hex:0x";
+    static const char HEX_PREFIX[] = PERSONAL_MESSAGE_HEX_PREFIX;
     bool is_hex = false;
     size_t display_length = 0;
 
