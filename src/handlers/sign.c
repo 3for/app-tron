@@ -528,10 +528,6 @@ static parserStatus_e finish_streamed_transaction(void) {
         !legacy_tx_stream_finish(&sign_stream->envelope, &result)) {
         goto cleanup;
     }
-    if (result.raw_data_size > UINT32_MAX) {
-        goto cleanup;
-    }
-    legacy_raw_data_size = (uint32_t) result.raw_data_size;
 
     if (result.contract_type ==
         protocol_Transaction_Contract_ContractType_CreateSmartContract) {
@@ -582,7 +578,6 @@ void sign_cleanup(void) {
     votes_count = 0;
     perm_field_count = 0;
     perm_field_capacity = 0;
-    legacy_raw_data_size = 0U;
 }
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {

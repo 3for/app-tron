@@ -76,9 +76,6 @@ extern volatile uint8_t customContractField;
 // mirroring app-ethereum.
 extern uint8_t votes_count;
 extern char *vote_display_buffer;
-// Size of the Transaction.raw payload currently owned by legacy INS_SIGN.
-// Kept outside txContent_t so the public plugin-facing structure remains ABI-stable.
-extern uint32_t legacy_raw_data_size;
 extern cx_sha3_t global_sha3;
 extern strings_t strings;
 

@@ -42,8 +42,7 @@
 
 // Macros
 #define WARNING_TYPES_NUMBER 1
-#define LEGACY_FEE_FIELDS    2U
-#define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1U + LEGACY_FEE_FIELDS)
+#define MAX_TX_FIELDS        (PERM_MAX_FIELDS + 1)
 #define PROPOSAL_ITEM_LEN    10
 #define PROPOSAL_VALUE_LEN   80
 #define ASSET_ISSUE_NUMBER_LEN       22
@@ -57,20 +56,14 @@
 #error "MAX_TX_FIELDS is too small for the asset issue review flow"
 #endif
 
-#if MAX_PROPOSAL_PARAMETERS + 1U + LEGACY_FEE_FIELDS > MAX_TX_FIELDS
-#error "MAX_TX_FIELDS is too small for the proposal review flow"
-#endif
-
 static const char *stringLabelSenderAddress = "From";
 static const char *stringLabelRecipientAddress = "To";
 static const char *stringLabelTxAmount = "Amount";
 static const char *stringLabelResource = "Resource";
 #ifdef SCREEN_SIZE_WALLET
 static const char *stringLabelTxHash = "Transaction hash";
-static const char *stringLabelRawTxSize = "Raw transaction size";
 #else
 static const char *stringLabelTxHash = "Tx hash";
-static const char *stringLabelRawTxSize = "Raw tx size";
 #endif
 static const char *stringLabelUrl = "Url";
 static const char *stringLabelGain = "Gain";
@@ -152,9 +145,6 @@ static char trc20FeeLimit[32];
 // Custom TriggerSmartContract is a blind-signing flow, but its fee limit is a
 // useful signed summary field and must remain stable during asynchronous review.
 static char customContractFeeLimit[32];
-// Raw-data size is security-relevant review state and must outlive the APDU
-// buffer that carried the final transaction chunk.
-static char legacyRawDataSize[24];
 // Reviews are asynchronous while the APDU transport immediately reuses its
 // buffer. Keep a stable snapshot for all review fields prepared in sign.c.
 static uint8_t reviewDisplayBuffer[sizeof(G_io_apdu_buffer)];
@@ -206,7 +196,6 @@ void ui_review_menu_cleanup(void) {
     explicit_bzero(actionSignTitle, sizeof(actionSignTitle));
     explicit_bzero(trc20FeeLimit, sizeof(trc20FeeLimit));
     explicit_bzero(customContractFeeLimit, sizeof(customContractFeeLimit));
-    explicit_bzero(legacyRawDataSize, sizeof(legacyRawDataSize));
     explicit_bzero(proposalIdValue, sizeof(proposalIdValue));
 }
 
@@ -662,7 +651,7 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
         if ((perm_field_count == 0U) || (perm_field_count > PERM_MAX_FIELDS)) {
             return UI_PREPARE_INVALID_DATA;
         }
-        pair_capacity = (uint8_t) (perm_field_count + 1U + LEGACY_FEE_FIELDS);
+        pair_capacity = (uint8_t) (perm_field_count + 1U);
     }
     if (!ui_pairs_init(pair_capacity)) {
         return UI_PREPARE_OUT_OF_MEMORY;
@@ -1501,26 +1490,6 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
         default:
             PRINTF("This should not happen !\n");
             return UI_PREPARE_INVALID_DATA;
-    }
-
-    if (legacy_raw_data_size != 0U) {
-        if (((uint16_t) g_pairsList->nbPairs + LEGACY_FEE_FIELDS) > pair_capacity) {
-            return UI_PREPARE_INVALID_DATA;
-        }
-        const int raw_size_len = snprintf(legacyRawDataSize,
-                                          sizeof(legacyRawDataSize),
-                                          "%u bytes",
-                                          (unsigned int) legacy_raw_data_size);
-        if ((raw_size_len <= 0) || ((size_t) raw_size_len >= sizeof(legacyRawDataSize))) {
-            return UI_PREPARE_FORMAT_ERROR;
-        }
-        txInfos.fields[g_pairsList->nbPairs].item = stringLabelRawTxSize;
-        txInfos.fields[g_pairsList->nbPairs].value = legacyRawDataSize;
-        g_pairsList->nbPairs++;
-        txInfos.fields[g_pairsList->nbPairs].item = "Fee notice";
-        txInfos.fields[g_pairsList->nbPairs].value =
-            "Bandwidth, memo and multisig fees may apply";
-        g_pairsList->nbPairs++;
     }
 
     // Append the transaction hash when the displayHash setting is on, or always for the

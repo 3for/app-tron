@@ -34,7 +34,6 @@ extern char (*perm_field_labels)[PERM_ITEM_LEN];
 extern char (*perm_field_values)[PERM_VAL_LEN];
 extern uint8_t votes_count;
 extern char *vote_display_buffer;
-extern uint32_t legacy_raw_data_size;
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 

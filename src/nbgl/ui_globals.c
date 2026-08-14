@@ -38,7 +38,6 @@
 volatile uint8_t customContractField;
 uint8_t votes_count;
 char *vote_display_buffer;
-uint32_t legacy_raw_data_size;
 cx_sha3_t global_sha3;
 strings_t strings;
 

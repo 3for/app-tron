@@ -35,7 +35,6 @@ char (*perm_field_labels)[PERM_ITEM_LEN];
 char (*perm_field_values)[PERM_VAL_LEN];
 uint8_t votes_count;
 char *vote_display_buffer;
-uint32_t legacy_raw_data_size;
 volatile uint8_t customContractField;
 uint8_t G_io_apdu_buffer[260];
 
