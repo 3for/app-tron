@@ -107,6 +107,10 @@ typedef struct messageSigningContext712_t {
     uint32_t bip32Path[MAX_BIP32_PATH];
     uint8_t domainHash[32];
     uint8_t messageHash[32];
+    // Stable account identity for the asynchronous legacy hash-only review.
+    // This cannot live in `strings`: TIP-712 hash formatting uses the other
+    // member of that union and would overwrite it before the user approves.
+    char signerAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 } messageSigningContext712_t;
 
 typedef union {

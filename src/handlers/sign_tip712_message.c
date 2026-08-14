@@ -19,6 +19,7 @@
 
 #include "cx.h"
 #include "io.h"
+#include "crypto_helpers.h"
 
 #include "format.h"
 
@@ -35,6 +36,7 @@ extern void reset_app_context();
 
 uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t dataLength) {
     uint8_t i;
+    uint8_t public_key[PUBLIC_KEY_SIZE] = {0};
 
     if (!N_storage.signByHash) {
         return E_MISSING_SETTING_SIGN_BY_HASH;
@@ -72,6 +74,22 @@ uint16_t handleSignTIP712Message(uint8_t p1, const uint8_t *workBuffer, uint8_t 
     }
     memmove(tmpCtx.messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
     memmove(tmpCtx.messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
+
+    // Bind the account shown during review to the exact path retained for the
+    // approval callback. A persistent blind-signing setting is only an entry
+    // gate; each hash-only request still needs operation-local signer context.
+    if (bip32_derive_get_pubkey_256(CX_CURVE_256K1,
+                                    tmpCtx.messageSigningContext712.bip32Path,
+                                    tmpCtx.messageSigningContext712.pathLength,
+                                    public_key,
+                                    NULL,
+                                    CX_SHA512) != CX_OK) {
+        explicit_bzero(public_key, sizeof(public_key));
+        reset_app_context();
+        return E_SECURITY_STATUS_NOT_SATISFIED;
+    }
+    getBase58FromPublicKey(public_key, tmpCtx.messageSigningContext712.signerAddress);
+    explicit_bzero(public_key, sizeof(public_key));
 
     if (!tip712_mark_legacy_reviewing()) {
         return SWO_COMMAND_NOT_ALLOWED;

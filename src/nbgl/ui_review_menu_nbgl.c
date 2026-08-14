@@ -238,13 +238,14 @@ static void displayTransaction(void) {
     if ((txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE) ||
         (txInfos.state == APPROVAL_SIMPLE_TRANSACTION) ||
         (txInfos.state == APPROVAL_CUSTOM_CONTRACT) ||
-        (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION)) {
+        (txInfos.state == APPROVAL_CREATESMARTCONTRACT_TRANSACTION) ||
+        (txInfos.state == APPROVAL_SIGN_TIP72_TRANSACTION)) {
         // Hash-only reviews must use the advanced flow so the blind-signing
         // warning is explicit. Keep the transaction wording for custom-contract
-        // reviews and use message wording for the legacy personal-message path.
+        // reviews and use message wording for hash-only message paths.
         const char *finish_title = infoLongPress.text;
         if (warning.predefinedSet & SET_BIT(BLIND_SIGNING_WARN)) {
-            finish_title = (txInfos.state == APPROVAL_SIGN_PERSONAL_MESSAGE)
+            finish_title = (operationType == TYPE_MESSAGE)
                                ? stringLabelBlindSignMessage
                                : "Accept risk and sign transaction";
         }
@@ -1310,9 +1311,15 @@ static ui_prepare_status_t prepareTxInfos(ui_approval_state_t state, bool data_w
             txInfos.flowIcon = &APP_TRON_HOME_ICON;
             infoLongPress.icon = &APP_TRON_HOME_ICON;
 #endif
+            // Legacy TIP-712 exposes only opaque commitments. Keep the global
+            // setting as an entry gate, and require a per-operation warning.
+            explicit_bzero(&warning, sizeof(warning));
+            warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
             tip712_format_hash(0, &txInfos.fields[0].item, &txInfos.fields[0].value);
             tip712_format_hash(1, &txInfos.fields[1].item, &txInfos.fields[1].value);
-            g_pairsList->nbPairs = 2;
+            txInfos.fields[2].item = "Sign with";
+            txInfos.fields[2].value = tmpCtx.messageSigningContext712.signerAddress;
+            g_pairsList->nbPairs = 3;
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
             break;

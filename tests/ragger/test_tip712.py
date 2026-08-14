@@ -1038,7 +1038,8 @@ def gcs_handler_separate_selector(client: TronClient, json_data: dict) -> None:
 
 
 def test_sign_tip712(
-                         scenario_navigator: NavigateWithScenario):
+        scenario_navigator: NavigateWithScenario,
+        test_name: str):
     """Legacy P2=0 remains signable without the full-mode INIT command."""
     backend = scenario_navigator.backend
     device = backend.device
@@ -1051,10 +1052,14 @@ def test_sign_tip712(
     messageHash = bytes.fromhex(
         'eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8')
 
-    with client.tip712_sign_legacy(client.getAccount(0)['path'],
+    signing_account = client.getAccount(1)
+
+    with client.tip712_sign_legacy(signing_account['path'],
                                    domainHash,
                                    messageHash):
-        scenario_navigator.review_approve(do_comparison=False)
+        warning_screen = " ".join(current_screen_texts(backend)).lower()
+        assert "blind signing" in warning_screen
+        scenario_navigator.review_approve_with_warning(test_name=test_name)
 
     resp = scenario_navigator.backend.last_async_response
 
@@ -1063,7 +1068,7 @@ def test_sign_tip712(
     digest = keccak.new(digest_bits=256, data=msg_to_sign).digest()
 
     assert check_hash_signature(digest, resp.data[0:65],
-                                client.getAccount(0)['publicKey'][2:])
+                                signing_account['publicKey'][2:])
 
 
 def test_tip712_legacy_host_apdu_remains_single_step():
