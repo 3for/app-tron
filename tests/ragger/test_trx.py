@@ -177,6 +177,27 @@ class TestTRX():
                 amount=100000000))
         self.sign_and_validate(client, device, 0, tx)
 
+    def test_trx_send_shows_raw_size_and_fee_notice(self, backend, device):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000))
+
+        # Exercise both forced fee-review fields. Each pass completes a fresh
+        # signing session so navigation starts from a known state.
+        for required_text in (f"{len(tx)} bytes", "Fee notice"):
+            self.sign_and_validate(client,
+                                   device,
+                                   0,
+                                   tx,
+                                   do_comparison=False,
+                                   required_review_text=required_text)
+
     def test_trx_send_int64_max_amount(self, backend, device):
         client = TronClient(backend)
         tx = client.packContract(
@@ -2970,6 +2991,38 @@ class TestTRX():
                                oversized_tx,
                                warning_approve=True,
                                do_comparison=False)
+
+    def test_trx_legacy_rejects_hidden_scripts_and_resets_signing_state(
+            self, backend):
+        client = TronClient(backend)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.getAccount(1)['addressHex']),
+                amount=1000000))
+
+        # protocol.Transaction.raw.scripts (tag 12, length-delimited).
+        # This field used to be skipped by the semantic parser but retained in
+        # the transaction hash.
+        tx += b"\x62\x01\x01"
+        path = pack_derivation_path(client.getAccount(0)['path'])
+        assert len(path + tx) <= MAX_APDU_LEN
+
+        with pytest.raises(ExceptionRAPDU) as e:
+            backend.exchange(CLA,
+                             InsType.SIGN,
+                             P1Type.FIRST,
+                             0x00,
+                             path + tx)
+        assert e.value.status == StatusWord.INVALID_DATA
+
+        # Rejection must discard both parser and partial hash state.
+        with pytest.raises(ExceptionRAPDU) as e:
+            backend.exchange(CLA, InsType.SIGN, P1Type.MORE, 0x00, b"\x00")
+        assert e.value.status == StatusWord.COMMAND_NOT_ALLOWED
 
     def test_trx_oversized_non_create_parameter_resets_signing_state(
             self, backend):

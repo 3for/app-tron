@@ -19,6 +19,7 @@ typedef enum {
     LEGACY_TX_CTX_RAW = 0,
     LEGACY_TX_CTX_CONTRACT,
     LEGACY_TX_CTX_ANY,
+    LEGACY_TX_CTX_COUNT,
 } legacy_tx_context_t;
 
 typedef struct {
@@ -52,6 +53,7 @@ typedef struct {
     int32_t permission_id;
     int64_t fee_limit;
     uint64_t custom_data_len;
+    size_t raw_data_size;
     const uint8_t *parameter;
     size_t parameter_len;
     bool parameter_overflow;
@@ -96,6 +98,10 @@ typedef struct {
     size_t capture_offset;
     bool parameter_overflow;
     legacy_parameter_observer_t parameter_observer;
+
+    // All accepted envelope fields are singular in the legacy signing model.
+    // Track them per protobuf context so duplicate encodings fail closed.
+    uint32_t seen_fields[LEGACY_TX_CTX_COUNT];
 } legacy_tx_stream_t;
 
 void legacy_tx_stream_init(legacy_tx_stream_t *stream,

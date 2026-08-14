@@ -7,8 +7,72 @@
 
 static const uint8_t TYPE_URL_PREFIX[] = "type.googleapis.com/protocol.";
 
+enum {
+    LEGACY_TX_RAW_REF_BLOCK_BYTES_TAG = 1U,
+    LEGACY_TX_RAW_REF_BLOCK_NUM_TAG = 3U,
+    LEGACY_TX_RAW_REF_BLOCK_HASH_TAG = 4U,
+    LEGACY_TX_RAW_EXPIRATION_TAG = 8U,
+    LEGACY_TX_RAW_TIMESTAMP_TAG = 14U,
+};
+
+#define LEGACY_TX_REF_BLOCK_BYTES_SIZE 2U
+#define LEGACY_TX_REF_BLOCK_HASH_SIZE  8U
+
 static legacy_tx_context_t current_context(const legacy_tx_stream_t *stream) {
     return stream->frames[stream->depth - 1U].context;
+}
+
+static bool field_wire_is_allowed(legacy_tx_context_t context,
+                                  uint32_t tag,
+                                  pb_wire_type_t wire) {
+    switch (context) {
+        case LEGACY_TX_CTX_RAW:
+            switch (tag) {
+                case LEGACY_TX_RAW_REF_BLOCK_BYTES_TAG:
+                case LEGACY_TX_RAW_REF_BLOCK_HASH_TAG:
+                case protocol_Transaction_raw_custom_data_tag:
+                case protocol_Transaction_raw_contract_tag:
+                    return wire == PB_WT_STRING;
+                case LEGACY_TX_RAW_REF_BLOCK_NUM_TAG:
+                case LEGACY_TX_RAW_EXPIRATION_TAG:
+                case LEGACY_TX_RAW_TIMESTAMP_TAG:
+                case protocol_Transaction_raw_fee_limit_tag:
+                    return wire == PB_WT_VARINT;
+                default:
+                    return false;
+            }
+        case LEGACY_TX_CTX_CONTRACT:
+            switch (tag) {
+                case protocol_Transaction_Contract_type_tag:
+                case protocol_Transaction_Contract_Permission_id_tag:
+                    return wire == PB_WT_VARINT;
+                case protocol_Transaction_Contract_parameter_tag:
+                    return wire == PB_WT_STRING;
+                default:
+                    return false;
+            }
+        case LEGACY_TX_CTX_ANY:
+            return ((tag == google_protobuf_Any_type_url_tag) ||
+                    (tag == google_protobuf_Any_value_tag)) &&
+                   (wire == PB_WT_STRING);
+        default:
+            return false;
+    }
+}
+
+static bool mark_field_seen(legacy_tx_stream_t *stream,
+                            legacy_tx_context_t context,
+                            uint32_t tag) {
+    if (context >= LEGACY_TX_CTX_COUNT || tag >= 32U) {
+        return false;
+    }
+
+    const uint32_t mask = UINT32_C(1) << tag;
+    if ((stream->seen_fields[context] & mask) != 0U) {
+        return false;
+    }
+    stream->seen_fields[context] |= mask;
+    return true;
 }
 
 static void set_error(legacy_tx_stream_t *stream) {
@@ -187,6 +251,13 @@ static bool handle_varint_value(legacy_tx_stream_t *stream, uint64_t value) {
         }
         stream->fee_limit_seen = true;
         stream->fee_limit = (int64_t) value;
+    } else if (context == LEGACY_TX_CTX_RAW &&
+               ((stream->pending_tag == LEGACY_TX_RAW_REF_BLOCK_NUM_TAG) ||
+                (stream->pending_tag == LEGACY_TX_RAW_EXPIRATION_TAG) ||
+                (stream->pending_tag == LEGACY_TX_RAW_TIMESTAMP_TAG))) {
+        if (value > INT64_MAX) {
+            return false;
+        }
     } else if (context == LEGACY_TX_CTX_CONTRACT &&
                stream->pending_tag == protocol_Transaction_Contract_type_tag) {
         if (stream->contract_type_seen || value > INT32_MAX) {
@@ -209,6 +280,14 @@ static bool start_length_field(legacy_tx_stream_t *stream, size_t len) {
     const legacy_tx_context_t context = current_context(stream);
     stream->bytes_action = LEGACY_TX_BYTES_SKIP;
     stream->capture_offset = 0;
+
+    if ((context == LEGACY_TX_CTX_RAW) &&
+        (((stream->pending_tag == LEGACY_TX_RAW_REF_BLOCK_BYTES_TAG) &&
+          (len != LEGACY_TX_REF_BLOCK_BYTES_SIZE)) ||
+         ((stream->pending_tag == LEGACY_TX_RAW_REF_BLOCK_HASH_TAG) &&
+          (len != LEGACY_TX_REF_BLOCK_HASH_SIZE)))) {
+        return false;
+    }
 
     if (context == LEGACY_TX_CTX_RAW &&
         stream->pending_tag == protocol_Transaction_raw_contract_tag) {
@@ -294,22 +373,19 @@ static bool process_byte(legacy_tx_stream_t *stream, uint8_t byte) {
                 }
                 stream->pending_tag = (uint32_t) field_number;
                 stream->pending_wire = (pb_wire_type_t) (value & 0x07U);
+                const legacy_tx_context_t context = current_context(stream);
+                if (!field_wire_is_allowed(context,
+                                           stream->pending_tag,
+                                           stream->pending_wire) ||
+                    !mark_field_seen(stream, context, stream->pending_tag)) {
+                    return false;
+                }
                 switch (stream->pending_wire) {
                     case PB_WT_VARINT:
                         stream->mode = LEGACY_TX_MODE_VARINT;
                         break;
                     case PB_WT_STRING:
                         stream->mode = LEGACY_TX_MODE_LENGTH;
-                        break;
-                    case PB_WT_32BIT:
-                        stream->bytes_action = LEGACY_TX_BYTES_SKIP;
-                        stream->bytes_remaining = 4U;
-                        stream->mode = LEGACY_TX_MODE_BYTES;
-                        break;
-                    case PB_WT_64BIT:
-                        stream->bytes_action = LEGACY_TX_BYTES_SKIP;
-                        stream->bytes_remaining = 8U;
-                        stream->mode = LEGACY_TX_MODE_BYTES;
                         break;
                     default:
                         return false;
@@ -468,6 +544,7 @@ bool legacy_tx_stream_finish(legacy_tx_stream_t *stream, legacy_tx_stream_result
     result->permission_id = stream->permission_id;
     result->fee_limit = stream->fee_limit;
     result->custom_data_len = stream->custom_data_len;
+    result->raw_data_size = stream->total_len;
     result->parameter = stream->parameter_overflow ? NULL : stream->parameter;
     result->parameter_len = stream->parameter_len;
     result->parameter_overflow = stream->parameter_overflow;

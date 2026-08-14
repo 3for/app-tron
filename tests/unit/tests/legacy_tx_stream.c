@@ -82,6 +82,22 @@ static void buffer_append_bytes_field(test_buffer_t *buffer,
     buffer_append(buffer, data, len);
 }
 
+static void buffer_append_fixed32_field(test_buffer_t *buffer, uint32_t tag, uint32_t value) {
+    buffer_append_key(buffer, tag, PB_WT_32BIT);
+    for (size_t i = 0U; i < sizeof(value); i++) {
+        uint8_t byte = (uint8_t) (value >> (8U * i));
+        buffer_append(buffer, &byte, 1U);
+    }
+}
+
+static void buffer_append_fixed64_field(test_buffer_t *buffer, uint32_t tag, uint64_t value) {
+    buffer_append_key(buffer, tag, PB_WT_64BIT);
+    for (size_t i = 0U; i < sizeof(value); i++) {
+        uint8_t byte = (uint8_t) (value >> (8U * i));
+        buffer_append(buffer, &byte, 1U);
+    }
+}
+
 static test_buffer_t build_contract(size_t parameter_len, bool reordered, const char *type_url) {
     test_buffer_t any = {0};
     test_buffer_t contract = {0};
@@ -164,6 +180,16 @@ static test_buffer_t build_raw(size_t memo_len,
                               123456U);
 }
 
+static test_buffer_t wrap_contract(const test_buffer_t *contract) {
+    test_buffer_t raw = {0};
+    buffer_append_bytes_field(&raw,
+                              protocol_Transaction_raw_contract_tag,
+                              contract->data,
+                              contract->len);
+    buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 123456U);
+    return raw;
+}
+
 static bool feed_in_chunks(legacy_tx_stream_t *stream,
                            const test_buffer_t *raw,
                            size_t chunk_size) {
@@ -179,6 +205,18 @@ static bool feed_in_chunks(legacy_tx_stream_t *stream,
         offset += take;
     }
     return true;
+}
+
+static void assert_stream_rejects(const test_buffer_t *raw) {
+    legacy_tx_stream_t *stream = calloc(1U, sizeof(*stream));
+    legacy_tx_stream_result_t result;
+    assert_non_null(stream);
+
+    legacy_tx_stream_init(stream, NULL);
+    assert_false(feed_in_chunks(stream, raw, 1U));
+    assert_false(legacy_tx_stream_finish(stream, &result));
+
+    free(stream);
 }
 
 typedef struct {
@@ -260,6 +298,7 @@ static void test_matches_whole_nanopb_decode(void **state) {
     assert_int_equal(streamed.permission_id, decoded.contract[0].Permission_id);
     assert_int_equal(streamed.fee_limit, decoded.fee_limit);
     assert_int_equal(streamed.custom_data_len, whole.custom_data_len);
+    assert_int_equal(streamed.raw_data_size, raw.len);
     assert_int_equal(streamed.parameter_len, whole.parameter_len);
     assert_memory_equal(streamed.parameter, whole.parameter, whole.parameter_len);
 
@@ -477,6 +516,267 @@ static void test_zero_length_parameter_observer(void **state) {
     buffer_free(&raw);
 }
 
+static void test_rejects_hidden_fee_bearing_fields(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t hidden_value[] = {0x01U};
+    const uint32_t hidden_raw_tags[] = {
+        9U,   // protocol.Transaction.raw.auths
+        12U,  // protocol.Transaction.raw.scripts
+    };
+    const uint32_t hidden_contract_tags[] = {
+        protocol_Transaction_Contract_provider_tag,
+        protocol_Transaction_Contract_ContractName_tag,
+    };
+
+    for (size_t i = 0U; i < sizeof(hidden_raw_tags) / sizeof(hidden_raw_tags[0]); i++) {
+        test_buffer_t raw = build_raw(0U, 8U, false, type_url, 1U);
+        buffer_append_bytes_field(&raw,
+                                  hidden_raw_tags[i],
+                                  hidden_value,
+                                  sizeof(hidden_value));
+        assert_stream_rejects(&raw);
+        buffer_free(&raw);
+    }
+
+    for (size_t i = 0U;
+         i < sizeof(hidden_contract_tags) / sizeof(hidden_contract_tags[0]);
+         i++) {
+        test_buffer_t contract = build_contract(8U, false, type_url);
+        test_buffer_t raw = {0};
+        buffer_append_bytes_field(&contract,
+                                  hidden_contract_tags[i],
+                                  hidden_value,
+                                  sizeof(hidden_value));
+        buffer_append_bytes_field(&raw,
+                                  protocol_Transaction_raw_contract_tag,
+                                  contract.data,
+                                  contract.len);
+        buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 123456U);
+        assert_stream_rejects(&raw);
+        buffer_free(&contract);
+        buffer_free(&raw);
+    }
+}
+
+static void test_rejects_unknown_fields_all_wire_types(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t unknown_value[] = {0xA5U};
+    const uint32_t unknown_tag = 31U;
+
+    test_buffer_t varint = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_varint_field(&varint, unknown_tag, 1U);
+    assert_stream_rejects(&varint);
+    buffer_free(&varint);
+
+    test_buffer_t string = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_bytes_field(&string, unknown_tag, unknown_value, sizeof(unknown_value));
+    assert_stream_rejects(&string);
+    buffer_free(&string);
+
+    test_buffer_t fixed32 = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_fixed32_field(&fixed32, unknown_tag, UINT32_C(0xA5A5A5A5));
+    assert_stream_rejects(&fixed32);
+    buffer_free(&fixed32);
+
+    test_buffer_t fixed64 = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_fixed64_field(&fixed64, unknown_tag, UINT64_C(0xA5A5A5A5A5A5A5A5));
+    assert_stream_rejects(&fixed64);
+    buffer_free(&fixed64);
+}
+
+static void test_rejects_unknown_fields_in_nested_contexts(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t unknown_value[] = {0xA5U};
+    const uint32_t unknown_tag = 31U;
+
+    test_buffer_t contract = build_contract(8U, false, type_url);
+    buffer_append_varint_field(&contract, unknown_tag, 1U);
+    test_buffer_t raw = wrap_contract(&contract);
+    assert_stream_rejects(&raw);
+    buffer_free(&contract);
+    buffer_free(&raw);
+
+    test_buffer_t any = {0};
+    contract = (test_buffer_t) {0};
+    static const uint8_t parameter[] = {0x01U};
+    buffer_append_bytes_field(&any,
+                              google_protobuf_Any_type_url_tag,
+                              (const uint8_t *) type_url,
+                              strlen(type_url));
+    buffer_append_bytes_field(&any,
+                              google_protobuf_Any_value_tag,
+                              parameter,
+                              sizeof(parameter));
+    buffer_append_bytes_field(&any, unknown_tag, unknown_value, sizeof(unknown_value));
+    buffer_append_varint_field(&contract,
+                               protocol_Transaction_Contract_type_tag,
+                               protocol_Transaction_Contract_ContractType_TransferContract);
+    buffer_append_bytes_field(&contract,
+                              protocol_Transaction_Contract_parameter_tag,
+                              any.data,
+                              any.len);
+    raw = wrap_contract(&contract);
+    assert_stream_rejects(&raw);
+    buffer_free(&any);
+    buffer_free(&contract);
+    buffer_free(&raw);
+}
+
+static void test_rejects_known_fields_with_wrong_wire_type(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t wrong_value[] = {0x01U};
+
+    test_buffer_t raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_varint_field(&raw, 1U, 1U);  // ref_block_bytes must be STRING.
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+
+    raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_bytes_field(&raw,
+                              3U,
+                              wrong_value,
+                              sizeof(wrong_value));  // ref_block_num must be VARINT.
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+
+    test_buffer_t valid_contract = build_contract(8U, false, type_url);
+    test_buffer_t contract = {0};
+    buffer_append_bytes_field(&contract,
+                              protocol_Transaction_Contract_type_tag,
+                              wrong_value,
+                              sizeof(wrong_value));
+    buffer_append(&contract, valid_contract.data, valid_contract.len);
+    raw = wrap_contract(&contract);
+    assert_stream_rejects(&raw);
+    buffer_free(&valid_contract);
+    buffer_free(&contract);
+    buffer_free(&raw);
+
+    test_buffer_t any = {0};
+    contract = (test_buffer_t) {0};
+    buffer_append_varint_field(&any, google_protobuf_Any_type_url_tag, 1U);
+    buffer_append_bytes_field(&any,
+                              google_protobuf_Any_type_url_tag,
+                              (const uint8_t *) type_url,
+                              strlen(type_url));
+    buffer_append_bytes_field(&any,
+                              google_protobuf_Any_value_tag,
+                              wrong_value,
+                              sizeof(wrong_value));
+    buffer_append_varint_field(&contract,
+                               protocol_Transaction_Contract_type_tag,
+                               protocol_Transaction_Contract_ContractType_TransferContract);
+    buffer_append_bytes_field(&contract,
+                              protocol_Transaction_Contract_parameter_tag,
+                              any.data,
+                              any.len);
+    raw = wrap_contract(&contract);
+    assert_stream_rejects(&raw);
+    buffer_free(&any);
+    buffer_free(&contract);
+    buffer_free(&raw);
+}
+
+static void test_rejects_duplicate_unreviewed_fields(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t ref_block_bytes[] = {0x12U, 0x34U};
+
+    test_buffer_t raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_varint_field(&raw, 3U, 1U);
+    buffer_append_varint_field(&raw, 3U, 2U);
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+
+    raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_bytes_field(&raw, 1U, ref_block_bytes, sizeof(ref_block_bytes));
+    buffer_append_bytes_field(&raw, 1U, ref_block_bytes, sizeof(ref_block_bytes));
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+}
+
+static void test_rejects_invalid_tapos_field_encodings(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t short_ref_block_bytes[] = {0x12U};
+    static const uint8_t short_ref_block_hash[] = {
+        0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U,
+    };
+
+    test_buffer_t raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_bytes_field(&raw,
+                              1U,
+                              short_ref_block_bytes,
+                              sizeof(short_ref_block_bytes));
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+
+    raw = build_raw(0U, 8U, false, type_url, 1U);
+    buffer_append_bytes_field(&raw,
+                              4U,
+                              short_ref_block_hash,
+                              sizeof(short_ref_block_hash));
+    assert_stream_rejects(&raw);
+    buffer_free(&raw);
+
+    const uint32_t signed_raw_tags[] = {3U, 8U, 14U};
+    for (size_t i = 0U; i < sizeof(signed_raw_tags) / sizeof(signed_raw_tags[0]); i++) {
+        raw = build_raw(0U, 8U, false, type_url, 1U);
+        buffer_append_varint_field(&raw, signed_raw_tags[i], (uint64_t) INT64_MAX + 1U);
+        assert_stream_rejects(&raw);
+        buffer_free(&raw);
+    }
+}
+
+static void test_accepts_all_supported_envelope_fields(void **state) {
+    (void) state;
+    static const char type_url[] = "type.googleapis.com/protocol.TransferContract";
+    static const uint8_t ref_block_bytes[] = {0x12U, 0x34U};
+    static const uint8_t ref_block_hash[] = {
+        0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U,
+    };
+    static const uint8_t custom_data[] = {0xAAU, 0xBBU};
+    test_buffer_t contract = build_contract(8U, false, type_url);
+    test_buffer_t raw = {0};
+    legacy_tx_stream_t *stream = calloc(1U, sizeof(*stream));
+    legacy_tx_stream_result_t result;
+    assert_non_null(stream);
+
+    buffer_append_bytes_field(&raw, 1U, ref_block_bytes, sizeof(ref_block_bytes));
+    buffer_append_varint_field(&raw, 3U, 123U);
+    buffer_append_bytes_field(&raw, 4U, ref_block_hash, sizeof(ref_block_hash));
+    buffer_append_varint_field(&raw, 8U, 987654321U);
+    buffer_append_bytes_field(&raw,
+                              protocol_Transaction_raw_custom_data_tag,
+                              custom_data,
+                              sizeof(custom_data));
+    buffer_append_bytes_field(&raw,
+                              protocol_Transaction_raw_contract_tag,
+                              contract.data,
+                              contract.len);
+    buffer_append_varint_field(&raw, 14U, 987650000U);
+    buffer_append_varint_field(&raw, protocol_Transaction_raw_fee_limit_tag, 123456U);
+
+    legacy_tx_stream_init(stream, NULL);
+    assert_true(feed_in_chunks(stream, &raw, 1U));
+    assert_true(legacy_tx_stream_finish(stream, &result));
+    assert_int_equal(result.contract_type,
+                     protocol_Transaction_Contract_ContractType_TransferContract);
+    assert_int_equal(result.permission_id, 2);
+    assert_int_equal(result.fee_limit, 123456);
+    assert_int_equal(result.custom_data_len, sizeof(custom_data));
+    assert_int_equal(result.raw_data_size, raw.len);
+    assert_int_equal(result.parameter_len, 8U);
+
+    free(stream);
+    buffer_free(&contract);
+    buffer_free(&raw);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_matches_whole_nanopb_decode),
@@ -488,6 +788,13 @@ int main(void) {
         cmocka_unit_test(test_raw_size_limit),
         cmocka_unit_test(test_parameter_observer_lifecycle_and_chunks),
         cmocka_unit_test(test_zero_length_parameter_observer),
+        cmocka_unit_test(test_rejects_hidden_fee_bearing_fields),
+        cmocka_unit_test(test_rejects_unknown_fields_all_wire_types),
+        cmocka_unit_test(test_rejects_unknown_fields_in_nested_contexts),
+        cmocka_unit_test(test_rejects_known_fields_with_wrong_wire_type),
+        cmocka_unit_test(test_rejects_duplicate_unreviewed_fields),
+        cmocka_unit_test(test_rejects_invalid_tapos_field_encodings),
+        cmocka_unit_test(test_accepts_all_supported_envelope_fields),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
