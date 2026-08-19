@@ -136,10 +136,21 @@ static bool check_swap_amount(const char *amount, const uint8_t decimals) {
 bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
-                         const char *toAddress) {
+                         const char *toAddress,
+                         uint64_t callValue,
+                         uint64_t callTokenValue,
+                         uint64_t tokenId) {
     PRINTF("Inside Tron swap_check_validity\n");
 
     if (!G_swap_validated.initialized) {
+        return false;
+    }
+
+    // The Exchange application authorizes one displayed asset transfer. A
+    // TriggerSmartContract carrying additional TRX/TRC10 value is therefore
+    // never equivalent to the transaction approved in Exchange.
+    if ((callValue != 0) || (callTokenValue != 0) || (tokenId != 0)) {
+        PRINTF("Refused swap transaction with attached smart-contract value\n");
         return false;
     }
 

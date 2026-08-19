@@ -325,21 +325,35 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review message";
             infoLongPress.text = "Sign message";
             break;
-        case APPROVAL_CUSTOM_CONTRACT:
+        case APPROVAL_CUSTOM_CONTRACT: {
             txInfos.warnings[CUSTOM_CONTRACT_WARNING] = true;
             txInfos.fields[0].item = "Contract";
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = "Selector";
             txInfos.fields[1].value = TRC20Action;
-            txInfos.fields[2].item = "Pay Token";
-            txInfos.fields[2].value = toAddress;
-            txInfos.fields[3].item = "Call Amount";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-            txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
-            pairList.nbPairs = 5;
+            if ((txContent.callTokenValue != 0) || (txContent.tokenId != 0)) {
+                txInfos.fields[2].item = "Attached TRX";
+                txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+                txInfos.fields[3].item = "TRC10 ID";
+                txInfos.fields[3].value = toAddress;
+                txInfos.fields[4].item = "TRC10 Amount";
+                txInfos.fields[4].value =
+                    (const char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
+                txInfos.fields[5].item = stringLabelSenderAddress;
+                txInfos.fields[5].value = fromAddress;
+                pairList.nbPairs = 6;
+            } else {
+                txInfos.fields[2].item = "Pay Token";
+                txInfos.fields[2].value = toAddress;
+                txInfos.fields[3].item = "Call Amount";
+                txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
+                txInfos.fields[4].item = stringLabelSenderAddress;
+                txInfos.fields[4].value = fromAddress;
+                pairList.nbPairs = 5;
+            }
             txInfos.flowSubtitle = "Custom Contract";
             break;
+        }
         case APPROVAL_SHARED_ECDH_SECRET:
             txInfos.fields[0].item = "ECDH Address";
             txInfos.fields[0].value = fromAddress;

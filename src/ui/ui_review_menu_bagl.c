@@ -857,6 +857,24 @@ UX_STEP_NOCB(ux_approval_custom_contract_5_step,
                  .title = "Call Amount",
                  .text = (char *) G_io_apdu_buffer,
              });
+UX_STEP_NOCB(ux_approval_custom_contract_trc10_trx_step,
+             bnnn_paging,
+             {
+                 .title = "Attached TRX",
+                 .text = (char *) G_io_apdu_buffer,
+             });
+UX_STEP_NOCB(ux_approval_custom_contract_trc10_id_step,
+             bnnn_paging,
+             {
+                 .title = "TRC10 ID",
+                 .text = toAddress,
+             });
+UX_STEP_NOCB(ux_approval_custom_contract_trc10_amount_step,
+             bnnn_paging,
+             {
+                 .title = "TRC10 Amount",
+                 .text = (char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+             });
 
 UX_STEP_NOCB(ux_approval_custom_contract_warning_step,
              pnn,
@@ -885,6 +903,31 @@ UX_DEF(ux_approval_custom_contract_data_warning_flow,
        &ux_approval_custom_contract_3_step,
        &ux_approval_custom_contract_4_step,
        &ux_approval_custom_contract_5_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_custom_contract_trc10_flow,
+       &ux_approval_custom_contract_1_step,
+       &ux_approval_custom_contract_warning_step,
+       &ux_approval_custom_contract_2_step,
+       &ux_approval_custom_contract_3_step,
+       &ux_approval_custom_contract_trc10_trx_step,
+       &ux_approval_custom_contract_trc10_id_step,
+       &ux_approval_custom_contract_trc10_amount_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_custom_contract_trc10_data_warning_flow,
+       &ux_approval_custom_contract_1_step,
+       &ux_approval_custom_contract_warning_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_custom_contract_2_step,
+       &ux_approval_custom_contract_3_step,
+       &ux_approval_custom_contract_trc10_trx_step,
+       &ux_approval_custom_contract_trc10_id_step,
+       &ux_approval_custom_contract_trc10_amount_step,
        &ux_approval_from_address_step,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
@@ -994,10 +1037,19 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
             ux_flow_init(0, ux_sign_flow, NULL);
             break;
         case APPROVAL_CUSTOM_CONTRACT:
-            ux_flow_init(0,
-                         ((data_warning == true) ? ux_approval_custom_contract_data_warning_flow
-                                                 : ux_approval_custom_contract_flow),
-                         NULL);
+            if ((txContent.callTokenValue != 0) || (txContent.tokenId != 0)) {
+                ux_flow_init(
+                    0,
+                    ((data_warning == true) ? ux_approval_custom_contract_trc10_data_warning_flow
+                                            : ux_approval_custom_contract_trc10_flow),
+                    NULL);
+            } else {
+                ux_flow_init(0,
+                             ((data_warning == true)
+                                  ? ux_approval_custom_contract_data_warning_flow
+                                  : ux_approval_custom_contract_flow),
+                             NULL);
+            }
             break;
         case APPROVAL_SHARED_ECDH_SECRET:
             // reserve a display stack slot if none yet

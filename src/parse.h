@@ -131,6 +131,11 @@ typedef struct transactionContext_t {
 typedef struct txContent_t {
     uint64_t amount[2];
     uint64_t exchangeID;
+    // TriggerSmartContract can attach a TRC10 transfer independently of its
+    // native TRX call value and ABI calldata. Keep both fields in the trusted
+    // transaction model so every signing path can review or reject them.
+    uint64_t callTokenValue;
+    uint64_t tokenId;
     uint8_t account[ADDRESS_SIZE];
     uint8_t destination[ADDRESS_SIZE];
     uint8_t contractAddress[ADDRESS_SIZE];

@@ -25,6 +25,10 @@
 #include "tokens.h"
 #include "app_errors.h"
 
+// java-tron reserves IDs up to and including 1,000,000. A non-zero TRC10
+// token ID carried by TriggerSmartContract must be above that boundary.
+#define MAX_RESERVED_TRC10_TOKEN_ID 1000000
+
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
 
@@ -646,9 +650,24 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
         return false;
     }
 
+    const int64_t call_value = msg.trigger_smart_contract.call_value;
+    const int64_t call_token_value = msg.trigger_smart_contract.call_token_value;
+    const int64_t token_id = msg.trigger_smart_contract.token_id;
+
+    // Validate signed protobuf values before converting them to uint64_t.
+    // call_token_value without a token_id cannot identify the transferred
+    // asset, and IDs in java-tron's reserved range are not valid TRC10 IDs.
+    if ((call_value < 0) || (call_token_value < 0) || (token_id < 0) ||
+        ((token_id != 0) && (token_id <= MAX_RESERVED_TRC10_TOKEN_ID)) ||
+        ((call_token_value > 0) && (token_id == 0))) {
+        return false;
+    }
+
     COPY_ADDRESS(content->account, &msg.trigger_smart_contract.owner_address);
     COPY_ADDRESS(content->contractAddress, &msg.trigger_smart_contract.contract_address);
-    content->amount[0] = msg.trigger_smart_contract.call_value;
+    content->amount[0] = (uint64_t) call_value;
+    content->callTokenValue = (uint64_t) call_token_value;
+    content->tokenId = (uint64_t) token_id;
 
     tokenDefinition_t *trc20 = getKnownToken(content);
 

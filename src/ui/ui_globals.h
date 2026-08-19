@@ -31,6 +31,12 @@
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)
 #define voteSlot(index, type) ((index * VOTE_PACK) + type)
 
+// The custom-contract review keeps the native TRX amount at offset 0 and the
+// raw TRC10 amount in a separate, non-overlapping slot. Both values are
+// bounded by INT64_MAX, so 100 bytes per slot is ample and preserves the
+// existing uses of G_io_apdu_buffer.
+#define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 100
+
 #ifdef HAVE_NBGL
 #if LARGE_ICON_SIZE == 64
 #define APP_TRON_ICON C_app_tron_64px

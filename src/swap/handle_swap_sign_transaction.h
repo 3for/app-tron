@@ -17,10 +17,14 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MAX_SWAP_TOKEN_LENGTH 15
 
 bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
-                         const char *toAddress);
+                         const char *toAddress,
+                         uint64_t callValue,
+                         uint64_t callTokenValue,
+                         uint64_t tokenId);

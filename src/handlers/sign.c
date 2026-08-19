@@ -58,6 +58,11 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
     PRINTF("Amount: %d - %s\n", index, destination + (voteSlot(index, VOTE_AMOUNT)));
 }
 
+static bool trigger_has_attached_values(const txContent_t *content) {
+    return (content->amount[0] != 0) || (content->callTokenValue != 0) ||
+           (content->tokenId != 0);
+}
+
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -233,6 +238,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             strcpy(TRC20ActionSendAllow, "To");
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
+                // The standard TRC20 transfer/approve review has room for the
+                // ABI operation only. Fail closed if the same contract call
+                // also transfers TRX or TRC10 value. In Swap mode preserve the
+                // status expected by app-exchange.
+                if ((txContent.TRC20Method != 0) &&
+                    trigger_has_attached_values(&txContent)) {
+#ifdef HAVE_SWAP
+                    if (G_called_from_swap) {
+                        return io_send_sw(E_SWAP_CHECKING_FAIL);
+                    }
+#endif
+                    return io_send_sw(E_INCORRECT_DATA);
+                }
+
                 if (txContent.TRC20Method == 1)
                     strcpy(TRC20Action, "Asset");
                 else if (txContent.TRC20Method == 2) {
@@ -250,22 +269,55 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                              "%08x",
                              txContent.customSelector);
                     G_io_apdu_buffer[0] = '\0';
-                    G_io_apdu_buffer[100] = '\0';
+                    G_io_apdu_buffer[CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET] = '\0';
                     toAddress[0] = '\0';
-                    if (txContent.amount[0] > 0 && txContent.amount[1] > 0) {
-                        return io_send_sw(E_INCORRECT_DATA);
-                    }
-                    // call has value
-                    if (txContent.amount[0] > 0) {
+
+                    const bool has_attached_trc10 =
+                        (txContent.callTokenValue != 0) || (txContent.tokenId != 0);
+                    if (has_attached_trc10) {
+                        // No trusted decimals/name metadata is available on
+                        // this path. Display the exact token ID and raw amount,
+                        // and keep an independently attached TRX value visible.
+                        if (txContent.amount[0] > 0) {
+                            if (print_amount(txContent.amount[0],
+                                             (void *) G_io_apdu_buffer,
+                                             CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                             SUN_DIG) == 0) {
+                                return io_send_sw(E_INCORRECT_LENGTH);
+                            }
+                        } else {
+                            strlcpy((char *) G_io_apdu_buffer,
+                                    "-",
+                                    CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET);
+                        }
+
+                        if (print_amount(txContent.tokenId,
+                                         toAddress,
+                                         sizeof(toAddress),
+                                         0) == 0) {
+                            return io_send_sw(E_INCORRECT_LENGTH);
+                        }
+
+                        if (txContent.callTokenValue == 0) {
+                            strlcpy((char *) G_io_apdu_buffer +
+                                        CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                    "0",
+                                    sizeof(G_io_apdu_buffer) -
+                                        CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET);
+                        } else if (print_amount(
+                                       txContent.callTokenValue,
+                                       (void *) G_io_apdu_buffer +
+                                           CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                       sizeof(G_io_apdu_buffer) -
+                                           CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                       0) == 0) {
+                            return io_send_sw(E_INCORRECT_LENGTH);
+                        }
+                    } else if (txContent.amount[0] > 0) {
+                        // Preserve the existing custom-contract review when
+                        // only native TRX is attached.
                         strcpy(toAddress, "TRX");
                         print_amount(txContent.amount[0], (void *) G_io_apdu_buffer, 100, SUN_DIG);
-                        customContractField |= (1 << 0x05);
-                        customContractField |= (1 << 0x06);
-                    } else if (txContent.amount[1] > 0) {
-                        memcpy(toAddress,
-                               txContent.tokenNames[0],
-                               txContent.tokenNamesLength[0] + 1);
-                        print_amount(txContent.amount[1], (void *) G_io_apdu_buffer, 100, 0);
                         customContractField |= (1 << 0x05);
                         customContractField |= (1 << 0x06);
                     } else {
@@ -307,7 +359,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
                                         fullContract,               // Token name
                                         TRC20ActionSendAllow,       // "Send To"
-                                        toAddress)) {
+                                        toAddress,
+                                        (txContent.contractType == TRIGGERSMARTCONTRACT)
+                                            ? txContent.amount[0]
+                                            : 0,
+                                        txContent.callTokenValue,
+                                        txContent.tokenId)) {
                     PRINTF("Signing valid swap transaction\n");
                     ui_callback_tx_ok(false);
                 } else {
