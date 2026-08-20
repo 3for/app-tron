@@ -59,8 +59,7 @@ static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index)
 }
 
 static bool trigger_has_attached_values(const txContent_t *content) {
-    return (content->amount[0] != 0) || (content->callTokenValue != 0) ||
-           (content->tokenId != 0);
+    return (content->amount[0] != 0) || (content->callTokenValue != 0) || (content->tokenId != 0);
 }
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
@@ -169,8 +168,18 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
+            // Parsing happens after this fragment has entered the cumulative
+            // hash. Poison the session so rejected bytes can never be followed
+            // by another fragment and signed.
+            txContext.initialized = false;
+#ifdef HAVE_SWAP
+            if (G_called_from_swap) {
+                return io_send_sw(E_SWAP_CHECKING_FAIL);
+            }
+#endif
             return io_send_sw(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
+            txContext.initialized = false;
 #ifdef HAVE_SWAP
             if (G_called_from_swap) {
                 return io_send_sw(E_SWAP_CHECKING_FAIL);
@@ -180,6 +189,29 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
         default:
             PRINTF("Unexpected parser status\n");
             return io_send_sw(txResult);
+    }
+
+    if (!txContent.contractSeen) {
+        txContext.initialized = false;
+#ifdef HAVE_SWAP
+        if (G_called_from_swap) {
+            return io_send_sw(E_SWAP_CHECKING_FAIL);
+        }
+#endif
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
+    if ((txContent.contractType == TRIGGERSMARTCONTRACT) &&
+        (txContent.feeLimit > MAX_PROTOCOL_FEE_LIMIT)) {
+        // This also rejects negative int64 values, whose protobuf wire value
+        // is larger than INT64_MAX. Poison the cumulative hash session.
+        txContext.initialized = false;
+#ifdef HAVE_SWAP
+        if (G_called_from_swap) {
+            return io_send_sw(E_SWAP_CHECKING_FAIL);
+        }
+#endif
+        return io_send_sw(E_INCORRECT_DATA);
     }
 
     // Last data hash
@@ -207,6 +239,15 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     }
 
     data_warning = ((txContent.dataBytes > 0) ? true : false);
+
+    if (txContent.contractType == TRIGGERSMARTCONTRACT) {
+        if (print_amount(txContent.feeLimit,
+                         strings.common.maxFee,
+                         sizeof(strings.common.maxFee),
+                         SUN_DIG) == 0) {
+            return io_send_sw(E_INCORRECT_LENGTH);
+        }
+    }
 
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
@@ -242,8 +283,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 // ABI operation only. Fail closed if the same contract call
                 // also transfers TRX or TRC10 value. In Swap mode preserve the
                 // status expected by app-exchange.
-                if ((txContent.TRC20Method != 0) &&
-                    trigger_has_attached_values(&txContent)) {
+                if ((txContent.TRC20Method != 0) && trigger_has_attached_values(&txContent)) {
 #ifdef HAVE_SWAP
                     if (G_called_from_swap) {
                         return io_send_sw(E_SWAP_CHECKING_FAIL);
@@ -291,26 +331,20 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                     CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET);
                         }
 
-                        if (print_amount(txContent.tokenId,
-                                         toAddress,
-                                         sizeof(toAddress),
-                                         0) == 0) {
+                        if (print_amount(txContent.tokenId, toAddress, sizeof(toAddress), 0) == 0) {
                             return io_send_sw(E_INCORRECT_LENGTH);
                         }
 
                         if (txContent.callTokenValue == 0) {
-                            strlcpy((char *) G_io_apdu_buffer +
-                                        CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                            strlcpy((char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
                                     "0",
-                                    sizeof(G_io_apdu_buffer) -
-                                        CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET);
-                        } else if (print_amount(
-                                       txContent.callTokenValue,
-                                       (void *) G_io_apdu_buffer +
-                                           CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
-                                       sizeof(G_io_apdu_buffer) -
-                                           CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
-                                       0) == 0) {
+                                    sizeof(G_io_apdu_buffer) - CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET);
+                        } else if (print_amount(txContent.callTokenValue,
+                                                (void *) G_io_apdu_buffer +
+                                                    CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                                sizeof(G_io_apdu_buffer) -
+                                                    CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                                                0) == 0) {
                             return io_send_sw(E_INCORRECT_LENGTH);
                         }
                     } else if (txContent.amount[0] > 0) {
@@ -356,15 +390,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             // If we are in swap context, do not redisplay the message data
             // Instead, ensure they are identical with what was previously displayed
             if (G_called_from_swap) {
-                if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
-                                        fullContract,               // Token name
-                                        TRC20ActionSendAllow,       // "Send To"
-                                        toAddress,
-                                        (txContent.contractType == TRIGGERSMARTCONTRACT)
-                                            ? txContent.amount[0]
-                                            : 0,
-                                        txContent.callTokenValue,
-                                        txContent.tokenId)) {
+                if (swap_check_validity(
+                        (char *) G_io_apdu_buffer,  // Amount
+                        fullContract,               // Token name
+                        TRC20ActionSendAllow,       // "Send To"
+                        toAddress,
+                        (txContent.contractType == TRIGGERSMARTCONTRACT) ? txContent.amount[0] : 0,
+                        txContent.callTokenValue,
+                        txContent.tokenId,
+                        txContent.feeLimit,
+                        txContent.contractType == TRIGGERSMARTCONTRACT)) {
                     PRINTF("Signing valid swap transaction\n");
                     ui_callback_tx_ok(false);
                 } else {

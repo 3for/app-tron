@@ -70,6 +70,123 @@ class TestTRX():
         assert (minor == int(version[0][1]))
         assert (patch == int(version[0][2]))
 
+    def test_trx_rejects_contracts_split_across_apdus(self, backend, firmware,
+                                                      navigator):
+        client = TronClient(backend, firmware, navigator)
+
+        def transfer(to_address, amount):
+            return client.packContract(
+                tron.Transaction.Contract.TransferContract,
+                contract.TransferContract(owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                                          to_address=bytes.fromhex(
+                                              client.address_hex(to_address)),
+                                          amount=amount))
+
+        hidden_tx = transfer("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M", 100000000)
+        visible_tx = transfer("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16", 1)
+        first_payload = pack_derivation_path(
+            client.getAccount(0)['path']) + hidden_tx
+
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, first_payload)
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.MORE, 0x00, visible_tx)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+        # A rejected fragment must poison the signing session. Otherwise a
+        # host could continue and sign bytes that were already rejected.
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.LAST, 0x00, b"")
+        assert error.value.status == Errors.INCORRECT_P2
+
+    def test_trx_rejects_multiple_contracts_in_one_apdu(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+
+        def transfer(to_address, amount):
+            return client.packContract(
+                tron.Transaction.Contract.TransferContract,
+                contract.TransferContract(owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                                          to_address=bytes.fromhex(
+                                              client.address_hex(to_address)),
+                                          amount=amount))
+
+        def contract_field(raw_tx):
+            remaining = raw_tx
+            while remaining:
+                field_length = client.get_next_length(remaining)
+                field = remaining[:field_length]
+                if field[0] == ((11 << 3) | 2):
+                    return field
+                remaining = remaining[field_length:]
+            raise AssertionError(
+                "serialized transaction has no Contract field")
+
+        raw_tx = contract_field(
+            transfer("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M", 100000000))
+        raw_tx += contract_field(
+            transfer("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16", 1))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + raw_tx
+        assert len(payload) <= 255
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+    def test_trx_accepts_one_contract_in_separate_apdu(self, backend, firmware,
+                                                       navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000))
+
+        fields = []
+        remaining = tx
+        while remaining:
+            field_length = client.get_next_length(remaining)
+            fields.append(remaining[:field_length])
+            remaining = remaining[field_length:]
+
+        contract_index = next(i for i, field in enumerate(fields)
+                              if field[0] == ((11 << 3) | 2))
+        assert 0 < contract_index < len(fields) - 1
+
+        first_payload = pack_derivation_path(client.getAccount(0)['path'])
+        first_payload += b''.join(fields[:contract_index])
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, first_payload)
+        backend.exchange(CLA, InsType.SIGN, P1.MORE, 0x00,
+                         fields[contract_index])
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.LAST, 0x00,
+                                    b''.join(fields[contract_index + 1:])):
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     @contextmanager
     def test_trx_send(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
@@ -451,6 +568,96 @@ class TestTRX():
                 data=tx_calldata))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    @pytest.mark.parametrize(("fee_limit", "expected_fee"), [
+        (123456789, r"^123\.456789$"),
+        (100000000000000000, r"^100000000000$"),
+    ])
+    def test_trx_trc20_displays_fee_limit_from_separate_apdu(
+            self, backend, firmware, navigator, fee_limit, expected_fee):
+        if firmware.device == "flex":
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+        elif firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        else:
+            pytest.skip(
+                "Direct semantic UI assertion is calibrated for Flex and Nano")
+
+        client = TronClient(backend, firmware, navigator)
+        tx_calldata = build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=tx_calldata),
+            fee_limit=fee_limit)
+
+        fields = []
+        remaining = tx
+        while remaining:
+            field_length = client.get_next_length(remaining)
+            fields.append(remaining[:field_length])
+            remaining = remaining[field_length:]
+
+        fee_index = next(i for i, field in enumerate(fields)
+                         if field.startswith(b'\x90\x01'))
+        fee_field = fields.pop(fee_index)
+        first_payload = pack_derivation_path(client.getAccount(0)['path'])
+        first_payload += b''.join(fields)
+        assert len(first_payload) < MAX_APDU_LEN
+
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, first_payload)
+        with backend.exchange_async(CLA, InsType.SIGN, P1.LAST, 0x00,
+                                    fee_field):
+            navigator.navigate_until_text(
+                navigate_instruction, [],
+                r"Max fee \(TRX\)",
+                screen_change_before_first_instruction=True)
+            assert backend.compare_screen_with_text(expected_fee), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    @pytest.mark.parametrize("fee_limit", [
+        -1,
+        100000000000000001,
+    ])
+    def test_trx_trc20_rejects_invalid_fee_limit(self, backend, firmware,
+                                                 navigator, fee_limit):
+        client = TronClient(backend, firmware, navigator)
+        tx_calldata = build_trc20_calldata(
+            "364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000))
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                data=tx_calldata),
+            fee_limit=fee_limit)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_trc20_send_zero_amount(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx_calldata = build_trc20_calldata(
@@ -497,24 +704,23 @@ class TestTRX():
 
     @pytest.mark.parametrize("selector", ["a9059cbb", "095ea7b3"])
     @pytest.mark.parametrize("attached", ["trx", "trc10", "token_id_only"])
-    def test_trx_trc20_rejects_hidden_attached_assets(self,
-                                                       backend,
-                                                       firmware,
-                                                       navigator,
-                                                       selector,
-                                                       attached):
+    def test_trx_trc20_rejects_hidden_attached_assets(self, backend, firmware,
+                                                      navigator, selector,
+                                                      attached):
         client = TronClient(backend, firmware, navigator)
         tx_calldata = bytearray(
-            build_trc20_calldata(
-                "364b03e0815687edaf90b81ff58e496dea7383d7",
-                Decimal(1000000)))
+            build_trc20_calldata("364b03e0815687edaf90b81ff58e496dea7383d7",
+                                 Decimal(1000000)))
         tx_calldata[:4] = bytes.fromhex(selector)
 
         values = {
-            "owner_address": bytes.fromhex(client.getAccount(0)['addressHex']),
-            "contract_address": bytes.fromhex(
+            "owner_address":
+            bytes.fromhex(client.getAccount(0)['addressHex']),
+            "contract_address":
+            bytes.fromhex(
                 client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
-            "data": bytes(tx_calldata),
+            "data":
+            bytes(tx_calldata),
         }
         if attached == "trx":
             values["call_value"] = 1
@@ -531,19 +737,21 @@ class TestTRX():
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
         assert error.value.status == Errors.INCORRECT_DATA
 
-    @pytest.mark.parametrize("field", ["call_value", "call_token_value", "token_id"])
-    def test_trx_trigger_rejects_negative_attached_values(self,
-                                                          backend,
-                                                          firmware,
-                                                          navigator,
-                                                          field):
+    @pytest.mark.parametrize("field",
+                             ["call_value", "call_token_value", "token_id"])
+    def test_trx_trigger_rejects_negative_attached_values(
+            self, backend, firmware, navigator, field):
         client = TronClient(backend, firmware, navigator)
         values = {
-            "owner_address": bytes.fromhex(client.getAccount(0)['addressHex']),
-            "contract_address": bytes.fromhex(
+            "owner_address":
+            bytes.fromhex(client.getAccount(0)['addressHex']),
+            "contract_address":
+            bytes.fromhex(
                 client.address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
-            "data": bytes.fromhex("0a857040"),
-            field: -1,
+            "data":
+            bytes.fromhex("0a857040"),
+            field:
+            -1,
         }
         tx = client.packContract(
             tron.Transaction.Contract.TriggerSmartContract,
@@ -563,17 +771,17 @@ class TestTRX():
             "token_id": 1000000,
         },
     ])
-    def test_trx_trigger_rejects_invalid_trc10_values(self,
-                                                       backend,
-                                                       firmware,
-                                                       navigator,
-                                                       attached):
+    def test_trx_trigger_rejects_invalid_trc10_values(self, backend, firmware,
+                                                      navigator, attached):
         client = TronClient(backend, firmware, navigator)
         values = {
-            "owner_address": bytes.fromhex(client.getAccount(0)['addressHex']),
-            "contract_address": bytes.fromhex(
+            "owner_address":
+            bytes.fromhex(client.getAccount(0)['addressHex']),
+            "contract_address":
+            bytes.fromhex(
                 client.address_hex("TTg3AAJBYsDNjx5Moc5EPNsgJSa4anJQ3M")),
-            "data": bytes.fromhex("0a857040"),
+            "data":
+            bytes.fromhex("0a857040"),
         }
         values.update(attached)
         tx = client.packContract(
@@ -708,21 +916,22 @@ class TestTRX():
                     0x0a857040, int(10001)))))
         self.sign_and_validate(client, firmware, 0, tx, warning_approve=True)
 
-    def test_trx_custom_contract_displays_all_attached_values(self,
-                                                              backend,
-                                                              firmware,
-                                                              navigator):
+    def test_trx_custom_contract_displays_all_attached_values(
+            self, backend, firmware, navigator):
         if firmware.device == "flex":
             navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
-            validation_instructions = [NavInsID.USE_CASE_REVIEW_CONFIRM,
-                                       NavInsID.USE_CASE_STATUS_DISMISS]
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
             approval_text = "Hold to sign"
         elif firmware.is_nano:
             navigate_instruction = NavInsID.RIGHT_CLICK
             validation_instructions = [NavInsID.BOTH_CLICK]
             approval_text = "Sign"
         else:
-            pytest.skip("Direct semantic UI assertion is calibrated for Flex and Nano")
+            pytest.skip(
+                "Direct semantic UI assertion is calibrated for Flex and Nano")
 
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
@@ -743,22 +952,20 @@ class TestTRX():
         with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00, payload):
             if firmware.device == "flex":
                 navigator.navigate([NavIns(NavInsID.TOUCH, (200, 445))])
-            navigator.navigate_until_text(navigate_instruction,
-                                          [],
-                                          "Attached TRX",
-                                          screen_change_before_first_instruction=False)
+            navigator.navigate_until_text(
+                navigate_instruction, [],
+                "Attached TRX",
+                screen_change_before_first_instruction=False)
             assert backend.compare_screen_with_text(r"^1$"), \
                 backend.get_current_screen_content()
             navigator.navigate_until_text(
-                navigate_instruction,
-                [],
+                navigate_instruction, [],
                 "TRC10 ID",
                 screen_change_before_first_instruction=False)
             assert backend.compare_screen_with_text(r"^1000001$"), \
                 backend.get_current_screen_content()
             navigator.navigate_until_text(
-                navigate_instruction,
-                [],
+                navigate_instruction, [],
                 "TRC10 Amount",
                 screen_change_before_first_instruction=False)
             assert backend.compare_screen_with_text(r"^123$"), \

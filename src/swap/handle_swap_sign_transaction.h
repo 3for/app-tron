@@ -27,4 +27,6 @@ bool swap_check_validity(const char *amount,
                          const char *toAddress,
                          uint64_t callValue,
                          uint64_t callTokenValue,
-                         uint64_t tokenId);
+                         uint64_t tokenId,
+                         uint64_t feeLimit,
+                         bool feeLimitApplies);

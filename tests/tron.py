@@ -171,7 +171,8 @@ class TronClient:
                      contractType,
                      newContract,
                      data=None,
-                     permission_id=None):
+                     permission_id=None,
+                     fee_limit=None):
         tx = tron.Transaction()
         tx.raw_data.timestamp = 1575712492061
         tx.raw_data.expiration = 1575712551000
@@ -179,6 +180,8 @@ class TronClient:
         tx.raw_data.ref_block_bytes = bytes.fromhex("3DCE")
         if data:
             tx.raw_data.custom_data = data
+        if fee_limit is not None:
+            tx.raw_data.fee_limit = fee_limit
 
         c = tx.raw_data.contract.add()
         c.type = contractType

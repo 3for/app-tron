@@ -807,8 +807,28 @@ bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **a
     return true;
 }
 
+static bool parse_fee_limit(const uint8_t *buffer, size_t length, uint64_t *fee_limit) {
+    pb_istream_t stream = pb_istream_from_buffer(buffer, length);
+    pb_wire_type_t wire_type;
+    uint32_t tag;
+    bool eof;
+
+    while (pb_decode_tag(&stream, &wire_type, &tag, &eof)) {
+        if (tag == protocol_Transaction_raw_fee_limit_tag) {
+            if ((wire_type != PB_WT_VARINT) || !pb_decode_varint(&stream, fee_limit)) {
+                return false;
+            }
+        } else if (!pb_skip_field(&stream, wire_type)) {
+            return false;
+        }
+    }
+
+    return eof;
+}
+
 parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content) {
     protocol_Transaction_raw transaction;
+    uint64_t fee_limit = content->feeLimit;
 
     if (length == 0) {
         return USTREAM_FINISHED;
@@ -816,6 +836,14 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
 
     memset(&transaction, 0, sizeof(transaction));
     memset(&msg, 0, sizeof(msg));
+
+    // Each APDU contains complete top-level protobuf fields. Scan tag 18 on a
+    // separate stream so an absent field in a later APDU cannot reset a value
+    // decoded earlier. Repeated singular fields retain protobuf's last-value-
+    // wins semantics.
+    if (!parse_fee_limit(buffer, length, &fee_limit)) {
+        return USTREAM_FAULT;
+    }
 
     pb_istream_t stream = pb_istream_from_buffer(buffer, length);
 
@@ -836,6 +864,18 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
 
     if (!pb_decode(&stream, protocol_Transaction_raw_fields, &transaction)) {
         return USTREAM_FAULT;
+    }
+
+    content->feeLimit = fee_limit;
+
+    if (transaction.contract_count != 0) {
+        if (content->contractSeen) {
+            // processTx() decodes one APDU-local protobuf fragment at a time.
+            // Without this transaction-wide guard, a later Contract field
+            // would overwrite the model reviewed for the cumulative hash.
+            return USTREAM_FAULT;
+        }
+        content->contractSeen = true;
     }
 
     if (!HAS_SETTING(S_DATA_ALLOWED) && content->dataBytes != 0) {

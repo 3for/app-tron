@@ -189,11 +189,19 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = fullContract;
             txInfos.fields[2].item = TRC20ActionSendAllow;
             txInfos.fields[2].value = toAddress;
-            txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
+            if (txContent.contractType == TRIGGERSMARTCONTRACT) {
+                txInfos.fields[3].item = "Max fee (TRX)";
+                txInfos.fields[3].value = strings.common.maxFee;
+                txInfos.fields[4].item = stringLabelSenderAddress;
+                txInfos.fields[4].value = fromAddress;
+                pairList.nbPairs = 5;
+            } else {
+                txInfos.fields[3].item = stringLabelSenderAddress;
+                txInfos.fields[3].value = fromAddress;
+                pairList.nbPairs = 4;
+            }
             txInfos.flowTitle = "Review Transaction";
             infoLongPress.text = "Sign Transaction";
-            pairList.nbPairs = 4;
             break;
         case APPROVAL_SIMPLE_TRANSACTION:
             txInfos.fields[0].item = stringLabelHash;
@@ -339,17 +347,21 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 txInfos.fields[4].item = "TRC10 Amount";
                 txInfos.fields[4].value =
                     (const char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
-                txInfos.fields[5].item = stringLabelSenderAddress;
-                txInfos.fields[5].value = fromAddress;
-                pairList.nbPairs = 6;
+                txInfos.fields[5].item = "Max fee (TRX)";
+                txInfos.fields[5].value = strings.common.maxFee;
+                txInfos.fields[6].item = stringLabelSenderAddress;
+                txInfos.fields[6].value = fromAddress;
+                pairList.nbPairs = 7;
             } else {
                 txInfos.fields[2].item = "Pay Token";
                 txInfos.fields[2].value = toAddress;
                 txInfos.fields[3].item = "Call Amount";
                 txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
-                txInfos.fields[4].item = stringLabelSenderAddress;
-                txInfos.fields[4].value = fromAddress;
-                pairList.nbPairs = 5;
+                txInfos.fields[4].item = "Max fee (TRX)";
+                txInfos.fields[4].value = strings.common.maxFee;
+                txInfos.fields[5].item = stringLabelSenderAddress;
+                txInfos.fields[5].value = fromAddress;
+                pairList.nbPairs = 6;
             }
             txInfos.flowSubtitle = "Custom Contract";
             break;

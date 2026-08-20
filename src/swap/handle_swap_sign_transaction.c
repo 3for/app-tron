@@ -27,6 +27,7 @@ typedef struct swap_validated_s {
     uint8_t decimals;
     char ticker[MAX_SWAP_TOKEN_LENGTH];
     uint256_t amount;
+    uint256_t fee;
     char recipient[BASE58CHECK_ADDRESS_SIZE + 1];
 } swap_validated_t;
 
@@ -56,6 +57,11 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
 
     if (params->amount == NULL) {
         PRINTF("Amount expected\n");
+        return false;
+    }
+
+    if ((params->fee_amount == NULL) || (params->fee_amount_length > 32)) {
+        PRINTF("Valid fee amount expected\n");
         return false;
     }
 
@@ -94,6 +100,7 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
     }
 
     convertUint256BE(params->amount, params->amount_length, &swap_validated.amount);
+    convertUint256BE(params->fee_amount, params->fee_amount_length, &swap_validated.fee);
 
     swap_validated.initialized = true;
 
@@ -133,13 +140,28 @@ static bool check_swap_amount(const char *amount, const uint8_t decimals) {
     return true;
 }
 
+static bool check_swap_fee(uint64_t fee_limit) {
+    uint256_t raw_fee = {0};
+
+    // uint256_t stores the least-significant 64 bits in this final limb.
+    raw_fee.elements[1].elements[1] = fee_limit;
+    if (gt256(&raw_fee, &G_swap_validated.fee)) {
+        PRINTF("Fee limit requested in this transaction exceeds swap fee\n");
+        return false;
+    }
+
+    return true;
+}
+
 bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
                          const char *toAddress,
                          uint64_t callValue,
                          uint64_t callTokenValue,
-                         uint64_t tokenId) {
+                         uint64_t tokenId,
+                         uint64_t feeLimit,
+                         bool feeLimitApplies) {
     PRINTF("Inside Tron swap_check_validity\n");
 
     if (!G_swap_validated.initialized) {
@@ -151,6 +173,14 @@ bool swap_check_validity(const char *amount,
     // never equivalent to the transaction approved in Exchange.
     if ((callValue != 0) || (callTokenValue != 0) || (tokenId != 0)) {
         PRINTF("Refused swap transaction with attached smart-contract value\n");
+        return false;
+    }
+
+    // For smart-contract calls, fee_limit is the signed maximum energy fee.
+    // Exchange already displayed fee_amount, so ensure the raw limit does not
+    // exceed the approved maximum. A TransferContract's bandwidth fee is not
+    // represented by raw fee_limit.
+    if (feeLimitApplies && !check_swap_fee(feeLimit)) {
         return false;
     }
 

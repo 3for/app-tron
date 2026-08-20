@@ -23,6 +23,11 @@
 #define MAX_RAW_SIGNATURE        65
 #define MAX_TOKEN_LENGTH         67
 
+// java-tron rejects smart-contract fee limits above this protocol-wide
+// governance ceiling (100 billion TRX, expressed in sun). The live network
+// limit may be lower, but an offline signer cannot safely predict it.
+#define MAX_PROTOCOL_FEE_LIMIT UINT64_C(100000000000000000)
+
 #define NETWORK_STRING_MAX_SIZE 16
 #define SHARED_CTX_FIELD_1_SIZE 256
 #define SHARED_CTX_FIELD_2_SIZE 40
@@ -131,6 +136,10 @@ typedef struct transactionContext_t {
 typedef struct txContent_t {
     uint64_t amount[2];
     uint64_t exchangeID;
+    // Last-value-wins decoding of Transaction.raw.fee_limit across APDUs.
+    // Keeping the unsigned wire value also makes negative int64 encodings
+    // fail the protocol-ceiling check without implementation-defined casts.
+    uint64_t feeLimit;
     // TriggerSmartContract can attach a TRC10 transfer independently of its
     // native TRX call value and ABI calldata. Keep both fields in the trusted
     // transaction model so every signing path can review or reject them.
@@ -149,6 +158,10 @@ typedef struct txContent_t {
     contractType_e contractType;
     uint64_t dataBytes;
     uint8_t permission_id;
+    // Transaction.raw.contract is repeated on the wire, while this app can
+    // safely review exactly one contract. Track the occurrence across every
+    // APDU in the signing session, not only within one nanopb decode.
+    bool contractSeen;
     uint32_t customData;
 } txContent_t;
 
