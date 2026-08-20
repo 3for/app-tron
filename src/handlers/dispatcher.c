@@ -27,6 +27,13 @@
 
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
+    // A personal-message hash stream may only contain personal-message APDUs.
+    // Any other command (including one with a bad CLA) invalidates it so a
+    // later P1_MORE cannot resume across an interleaved operation.
+    if ((cmd->cla != CLA) || (cmd->ins != INS_SIGN_PERSONAL_MESSAGE)) {
+        resetPersonalMessageSigningContext();
+    }
+
     if (cmd->cla != CLA) {
         return io_send_sw(E_CLA_NOT_SUPPORTED);
     }
@@ -34,6 +41,7 @@ int apdu_dispatcher(const command_t *cmd) {
 #ifdef HAVE_SWAP
     if (G_called_from_swap) {
         if ((cmd->ins != INS_GET_PUBLIC_KEY) && (cmd->ins != INS_SIGN)) {
+            resetPersonalMessageSigningContext();
             PRINTF("Refused INS when in SWAP mode\n");
             return io_send_sw(E_SWAP_CHECKING_FAIL);
         }

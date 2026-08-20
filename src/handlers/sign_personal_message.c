@@ -31,25 +31,52 @@
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
+typedef struct {
+    cx_sha3_t keccak;
+    bip32_path_t bip32_path;
+    uint32_t remaining_length;
+    bool initialized;
+} personal_message_signing_context_t;
+
+static personal_message_signing_context_t G_personal_message_context;
+
+void resetPersonalMessageSigningContext(void) {
+    memset(&G_personal_message_context, 0, sizeof(G_personal_message_context));
+}
+
+static int failPersonalMessageSigning(uint16_t status_word) {
+    resetPersonalMessageSigningContext();
+    return io_send_sw(status_word);
+}
+
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    cx_sha3_t sha3;
+    if (p2 != 0) {
+        return failPersonalMessageSigning(E_INCORRECT_P1_P2);
+    }
 
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+        // A fresh first chunk safely abandons any incomplete prior message.
+        resetPersonalMessageSigningContext();
+
+        off_t ret = read_bip32_path(workBuffer, dataLength, &G_personal_message_context.bip32_path);
         if (ret < 0) {
-            return io_send_sw(E_INCORRECT_BIP32_PATH);
+            return failPersonalMessageSigning(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;
 
+        if (dataLength < sizeof(uint32_t)) {
+            return failPersonalMessageSigning(E_INCORRECT_LENGTH);
+        }
+
         // Message Length
-        txContent.dataBytes = U4BE(workBuffer, 0);
+        G_personal_message_context.remaining_length = U4BE(workBuffer, 0);
         workBuffer += 4;
         dataLength -= 4;
 
         // Initialize message header + length
-        CX_ASSERT(cx_keccak_init_no_throw(&sha3, 256));
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &sha3,
+        CX_ASSERT(cx_keccak_init_no_throw(&G_personal_message_context.keccak, 256));
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &G_personal_message_context.keccak,
                                    0,
                                    (const uint8_t *) SIGN_MAGIC,
                                    sizeof(SIGN_MAGIC) - 1,
@@ -57,30 +84,46 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    0));
 
         char tmp[11];
-        snprintf((char *) tmp, 11, "%d", (uint32_t) txContent.dataBytes);
-        CX_ASSERT(
-            cx_hash_no_throw((cx_hash_t *) &sha3, 0, (const uint8_t *) tmp, strlen(tmp), NULL, 0));
+        snprintf(tmp,
+                 sizeof(tmp),
+                 "%u",
+                 (unsigned int) G_personal_message_context.remaining_length);
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &G_personal_message_context.keccak,
+                                   0,
+                                   (const uint8_t *) tmp,
+                                   strlen(tmp),
+                                   NULL,
+                                   0));
+        G_personal_message_context.initialized = true;
 
-    } else if (p1 != P1_MORE) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+    } else if (p1 == P1_MORE) {
+        if (!G_personal_message_context.initialized) {
+            return failPersonalMessageSigning(E_INCORRECT_P1_P2);
+        }
+    } else {
+        return failPersonalMessageSigning(E_INCORRECT_P1_P2);
     }
 
-    if (p2 != 0) {
-        return io_send_sw(E_INCORRECT_P1_P2);
-    }
-    if (dataLength > txContent.dataBytes) {
-        return io_send_sw(E_INCORRECT_LENGTH);
+    if (dataLength > G_personal_message_context.remaining_length) {
+        return failPersonalMessageSigning(E_INCORRECT_LENGTH);
     }
 
-    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &sha3, 0, workBuffer, dataLength, NULL, 0));
-    txContent.dataBytes -= dataLength;
-    if (txContent.dataBytes == 0) {
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &sha3,
+    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &G_personal_message_context.keccak,
+                               0,
+                               workBuffer,
+                               dataLength,
+                               NULL,
+                               0));
+    G_personal_message_context.remaining_length -= dataLength;
+    if (G_personal_message_context.remaining_length == 0) {
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &G_personal_message_context.keccak,
                                    CX_LAST,
                                    workBuffer,
                                    0,
                                    transactionContext.hash,
                                    32));
+        transactionContext.bip32_path = G_personal_message_context.bip32_path;
+        resetPersonalMessageSigningContext();
 #ifdef HAVE_BAGL
 #define HASH_LENGTH 4
         format_hex(transactionContext.hash, HASH_LENGTH / 2, fullContract, sizeof(fullContract));

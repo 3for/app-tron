@@ -1070,6 +1070,124 @@ class TestTRX():
         assert check_hash_signature(hash_to_sign, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
 
+    def test_trx_sign_message_across_three_chunks(self, backend, firmware,
+                                                  navigator):
+        if firmware.device != "flex":
+            pytest.skip("Direct multi-chunk assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        sign_magic = b'\x19TRON Signed Message:\n'
+        message = bytes(range(200)) + bytes(range(200))
+        first = pack_derivation_path(client.getAccount(0)['path'])
+        first += struct.pack(">I", len(message)) + message[:100]
+
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0x00,
+                         first)
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                         message[100:200])
+        with backend.exchange_async(CLA, InsType.SIGN_PERSONAL_MESSAGE,
+                                    P1.MORE, 0x00, message[200:]):
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        signed_message = sign_magic + str(len(message)).encode() + message
+        keccak_hash = keccak.new(digest_bits=256)
+        keccak_hash.update(signed_message)
+        assert check_hash_signature(keccak_hash.digest(), response.data[0:65],
+                                    client.getAccount(0)['publicKey'][2:])
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"after-finalization")
+        assert error.value.status == Errors.INCORRECT_P2
+
+    def test_trx_personal_message_rejects_invalid_continuations(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"without-first")
+        assert error.value.status == Errors.INCORRECT_P2
+
+        first = pack_derivation_path(client.getAccount(0)['path'])
+        first += struct.pack(">I", 1) + b"too long"
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST,
+                             0x00, first)
+        assert error.value.status == Errors.INCORRECT_LENGTH
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"x")
+        assert error.value.status == Errors.INCORRECT_P2
+
+        first = pack_derivation_path(client.getAccount(0)['path'])
+        first += struct.pack(">I", 2) + b"a"
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0x00,
+                         first)
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x01,
+                             b"b")
+        assert error.value.status == Errors.INCORRECT_P2
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"b")
+        assert error.value.status == Errors.INCORRECT_P2
+
+    def test_trx_personal_message_rejects_interleaved_stream(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        first = pack_derivation_path(client.getAccount(0)['path'])
+        first += struct.pack(">I", 4) + b"a"
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0x00,
+                         first)
+
+        client.getVersion()
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"bcd")
+        assert error.value.status == Errors.INCORRECT_P2
+
+    def test_trx_personal_message_first_restarts_abandoned_stream(
+            self, backend, firmware, navigator):
+        if firmware.device != "flex":
+            pytest.skip("Direct restart assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        abandoned = pack_derivation_path(client.getAccount(0)['path'])
+        abandoned += struct.pack(">I", 10) + b"old"
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0x00,
+                         abandoned)
+
+        message = b"replacement message"
+        replacement = pack_derivation_path(client.getAccount(0)['path'])
+        replacement += struct.pack(">I", len(message)) + message
+        with backend.exchange_async(CLA, InsType.SIGN_PERSONAL_MESSAGE,
+                                    P1.FIRST, 0x00, replacement):
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        signed_message = (b'\x19TRON Signed Message:\n' +
+                          str(len(message)).encode() + message)
+        keccak_hash = keccak.new(digest_bits=256)
+        keccak_hash.update(signed_message)
+        assert check_hash_signature(keccak_hash.digest(), response.data[0:65],
+                                    client.getAccount(0)['publicKey'][2:])
+
     def test_trx_sign_hash(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         hash_to_sign = bytes.fromhex("000102030405060708090a0b0c0d0e0f"

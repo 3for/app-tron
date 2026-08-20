@@ -230,6 +230,8 @@ across multiple chunks.
 - `P1_MORE`: `[message data]`
 
 The cumulative data must not exceed the announced length (`0x6700` otherwise).
+Continuation chunks must be contiguous: any non-personal-message APDU or invalid chunk cancels the
+active stream, and a new `P1_FIRST`/`P1_SIGN` safely starts a new stream.
 
 **Response**
 
@@ -307,4 +309,3 @@ Defined in [`src/app_errors.h`](../src/app_errors.h).
 | `0x6D00` | `E_INS_NOT_SUPPORTED`               | Unknown instruction                                  |
 | `0x6E00` | `E_CLA_NOT_SUPPORTED`               | Wrong class byte (`CLA != 0xE0`)                     |
 | `0x6F00` | `E_TECHNICAL_PROBLEM`               | Internal error                                       |
-
