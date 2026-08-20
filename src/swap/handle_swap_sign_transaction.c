@@ -16,11 +16,15 @@
  ********************************************************************************/
 #ifdef HAVE_SWAP
 
+#include "base58.h"
 #include "handle_swap_sign_transaction.h"
 #include "swap.h"
 
+#include "helpers.h"
 #include "parse.h"
 #include "uint256.h"
+
+#define BASE58CHECK_DECODED_SIZE (ADDRESS_SIZE + 4)
 
 typedef struct swap_validated_s {
     bool initialized;
@@ -28,13 +32,39 @@ typedef struct swap_validated_s {
     char ticker[MAX_SWAP_TOKEN_LENGTH];
     uint256_t amount;
     uint256_t fee;
-    char recipient[BASE58CHECK_ADDRESS_SIZE + 1];
+    uint8_t recipient[ADDRESS_SIZE];
 } swap_validated_t;
 
 static swap_validated_t G_swap_validated;
 
 // Save the BSS address where we will write the return value when finished
 static uint8_t *G_swap_sign_return_value_address;
+
+static bool parse_swap_recipient(const char *address58, uint8_t recipient[static ADDRESS_SIZE]) {
+    uint8_t decoded[BASE58CHECK_DECODED_SIZE];
+    char canonical[BASE58CHECK_ADDRESS_SIZE + 1];
+
+    if ((address58 == NULL) ||
+        (strnlen(address58, sizeof(canonical)) != BASE58CHECK_ADDRESS_SIZE)) {
+        return false;
+    }
+
+    if ((base58_decode(address58, BASE58CHECK_ADDRESS_SIZE, decoded, sizeof(decoded)) !=
+         BASE58CHECK_DECODED_SIZE) ||
+        (decoded[0] != ADD_PRE_FIX_BYTE_MAINNET)) {
+        return false;
+    }
+
+    // Re-encode the 21-byte address to verify its checksum and require the
+    // caller's text to be the unique canonical TRON Base58Check encoding.
+    getBase58FromAddress(decoded, canonical);
+    if (memcmp(address58, canonical, sizeof(canonical)) != 0) {
+        return false;
+    }
+
+    memcpy(recipient, decoded, ADDRESS_SIZE);
+    return true;
+}
 
 // Save the data validated during the Exchange app flow
 bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
@@ -54,8 +84,9 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         return false;
     }
 
-    if (params->destination_address == NULL) {
-        PRINTF("Destination address expected\n");
+    uint8_t recipient[ADDRESS_SIZE];
+    if (!parse_swap_recipient(params->destination_address, recipient)) {
+        PRINTF("Valid canonical destination address expected\n");
         return false;
     }
 
@@ -94,14 +125,7 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         }
     }
 
-    // Save recipient
-    strlcpy(swap_validated.recipient,
-            params->destination_address,
-            sizeof(swap_validated.recipient));
-    if (swap_validated.recipient[sizeof(swap_validated.recipient) - 1] != '\0') {
-        PRINTF("Address copy error\n");
-        return false;
-    }
+    memcpy(swap_validated.recipient, recipient, sizeof(swap_validated.recipient));
 
     if (!convertUint256BE(params->amount, params->amount_length, &swap_validated.amount) ||
         !convertUint256BE(params->fee_amount, params->fee_amount_length, &swap_validated.fee)) {
@@ -163,7 +187,7 @@ static bool check_swap_fee(uint64_t fee_limit) {
 bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
-                         const char *toAddress,
+                         const uint8_t *recipient,
                          uint64_t callValue,
                          uint64_t callTokenValue,
                          uint64_t tokenId,
@@ -205,9 +229,8 @@ bool swap_check_validity(const char *amount,
         return false;
     }
 
-    if (strncmp(G_swap_validated.recipient, toAddress, BASE58CHECK_ADDRESS_SIZE + 1) != 0) {
-        PRINTF("Recipient requested in this transaction = %s\n", toAddress);
-        PRINTF("Recipient validated in swap = %s\n", G_swap_validated.recipient);
+    if ((recipient == NULL) || (memcmp(G_swap_validated.recipient, recipient, ADDRESS_SIZE) != 0)) {
+        PRINTF("Recipient requested in this transaction does not match swap recipient\n");
         return false;
     }
 

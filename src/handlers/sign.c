@@ -396,7 +396,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                         (char *) G_io_apdu_buffer,  // Amount
                         fullContract,               // Token name
                         TRC20ActionSendAllow,       // "Send To"
-                        toAddress,
+                        txContent.destination,
                         (txContent.contractType == TRIGGERSMARTCONTRACT) ? txContent.amount[0] : 0,
                         txContent.callTokenValue,
                         txContent.tokenId,
