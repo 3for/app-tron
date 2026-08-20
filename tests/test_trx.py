@@ -242,6 +242,204 @@ class TestTRX():
         assert check_tx_signature(tx, response.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
+    @pytest.mark.parametrize("contract_kind", ["trx", "trc10"])
+    @pytest.mark.parametrize("amount", [-1, -(1 << 63)])
+    def test_trx_rejects_negative_transfer_amounts(self, backend, firmware,
+                                                   navigator, contract_kind,
+                                                   amount):
+        client = TronClient(backend, firmware, navigator)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        recipient = bytes.fromhex(
+            client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"))
+        if contract_kind == "trx":
+            contract_type = tron.Transaction.Contract.TransferContract
+            message = contract.TransferContract(owner_address=owner,
+                                                to_address=recipient,
+                                                amount=amount)
+        else:
+            contract_type = tron.Transaction.Contract.TransferAssetContract
+            message = contract.TransferAssetContract(asset_name=b"1000166",
+                                                     owner_address=owner,
+                                                     to_address=recipient,
+                                                     amount=amount)
+
+        tx = client.packContract(contract_type, message)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+    def test_trx_formats_maximum_int64_transfer_amount(self, backend, firmware,
+                                                       navigator):
+        if firmware.device != "flex":
+            pytest.skip(
+                "Direct maximum-amount assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=(1 << 63) - 1))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00, payload):
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [],
+                "Amount",
+                screen_change_before_first_instruction=True)
+            assert backend.compare_screen_with_text(
+                r"^9223372036854\.77580$"), \
+                backend.get_current_screen_content()
+            assert backend.compare_screen_with_text(r"^7$"), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    @pytest.mark.parametrize("case", [
+        "vote_count",
+        "freeze_balance",
+        "freeze_balance_v2",
+        "unfreeze_balance_v2",
+        "delegate_balance",
+        "undelegate_balance",
+        "exchange_create_first",
+        "exchange_create_second",
+        "exchange_inject_id",
+        "exchange_inject_quant",
+        "exchange_withdraw_id",
+        "exchange_withdraw_quant",
+        "exchange_transaction_id",
+        "exchange_transaction_quant",
+        "exchange_transaction_expected",
+        "proposal_delete_id",
+    ])
+    def test_trx_rejects_negative_displayed_values(self, backend, firmware,
+                                                   navigator, case):
+        client = TronClient(backend, firmware, navigator)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        recipient = bytes.fromhex(
+            client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"))
+
+        cases = {
+            "vote_count": (tron.Transaction.Contract.VoteWitnessContract,
+                           contract.VoteWitnessContract(
+                               owner_address=owner,
+                               votes=[
+                                   contract.VoteWitnessContract.Vote(
+                                       vote_address=recipient, vote_count=-1)
+                               ])),
+            "freeze_balance": (tron.Transaction.Contract.FreezeBalanceContract,
+                               contract.FreezeBalanceContract(
+                                   owner_address=owner,
+                                   frozen_balance=-1,
+                                   frozen_duration=3,
+                                   resource=contract.BANDWIDTH)),
+            "freeze_balance_v2":
+            (tron.Transaction.Contract.FreezeBalanceV2Contract,
+             contract.FreezeBalanceV2Contract(owner_address=owner,
+                                              frozen_balance=-1,
+                                              resource=contract.BANDWIDTH)),
+            "unfreeze_balance_v2":
+            (tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+             contract.UnfreezeBalanceV2Contract(owner_address=owner,
+                                                unfreeze_balance=-1,
+                                                resource=contract.BANDWIDTH)),
+            "delegate_balance":
+            (tron.Transaction.Contract.DelegateResourceContract,
+             contract.DelegateResourceContract(owner_address=owner,
+                                               resource=contract.BANDWIDTH,
+                                               balance=-1,
+                                               receiver_address=recipient)),
+            "undelegate_balance":
+            (tron.Transaction.Contract.UnDelegateResourceContract,
+             contract.UnDelegateResourceContract(owner_address=owner,
+                                                 resource=contract.BANDWIDTH,
+                                                 balance=-1,
+                                                 receiver_address=recipient)),
+            "exchange_create_first":
+            (tron.Transaction.Contract.ExchangeCreateContract,
+             contract.ExchangeCreateContract(owner_address=owner,
+                                             first_token_id=b"_",
+                                             first_token_balance=-1,
+                                             second_token_id=b"1000166",
+                                             second_token_balance=1)),
+            "exchange_create_second":
+            (tron.Transaction.Contract.ExchangeCreateContract,
+             contract.ExchangeCreateContract(owner_address=owner,
+                                             first_token_id=b"_",
+                                             first_token_balance=1,
+                                             second_token_id=b"1000166",
+                                             second_token_balance=-1)),
+            "exchange_inject_id":
+            (tron.Transaction.Contract.ExchangeInjectContract,
+             contract.ExchangeInjectContract(owner_address=owner,
+                                             exchange_id=-1,
+                                             token_id=b"1000166",
+                                             quant=1)),
+            "exchange_inject_quant":
+            (tron.Transaction.Contract.ExchangeInjectContract,
+             contract.ExchangeInjectContract(owner_address=owner,
+                                             exchange_id=1,
+                                             token_id=b"1000166",
+                                             quant=-1)),
+            "exchange_withdraw_id":
+            (tron.Transaction.Contract.ExchangeWithdrawContract,
+             contract.ExchangeWithdrawContract(owner_address=owner,
+                                               exchange_id=-1,
+                                               token_id=b"1000166",
+                                               quant=1)),
+            "exchange_withdraw_quant":
+            (tron.Transaction.Contract.ExchangeWithdrawContract,
+             contract.ExchangeWithdrawContract(owner_address=owner,
+                                               exchange_id=1,
+                                               token_id=b"1000166",
+                                               quant=-1)),
+            "exchange_transaction_id":
+            (tron.Transaction.Contract.ExchangeTransactionContract,
+             contract.ExchangeTransactionContract(owner_address=owner,
+                                                  exchange_id=-1,
+                                                  token_id=b"1000166",
+                                                  quant=1,
+                                                  expected=1)),
+            "exchange_transaction_quant":
+            (tron.Transaction.Contract.ExchangeTransactionContract,
+             contract.ExchangeTransactionContract(owner_address=owner,
+                                                  exchange_id=1,
+                                                  token_id=b"1000166",
+                                                  quant=-1,
+                                                  expected=1)),
+            "exchange_transaction_expected":
+            (tron.Transaction.Contract.ExchangeTransactionContract,
+             contract.ExchangeTransactionContract(owner_address=owner,
+                                                  exchange_id=1,
+                                                  token_id=b"1000166",
+                                                  quant=1,
+                                                  expected=-1)),
+            "proposal_delete_id":
+            (tron.Transaction.Contract.ProposalDeleteContract,
+             contract.ProposalDeleteContract(owner_address=owner,
+                                             proposal_id=-1)),
+        }
+
+        contract_type, message = cases[case]
+        tx = client.packContract(contract_type, message)
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     @contextmanager
     def test_trx_send(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
