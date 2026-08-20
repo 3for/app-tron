@@ -1142,6 +1142,25 @@ class TestTRX():
                              b"b")
         assert error.value.status == Errors.INCORRECT_P2
 
+    @pytest.mark.parametrize("p1", [P1.FIRST, P1.SIGN])
+    @pytest.mark.parametrize("length_prefix_size", range(4))
+    def test_trx_personal_message_rejects_truncated_length_prefix(
+            self, backend, firmware, navigator, length_prefix_size, p1):
+        client = TronClient(backend, firmware, navigator)
+        data = pack_derivation_path(client.getAccount(0)['path'])
+        data += b"\xff" * length_prefix_size
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, p1, 0x00,
+                             data)
+        assert error.value.status == Errors.INCORRECT_LENGTH
+
+        # Every framing error must clear the stream before a continuation.
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0x00,
+                             b"x")
+        assert error.value.status == Errors.INCORRECT_P2
+
     def test_trx_personal_message_rejects_interleaved_stream(
             self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
