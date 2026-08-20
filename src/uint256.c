@@ -42,10 +42,18 @@ void readu256BE(uint8_t *buffer, uint256_t *target) {
     readu128BE(buffer + 16, &LOWER_P(target));
 }
 
-void convertUint256BE(const uint8_t *data, const uint32_t length, uint256_t *target) {
+bool convertUint256BE(const uint8_t *data, const size_t length, uint256_t *target) {
     uint8_t tmp[32] = {0};
-    memcpy(tmp + 32 - length, data, length);
+
+    if ((target == NULL) || (length > sizeof(tmp)) || ((data == NULL) && (length != 0))) {
+        return false;
+    }
+
+    if (length != 0) {
+        memcpy(tmp + sizeof(tmp) - length, data, length);
+    }
     readu256BE(tmp, target);
+    return true;
 }
 
 bool zero128(uint128_t *number) {

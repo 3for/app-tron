@@ -29,6 +29,16 @@ void swap_handle_get_printable_amount(get_printable_amount_parameters_t *params)
 
     PRINTF("Inside Tron swap_handle_get_printable_amount\n");
 
+    if (params == NULL) {
+        return;
+    }
+
+    if ((params->amount_length > MAX_SWAP_AMOUNT_LENGTH) ||
+        ((params->amount == NULL) && (params->amount_length != 0))) {
+        PRINTF("Invalid amount buffer\n");
+        goto error;
+    }
+
     // If the amount is a fee, its value is nominated in TRX even if we're doing an TRC20 swap
     // If there is no coin_configuration, consider that we are doing a TRX swap
     if (params->is_fee || params->coin_configuration == NULL) {
@@ -50,7 +60,10 @@ void swap_handle_get_printable_amount(get_printable_amount_parameters_t *params)
     // Raw amount string without a decimal point
     char amount_raw_string[MAX_PRINTABLE_AMOUNT_SIZE] = {0};
 
-    convertUint256BE(params->amount, params->amount_length, &amount_number);
+    if (!convertUint256BE(params->amount, params->amount_length, &amount_number)) {
+        PRINTF("Invalid amount\n");
+        goto error;
+    }
 
     tostring256(&amount_number, 10, amount_raw_string, sizeof(amount_raw_string));
 

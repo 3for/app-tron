@@ -40,6 +40,10 @@ static uint8_t *G_swap_sign_return_value_address;
 bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
     PRINTF("Inside Tron swap_copy_transaction_parameters\n");
 
+    if (params == NULL) {
+        return false;
+    }
+
     // Ensure no extraid
     if (params->destination_address_extra_id == NULL) {
         PRINTF("destination_address_extra_id expected\n");
@@ -55,12 +59,12 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         return false;
     }
 
-    if (params->amount == NULL) {
-        PRINTF("Amount expected\n");
+    if ((params->amount == NULL) || (params->amount_length > MAX_SWAP_AMOUNT_LENGTH)) {
+        PRINTF("Valid amount expected\n");
         return false;
     }
 
-    if ((params->fee_amount == NULL) || (params->fee_amount_length > 32)) {
+    if ((params->fee_amount == NULL) || (params->fee_amount_length > MAX_SWAP_AMOUNT_LENGTH)) {
         PRINTF("Valid fee amount expected\n");
         return false;
     }
@@ -99,8 +103,11 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         return false;
     }
 
-    convertUint256BE(params->amount, params->amount_length, &swap_validated.amount);
-    convertUint256BE(params->fee_amount, params->fee_amount_length, &swap_validated.fee);
+    if (!convertUint256BE(params->amount, params->amount_length, &swap_validated.amount) ||
+        !convertUint256BE(params->fee_amount, params->fee_amount_length, &swap_validated.fee)) {
+        PRINTF("Invalid amount conversion\n");
+        return false;
+    }
 
     swap_validated.initialized = true;
 
