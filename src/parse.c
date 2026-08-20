@@ -388,17 +388,21 @@ bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
     return true;
 }
 
+contract_t msg;
+
 void initTx(txContext_t *context, txContent_t *content) {
     memset(context, 0, sizeof(txContext_t));
     memset(content, 0, sizeof(txContent_t));
+    // The decoded contract is consumed when the complete, cumulatively hashed
+    // transaction is reviewed. Keep it for the same signing-session lifetime
+    // so a trailing APDU containing only other top-level fields cannot erase it.
+    memset(&msg, 0, sizeof(msg));
     context->initialized = true;
     content->contractType = INVALID_CONTRACT;
     cx_sha256_init(&context->sha2);  // init sha
 }
 
 #define COPY_ADDRESS(a, b) memcpy((a), (b), ADDRESS_SIZE)
-
-contract_t msg;
 
 static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
@@ -835,7 +839,6 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
     }
 
     memset(&transaction, 0, sizeof(transaction));
-    memset(&msg, 0, sizeof(msg));
 
     // Each APDU contains complete top-level protobuf fields. Scan tag 18 on a
     // separate stream so an absent field in a later APDU cannot reset a value

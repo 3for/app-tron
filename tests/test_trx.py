@@ -187,6 +187,61 @@ class TestTRX():
         assert check_tx_signature(tx, response.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
+    def test_trx_vote_details_survive_trailing_field_apdu(
+            self, backend, firmware, navigator):
+        if firmware.device != "flex":
+            pytest.skip("Direct vote-field assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        vote_address = "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=[
+                    contract.VoteWitnessContract.Vote(
+                        vote_address=bytes.fromhex(
+                            client.address_hex(vote_address)),
+                        vote_count=100),
+                ]))
+
+        fields = []
+        remaining = tx
+        while remaining:
+            field_length = client.get_next_length(remaining)
+            fields.append(remaining[:field_length])
+            remaining = remaining[field_length:]
+
+        contract_index = next(i for i, field in enumerate(fields)
+                              if field[0] == ((11 << 3) | 2))
+        assert 0 < contract_index < len(fields) - 1
+
+        first_payload = pack_derivation_path(client.getAccount(0)['path'])
+        first_payload += b''.join(fields[:contract_index])
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, first_payload)
+        backend.exchange(CLA, InsType.SIGN, P1.MORE, 0x00,
+                         fields[contract_index])
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.LAST, 0x00,
+                                    b''.join(fields[contract_index + 1:])):
+            navigator.navigate([NavIns(NavInsID.SWIPE_CENTER_TO_LEFT)])
+            assert backend.compare_screen_with_text(vote_address[:24]), \
+                backend.get_current_screen_content()
+            assert backend.compare_screen_with_text(r"^1: 100$"), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     @contextmanager
     def test_trx_send(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
