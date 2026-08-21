@@ -196,3 +196,7 @@ The flow processed in [GitHub Actions](https://github.com/features/actions) is t
 
 * Compilation of the application for all Ledger hardware in [ledger-app-builder](https://github.com/LedgerHQ/ledger-app-builder)
 * End-to-end tests with [Speculos](https://github.com/LedgerHQ/speculos) emulator and [Ragger](https://github.com/LedgerHQ/ragger) (see [tests/](tests/))
+
+## Release checklist
+
+Before preparing a release, complete the [release checklist](docs/RELEASE_CHECKLIST.md). Items marked as blocking require coordination with Ledger.

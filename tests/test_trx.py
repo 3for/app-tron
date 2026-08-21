@@ -612,6 +612,51 @@ class TestTRX():
         ]
         self.sign_and_validate(client, firmware, 0, tx, exchangeSignature)
 
+    @pytest.mark.parametrize(
+        ("exchange_id", "token_id", "exchange_details"),
+        [
+            (
+                6 + (1 << 32),
+                "1000166",
+                # Valid exchange-6 metadata and authority signature with only the
+                # protobuf exchange ID changed. The legacy verifier narrowed this
+                # value back to 6 when reconstructing the signed bytes.
+                "0886808080101207313030303136361a0b43727970746f436861696e20002a015f"
+                "3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b"
+                "61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb1"
+                "36f910b9a1f37bfde192fc448793",
+            ),
+            (
+                166,
+                "1002000",
+                # The fields below concatenate to the authentic exchange-166
+                # payload, but repartition BitTorrent/6/_/TRX/6 as
+                # BitTorrent\\x06/95/T/RX/6.
+                "08a6011207313030323030301a0b426974546f7272656e7406205f2a0154320252"
+                "58380642473045022100ba57d12e19f4f621780ae98430b5bbdcb7c8fa4fbdf6d"
+                "957f43ca5813fd25bd702207698adb892771b71417f09e7ce6de7b773e5cb5717d"
+                "df71fb63bd7890513fd9b",
+            ),
+        ])
+    def test_trx_exchange_rejects_signature_replay(self, backend, firmware,
+                                                   navigator, exchange_id,
+                                                   token_id, exchange_details):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeTransactionContract,
+            contract.ExchangeTransactionContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                                 exchange_id=exchange_id,
+                                                 token_id=token_id.encode(),
+                                                 quant=1000000,
+                                                 expected=1))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'],
+                        tx, [exchange_details],
+                        navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_vote_witness(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(

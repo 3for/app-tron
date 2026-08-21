@@ -5,6 +5,7 @@ import codecs
 import os
 
 from secp256k1 import PrivateKey, PublicKey
+from exchange_serialization import serialize_exchange_signature_payload
 
 # GET Sign PK from Env
 key=os.environ['TRONLEDGER_SIGN']
@@ -69,10 +70,16 @@ for E in exchanges['exchanges']:
         data = urllib.request.urlopen("{}/wallet/getassetissuebyid?value={}".format(full_node,tron.toText(E['second_token_id'])))
         token2 = json.loads(data.read().decode())
 
-    #exchange_id
-    MESSAGE = str(E['exchange_id']).encode() +\
-        binascii.unhexlify(E['first_token_id']) + binascii.unhexlify(token1['name']) + bytes([token1['precision'] if 'precision' in token1 else 0]) +\
-        binascii.unhexlify(E['second_token_id']) + binascii.unhexlify(token2['name']) + bytes([token2['precision'] if 'precision' in token2 else 0])
+    # The v1 marker is part of the signed payload only. ExchangeDetails keeps
+    # its existing Ledger host wire schema; no chain transaction proto changes.
+    MESSAGE = serialize_exchange_signature_payload(
+        E['exchange_id'],
+        binascii.unhexlify(E['first_token_id']),
+        binascii.unhexlify(token1['name']),
+        token1['precision'] if 'precision' in token1 else 0,
+        binascii.unhexlify(E['second_token_id']),
+        binascii.unhexlify(token2['name']),
+        token2['precision'] if 'precision' in token2 else 0)
 
     sig_check = privkey.ecdsa_sign(MESSAGE)
     sig_ser = privkey.ecdsa_serialize(sig_check)

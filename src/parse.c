@@ -19,6 +19,7 @@
 
 #include "pb.h"
 #include "misc/TronApp.pb.h"
+#include "exchange_serialization.h"
 #include "format.h"
 #include "parse.h"
 #include "settings.h"
@@ -319,12 +320,11 @@ static bool set_token_info(txContent_t *content,
     return true;
 }
 
-// Exchange Token ID + Name
-// CHECK SIGNATURE(EXCHANGEID+TOKEN1ID+NAME1+PRECISION1+TOKEN2ID+NAME2+PRECISION2)
-// Parse token Name and Signature
+// Parse token names and verify either the canonical v1 signed payload or a
+// strictly validated, unambiguous legacy payload during migration.
 bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
-    ExchangeDetails details;
-    char buffer[90];
+    ExchangeDetails details = ExchangeDetails_init_zero;
+    uint8_t buffer[EXCHANGE_SIGNATURE_PAYLOAD_MAX_SIZE];
 
     pb_istream_t stream = pb_istream_from_buffer(data, length);
     if (!pb_decode(&stream, ExchangeDetails_fields, &details)) {
@@ -335,43 +335,34 @@ bool parseExchange(const uint8_t *data, size_t length, txContent_t *content) {
         return false;
     }
 
-    /* Replace token ID with Name[ID] */
-    if (strlen(details.token1Id) != 1 && strlen(details.token1Id) != 7) {
-        return false;
-    }
-    if (strlen(details.token2Id) != 1 && strlen(details.token2Id) != 7) {
-        return false;
-    }
-
-    /* Check provided signature. Strange serialization, it would have been
-     * easier to sign the whole protobuf data...
-     *
-     * exchangeId is casted to int32_t as the custom snprintf implementation does
-     * not seem to support %lld. Moreover, two calls to snprintf are made as
-     * implementation does not return the number of written chars...
-     */
     size_t msg_size;
-    snprintf(buffer, sizeof(buffer), "%d", (int32_t) details.exchangeId);
-    msg_size = strlen(buffer);
-
-    snprintf(buffer,
-             sizeof(buffer),
-             "%d%s%s%c%s%s%c",
-             (int32_t) details.exchangeId,
-             details.token1Id,
-             details.token1Name,
-             details.token1Precision,
-             details.token2Id,
-             details.token2Name,
-             details.token2Precision);
-    msg_size += strlen(details.token1Id) + strlen(details.token1Name) + 1;
-    msg_size += strlen(details.token2Id) + strlen(details.token2Name) + 1;
-
-    if (!verifyExchangeID((uint8_t *) buffer,
-                          msg_size,
-                          details.signature.bytes,
-                          details.signature.size)) {
+    if (!serialize_exchange_signature_payload(buffer,
+                                              sizeof(buffer),
+                                              &msg_size,
+                                              details.exchangeId,
+                                              details.token1Id,
+                                              details.token1Name,
+                                              details.token1Precision,
+                                              details.token2Id,
+                                              details.token2Name,
+                                              details.token2Precision)) {
         return false;
+    }
+
+    if (!verifyExchangeID(buffer, msg_size, details.signature.bytes, details.signature.size)) {
+        if (!serialize_legacy_exchange_signature_payload(buffer,
+                                                         sizeof(buffer),
+                                                         &msg_size,
+                                                         details.exchangeId,
+                                                         details.token1Id,
+                                                         details.token1Name,
+                                                         details.token1Precision,
+                                                         details.token2Id,
+                                                         details.token2Name,
+                                                         details.token2Precision) ||
+            !verifyExchangeID(buffer, msg_size, details.signature.bytes, details.signature.size)) {
+            return false;
+        }
     }
 
     int first_token = 0, second_token = 0;
