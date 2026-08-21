@@ -345,8 +345,8 @@ bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     io_seproxyhal_io_heartbeat();
     // Get private key
     err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
-                                        messageSigningContext712.bip32Path,
-                                        messageSigningContext712.pathLength,
+                                        messageSigningContext712.bip32_path.indices,
+                                        messageSigningContext712.bip32_path.length,
                                         &privateKey,
                                         NULL);
     if (err != CX_OK) {

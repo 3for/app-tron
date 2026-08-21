@@ -31,7 +31,6 @@
 #include "settings.h"
 
 int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
-    uint8_t i;
     if (!HAS_SETTING(S_SIGN_BY_HASH)) {
         return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
     }
@@ -39,27 +38,23 @@ int handleSignTIP712Message(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_
     if ((p1 != 00) || (p2 != 00)) {
         return io_send_sw(E_INCORRECT_P1_P2);
     }
-    if (dataLength < 1) {
-        return io_send_sw(E_INCORRECT_DATA);
+    bip32_path_t bip32_path = {0};
+    off_t path_size = read_bip32_path(workBuffer, dataLength, &bip32_path);
+    if (path_size < 0) {
+        return io_send_sw(E_INCORRECT_BIP32_PATH);
     }
-    messageSigningContext712.pathLength = workBuffer[0];
-    if ((messageSigningContext712.pathLength < 0x01) ||
-        (messageSigningContext712.pathLength > MAX_BIP32_PATH)) {
-        return io_send_sw(E_INCORRECT_DATA);
+    workBuffer += path_size;
+    dataLength -= path_size;
+
+    if (dataLength != HASH_SIZE * 2) {
+        return io_send_sw(E_INCORRECT_LENGTH);
     }
-    workBuffer++;
-    dataLength--;
-    for (i = 0; i < messageSigningContext712.pathLength; i++) {
-        if (dataLength < 4) {
-            return io_send_sw(E_INCORRECT_DATA);
-        }
-        messageSigningContext712.bip32Path[i] = U4BE(workBuffer, 0);
-        workBuffer += 4;
-        dataLength -= 4;
+
+    if (initPublicKeyContext(&bip32_path, messageSigningContext712.signerAddress) != 0) {
+        return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
     }
-    if (dataLength < HASH_SIZE * 2) {
-        return io_send_sw(E_INCORRECT_DATA);
-    }
+
+    messageSigningContext712.bip32_path = bip32_path;
     memmove(messageSigningContext712.domainHash, workBuffer, HASH_SIZE);
     memmove(messageSigningContext712.messageHash, workBuffer + HASH_SIZE, HASH_SIZE);
 

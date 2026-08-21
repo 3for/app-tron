@@ -1272,23 +1272,51 @@ class TestTRX():
         assert check_hash_signature(hash_to_sign, resp.data[0:65],
                                     client.getAccount(0)['publicKey'][2:])
 
-    def test_trx_sign_tip712(self, backend, firmware, navigator):
+    @pytest.mark.parametrize("account_number", [0, 1])
+    def test_trx_sign_tip712_displays_signing_account(self, backend, firmware,
+                                                      navigator,
+                                                      account_number):
         client = TronClient(backend, firmware, navigator)
         domainHash = bytes.fromhex(
             '6137beb405d9ff777172aa879e33edb34a1460e701802746c5ef96e741710e59')
         messageHash = bytes.fromhex(
             'eb4221181ff3f1a83ea7313993ca9218496e424604ba9492bb4052c03d5c3df8')
-        data = pack_derivation_path(client.getAccount(0)['path'])
+        account = client.getAccount(account_number)
+        data = pack_derivation_path(account['path'])
         data += domainHash
         data += messageHash
+        signer_public_key = b'\x04' + bytes.fromhex(account['publicKey'][2:])
+        signer_address = client.compute_address_from_public_key(
+            signer_public_key)
 
         with backend.exchange_async(CLA, InsType.SIGN_TIP_712_MESSAGE, 0x00,
                                     0x00, data):
             if firmware.is_nano:
-                text = "message"
+                navigate_instruction = NavInsID.RIGHT_CLICK
+                validation_instructions = [NavInsID.BOTH_CLICK]
+                approval_text = "Sign"
             else:
-                text = "Hold to sign"
-            client.navigate(Path(currentframe().f_code.co_name), text)
+                navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+                validation_instructions = [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ]
+                approval_text = "Hold to sign"
+
+            navigator.navigate_until_text(
+                navigate_instruction, [],
+                "Sign with",
+                screen_change_before_first_instruction=True,
+                screen_change_after_last_instruction=False)
+            displayed_address = (signer_address[:12]
+                                 if firmware.is_nano else signer_address)
+            assert backend.compare_screen_with_text(displayed_address), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=False)
 
         resp = backend.last_async_response
 
@@ -1298,7 +1326,19 @@ class TestTRX():
         hash = keccak.new(digest_bits=256, data=msg_to_sign).digest()
 
         assert check_hash_signature(hash, resp.data[0:65],
-                                    client.getAccount(0)['publicKey'][2:])
+                                    account['publicKey'][2:])
+
+    @pytest.mark.parametrize(("payload", "expected_status"), [
+        (b'\x00' + (b'\x00' * 64), Errors.INCORRECT_BIP32_PATH),
+        (pack_derivation_path("m/44'/195'/0'/0/0") +
+         (b'\x00' * 65), Errors.INCORRECT_LENGTH),
+    ])
+    def test_trx_sign_tip712_rejects_malformed_payload(self, backend, payload,
+                                                       expected_status):
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN_TIP_712_MESSAGE, 0x00, 0x00,
+                             payload)
+        assert error.value.status == expected_status
 
     def test_trx_send_permissioned(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)

@@ -821,7 +821,13 @@ UX_STEP_NOCB_INIT(ux_sign_712_v0_3_step,
                       .title = "Message hash",
                       .text = strings.tmp.tmp,
                   });
-UX_STEP_VALID(ux_sign_712_v0_4_step,
+UX_STEP_NOCB(ux_sign_712_v0_4_step,
+             bnnn_paging,
+             {
+                 .title = "Sign with",
+                 .text = messageSigningContext712.signerAddress,
+             });
+UX_STEP_VALID(ux_sign_712_v0_5_step,
               pbb,
               ui_callback_signMessage712_v0_ok(true),
               {
@@ -829,7 +835,7 @@ UX_STEP_VALID(ux_sign_712_v0_4_step,
                   "Sign",
                   "message",
               });
-UX_STEP_VALID(ux_sign_712_v0_5_step,
+UX_STEP_VALID(ux_sign_712_v0_6_step,
               pbb,
               ui_callback_signMessage712_v0_cancel(true),
               {
@@ -843,7 +849,8 @@ UX_STEP_VALID(ux_sign_712_v0_5_step,
 //         &ux_sign_712_v0_2_step,
 //         &ux_sign_712_v0_3_step,
 //         &ux_sign_712_v0_4_step,
-//         &ux_sign_712_v0_5_step);
+//         &ux_sign_712_v0_5_step,
+//         &ux_sign_712_v0_6_step);
 
 const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
     &ux_sign_712_v0_1_step,
@@ -851,6 +858,7 @@ const ux_flow_step_t *const ux_sign_712_v0_flow[] = {
     &ux_sign_712_v0_3_step,
     &ux_sign_712_v0_4_step,
     &ux_sign_712_v0_5_step,
+    &ux_sign_712_v0_6_step,
     FLOW_END_STEP,
 };
 

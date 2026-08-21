@@ -166,10 +166,10 @@ typedef struct txContent_t {
 } txContent_t;
 
 typedef struct messageSigningContext712_t {
-    uint8_t pathLength;
-    uint32_t bip32Path[MAX_BIP32_PATH];
+    bip32_path_t bip32_path;
     uint8_t domainHash[32];
     uint8_t messageHash[32];
+    char signerAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 } messageSigningContext712_t;
 
 typedef struct txStringProperties_t {

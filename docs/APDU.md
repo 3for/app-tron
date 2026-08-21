@@ -278,6 +278,10 @@ Requires the **Sign by hash** setting.
 [32 bytes] message hash
 ```
 
+The payload must end immediately after the message hash. Before approval, the
+device derives the selected path's Tron Base58Check address and displays it as
+`Sign with` together with both hashes.
+
 **Response**
 
 ```
