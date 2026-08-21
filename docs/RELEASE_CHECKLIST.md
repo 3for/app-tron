@@ -31,3 +31,32 @@ Complete the following items with Ledger before releasing this change:
 Release evidence must include the firmware version, signed-list revision,
 Ledger approval reference, successful v1 verification, successful legacy
 compatibility verification, and rejection of both documented replay payloads.
+
+## Blocking for ambiguous assets: TRC20 swap contract binding
+
+The swap signer now binds a TRC20 approval to the token's 21-byte Tron contract
+address. Existing app-exchange configurations using
+`[ticker length][ticker][decimals]` remain compatible when that metadata maps to
+exactly one contract in the app's trusted token table. Metadata shared by
+multiple contracts is intentionally rejected unless the signed Tron
+sub-configuration appends the explicit contract address:
+
+`[ticker length][ticker][decimals][21-byte contract address]`
+
+Complete the following items with the Ledger app-exchange and CAL owners before
+enabling or releasing swap support for an asset with ambiguous metadata:
+
+- [ ] Confirm the optional Tron sub-configuration extension and rollout plan
+      with the Ledger app-exchange and CAL owners.
+- [ ] Publish a signed CAL configuration containing the exact 21-byte Tron
+      contract address for every ambiguous asset that must remain swappable.
+- [ ] Run the official app-exchange integration tests for native TRX, existing
+      legacy unique-metadata tokens, and the extended address-bound format.
+- [ ] Verify that approving contract A and submitting otherwise identical token
+      calldata for contract B is rejected on Speculos and a physical device.
+- [ ] Record the app-exchange revision, CAL record revision, firmware version,
+      and Ledger approval reference in the release evidence.
+
+Unique-metadata legacy configurations do not require a CAL format migration,
+but the release evidence should still include at least one successful legacy
+TRC20 swap to guard the existing app-exchange flow.

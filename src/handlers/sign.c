@@ -397,6 +397,8 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                         fullContract,               // Token name
                         TRC20ActionSendAllow,       // "Send To"
                         txContent.destination,
+                        (txContent.contractType == TRIGGERSMARTCONTRACT) ? txContent.contractAddress
+                                                                         : NULL,
                         (txContent.contractType == TRIGGERSMARTCONTRACT) ? txContent.amount[0] : 0,
                         txContent.callTokenValue,
                         txContent.tokenId,

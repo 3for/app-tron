@@ -22,14 +22,17 @@
 
 #include "helpers.h"
 #include "parse.h"
+#include "tokens.h"
 #include "uint256.h"
 
 #define BASE58CHECK_DECODED_SIZE (ADDRESS_SIZE + 4)
 
 typedef struct swap_validated_s {
     bool initialized;
+    bool is_trc20;
     uint8_t decimals;
     char ticker[MAX_SWAP_TOKEN_LENGTH];
+    uint8_t contract_address[ADDRESS_SIZE];
     uint256_t amount;
     uint256_t fee;
     uint8_t recipient[ADDRESS_SIZE];
@@ -39,6 +42,54 @@ static swap_validated_t G_swap_validated;
 
 // Save the BSS address where we will write the return value when finished
 static uint8_t *G_swap_sign_return_value_address;
+
+static bool token_metadata_matches(const tokenDefinition_t *token,
+                                   const char *ticker,
+                                   uint8_t decimals) {
+    return (token->decimals == decimals) && (strcmp(token->ticker, ticker) == 0);
+}
+
+static bool resolve_trc20_contract(const char *ticker,
+                                   uint8_t decimals,
+                                   const uint8_t *configured_address,
+                                   uint8_t contract_address[static ADDRESS_SIZE]) {
+    const tokenDefinition_t *match = NULL;
+
+    for (size_t i = 0; i < NUM_TOKENS_TRC20; i++) {
+        const tokenDefinition_t *token = (const tokenDefinition_t *) PIC(&TOKENS_TRC20[i]);
+
+        if (configured_address != NULL) {
+            if (memcmp(token->address, configured_address, ADDRESS_SIZE) != 0) {
+                continue;
+            }
+            if (!token_metadata_matches(token, ticker, decimals)) {
+                PRINTF("Configured TRC20 contract does not match ticker/decimals\n");
+                return false;
+            }
+            memcpy(contract_address, token->address, ADDRESS_SIZE);
+            return true;
+        }
+
+        if (!token_metadata_matches(token, ticker, decimals)) {
+            continue;
+        }
+
+        if (match == NULL) {
+            match = token;
+        } else if (memcmp(match->address, token->address, ADDRESS_SIZE) != 0) {
+            PRINTF("TRC20 ticker/decimals do not identify a unique contract\n");
+            return false;
+        }
+    }
+
+    if (match == NULL) {
+        PRINTF("TRC20 configuration is not present in the trusted token table\n");
+        return false;
+    }
+
+    memcpy(contract_address, match->address, ADDRESS_SIZE);
+    return true;
+}
 
 static bool parse_swap_recipient(const char *address58, uint8_t recipient[static ADDRESS_SIZE]) {
     uint8_t decoded[BASE58CHECK_DECODED_SIZE];
@@ -109,7 +160,7 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
     swap_validated_t swap_validated;
     memset(&swap_validated, 0, sizeof(swap_validated));
 
-    // Parse config and save decimals and ticker
+    // Parse config and save decimals, ticker and the canonical asset identity.
     // If there is no coin_configuration, consider that we are doing a TRX swap
     if (params->coin_configuration == NULL) {
         memcpy(swap_validated.ticker, "TRX", sizeof("TRX"));
@@ -123,6 +174,28 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
             PRINTF("Fail to parse coin_configuration\n");
             return false;
         }
+
+        // Legacy Tron sub-configurations contain [ticker length][ticker][decimals].
+        // They remain supported when ticker/decimals identify exactly one trusted
+        // contract. An optional trailing 21-byte address lets the signed CAL
+        // configuration disambiguate colliding token metadata without changing
+        // the app-exchange library ABI.
+        const size_t base_config_length = 2u + params->coin_configuration[0];
+        const uint8_t *configured_address = NULL;
+        if (params->coin_configuration_length == base_config_length + ADDRESS_SIZE) {
+            configured_address = params->coin_configuration + base_config_length;
+        } else if (params->coin_configuration_length != base_config_length) {
+            PRINTF("Unexpected Tron coin_configuration length\n");
+            return false;
+        }
+
+        if (!resolve_trc20_contract(swap_validated.ticker,
+                                    swap_validated.decimals,
+                                    configured_address,
+                                    swap_validated.contract_address)) {
+            return false;
+        }
+        swap_validated.is_trc20 = true;
     }
 
     memcpy(swap_validated.recipient, recipient, sizeof(swap_validated.recipient));
@@ -188,6 +261,7 @@ bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
                          const uint8_t *recipient,
+                         const uint8_t *contractAddress,
                          uint64_t callValue,
                          uint64_t callTokenValue,
                          uint64_t tokenId,
@@ -221,6 +295,17 @@ bool swap_check_validity(const char *amount,
 
     if (strncmp(tokenName, G_swap_validated.ticker, MAX_SWAP_TOKEN_LENGTH) != 0) {
         PRINTF("Refused field '%s', expecting '%s'\n", tokenName, G_swap_validated.ticker);
+        return false;
+    }
+
+    if (G_swap_validated.is_trc20) {
+        if ((contractAddress == NULL) ||
+            (memcmp(contractAddress, G_swap_validated.contract_address, ADDRESS_SIZE) != 0)) {
+            PRINTF("TRC20 contract requested in this transaction does not match swap asset\n");
+            return false;
+        }
+    } else if (contractAddress != NULL) {
+        PRINTF("Refused TRC20 transaction for a native TRX swap\n");
         return false;
     }
 
