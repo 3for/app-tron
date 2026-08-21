@@ -27,6 +27,7 @@
 #include "app_errors.h"
 #include "handlers.h"
 #include "parse.h"
+#include "settings.h"
 #include "ui_globals.h"
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
@@ -50,6 +51,12 @@ static int failPersonalMessageSigning(uint16_t status_word) {
 }
 
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
+    // Personal messages are arbitrary, potentially binary streams that cannot
+    // be interpreted or fully displayed by the app. Treat this as blind signing.
+    if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+        return failPersonalMessageSigning(E_MISSING_SETTING_SIGN_BY_HASH);
+    }
+
     if (p2 != 0) {
         return failPersonalMessageSigning(E_INCORRECT_P1_P2);
     }
@@ -124,22 +131,10 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    32));
         transactionContext.bip32_path = G_personal_message_context.bip32_path;
         resetPersonalMessageSigningContext();
-#ifdef HAVE_BAGL
-#define HASH_LENGTH 4
-        format_hex(transactionContext.hash, HASH_LENGTH / 2, fullContract, sizeof(fullContract));
-        fullContract[HASH_LENGTH] = '.';
-        fullContract[HASH_LENGTH + 1] = '.';
-        fullContract[HASH_LENGTH + 2] = '.';
-        format_hex(transactionContext.hash + 32 - HASH_LENGTH / 2,
-                   HASH_LENGTH / 2,
-                   fullContract + HASH_LENGTH + 3,
-                   sizeof(fullContract) - (HASH_LENGTH + 3));
-#else
         format_hex(transactionContext.hash,
                    sizeof(transactionContext.hash),
                    fullContract,
                    sizeof(fullContract));
-#endif
         if (initPublicKeyContext(&transactionContext.bip32_path, fromAddress) != 0) {
             return io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
         }

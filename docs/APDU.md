@@ -207,7 +207,9 @@ ignored.
 
 Signs an arbitrary message using the TRON personal-message scheme. The message is prefixed with
 `\x19TRON Signed Message:\n<length>` and hashed with **Keccak-256**. The message may be streamed
-across multiple chunks.
+across multiple chunks. Because arbitrary streamed content cannot be interpreted or completely
+displayed by the app, this command requires the **Sign by hash** setting. The approval screen shows
+the complete 256-bit message hash; BAGL devices paginate it instead of truncating it.
 
 **P1**
 
@@ -232,6 +234,8 @@ across multiple chunks.
 The cumulative data must not exceed the announced length (`0x6700` otherwise).
 Continuation chunks must be contiguous: any non-personal-message APDU or invalid chunk cancels the
 active stream, and a new `P1_FIRST`/`P1_SIGN` safely starts a new stream.
+If the *Sign by hash* setting is disabled, the command returns `0x6A8C` and clears any active
+personal-message stream.
 
 **Response**
 

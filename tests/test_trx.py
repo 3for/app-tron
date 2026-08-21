@@ -28,6 +28,19 @@ from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
 
 
+@pytest.mark.parametrize("p1", [P1.FIRST, P1.SIGN])
+def test_personal_message_requires_blind_signing(backend, firmware, navigator,
+                                                 p1):
+    client = TronClient(backend, firmware, navigator)
+    message = b"blind message"
+    data = pack_derivation_path(client.getAccount(0)['path'])
+    data += struct.pack(">I", len(message)) + message
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, p1, 0x00, data)
+    assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
+
+
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
     '''Test TRX client.'''
