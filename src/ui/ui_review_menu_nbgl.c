@@ -422,9 +422,9 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
             txInfos.fields[1].value = (const char *) reviewData;
-            txInfos.fields[2].item = stringLabelRecipientAddress;
+            txInfos.fields[2].item = "Undelegate To";
             txInfos.fields[2].value = fromAddress;
-            txInfos.fields[3].item = stringLabelSenderAddress;
+            txInfos.fields[3].item = "Undelegate From";
             txInfos.fields[3].value = toAddress;
             pairList.nbPairs = 4;
             txInfos.flowTitle = "Review transaction to\nUndelegate Resource";

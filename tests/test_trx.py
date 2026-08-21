@@ -1589,6 +1589,62 @@ class TestTRX():
                     client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP"))))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    @pytest.mark.parametrize(("resource", "receiver_address"), [
+        (contract.ENERGY, "TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP"),
+        (contract.BANDWIDTH, "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"),
+    ])
+    def test_trx_undelegate_resource_displays_semantic_address_roles(
+            self, backend, firmware, navigator, resource, receiver_address):
+        if firmware.device != "flex":
+            pytest.skip(
+                "Direct undelegation role assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        account = client.getAccount(0)
+        owner_address = client.compute_address_from_public_key(
+            b'\x04' + bytes.fromhex(account['publicKey'][2:]))
+        tx = client.packContract(
+            tron.Transaction.Contract.UnDelegateResourceContract,
+            contract.UnDelegateResourceContract(
+                owner_address=bytes.fromhex(account['addressHex']),
+                resource=resource,
+                balance=100000000,
+                receiver_address=bytes.fromhex(
+                    client.address_hex(receiver_address))))
+        payload = pack_derivation_path(account['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00, payload):
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [],
+                "Undelegate To",
+                screen_change_before_first_instruction=True)
+            assert backend.compare_screen_with_text(owner_address[:12]), \
+                backend.get_current_screen_content()
+            assert not backend.compare_screen_with_text(receiver_address[:12]), \
+                backend.get_current_screen_content()
+
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [],
+                "Undelegate From",
+                screen_change_before_first_instruction=False)
+            assert backend.compare_screen_with_text(receiver_address[:12]), \
+                backend.get_current_screen_content()
+            assert not backend.compare_screen_with_text(owner_address[:12]), \
+                backend.get_current_screen_content()
+
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  account['publicKey'][2:])
+
     def test_trx_withdraw_unfreeze(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
