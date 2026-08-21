@@ -22,6 +22,8 @@
 
 #include "ux.h"
 #include "os_io_seproxyhal.h"
+#include "io.h"
+#include "app_errors.h"
 #include "ui_globals.h"
 #include "ui_review_menu.h"
 
@@ -113,9 +115,7 @@ UX_STEP_NOCB(ux_approval_tx_1_step,
                  "Review",
                  "Transaction",
              });
-UX_STEP_NOCB(ux_approval_tx_2_step,
-             bnnn_paging,
-             {.title = "Amount", .text = (char *) G_io_apdu_buffer});
+UX_STEP_NOCB(ux_approval_tx_2_step, bnnn_paging, {.title = "Amount", .text = (char *) reviewData});
 UX_STEP_NOCB(ux_approval_tx_3_step,
              bnnn_paging,
              {
@@ -191,7 +191,7 @@ UX_STEP_NOCB(ux_approval_exchange_create_3_step,
              bnnn_paging,
              {
                  .title = "Amount 1",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_exchange_create_4_step,
              bnnn_paging,
@@ -203,7 +203,7 @@ UX_STEP_NOCB(ux_approval_exchange_create_5_step,
              bnnn_paging,
              {
                  .title = "Amount 2",
-                 .text = (char *) G_io_apdu_buffer + 100,
+                 .text = (char *) reviewData + 100,
              });
 UX_STEP_VALID(ux_approval_exchange_create_confirm_step,
               pbb,
@@ -247,32 +247,32 @@ UX_STEP_NOCB(ux_approval_vote_flow_1_step,
 UX_STEP_NOCB(ux_approval_vote_flow_2_step,
              bnnn_paging,
              {
-                 .title = (char *) (G_io_apdu_buffer + voteSlot(0, VOTE_ADDRESS)),
-                 .text = (char *) (G_io_apdu_buffer + voteSlot(0, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(0, VOTE_ADDRESS)),
+                 .text = (char *) (reviewData + voteSlot(0, VOTE_AMOUNT)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_3_step,
              bnnn_paging,
              {
-                 .title = (char *) (G_io_apdu_buffer + voteSlot(1, VOTE_ADDRESS)),
-                 .text = (char *) (G_io_apdu_buffer + voteSlot(1, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(1, VOTE_ADDRESS)),
+                 .text = (char *) (reviewData + voteSlot(1, VOTE_AMOUNT)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_4_step,
              bnnn_paging,
              {
-                 .title = (char *) (G_io_apdu_buffer + voteSlot(2, VOTE_ADDRESS)),
-                 .text = (char *) (G_io_apdu_buffer + voteSlot(2, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(2, VOTE_ADDRESS)),
+                 .text = (char *) (reviewData + voteSlot(2, VOTE_AMOUNT)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_5_step,
              bnnn_paging,
              {
-                 .title = (char *) (G_io_apdu_buffer + voteSlot(3, VOTE_ADDRESS)),
-                 .text = (char *) (G_io_apdu_buffer + voteSlot(3, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(3, VOTE_ADDRESS)),
+                 .text = (char *) (reviewData + voteSlot(3, VOTE_AMOUNT)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_6_step,
              bnnn_paging,
              {
-                 .title = (char *) (G_io_apdu_buffer + voteSlot(4, VOTE_ADDRESS)),
-                 .text = (char *) (G_io_apdu_buffer + voteSlot(4, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(4, VOTE_ADDRESS)),
+                 .text = (char *) (reviewData + voteSlot(4, VOTE_AMOUNT)),
              });
 
 // 11 slots for dynamic Nano UX voting steps
@@ -294,7 +294,7 @@ UX_STEP_NOCB(ux_approval_freeze_flow_3_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_freeze_flow_4_step,
              bnnn_paging,
@@ -372,7 +372,7 @@ UX_STEP_NOCB(ux_approval_freeze_v2_flow_3_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_freeze_v2_flow_4_step,
              bnnn_paging,
@@ -420,7 +420,7 @@ UX_STEP_NOCB(ux_approval_unfreeze_v2_flow_show_amount_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 
 UX_DEF(ux_approval_unfreeze_v2_flow,
@@ -458,13 +458,13 @@ UX_STEP_NOCB(ux_approval_delegate_flow_show_amount_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_delegate_resource_flow_check_lock_step,
              bnnn_paging,
              {
                  .title = "Is Lock",
-                 .text = (const char *) G_io_apdu_buffer + 100,
+                 .text = (const char *) reviewData + 100,
              });
 
 UX_STEP_NOCB(ux_approval_delegate_resource_flow_delegate_to_step,
@@ -511,7 +511,7 @@ UX_STEP_NOCB(ux_approval_undelegate_flow_show_amount_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 
 UX_STEP_NOCB(ux_approval_undelegate_resource_flow_undelegate_to_step,
@@ -615,13 +615,13 @@ UX_STEP_NOCB(ux_approval_exchange_transaction_4_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_exchange_transaction_5_step,
              bnnn_paging,
              {
                  .title = "Expected",
-                 .text = (char *) G_io_apdu_buffer + 100,
+                 .text = (char *) reviewData + 100,
              });
 
 UX_DEF(ux_approval_exchange_transaction_flow,
@@ -656,7 +656,7 @@ UX_STEP_NOCB(ux_approval_exchange_wi_1_step,
              });
 UX_STEP_NOCB(ux_approval_exchange_wi_2_step,
              bnnn_paging,
-             {.title = "Action", .text = (char *) G_io_apdu_buffer + 100});
+             {.title = "Action", .text = (char *) reviewData + 100});
 UX_STEP_NOCB(ux_approval_exchange_wi_3_step,
              bnnn_paging,
              {
@@ -673,7 +673,7 @@ UX_STEP_NOCB(ux_approval_exchange_wi_5_step,
              bnnn_paging,
              {
                  .title = "Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 
 UX_DEF(ux_approval_exchange_wi_flow,
@@ -882,13 +882,13 @@ UX_STEP_NOCB(ux_approval_custom_contract_5_step,
              bnnn_paging,
              {
                  .title = "Call Amount",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_custom_contract_trc10_trx_step,
              bnnn_paging,
              {
                  .title = "Attached TRX",
-                 .text = (char *) G_io_apdu_buffer,
+                 .text = (char *) reviewData,
              });
 UX_STEP_NOCB(ux_approval_custom_contract_trc10_id_step,
              bnnn_paging,
@@ -900,7 +900,7 @@ UX_STEP_NOCB(ux_approval_custom_contract_trc10_amount_step,
              bnnn_paging,
              {
                  .title = "TRC10 Amount",
-                 .text = (char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
+                 .text = (char *) reviewData + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET,
              });
 UX_STEP_NOCB(ux_approval_custom_contract_fee_step,
              bnnn_paging,
@@ -994,6 +994,11 @@ UX_DEF(ux_approval_account_permission_update_data_warning_flow,
        &ux_approval_reject_step);
 
 void ux_flow_display(ui_approval_state_t state, bool data_warning) {
+    if (!ui_review_begin(state)) {
+        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return;
+    }
+
     switch (state) {
         case APPROVAL_TRANSFER:
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {

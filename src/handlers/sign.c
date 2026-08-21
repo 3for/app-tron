@@ -403,6 +403,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                         txContent.feeLimit,
                         txContent.contractType == TRIGGERSMARTCONTRACT)) {
                     PRINTF("Signing valid swap transaction\n");
+                    if (!ui_review_begin(APPROVAL_TRANSFER)) {
+                        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+                    }
                     ui_callback_tx_ok(false);
                 } else {
                     PRINTF("Refused signing incorrect Swap transaction\n");

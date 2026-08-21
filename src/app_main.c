@@ -27,6 +27,7 @@
 #include "ux.h"
 
 #include "ui_idle_menu.h"
+#include "ui_globals.h"
 #include "settings.h"
 #include "handlers.h"
 #include "parse.h"
@@ -60,6 +61,7 @@ void app_main(void) {
     nv_app_state_init();
 
     io_init();
+    ui_review_reset();
 
 #ifdef HAVE_SWAP
     if (!G_called_from_swap) {
@@ -78,6 +80,7 @@ void app_main(void) {
 
                 // Receive command bytes in G_io_apdu_buffer
                 if ((input_len = io_recv_command()) < 0) {
+                    ui_review_reset();
                     CLOSE_TRY;
                     return;
                 }
@@ -106,10 +109,14 @@ void app_main(void) {
                 }
             }
             CATCH(EXCEPTION_IO_RESET) {
+                ui_review_reset();
                 CLOSE_TRY;
                 THROW(EXCEPTION_IO_RESET);
             }
             CATCH_OTHER(e) {
+                // An exception aborts the command that may have started a
+                // review. Do not leave the dispatcher permanently locked.
+                ui_review_reset();
                 io_send_sw(e);
             }
             FINALLY {

@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include "app_errors.h"
+#include "io.h"
 #include "ux.h"
 #include "nbgl_use_case.h"
 #include "ui_globals.h"
@@ -184,7 +185,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
     switch (state) {
         case APPROVAL_TRANSFER:
             txInfos.fields[0].item = stringLabelTxAmount;
-            txInfos.fields[0].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[0].value = (const char *) reviewData;
             txInfos.fields[1].item = "Token";
             txInfos.fields[1].value = fullContract;
             txInfos.fields[2].item = TRC20ActionSendAllow;
@@ -223,11 +224,11 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = "Token 1";
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = "Amount 1";
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = "Token 2";
             txInfos.fields[2].value = toAddress;
             txInfos.fields[3].item = "Amount 2";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[3].value = (const char *) reviewData + 100;
             txInfos.fields[4].item = stringLabelSenderAddress;
             txInfos.fields[4].value = fromAddress;
             pairList.nbPairs = 5;
@@ -240,22 +241,22 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].item = "Token pair";
             txInfos.fields[1].value = fullContract;
             txInfos.fields[2].item = stringLabelTxAmount;
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[2].value = (const char *) reviewData;
             txInfos.fields[3].item = "Expected";
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[3].value = (const char *) reviewData + 100;
             txInfos.fields[4].item = stringLabelSenderAddress;
             txInfos.fields[4].value = fromAddress;
             pairList.nbPairs = 5;
             break;
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
             txInfos.fields[0].item = "Action";
-            txInfos.fields[0].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[0].value = (const char *) reviewData + 100;
             txInfos.fields[1].item = "Exchange ID";
             txInfos.fields[1].value = toAddress;
             txInfos.fields[2].item = "Token Name";
             txInfos.fields[2].value = fullContract;
             txInfos.fields[3].item = stringLabelTxAmount;
-            txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[3].value = (const char *) reviewData;
             txInfos.fields[4].item = stringLabelSenderAddress;
             txInfos.fields[4].value = fromAddress;
             pairList.nbPairs = 5;
@@ -265,10 +266,8 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 THROW(E_INCORRECT_DATA);
             }
             for (uint8_t i = 0; i < votes_count; i++) {
-                txInfos.fields[i].item =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_ADDRESS));
-                txInfos.fields[i].value =
-                    ((const char *) G_io_apdu_buffer + voteSlot(i, VOTE_AMOUNT));
+                txInfos.fields[i].item = ((const char *) reviewData + voteSlot(i, VOTE_ADDRESS));
+                txInfos.fields[i].value = ((const char *) reviewData + voteSlot(i, VOTE_AMOUNT));
             }
             txInfos.fields[votes_count].item = "Total Vote Count";
             txInfos.fields[votes_count].value = fullContract;
@@ -282,7 +281,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = "Freeze To";
             txInfos.fields[2].value = toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
@@ -341,12 +340,12 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = TRC20Action;
             if ((txContent.callTokenValue != 0) || (txContent.tokenId != 0)) {
                 txInfos.fields[2].item = "Attached TRX";
-                txInfos.fields[2].value = (const char *) G_io_apdu_buffer;
+                txInfos.fields[2].value = (const char *) reviewData;
                 txInfos.fields[3].item = "TRC10 ID";
                 txInfos.fields[3].value = toAddress;
                 txInfos.fields[4].item = "TRC10 Amount";
                 txInfos.fields[4].value =
-                    (const char *) G_io_apdu_buffer + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
+                    (const char *) reviewData + CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET;
                 txInfos.fields[5].item = "Max fee (TRX)";
                 txInfos.fields[5].value = strings.common.maxFee;
                 txInfos.fields[6].item = stringLabelSenderAddress;
@@ -356,7 +355,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
                 txInfos.fields[2].item = "Pay Token";
                 txInfos.fields[2].value = toAddress;
                 txInfos.fields[3].item = "Call Amount";
-                txInfos.fields[3].value = (const char *) G_io_apdu_buffer;
+                txInfos.fields[3].value = (const char *) reviewData;
                 txInfos.fields[4].item = "Max fee (TRX)";
                 txInfos.fields[4].value = strings.common.maxFee;
                 txInfos.fields[5].item = stringLabelSenderAddress;
@@ -379,7 +378,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = stringLabelRecipientAddress;
             txInfos.fields[2].value = toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
@@ -392,7 +391,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = stringLabelRecipientAddress;
             txInfos.fields[2].value = toAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
@@ -405,9 +404,9 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = "Lock";
-            txInfos.fields[2].value = (const char *) G_io_apdu_buffer + 100;
+            txInfos.fields[2].value = (const char *) reviewData + 100;
             txInfos.fields[3].item = stringLabelRecipientAddress;
             txInfos.fields[3].value = toAddress;
             txInfos.fields[4].item = stringLabelSenderAddress;
@@ -420,7 +419,7 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[0].item = stringLabelResource;
             txInfos.fields[0].value = fullContract;
             txInfos.fields[1].item = stringLabelTxAmount;
-            txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
+            txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = stringLabelRecipientAddress;
             txInfos.fields[2].value = fromAddress;
             txInfos.fields[3].item = stringLabelSenderAddress;
@@ -453,6 +452,11 @@ static void display_address_callback(bool confirm) {
 }
 
 void ux_flow_display(ui_approval_state_t state, bool data_warning) {
+    if (!ui_review_begin(state)) {
+        io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        return;
+    }
+
     if (state == APPROVAL_VERIFY_ADDRESS) {
         nbgl_useCaseAddressReview(toAddress,
                                   NULL,

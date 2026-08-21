@@ -20,6 +20,7 @@
 
 #include "handlers.h"
 #include "app_errors.h"
+#include "ui_globals.h"
 
 #ifdef HAVE_SWAP
 #include "swap.h"
@@ -27,6 +28,14 @@
 
 // Check ADPU and process the assigned task
 int apdu_dispatcher(const command_t *cmd) {
+    // Approval callbacks consume mutable signing/key contexts asynchronously.
+    // Once a review starts, no later APDU may reach a handler until the user
+    // approves or rejects it. Review text that used the transport buffer is
+    // separately sealed by ui_review_begin before the UX starts.
+    if (ui_review_is_pending()) {
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
     // A personal-message hash stream may only contain personal-message APDUs.
     // Any other command (including one with a bad CLA) invalidates it so a
     // later P1_MORE cannot resume across an interleaved operation.

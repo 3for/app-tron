@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "../parse.h"
+#include "ui_review_menu.h"
 
 #define VOTE_ADDRESS 0
 #ifdef HAVE_BAGL
@@ -36,6 +37,7 @@
 // bounded by INT64_MAX, so 100 bytes per slot is ample and preserves the
 // existing uses of G_io_apdu_buffer.
 #define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 100
+#define REVIEW_DATA_BUFFER_SIZE             250
 
 #ifdef HAVE_NBGL
 #if LARGE_ICON_SIZE == 64
@@ -61,6 +63,13 @@ extern transactionContext_t transactionContext;
 extern publicKeyContext_t publicKeyContext;
 extern messageSigningContext712_t messageSigningContext712;
 extern strings_t strings;
+// Immutable copy of display data prepared in G_io_apdu_buffer. Incoming APDUs
+// reuse that transport buffer, so review screens must never reference it.
+extern uint8_t reviewData[REVIEW_DATA_BUFFER_SIZE];
+
+bool ui_review_begin(ui_approval_state_t state);
+bool ui_review_is_pending(void);
+void ui_review_reset(void);
 
 bool ui_callback_tx_ok(bool display_menu);
 bool ui_callback_tx_cancel(bool display_menu);

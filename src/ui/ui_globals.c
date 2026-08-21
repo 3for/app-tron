@@ -36,8 +36,115 @@ transactionContext_t transactionContext;
 publicKeyContext_t publicKeyContext;
 messageSigningContext712_t messageSigningContext712;
 strings_t strings;
+uint8_t reviewData[REVIEW_DATA_BUFFER_SIZE];
+
+_Static_assert(REVIEW_DATA_BUFFER_SIZE <= sizeof(G_io_apdu_buffer),
+               "review snapshot exceeds APDU buffer");
+_Static_assert(CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET + 100 <= REVIEW_DATA_BUFFER_SIZE,
+               "review snapshot does not cover amount slots");
+_Static_assert(5 * VOTE_PACK <= REVIEW_DATA_BUFFER_SIZE,
+               "review snapshot does not cover vote slots");
+
+typedef enum {
+    UI_REVIEW_NONE = 0,
+    UI_REVIEW_TRANSACTION,
+    UI_REVIEW_ADDRESS,
+    UI_REVIEW_PERSONAL_MESSAGE,
+    UI_REVIEW_ECDH,
+    UI_REVIEW_TIP712,
+} ui_review_operation_t;
+
+static volatile ui_review_operation_t G_review_operation;
+
+static ui_review_operation_t get_review_operation(ui_approval_state_t state) {
+    switch (state) {
+        case APPROVAL_VERIFY_ADDRESS:
+            return UI_REVIEW_ADDRESS;
+        case APPROVAL_SIGN_PERSONAL_MESSAGE:
+            return UI_REVIEW_PERSONAL_MESSAGE;
+        case APPROVAL_SHARED_ECDH_SECRET:
+            return UI_REVIEW_ECDH;
+        case APPROVAL_SIGN_TIP72_TRANSACTION:
+            return UI_REVIEW_TIP712;
+        case APPROVAL_TRANSFER:
+        case APPROVAL_SIMPLE_TRANSACTION:
+        case APPROVAL_PERMISSION_UPDATE:
+        case APPROVAL_EXCHANGE_CREATE:
+        case APPROVAL_EXCHANGE_TRANSACTION:
+        case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
+        case APPROVAL_WITNESSVOTE_TRANSACTION:
+        case APPROVAL_FREEZEASSET_TRANSACTION:
+        case APPROVAL_UNFREEZEASSET_TRANSACTION:
+        case APPROVAL_WITHDRAWBALANCE_TRANSACTION:
+        case APPROVAL_CUSTOM_CONTRACT:
+        case APPROVAL_FREEZEASSETV2_TRANSACTION:
+        case APPROVAL_UNFREEZEASSETV2_TRANSACTION:
+        case APPROVAL_DELEGATE_RESOURCE_TRANSACTION:
+        case APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION:
+        case APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION:
+            return UI_REVIEW_TRANSACTION;
+    }
+
+    return UI_REVIEW_NONE;
+}
+
+bool ui_review_begin(ui_approval_state_t state) {
+    ui_review_operation_t operation = get_review_operation(state);
+
+    if ((operation == UI_REVIEW_NONE) || (G_review_operation != UI_REVIEW_NONE)) {
+        return false;
+    }
+
+    // Seal every value backed by the APDU transport buffer before yielding to
+    // asynchronous UX. All other reviewed values live in dedicated globals
+    // that the dispatcher protects from later handler execution.
+    memcpy(reviewData, G_io_apdu_buffer, sizeof(reviewData));
+    G_review_operation = operation;
+    return true;
+}
+
+bool ui_review_is_pending(void) {
+    return G_review_operation != UI_REVIEW_NONE;
+}
+
+void ui_review_reset(void) {
+    G_review_operation = UI_REVIEW_NONE;
+    explicit_bzero(reviewData, sizeof(reviewData));
+}
+
+static bool ui_review_consume(ui_review_operation_t expected_operation) {
+    if (G_review_operation != expected_operation) {
+        return false;
+    }
+
+    G_review_operation = UI_REVIEW_NONE;
+    return true;
+}
+
+static bool ui_review_cancel(void) {
+    if (G_review_operation == UI_REVIEW_NONE) {
+        return false;
+    }
+
+    G_review_operation = UI_REVIEW_NONE;
+    return true;
+}
+
+static bool reject_unbound_callback(bool display_menu) {
+    io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
+
+    if (display_menu) {
+        ui_idle();
+    }
+
+    return false;
+}
 
 bool ui_callback_address_ok(bool display_menu) {
+    if (!ui_review_consume(UI_REVIEW_ADDRESS)) {
+        return reject_unbound_callback(display_menu);
+    }
+
     helper_send_response_pubkey(&publicKeyContext);
 
     if (display_menu) {
@@ -50,6 +157,10 @@ bool ui_callback_address_ok(bool display_menu) {
 
 bool ui_callback_signMessage_ok(bool display_menu) {
     bool ret = true;
+
+    if (!ui_review_consume(UI_REVIEW_PERSONAL_MESSAGE)) {
+        return reject_unbound_callback(display_menu);
+    }
 
     if (signTransaction(&transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
@@ -69,6 +180,7 @@ bool ui_callback_signMessage_ok(bool display_menu) {
 }
 
 bool ui_callback_tx_cancel(bool display_menu) {
+    ui_review_cancel();
     io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
 
     if (display_menu) {
@@ -81,6 +193,10 @@ bool ui_callback_tx_cancel(bool display_menu) {
 
 bool ui_callback_tx_ok(bool display_menu) {
     bool ret = true;
+
+    if (!ui_review_consume(UI_REVIEW_TRANSACTION)) {
+        return reject_unbound_callback(display_menu);
+    }
 
     if (signTransaction(&transactionContext) != 0) {
         io_send_sw(E_SECURITY_STATUS_NOT_SATISFIED);
@@ -103,6 +219,10 @@ bool ui_callback_ecdh_ok(bool display_menu) {
     cx_err_t err;
     cx_ecfp_private_key_t privateKey;
     uint32_t tx = 0;
+
+    if (!ui_review_consume(UI_REVIEW_ECDH)) {
+        return reject_unbound_callback(display_menu);
+    }
 
     // Get private key
     err = bip32_derive_init_privkey_256(CX_CURVE_256K1,
@@ -177,6 +297,10 @@ void format_signature_out(const uint8_t *signature) {
 bool ui_callback_signMessage712_v0_ok(bool display_menu) {
     uint32_t tx = 0;
     cx_err_t err;
+
+    if (!ui_review_consume(UI_REVIEW_TIP712)) {
+        return reject_unbound_callback(display_menu);
+    }
 
     cx_ecfp_private_key_t privateKey;
     uint8_t signature[100];
@@ -273,6 +397,7 @@ end:
 }
 
 bool ui_callback_signMessage712_v0_cancel(bool display_menu) {
+    ui_review_cancel();
     G_io_apdu_buffer[0] = 0x69;
     G_io_apdu_buffer[1] = 0x85;
     // Send back the response, do not restart the event loop
