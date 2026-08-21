@@ -62,6 +62,24 @@ static bool trigger_has_attached_values(const txContent_t *content) {
     return (content->amount[0] != 0) || (content->callTokenValue != 0) || (content->tokenId != 0);
 }
 
+static bool copy_token_label(char *destination,
+                             size_t destination_size,
+                             const txContent_t *content,
+                             uint8_t token_index) {
+    if (token_index >= 2) {
+        return false;
+    }
+
+    const size_t length = content->tokenNamesLength[token_index];
+    if ((length >= sizeof(content->tokenNames[token_index])) || (length >= destination_size) ||
+        (content->tokenNames[token_index][length] != '\0')) {
+        return false;
+    }
+
+    memcpy(destination, content->tokenNames[token_index], length + 1);
+    return true;
+}
+
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -422,9 +440,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case EXCHANGECREATECONTRACT:
-
-            memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
-            memcpy(toAddress, txContent.tokenNames[1], txContent.tokenNamesLength[1] + 1);
+            if (!copy_token_label(fullContract, sizeof(fullContract), &txContent, 0) ||
+                !copy_token_label(toAddress, sizeof(toAddress), &txContent, 1)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
             print_amount(txContent.amount[0],
                          (void *) G_io_apdu_buffer,
                          100,

@@ -582,6 +582,66 @@ class TestTRX():
 
         self.sign_and_validate(client, firmware, 1, tx, tokenSignature)
 
+    @pytest.mark.parametrize(("second_token_id", "second_token_signature"), [
+        (b"1002035",
+         bytes.fromhex(
+             "0a1f4c6f63616c697a655363616d427952454b54436f696e4265686176696f757210001a463044022068fec7768e3e09a0b74dfe6f1d7a297198e162d8e24922ea4d73fcc859383a710220625793998f64be4d0a087eb14ba188cd4d230b3d6a43536e9dc881e3d398efac"
+         )),
+        (b"1000932",
+         bytes.fromhex(
+             "0a1f47616d696e67456d706f7765726d656e744d6174657269616c536f7572636510001a463044022044444220afac6892a55b59a815e45725e53e321cea1535ececeb166a632cc6e402201f461c78b2b8d5433f2c984066c7aecf571fb5b4260f892492f1dd79ac5c0c33"
+         )),
+    ])
+    def test_trx_exchange_create_with_max_length_second_token_name(
+            self, backend, firmware, navigator, second_token_id,
+            second_token_signature):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeCreateContract,
+            contract.ExchangeCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            first_token_id=b"_",
+                                            first_token_balance=10000000000,
+                                            second_token_id=second_token_id,
+                                            second_token_balance=1))
+        token_signatures = [
+            bytes.fromhex(
+                "0a0354525810061a463044022037c53ecb06abe1bfd708bd7afd047720b72e2bfc0a2e4b6ade9a33ae813565a802200a7d5086dc08c4a6f866aad803ac7438942c3c0a6371adcb6992db94487f66c7"
+            ),
+            second_token_signature,
+        ]
+
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, payload)
+        backend.exchange(CLA, InsType.SIGN, P1.TRC10_NAME, 0x00,
+                         token_signatures[0])
+
+        final_p1 = P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE | 1
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Accept"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS,
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, final_p1, 0x00,
+                                    token_signatures[1]):
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     def test_trx_exchange_inject(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(

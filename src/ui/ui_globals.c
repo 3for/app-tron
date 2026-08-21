@@ -25,7 +25,7 @@
 
 volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
-char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
+char toAddress[MAX_TOKEN_LENGTH];
 char addressSummary[40];
 char fullContract[MAX_TOKEN_LENGTH];
 char TRC20Action[9];
@@ -44,6 +44,8 @@ _Static_assert(CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET + 100 <= REVIEW_DATA_BUFFER_S
                "review snapshot does not cover amount slots");
 _Static_assert(5 * VOTE_PACK <= REVIEW_DATA_BUFFER_SIZE,
                "review snapshot does not cover vote slots");
+_Static_assert(sizeof(toAddress) >= sizeof(((txContent_t *) 0)->tokenNames[0]),
+               "review buffer cannot hold a complete token label");
 
 typedef enum {
     UI_REVIEW_NONE = 0,

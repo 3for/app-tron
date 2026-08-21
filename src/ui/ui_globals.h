@@ -52,7 +52,9 @@
 extern volatile uint8_t customContractField;
 extern char
     fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
-extern char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
+// This buffer normally contains an address, but ExchangeCreate reuses it for
+// the second complete token label (name[id]).
+extern char toAddress[MAX_TOKEN_LENGTH];
 extern char addressSummary[40];
 extern char fullContract[MAX_TOKEN_LENGTH];
 extern char TRC20Action[9];
