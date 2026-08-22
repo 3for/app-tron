@@ -949,6 +949,7 @@ static bool account_permission_update_contract(txContent_t *content, pb_istream_
 typedef struct {
     const uint8_t *buf;
     size_t size;
+    bool has_value;
 } buffer_t;
 
 bool pb_decode_contract_parameter(pb_istream_t *stream, const pb_field_t *field, void **arg) {
@@ -957,6 +958,7 @@ bool pb_decode_contract_parameter(pb_istream_t *stream, const pb_field_t *field,
 
     buffer->buf = stream->state;
     buffer->size = stream->bytes_left;
+    buffer->has_value = true;
     return true;
 }
 
@@ -1012,7 +1014,7 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
      * and deserializing the nested contract inside the message requires too much
      * stack for Nano S
      */
-    buffer_t contract_buffer;
+    buffer_t contract_buffer = {0};
     transaction.contract->parameter.value.funcs.decode = pb_decode_contract_parameter;
     transaction.contract->parameter.value.arg = &contract_buffer;
 
@@ -1049,6 +1051,11 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
        so test if chunk has the contract
      */
     if (transaction.contract->has_parameter) {
+        if (!contract_buffer.has_value || contract_buffer.buf == NULL ||
+            contract_buffer.size == 0) {
+            return USTREAM_FAULT;
+        }
+
         content->permission_id = transaction.contract->Permission_id;
         content->contractType = (contractType_e) transaction.contract->type;
 

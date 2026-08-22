@@ -28,6 +28,13 @@ from core import Contract_pb2 as contract
 from core import Tron_pb2 as tron
 
 
+def encode_length_delimited_field(field_number, value):
+    """Encode the small length-delimited fields used by malformed-input tests."""
+    assert field_number < 16
+    assert len(value) < 128
+    return bytes([(field_number << 3) | 2, len(value)]) + value
+
+
 @pytest.mark.parametrize("p1", [P1.FIRST, P1.SIGN])
 def test_personal_message_requires_blind_signing(backend, firmware, navigator,
                                                  p1):
@@ -214,6 +221,59 @@ class TestTRX():
         with pytest.raises(ExceptionRAPDU) as error:
             backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
         assert error.value.status == Errors.INCORRECT_DATA
+
+    @pytest.mark.parametrize("parameter_encoding", [
+        "empty_parameter",
+        "type_url_only",
+        "empty_value",
+        "nonempty_then_empty_value",
+    ])
+    def test_trx_rejects_contract_parameter_without_nonempty_final_value(
+            self, backend, firmware, navigator, parameter_encoding):
+        client = TronClient(backend, firmware, navigator)
+
+        raw_tx = tron.Transaction.raw()
+        raw_tx.timestamp = 1575712492061
+        raw_tx.expiration = 1575712551000
+        raw_tx.ref_block_hash = bytes.fromhex("95DA42177DB00507")
+        raw_tx.ref_block_bytes = bytes.fromhex("3DCE")
+
+        type_url = b"type.googleapis.com/protocol.TransferContract"
+        valid_value = contract.TransferContract(
+            owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+            to_address=bytes.fromhex(
+                client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+            amount=100000000).SerializeToString()
+
+        if parameter_encoding == "empty_parameter":
+            any_fields = b""
+        elif parameter_encoding == "type_url_only":
+            any_fields = encode_length_delimited_field(1, type_url)
+        elif parameter_encoding == "empty_value":
+            any_fields = encode_length_delimited_field(2, b"")
+        else:
+            # Singular protobuf fields use the final occurrence. Ensure an
+            # earlier valid value cannot leave a stale callback buffer behind.
+            any_fields = encode_length_delimited_field(2, valid_value)
+            any_fields += encode_length_delimited_field(2, b"")
+
+        contract_fields = b'\x08\x01'  # TransferContract enum value.
+        contract_fields += encode_length_delimited_field(2, any_fields)
+        serialized_tx = raw_tx.SerializeToString()
+        serialized_tx += encode_length_delimited_field(11, contract_fields)
+
+        payload = pack_derivation_path(client.getAccount(0)['path'])
+        payload += serialized_tx
+        assert len(payload) <= 255
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+        # Malformed input must be rejected without terminating the app.
+        response = client.getVersion()
+        assert response.status == Errors.OK
 
     @pytest.mark.parametrize("unknown_field", [
         b'\x08\x01',                       # known tag, alternate wire type
