@@ -1913,7 +1913,7 @@ class TestTRX():
             if firmware.is_nano:
                 navigate_instruction = NavInsID.RIGHT_CLICK
                 validation_instructions = [NavInsID.BOTH_CLICK]
-                approval_text = "Sign"
+                approval_text = r"^Sign$"
             else:
                 navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
                 validation_instructions = [
