@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 
@@ -6,8 +7,12 @@ import pytest
 sys.path.append(str(Path(__file__).parent.parent / "signed_list"))
 from exchange_serialization import SIGNATURE_DOMAIN
 from exchange_serialization import SIGNATURE_FORMAT_V1
+from exchange_serialization import TOKEN_SIGNATURE_DOMAIN
+from exchange_serialization import TOKEN_SIGNATURE_FORMAT_V1
 from exchange_serialization import serialize_exchange_signature_payload
 from exchange_serialization import serialize_legacy_exchange_signature_payload
+from exchange_serialization import serialize_legacy_token_signature_payload
+from exchange_serialization import serialize_token_signature_payload
 
 
 def _read_varint(data, offset):
@@ -59,6 +64,77 @@ def test_existing_legacy_exchange_signature_payload_is_unchanged():
     assert payload == b"1661002000BitTorrent\x06_TRX\x06"
 
 
+def test_existing_legacy_token_signature_payload_is_unchanged():
+    assert serialize_legacy_token_signature_payload(
+        b"1002000", b"BitTorrent", 6) == b"1002000BitTorrent\x06"
+    assert serialize_legacy_token_signature_payload(b"TRX", b"TRX",
+                                                    6) == b"TRXTRX\x06"
+
+
+def test_token_v1_payload_is_domain_separated_and_length_delimited():
+    assert serialize_token_signature_payload(
+        b"1002000", b"BitTorrent", 6) == (
+            TOKEN_SIGNATURE_DOMAIN + bytes([TOKEN_SIGNATURE_FORMAT_V1, 7]) +
+            b"1002000\x0aBitTorrent\x06")
+
+
+def test_legacy_exchange_payload_cannot_be_replayed_as_token_metadata():
+    payload = serialize_legacy_exchange_signature_payload(**details())
+    assert payload == b"1661002000BitTorrent\x06_TRX\x06"
+    with pytest.raises(ValueError):
+        serialize_legacy_token_signature_payload(payload[:7], payload[7:-1],
+                                                 payload[-1])
+
+
+@pytest.mark.parametrize(("token_id", "token_name", "precision"), [
+    (b"1661002", b"000BitTorrent\x06_TRX", 6),
+    (b"10020A0", b"BitTorrent", 6),
+    (b"1002000", b"Bit\tTorrent", 6),
+    (b"1002000", b"", 6),
+    (b"1002000", b"BitTorrent", 7),
+    (b"_", b"TRX", 6),
+])
+def test_token_payload_rejects_invalid_or_cross_domain_fields(
+        token_id, token_name, precision):
+    with pytest.raises(ValueError):
+        serialize_token_signature_payload(token_id, token_name, precision)
+
+
+def test_token_v1_accepts_future_id_lengths_but_legacy_does_not():
+    canonical = serialize_token_signature_payload(b"10000000", b"Future", 6)
+    assert canonical.startswith(TOKEN_SIGNATURE_DOMAIN)
+    with pytest.raises(ValueError):
+        serialize_legacy_token_signature_payload(b"10000000", b"Future", 6)
+
+
+@pytest.mark.parametrize("token_id", [b"01", b"1" * 20])
+def test_token_v1_rejects_noncanonical_or_oversized_ids(token_id):
+    with pytest.raises(ValueError):
+        serialize_token_signature_payload(token_id, b"Token", 6)
+
+
+def test_every_decodable_published_token_record_remains_accepted():
+    token_list = (Path(__file__).parent.parent / "signed_list" / "tokens10.js")
+    records_rejected_by_existing_protobuf_limit = []
+    for line in token_list.read_text().splitlines():
+        match = re.search(r"id:\s*(\d+)\s*,\s*message:\s*'([0-9a-f]+)'", line)
+        if match is None:
+            continue
+        listed_id, encoded_hex = match.groups()
+        fields = _decode_exchange_details(bytes.fromhex(encoded_hex))
+        if len(fields[1]) > 31:
+            records_rejected_by_existing_protobuf_limit.append(int(listed_id))
+            continue
+        signing_id = b"TRX" if listed_id == "0" else listed_id.encode("ascii")
+        assert serialize_legacy_token_signature_payload(signing_id, fields[1],
+                                                        fields.get(2, 0))
+    assert records_rejected_by_existing_protobuf_limit == [
+        1001788,
+        1000825,
+        1000748,
+    ]
+
+
 def test_every_decodable_published_legacy_record_remains_accepted():
     signed_list = (Path(__file__).parent.parent / "signed_list" /
                    "signedList_Exchanges.txt")
@@ -88,6 +164,14 @@ def test_v1_payload_is_domain_separated_and_length_delimited():
                        bytes.fromhex("00000000000000a6") + b"\x07" +
                        b"1002000" + b"\x0a" + b"BitTorrent" + b"\x06" +
                        b"\x01" + b"_" + b"\x03" + b"TRX" + b"\x06")
+
+
+def test_exchange_v1_accepts_future_id_lengths_but_legacy_does_not():
+    record = details(token1_id=b"10000000")
+    canonical = serialize_exchange_signature_payload(**record)
+    assert canonical.startswith(SIGNATURE_DOMAIN)
+    with pytest.raises(ValueError):
+        serialize_legacy_exchange_signature_payload(**record)
 
 
 @pytest.mark.parametrize("exchange_id", [
@@ -151,6 +235,8 @@ def test_v1_distinct_semantics_have_distinct_payloads():
 @pytest.mark.parametrize(("field", "value"), [
     ("token1_id", b"T"),
     ("token1_id", b"10020A0"),
+    ("token1_id", b"01002000"),
+    ("token1_id", b"1" * 20),
     ("token1_name", b"BitTorrent\x06"),
     ("token1_name", b"Bit\tTorrent"),
     ("token1_precision", 7),

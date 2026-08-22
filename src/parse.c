@@ -294,7 +294,7 @@ static bool printTokenFromID(char *out,
                              size_t size,
                              bool *is_native) {
     *is_native = false;
-    if (size != TOKENID_SIZE && size != 1) {
+    if ((size == 0u) || (size > TOKEN_ID_MAX_LENGTH) || (outlen <= size)) {
         return false;
     }
 
@@ -306,7 +306,16 @@ static bool printTokenFromID(char *out,
         strlcpy(out, "TRX", outlen);
         return true;
     }
-    strlcpy(out, (char *) data, outlen);
+    if ((size > 1u) && (data[0] == '0')) {
+        return false;
+    }
+    for (size_t i = 0; i < size; i++) {
+        if ((data[i] < '0') || (data[i] > '9')) {
+            return false;
+        }
+    }
+    memcpy(out, data, size);
+    out[size] = '\0';
     return true;
 }
 

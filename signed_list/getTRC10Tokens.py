@@ -7,6 +7,7 @@ import time
 from secp256k1 import PrivateKey, PublicKey
 import os
 from pprint import pprint
+from exchange_serialization import serialize_token_signature_payload
 
 
 def urlopen_with_retry(toread, start):
@@ -37,7 +38,7 @@ fJS= open("tokens10.js","w+")
 fJS.write('var tokenList = [\n');
 
 # TRX
-MESSAGE = b'TRX' + b'TRX' + bytes([6])
+MESSAGE = serialize_token_signature_payload(b'TRX', b'TRX', 6)
 print(MESSAGE)
 sig_check = privkey.ecdsa_sign(MESSAGE)
 sig_ser = privkey.ecdsa_serialize(sig_check)
@@ -76,7 +77,10 @@ print('List updated. Total {}'.format(len(items)))
 itemsSorted = sorted(items, key=sortFN, reverse=True)
 print('List sorted')
 for T in itemsSorted:
-    MESSAGE = bytes(str(T[IDField])+T['name'],'utf-8') + bytes([T['precision']])
+    token_id = str(T[IDField]).encode('ascii')
+    token_name = T['name'].encode('utf-8')
+    MESSAGE = serialize_token_signature_payload(token_id, token_name,
+                                                T['precision'])
     print(MESSAGE)
     sig_check = privkey.ecdsa_sign(MESSAGE)
     sig_ser = privkey.ecdsa_serialize(sig_check)

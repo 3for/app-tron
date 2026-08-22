@@ -4,19 +4,20 @@
 
 _Static_assert(sizeof(EXCHANGE_SIGNATURE_DOMAIN) - 1u == EXCHANGE_SIGNATURE_DOMAIN_LENGTH,
                "exchange signature domain length mismatch");
+_Static_assert(sizeof(TOKEN_SIGNATURE_DOMAIN) - 1u == TOKEN_SIGNATURE_DOMAIN_LENGTH,
+               "token signature domain length mismatch");
 
 static bool is_ascii_letter(uint8_t value) {
     return ((value >= 'A') && (value <= 'Z')) || ((value >= 'a') && (value <= 'z'));
 }
 
-static bool is_valid_token_id(const char *token_id, size_t *token_id_length) {
+static bool is_valid_numeric_token_id(const char *token_id,
+                                      size_t maximum_length,
+                                      size_t *token_id_length) {
     size_t length = strlen(token_id);
 
-    if ((length == 1u) && (token_id[0] == '_')) {
-        *token_id_length = length;
-        return true;
-    }
-    if (length != EXCHANGE_TOKEN_ID_SIZE) {
+    if ((length == 0u) || (length > maximum_length) ||
+        ((length > 1u) && (token_id[0] == '0'))) {
         return false;
     }
     for (size_t i = 0; i < length; i++) {
@@ -26,6 +27,36 @@ static bool is_valid_token_id(const char *token_id, size_t *token_id_length) {
     }
     *token_id_length = length;
     return true;
+}
+
+static bool is_valid_exchange_token_id(const char *token_id,
+                                       bool legacy,
+                                       size_t *token_id_length) {
+    size_t length = strlen(token_id);
+
+    if ((length == 1u) && (token_id[0] == '_')) {
+        *token_id_length = length;
+        return true;
+    }
+    return is_valid_numeric_token_id(token_id,
+                                     legacy ? LEGACY_TOKEN_ID_SIZE : TOKEN_ID_MAX_LENGTH,
+                                     token_id_length) &&
+           (!legacy || (length == LEGACY_TOKEN_ID_SIZE));
+}
+
+static bool is_valid_token_signature_id(const char *token_id,
+                                        bool legacy,
+                                        size_t *token_id_length) {
+    size_t length = strlen(token_id);
+
+    if ((length == 3u) && (memcmp(token_id, "TRX", length) == 0)) {
+        *token_id_length = length;
+        return true;
+    }
+    return is_valid_numeric_token_id(token_id,
+                                     legacy ? LEGACY_TOKEN_ID_SIZE : TOKEN_ID_MAX_LENGTH,
+                                     token_id_length) &&
+           (!legacy || (length == LEGACY_TOKEN_ID_SIZE));
 }
 
 static bool is_valid_token_name(const char *token_name,
@@ -81,20 +112,90 @@ static bool validate_arguments(uint8_t *out,
     return true;
 }
 
+bool serialize_token_signature_payload(uint8_t *out,
+                                       size_t out_size,
+                                       size_t *payload_size,
+                                       const char *token_id,
+                                       const char *token_name,
+                                       uint32_t token_precision) {
+    size_t token_id_length;
+    size_t token_name_length;
+
+    if ((out == NULL) || (payload_size == NULL) || (token_id == NULL) || (token_name == NULL)) {
+        return false;
+    }
+    *payload_size = 0;
+    if (!is_valid_token_signature_id(token_id, false, &token_id_length) ||
+        !is_valid_token_name(token_name, false, &token_name_length) ||
+        (token_precision > EXCHANGE_MAX_TOKEN_PRECISION)) {
+        return false;
+    }
+
+    size_t required_size = TOKEN_SIGNATURE_DOMAIN_LENGTH + 1u + 1u + token_id_length + 1u +
+                           token_name_length + 1u;
+    if (required_size > out_size) {
+        return false;
+    }
+
+    size_t offset = 0;
+    append_bytes(out, &offset, TOKEN_SIGNATURE_DOMAIN, TOKEN_SIGNATURE_DOMAIN_LENGTH);
+    out[offset++] = TOKEN_SIGNATURE_FORMAT_V1;
+    out[offset++] = (uint8_t) token_id_length;
+    append_bytes(out, &offset, token_id, token_id_length);
+    out[offset++] = (uint8_t) token_name_length;
+    append_bytes(out, &offset, token_name, token_name_length);
+    out[offset++] = (uint8_t) token_precision;
+    *payload_size = offset;
+    return true;
+}
+
+bool serialize_legacy_token_signature_payload(uint8_t *out,
+                                              size_t out_size,
+                                              size_t *payload_size,
+                                              const char *token_id,
+                                              const char *token_name,
+                                              uint32_t token_precision) {
+    size_t token_id_length;
+    size_t token_name_length;
+
+    if ((out == NULL) || (payload_size == NULL) || (token_id == NULL) || (token_name == NULL)) {
+        return false;
+    }
+    *payload_size = 0;
+    if (!is_valid_token_signature_id(token_id, true, &token_id_length) ||
+        !is_valid_token_name(token_name, false, &token_name_length) ||
+        (token_precision > EXCHANGE_MAX_TOKEN_PRECISION)) {
+        return false;
+    }
+
+    size_t required_size = token_id_length + token_name_length + 1u;
+    if (required_size > out_size) {
+        return false;
+    }
+
+    size_t offset = 0;
+    append_bytes(out, &offset, token_id, token_id_length);
+    append_bytes(out, &offset, token_name, token_name_length);
+    out[offset++] = (uint8_t) token_precision;
+    *payload_size = offset;
+    return true;
+}
+
 static bool validate_exchange_fields(const char *token1_id,
                                      const char *token1_name,
                                      uint32_t token1_precision,
                                      const char *token2_id,
                                      const char *token2_name,
                                      uint32_t token2_precision,
+                                     bool legacy_token_ids,
                                      bool require_leading_letter,
                                      size_t *token1_id_length,
                                      size_t *token1_name_length,
                                      size_t *token2_id_length,
                                      size_t *token2_name_length) {
-    return is_valid_token_id(token1_id, token1_id_length) &&
+    return is_valid_exchange_token_id(token1_id, legacy_token_ids, token1_id_length) &&
            is_valid_token_name(token1_name, require_leading_letter, token1_name_length) &&
-           is_valid_token_id(token2_id, token2_id_length) &&
+           is_valid_exchange_token_id(token2_id, legacy_token_ids, token2_id_length) &&
            is_valid_token_name(token2_name, require_leading_letter, token2_name_length) &&
            (token1_precision <= EXCHANGE_MAX_TOKEN_PRECISION) &&
            (token2_precision <= EXCHANGE_MAX_TOKEN_PRECISION);
@@ -124,6 +225,7 @@ bool serialize_legacy_exchange_signature_payload(uint8_t *out,
                                   token2_id,
                                   token2_name,
                                   token2_precision,
+                                  true,
                                   true,
                                   &token1_id_length,
                                   &token1_name_length,
@@ -174,6 +276,7 @@ bool serialize_exchange_signature_payload(uint8_t *out,
                                   token2_id,
                                   token2_name,
                                   token2_precision,
+                                  false,
                                   false,
                                   &token1_id_length,
                                   &token1_name_length,

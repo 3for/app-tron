@@ -10,7 +10,6 @@
 
 #define ADD_PRE_FIX_STRING       "T"
 #define ADDRESS_SIZE             21
-#define TOKENID_SIZE             7
 #define BASE58CHECK_ADDRESS_SIZE 34
 #define PUBLIC_KEY_SIZE          65
 #define CHAIN_CODE_SIZE          32

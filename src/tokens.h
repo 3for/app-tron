@@ -20,7 +20,7 @@
 
 int verifyTokenNameID(const char *tokenId,
                       const char *tokenName,
-                      uint8_t decimals,
+                      uint32_t decimals,
                       uint8_t *signature,
                       uint8_t signatureLength);
 int verifyExchangeID(const unsigned char *exchangeValidation,

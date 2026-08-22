@@ -46,6 +46,32 @@ static bool serialize_v1(uint8_t *out,
                                                 token2_precision);
 }
 
+static bool serialize_token(uint8_t *out,
+                            size_t *out_size,
+                            const char *token_id,
+                            const char *token_name,
+                            uint32_t token_precision) {
+    return serialize_token_signature_payload(out,
+                                             EXCHANGE_SIGNATURE_PAYLOAD_MAX_SIZE,
+                                             out_size,
+                                             token_id,
+                                             token_name,
+                                             token_precision);
+}
+
+static bool serialize_legacy_token(uint8_t *out,
+                                   size_t *out_size,
+                                   const char *token_id,
+                                   const char *token_name,
+                                   uint32_t token_precision) {
+    return serialize_legacy_token_signature_payload(out,
+                                                    EXCHANGE_SIGNATURE_PAYLOAD_MAX_SIZE,
+                                                    out_size,
+                                                    token_id,
+                                                    token_name,
+                                                    token_precision);
+}
+
 int main(void) {
     uint8_t payload[EXCHANGE_SIGNATURE_PAYLOAD_MAX_SIZE];
     size_t payload_size;
@@ -55,6 +81,42 @@ int main(void) {
         serialize_legacy(payload, &payload_size, 166, "1002000", "BitTorrent", 6, "_", "TRX", 6));
     assert(payload_size == sizeof(legacy_expected) - 1u);
     assert(memcmp(payload, legacy_expected, payload_size) == 0);
+
+    const uint8_t token_expected[] = "1002000BitTorrent\x06";
+    assert(serialize_legacy_token(payload, &payload_size, "1002000", "BitTorrent", 6));
+    assert(payload_size == sizeof(token_expected) - 1u);
+    assert(memcmp(payload, token_expected, payload_size) == 0);
+
+    assert(serialize_legacy_token(payload, &payload_size, "TRX", "TRX", 6));
+    assert(payload_size == sizeof("TRXTRX\x06") - 1u);
+    assert(memcmp(payload, "TRXTRX\x06", payload_size) == 0);
+
+    const uint8_t token_v1_expected[] = TOKEN_SIGNATURE_DOMAIN
+        "\x01\x07"
+        "1002000"
+        "\x0a"
+        "BitTorrent"
+        "\x06";
+    assert(serialize_token(payload, &payload_size, "1002000", "BitTorrent", 6));
+    assert(payload_size == sizeof(token_v1_expected) - 1u);
+    assert(memcmp(payload, token_v1_expected, payload_size) == 0);
+
+    assert(serialize_token(payload, &payload_size, "10000000", "Future", 6));
+    assert(!serialize_legacy_token(payload, &payload_size, "10000000", "Future", 6));
+    assert(!serialize_token(payload, &payload_size, "01000000", "Future", 6));
+    assert(!serialize_token(payload, &payload_size, "12345678901234567890", "Future", 6));
+
+    // Legacy exchange 166 is byte-identical to this invalid TokenDetails
+    // repartition. Its embedded precision byte must keep it out of the token
+    // signature grammar.
+    assert(!serialize_legacy_token(payload,
+                                   &payload_size,
+                                   "1661002",
+                                   "000BitTorrent\x06_TRX",
+                                   6));
+    assert(!serialize_legacy_token(payload, &payload_size, "10020A0", "BitTorrent", 6));
+    assert(!serialize_legacy_token(payload, &payload_size, "1002000", "Bit\tTorrent", 6));
+    assert(!serialize_legacy_token(payload, &payload_size, "1002000", "BitTorrent", 7));
 
     const uint8_t v1_expected[] = EXCHANGE_SIGNATURE_DOMAIN
         "\x01\x00\x00\x00\x00\x00\x00\x00\xa6"
@@ -71,6 +133,17 @@ int main(void) {
     assert(payload_size == sizeof(v1_expected) - 1u);
     assert(memcmp(payload, v1_expected, payload_size) == 0);
     assert(memcmp(payload, legacy_expected, sizeof(legacy_expected) - 1u) != 0);
+
+    assert(serialize_v1(payload, &payload_size, 166, "10000000", "Future", 6, "_", "TRX", 6));
+    assert(!serialize_legacy(payload,
+                             &payload_size,
+                             166,
+                             "10000000",
+                             "Future",
+                             6,
+                             "_",
+                             "TRX",
+                             6));
 
     const uint8_t high_id_expected[] = "42949674621002000BitTorrent\x06_TRX\x06";
     assert(serialize_legacy(payload,

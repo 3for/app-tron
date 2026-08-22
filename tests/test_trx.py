@@ -512,6 +512,44 @@ class TestTRX():
                 asset_name="1002000".encode()))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_accepts_eight_digit_trc10_id(self, backend, firmware,
+                                              navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=b"10000000"))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     def test_trx_send_asset_with_name(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
@@ -552,6 +590,56 @@ class TestTRX():
                         navigate=False)
         assert e.value.status == Errors.INCORRECT_DATA
 
+    def test_trx_rejects_legacy_exchange_signature_as_token_metadata(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=b"1661002"))
+        # The signature is valid for legacy exchange 166 over
+        # b"1661002000BitTorrent\\x06_TRX\\x06", but must not authenticate
+        # TokenDetails(id="1661002", name="000BitTorrent\\x06_TRX", precision=6).
+        replayed_exchange_signature = [
+            "0a12303030426974546f7272656e74065f54525810061a473045022100ba57d12e19f4f621780ae98430b5bbdcb7c8fa4fbdf6d957f43ca5813fd25bd702207698adb892771b71417f09e7ce6de7b773e5cb5717ddf71fb63bd7890513fd9b"
+        ]
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'],
+                        tx,
+                        replayed_exchange_signature,
+                        navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+    @pytest.mark.parametrize("token_id", [
+        b"",
+        b"01002000",
+        b"123456A",
+        b"TRX\x00bad",
+        b"12345678901234567890",
+    ])
+    def test_trx_rejects_invalid_trc10_token_id(self, backend, firmware,
+                                                navigator, token_id):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferAssetContract,
+            contract.TransferAssetContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=1000000,
+                asset_name=token_id))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_exchange_create(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
@@ -563,6 +651,43 @@ class TestTRX():
                                             second_token_id="1000166".encode(),
                                             second_token_balance=10000000))
         self.sign_and_validate(client, firmware, 1, tx)
+
+    def test_trx_exchange_create_accepts_eight_digit_trc10_id(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeCreateContract,
+            contract.ExchangeCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex']),
+                                            first_token_id=b"_",
+                                            first_token_balance=10000000000,
+                                            second_token_id=b"10000000",
+                                            second_token_balance=10000000))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Accept"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=True)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
 
     def test_trx_exchange_create_with_token_name(self, backend, configuration,
                                                  firmware, navigator):

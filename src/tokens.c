@@ -16,6 +16,7 @@
  ********************************************************************************/
 
 #include <string.h>
+#include "exchange_serialization.h"
 #include "tokens.h"
 #include "os_io_seproxyhal.h"
 
@@ -1563,27 +1564,43 @@ const tokenDefinition_t TOKENS_TRC20[NUM_TOKENS_TRC20] = {
 
 int verifyTokenNameID(const char *tokenId,
                       const char *tokenName,
-                      uint8_t decimals,
+                      uint32_t decimals,
                       uint8_t *signature,
                       uint8_t signatureLength) {
-    uint8_t buffer[65];
+    uint8_t buffer[TOKEN_SIGNATURE_PAYLOAD_MAX_SIZE];
     uint8_t hash[32];
     cx_ecfp_public_key_t publicKey;
-
-    if (strlen(tokenId) > 32) return 0;
-
-    snprintf((char *) buffer, sizeof(buffer), "%s%s%c", tokenId, tokenName, decimals);
-
-    cx_hash_sha256(buffer, strlen(tokenId) + strlen(tokenName) + 1, hash, 32);
+    size_t payload_size;
 
     CX_ASSERT(cx_ecfp_init_public_key_no_throw(CX_CURVE_256K1,
                                                (uint8_t *) PIC(&token_public_key),
                                                65,
                                                &publicKey));
 
-    int ret = cx_ecdsa_verify_no_throw(&publicKey, hash, 32, signature, signatureLength);
+    if (!serialize_token_signature_payload(buffer,
+                                           sizeof(buffer),
+                                           &payload_size,
+                                           tokenId,
+                                           tokenName,
+                                           decimals)) {
+        return 0;
+    }
+    cx_hash_sha256(buffer, payload_size, hash, 32);
+    if (cx_ecdsa_verify_no_throw(&publicKey, hash, 32, signature, signatureLength) == 1) {
+        return 1;
+    }
 
-    return ret;
+    if (!serialize_legacy_token_signature_payload(buffer,
+                                                  sizeof(buffer),
+                                                  &payload_size,
+                                                  tokenId,
+                                                  tokenName,
+                                                  decimals)) {
+        return 0;
+    }
+    cx_hash_sha256(buffer, payload_size, hash, 32);
+
+    return cx_ecdsa_verify_no_throw(&publicKey, hash, 32, signature, signatureLength);
 }
 
 int verifyExchangeID(const unsigned char *exchangeValidation,

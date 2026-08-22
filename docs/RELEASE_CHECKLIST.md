@@ -1,6 +1,6 @@
 # Release checklist
 
-## Blocking: ExchangeDetails signature migration
+## Blocking: signed metadata migration
 
 The fix for the non-canonical `ExchangeDetails` signature encoding introduces
 a canonical, domain-separated v1 signed payload without changing any protobuf
@@ -11,8 +11,9 @@ Complete the following items with Ledger before releasing this change:
 
 - [ ] Share the canonical v1 byte layout and legacy validation rules with the
       Ledger security and release teams and obtain approval for the migration.
-- [ ] Confirm that `proto/core/*` and `proto/misc/*` remain unchanged and that
-      the v1 marker exists only inside the authenticated payload.
+- [ ] Confirm that the `.proto` schemas, field numbers, and wire types remain
+      unchanged and that the v1 marker exists only inside the authenticated
+      payload. The nanopb `.options` and generated C buffer sizes do change.
 - [ ] Agree on the rollout order: release supporting firmware first, then
       publish canonical v1 exchange metadata. Old firmware safely rejects v1
       signatures, so publishing the list first would break compatibility.
@@ -27,10 +28,36 @@ Complete the following items with Ledger before releasing this change:
       31-byte decoded limit and was already unusable before this fix.
 - [ ] Agree on criteria and timing for retiring the legacy verification path
       after supported hosts and published metadata have migrated to v1.
+- [ ] Share the canonical TokenDetails v1 layout with Ledger and obtain approval:
+      `TRON-TOKEN-DETAILS || 0x01 || id_len || id || name_len || name || precision`.
+      Confirm that this changes only the authenticated bytes and local nanopb
+      buffer sizes; no `.proto` field number, type, or chain wire encoding changes.
+- [ ] Agree on the TokenDetails rollout order with Ledger: release firmware that
+      verifies v1 and the restricted seven-digit legacy format first, then have
+      the authorized holder of `TRONLEDGER_SIGN` regenerate and publish
+      `signed_list/tokens10.js` with `signed_list/getTRC10Tokens.py`. Publishing
+      v1 token metadata before supporting firmware would break old devices.
+- [ ] Obtain and record Ledger's approval for widening accepted canonical TRC10
+      IDs to one through nineteen decimal digits without multi-digit leading
+      zeros, covering java-tron's decimal `long` ID representation. Legacy
+      verification remains limited to `TRX` or exactly seven digits and exists
+      only for already-published signatures.
+- [ ] Validate both a regenerated TokenDetails v1 record and an existing legacy
+      token record on Speculos and a physical Ledger device. Include a synthetic
+      eight-digit ID case to prove future java-tron IDs are not rejected.
+- [ ] Agree with Ledger on criteria and timing for retiring legacy TokenDetails
+      verification and whether TokenDetails and ExchangeDetails should receive
+      distinct verification keys during the next metadata-key rotation.
+- [ ] Run the cross-type replay regression using the published exchange-166
+      signature and confirm that the metadata APDU returns `INCORRECT_DATA`
+      before any approval screen is displayed.
+- [ ] Decide whether token IDs 1001788, 1000825, and 1000748 should be removed
+      or reissued: their 32-byte names exceed the existing TokenDetails protobuf
+      field's 31-byte decoded limit and were already unusable before this fix.
 
 Release evidence must include the firmware version, signed-list revision,
 Ledger approval reference, successful v1 verification, successful legacy
-compatibility verification, and rejection of both documented replay payloads.
+compatibility verification, and rejection of all documented replay payloads.
 
 ## Blocking for ambiguous assets: TRC20 swap contract binding
 

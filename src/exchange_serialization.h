@@ -5,7 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define EXCHANGE_TOKEN_ID_SIZE         7u
+#define LEGACY_TOKEN_ID_SIZE           7u
+#define TOKEN_ID_MAX_LENGTH            19u
 #define EXCHANGE_MAX_TOKEN_NAME_LENGTH 31u
 #define EXCHANGE_MAX_TOKEN_PRECISION   6u
 #define EXCHANGE_UINT64_DECIMAL_LENGTH 20u
@@ -14,13 +15,48 @@
 #define EXCHANGE_SIGNATURE_DOMAIN        "TRON-EXCHANGE-DETAILS"
 #define EXCHANGE_SIGNATURE_DOMAIN_LENGTH 21u
 
+#define TOKEN_SIGNATURE_FORMAT_V1     1u
+#define TOKEN_SIGNATURE_DOMAIN        "TRON-TOKEN-DETAILS"
+#define TOKEN_SIGNATURE_DOMAIN_LENGTH 18u
+
 #define EXCHANGE_LEGACY_SIGNATURE_PAYLOAD_MAX_SIZE                    \
-    (EXCHANGE_UINT64_DECIMAL_LENGTH + (2u * EXCHANGE_TOKEN_ID_SIZE) + \
+    (EXCHANGE_UINT64_DECIMAL_LENGTH + (2u * LEGACY_TOKEN_ID_SIZE) +   \
      (2u * EXCHANGE_MAX_TOKEN_NAME_LENGTH) + 2u)
 
 #define EXCHANGE_SIGNATURE_PAYLOAD_MAX_SIZE                                            \
-    (EXCHANGE_SIGNATURE_DOMAIN_LENGTH + 1u + 8u + 4u + (2u * EXCHANGE_TOKEN_ID_SIZE) + \
+    (EXCHANGE_SIGNATURE_DOMAIN_LENGTH + 1u + 8u + 4u + (2u * TOKEN_ID_MAX_LENGTH) +    \
      (2u * EXCHANGE_MAX_TOKEN_NAME_LENGTH) + 2u)
+
+#define TOKEN_LEGACY_SIGNATURE_PAYLOAD_MAX_SIZE \
+    (LEGACY_TOKEN_ID_SIZE + EXCHANGE_MAX_TOKEN_NAME_LENGTH + 1u)
+
+#define TOKEN_SIGNATURE_PAYLOAD_MAX_SIZE                                             \
+    (TOKEN_SIGNATURE_DOMAIN_LENGTH + 1u + 2u + TOKEN_ID_MAX_LENGTH +                \
+     EXCHANGE_MAX_TOKEN_NAME_LENGTH + 1u)
+
+/**
+ * Construct the canonical, domain-separated TokenDetails v1 payload:
+ *
+ *   domain || version || id length || id || name length || name || precision
+ */
+bool serialize_token_signature_payload(uint8_t *out,
+                                       size_t out_size,
+                                       size_t *payload_size,
+                                       const char *token_id,
+                                       const char *token_name,
+                                       uint32_t token_precision);
+
+/**
+ * Reconstruct the existing TokenDetails signature payload for published
+ * metadata. Its restricted grammar keeps it disjoint from every accepted
+ * legacy ExchangeDetails payload.
+ */
+bool serialize_legacy_token_signature_payload(uint8_t *out,
+                                              size_t out_size,
+                                              size_t *payload_size,
+                                              const char *token_id,
+                                              const char *token_name,
+                                              uint32_t token_precision);
 
 /**
  * Reconstruct the legacy ExchangeDetails signature payload.
