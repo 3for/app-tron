@@ -22,6 +22,7 @@
 #include "exchange_serialization.h"
 #include "format.h"
 #include "parse.h"
+#include "protobuf_validation.h"
 #include "settings.h"
 #include "tokens.h"
 
@@ -177,8 +178,17 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case ACCOUNTCREATECONTRACT:
             strlcpy(out, "Account Create", outlen);
             break;
+        case TRANSFERCONTRACT:
+            strlcpy(out, "TRX Transfer", outlen);
+            break;
+        case TRANSFERASSETCONTRACT:
+            strlcpy(out, "TRC10 Transfer", outlen);
+            break;
         case VOTEASSETCONTRACT:
             strlcpy(out, "Vote Asset", outlen);
+            break;
+        case VOTEWITNESSCONTRACT:
+            strlcpy(out, "Vote Witness", outlen);
             break;
         case WITNESSCREATECONTRACT:
             strlcpy(out, "Witness Create", outlen);
@@ -195,11 +205,17 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case ACCOUNTUPDATECONTRACT:
             strlcpy(out, "Account Update", outlen);
             break;
+        case FREEZEBALANCECONTRACT:
+            strlcpy(out, "Freeze Balance", outlen);
+            break;
         case UNFREEZEBALANCECONTRACT:
             strlcpy(out, "Unfreeze Balance", outlen);
             break;
         case UNFREEZEBALANCEV2CONTRACT:
             strlcpy(out, "UnfreezeV2 Balance", outlen);
+            break;
+        case FREEZEBALANCEV2CONTRACT:
+            strlcpy(out, "FreezeV2 Balance", outlen);
             break;
         case WITHDRAWBALANCECONTRACT:
             strlcpy(out, "Claim Rewards", outlen);
@@ -222,8 +238,29 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case PROPOSALDELETECONTRACT:
             strlcpy(out, "Proposal Delete", outlen);
             break;
+        case TRIGGERSMARTCONTRACT:
+            strlcpy(out, "Smart Contract", outlen);
+            break;
+        case EXCHANGECREATECONTRACT:
+            strlcpy(out, "Exchange Create", outlen);
+            break;
+        case EXCHANGEINJECTCONTRACT:
+            strlcpy(out, "Exchange Inject", outlen);
+            break;
+        case EXCHANGEWITHDRAWCONTRACT:
+            strlcpy(out, "Exchange Withdraw", outlen);
+            break;
+        case EXCHANGETRANSACTIONCONTRACT:
+            strlcpy(out, "Exchange Transaction", outlen);
+            break;
         case ACCOUNTPERMISSIONUPDATECONTRACT:
             strlcpy(out, "Permission Update", outlen);
+            break;
+        case DELEGATERESOURCECONTRACT:
+            strlcpy(out, "Delegate Resource", outlen);
+            break;
+        case UNDELEGATERESOURCECONTRACT:
+            strlcpy(out, "Undelegate Resource", outlen);
             break;
         case UNKNOWN_CONTRACT:
             strlcpy(out, "Unknown Type", outlen);
@@ -435,7 +472,10 @@ static bool copy_nonnegative_int64(uint64_t *destination, int64_t value) {
 }
 
 static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_TransferContract_fields, &msg.transfer_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_TransferContract_fields,
+                               &msg.transfer_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -452,7 +492,10 @@ static bool transfer_contract(txContent_t *content, pb_istream_t *stream) {
 }
 
 static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_TransferAssetContract_fields, &msg.transfer_asset_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_TransferAssetContract_fields,
+                               &msg.transfer_asset_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     if (!copy_nonnegative_int64(&content->amount[0], msg.transfer_asset_contract.amount)) {
@@ -474,7 +517,10 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
 }
 
 static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_VoteWitnessContract_fields, &msg.vote_witness_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_VoteWitnessContract_fields,
+                               &msg.vote_witness_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -489,7 +535,10 @@ static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
 }
 
 static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_FreezeBalanceContract_fields, &msg.freeze_balance_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_FreezeBalanceContract_fields,
+                               &msg.freeze_balance_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     /* Tron only accepts 3 days freezing */
@@ -506,9 +555,10 @@ static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) 
 }
 
 static bool unfreeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_UnfreezeBalanceContract_fields,
-                   &msg.unfreeze_balance_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_UnfreezeBalanceContract_fields,
+                               &msg.unfreeze_balance_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     content->resource = msg.unfreeze_balance_contract.resource;
@@ -519,9 +569,10 @@ static bool unfreeze_balance_contract(txContent_t *content, pb_istream_t *stream
 }
 
 static bool freeze_balance_v2_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_FreezeBalanceV2Contract_fields,
-                   &msg.freeze_balance_v2_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_FreezeBalanceV2Contract_fields,
+                               &msg.freeze_balance_v2_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -536,9 +587,10 @@ static bool freeze_balance_v2_contract(txContent_t *content, pb_istream_t *strea
 }
 
 static bool unfreeze_balance_v2_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_UnfreezeBalanceV2Contract_fields,
-                   &msg.unfreeze_balance_v2_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_UnfreezeBalanceV2Contract_fields,
+                               &msg.unfreeze_balance_v2_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     content->resource = msg.unfreeze_balance_v2_contract.resource;
@@ -553,9 +605,10 @@ static bool unfreeze_balance_v2_contract(txContent_t *content, pb_istream_t *str
 }
 
 static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_WithdrawExpireUnfreezeContract_fields,
-                   &msg.withdraw_expire_unfreeze_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_WithdrawExpireUnfreezeContract_fields,
+                               &msg.withdraw_expire_unfreeze_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.withdraw_expire_unfreeze_contract.owner_address);
@@ -563,9 +616,10 @@ static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t
 }
 
 static bool delegate_resource_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_DelegateResourceContract_fields,
-                   &msg.delegate_resource_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_DelegateResourceContract_fields,
+                               &msg.delegate_resource_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     content->resource = msg.delegate_resource_contract.resource;
@@ -573,6 +627,7 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
         return false;
     }
     content->customData = msg.delegate_resource_contract.lock;
+    content->lockPeriod = msg.delegate_resource_contract.lock_period;
 
     COPY_ADDRESS(content->account, &msg.delegate_resource_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.delegate_resource_contract.receiver_address);
@@ -580,9 +635,10 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
 }
 
 static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_UnDelegateResourceContract_fields,
-                   &msg.undelegate_resource_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_UnDelegateResourceContract_fields,
+                               &msg.undelegate_resource_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     content->resource = msg.undelegate_resource_contract.resource;
@@ -596,9 +652,10 @@ static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *str
 }
 
 static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_WithdrawBalanceContract_fields,
-                   &msg.withdraw_balance_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_WithdrawBalanceContract_fields,
+                               &msg.withdraw_balance_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.withdraw_balance_contract.owner_address);
@@ -606,7 +663,10 @@ static bool withdraw_balance_contract(txContent_t *content, pb_istream_t *stream
 }
 
 static bool proposal_create_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_ProposalCreateContract_fields, &msg.proposal_create_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ProposalCreateContract_fields,
+                               &msg.proposal_create_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -616,9 +676,10 @@ static bool proposal_create_contract(txContent_t *content, pb_istream_t *stream)
 }
 
 static bool proposal_approve_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_ProposalApproveContract_fields,
-                   &msg.proposal_approve_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ProposalApproveContract_fields,
+                               &msg.proposal_approve_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -627,7 +688,10 @@ static bool proposal_approve_contract(txContent_t *content, pb_istream_t *stream
 }
 
 static bool proposal_delete_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_ProposalDeleteContract_fields, &msg.proposal_delete_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ProposalDeleteContract_fields,
+                               &msg.proposal_delete_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -639,7 +703,10 @@ static bool proposal_delete_contract(txContent_t *content, pb_istream_t *stream)
 }
 
 static bool account_update_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_AccountUpdateContract_fields, &msg.account_update_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_AccountUpdateContract_fields,
+                               &msg.account_update_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.account_update_contract.owner_address);
@@ -705,7 +772,10 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     msg.trigger_smart_contract.data.funcs.decode = pb_decode_trigger_smart_contract_data;
     msg.trigger_smart_contract.data.arg = content;
 
-    if (!pb_decode(stream, protocol_TriggerSmartContract_fields, &msg.trigger_smart_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_TriggerSmartContract_fields,
+                               &msg.trigger_smart_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -744,7 +814,10 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
 }
 
 static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_ExchangeCreateContract_fields, &msg.exchange_create_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ExchangeCreateContract_fields,
+                               &msg.exchange_create_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -778,7 +851,10 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
 }
 
 static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream, protocol_ExchangeInjectContract_fields, &msg.exchange_inject_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ExchangeInjectContract_fields,
+                               &msg.exchange_inject_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.exchange_inject_contract.owner_address);
@@ -802,9 +878,10 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
 }
 
 static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_ExchangeWithdrawContract_fields,
-                   &msg.exchange_withdraw_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ExchangeWithdrawContract_fields,
+                               &msg.exchange_withdraw_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.exchange_withdraw_contract.owner_address);
@@ -828,9 +905,10 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
 }
 
 static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_ExchangeTransactionContract_fields,
-                   &msg.exchange_transaction_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_ExchangeTransactionContract_fields,
+                               &msg.exchange_transaction_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
     COPY_ADDRESS(content->account, &msg.exchange_transaction_contract.owner_address);
@@ -856,9 +934,10 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
 }
 
 static bool account_permission_update_contract(txContent_t *content, pb_istream_t *stream) {
-    if (!pb_decode(stream,
-                   protocol_AccountPermissionUpdateContract_fields,
-                   &msg.account_permission_update_contract)) {
+    if (!pb_decode_transaction(stream,
+                               protocol_AccountPermissionUpdateContract_fields,
+                               &msg.account_permission_update_contract,
+                               &content->hasUnreviewedFields)) {
         return false;
     }
 
@@ -942,7 +1021,10 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
     transaction.custom_data.funcs.decode = pb_get_tx_data_size;
     transaction.custom_data.arg = &content->dataBytes;
 
-    if (!pb_decode(&stream, protocol_Transaction_raw_fields, &transaction)) {
+    if (!pb_decode_transaction(&stream,
+                               protocol_Transaction_raw_fields,
+                               &transaction,
+                               &content->hasUnreviewedFields)) {
         return USTREAM_FAULT;
     }
 

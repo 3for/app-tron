@@ -466,6 +466,12 @@ UX_STEP_NOCB(ux_approval_delegate_resource_flow_check_lock_step,
                  .title = "Is Lock",
                  .text = (const char *) reviewData + 100,
              });
+UX_STEP_NOCB(ux_approval_delegate_resource_flow_lock_period_step,
+             bnnn_paging,
+             {
+                 .title = "Lock period",
+                 .text = (const char *) reviewData + DELEGATE_LOCK_PERIOD_OFFSET,
+             });
 
 UX_STEP_NOCB(ux_approval_delegate_resource_flow_delegate_to_step,
              bnnn_paging,
@@ -490,6 +496,29 @@ UX_DEF(ux_approval_delegate_resource_flow,
        &ux_approval_delegate_resource_flow_resource_step,
        &ux_approval_delegate_flow_show_amount_step,
        &ux_approval_delegate_resource_flow_check_lock_step,
+       &ux_approval_delegate_resource_flow_delegate_to_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_delegate_resource_locked_data_warning_flow,
+       &ux_approval_delegate_resource_flow_review_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_delegate_resource_flow_resource_step,
+       &ux_approval_delegate_flow_show_amount_step,
+       &ux_approval_delegate_resource_flow_check_lock_step,
+       &ux_approval_delegate_resource_flow_lock_period_step,
+       &ux_approval_delegate_resource_flow_delegate_to_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_delegate_resource_locked_flow,
+       &ux_approval_delegate_resource_flow_review_step,
+       &ux_approval_delegate_resource_flow_resource_step,
+       &ux_approval_delegate_flow_show_amount_step,
+       &ux_approval_delegate_resource_flow_check_lock_step,
+       &ux_approval_delegate_resource_flow_lock_period_step,
        &ux_approval_delegate_resource_flow_delegate_to_step,
        &ux_approval_from_address_step,
        &ux_approval_confirm_step,
@@ -1130,10 +1159,19 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                          NULL);
             break;
         case APPROVAL_DELEGATE_RESOURCE_TRANSACTION:
-            ux_flow_init(0,
-                         ((data_warning == true) ? ux_approval_delegate_resource_data_warning_flow
-                                                 : ux_approval_delegate_resource_flow),
-                         NULL);
+            if (txContent.customData != 0) {
+                ux_flow_init(
+                    0,
+                    ((data_warning == true) ? ux_approval_delegate_resource_locked_data_warning_flow
+                                            : ux_approval_delegate_resource_locked_flow),
+                    NULL);
+            } else {
+                ux_flow_init(
+                    0,
+                    ((data_warning == true) ? ux_approval_delegate_resource_data_warning_flow
+                                            : ux_approval_delegate_resource_flow),
+                    NULL);
+            }
             break;
         case APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION:
             ux_flow_init(0,

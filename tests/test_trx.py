@@ -41,6 +41,24 @@ def test_personal_message_requires_blind_signing(backend, firmware, navigator,
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
+def test_unreviewed_transaction_requires_blind_signing(backend, firmware,
+                                                        navigator):
+    client = TronClient(backend, firmware, navigator)
+    tx = client.packContract(
+        tron.Transaction.Contract.TransferContract,
+        contract.TransferContract(
+            owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+            to_address=bytes.fromhex(client.address_hex(
+                "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+            amount=100000000))
+    payload = pack_derivation_path(client.getAccount(0)['path'])
+    payload += tx + b'\xf8\x01\x01'
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+    assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
+
+
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
     '''Test TRX client.'''
@@ -70,6 +88,56 @@ class TestTRX():
                            text=text,
                            warning_approve=warning_approve)
         assert check_tx_signature(tx, resp.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    def sign_unreviewed_and_validate(self, backend, client, firmware,
+                                     navigator, tx):
+        path = pack_derivation_path(client.getAccount(0)['path'])
+        chunks = []
+        current_chunk = path
+        remaining = tx
+        while remaining:
+            field_length = client.get_next_length(remaining)
+            field = remaining[:field_length]
+            assert len(field) <= MAX_APDU_LEN
+            if len(current_chunk) + len(field) > MAX_APDU_LEN:
+                chunks.append(current_chunk)
+                current_chunk = b''
+            current_chunk += field
+            remaining = remaining[field_length:]
+        chunks.append(current_chunk)
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        if len(chunks) == 1:
+            final_p1 = P1.SIGN
+        else:
+            backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, chunks[0])
+            for chunk in chunks[1:-1]:
+                backend.exchange(CLA, InsType.SIGN, P1.MORE, 0x00, chunk)
+            final_p1 = P1.LAST
+
+        with backend.exchange_async(CLA, InsType.SIGN, final_p1, 0x00,
+                                    chunks[-1]):
+            navigator.navigate_until_text(
+                navigate_instruction, [], "Hash",
+                screen_change_before_first_instruction=True)
+            navigator.navigate_until_text(
+                navigate_instruction, validation_instructions, approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
     def test_trx_get_version(self, backend, firmware, navigator):
@@ -146,6 +214,106 @@ class TestTRX():
         with pytest.raises(ExceptionRAPDU) as error:
             backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
         assert error.value.status == Errors.INCORRECT_DATA
+
+    @pytest.mark.parametrize("unknown_field", [
+        b'\x08\x01',                       # known tag, alternate wire type
+        b'\x4a\x00',                       # unmodeled auths field 9
+        b'\x62\x00',                       # unmodeled scripts field 12
+        b'\xf8\x01\x01',                  # field 31, varint
+        b'\xf9\x01' + (b'\x00' * 8),     # field 31, fixed64
+        b'\xfa\x01\x01x',                # field 31, length-delimited
+        b'\xfd\x01' + (b'\x00' * 4),     # field 31, fixed32
+    ])
+    def test_trx_accepts_unknown_raw_fields_for_hash_review(
+            self, backend, firmware, navigator, unknown_field):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000))
+
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        payload += unknown_field
+        assert len(payload) <= 255
+
+        # FIRST proves that all java-tron-supported unknown wire classes pass
+        # decoding. A final fragment would enter full-hash review, covered by
+        # the focused tests below.
+        response = backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00,
+                                    payload)
+        assert response.status == Errors.OK
+
+    def test_trx_unknown_contract_parameter_uses_hash_review(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        recipient = bytes.fromhex(
+            client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"))
+        transfer = contract.TransferContract(owner_address=owner,
+                                             to_address=recipient,
+                                             amount=100000000)
+
+        tx = tron.Transaction.raw()
+        tx.timestamp = 1575712492061
+        tx.expiration = 1575712551000
+        tx.ref_block_hash = bytes.fromhex("95DA42177DB00507")
+        tx.ref_block_bytes = bytes.fromhex("3DCE")
+        wrapper = tx.contract.add()
+        wrapper.type = tron.Transaction.Contract.TransferContract
+        wrapper.parameter.type_url = \
+            "type.googleapis.com/protocol.TransferContract"
+        wrapper.parameter.value = transfer.SerializeToString() + b'\xf8\x01\x01'
+
+        serialized_tx = tx.SerializeToString()
+        self.sign_unreviewed_and_validate(backend, client, firmware, navigator,
+                                          serialized_tx)
+
+    def test_trx_vote_support_uses_hash_review(self, backend, firmware,
+                                               navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=[
+                    contract.VoteWitnessContract.Vote(
+                        vote_address=bytes.fromhex(client.address_hex(
+                            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")),
+                        vote_count=100),
+                ],
+                support=True))
+        self.sign_unreviewed_and_validate(backend, client, firmware, navigator,
+                                          tx)
+
+    def test_trx_account_permission_fields_use_hash_review(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        owner_address = bytes.fromhex(client.getAccount(0)['addressHex'])
+        key = tron.Key(address=owner_address, weight=1)
+        tx = client.packContract(
+            tron.Transaction.Contract.AccountPermissionUpdateContract,
+            contract.AccountPermissionUpdateContract(
+                owner_address=owner_address,
+                owner=tron.Permission(type=tron.Permission.Owner,
+                                      id=0,
+                                      permission_name="owner",
+                                      threshold=1,
+                                      keys=[key]),
+                actives=[
+                    tron.Permission(type=tron.Permission.Active,
+                                    id=2,
+                                    permission_name="active",
+                                    threshold=1,
+                                    operations=b'\xff' * 32,
+                                    keys=[key]),
+                ]))
+        self.sign_unreviewed_and_validate(backend, client, firmware, navigator,
+                                          tx)
 
     def test_trx_accepts_one_contract_in_separate_apdu(self, backend, firmware,
                                                        navigator):
@@ -1893,6 +2061,50 @@ class TestTRX():
                     client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
                 lock=0))
         self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_delegate_resource_displays_mainnet_lock_period(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.DelegateResourceContract,
+            contract.DelegateResourceContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                resource=contract.ENERGY,
+                balance=100000000,
+                receiver_address=bytes.fromhex(client.address_hex(
+                    "TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP")),
+                lock=True,
+                lock_period=864000))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) <= MAX_APDU_LEN
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate_until_text(
+                navigate_instruction, [], "Lock period",
+                screen_change_before_first_instruction=True)
+            assert backend.compare_screen_with_text("864000 blocks"), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                navigate_instruction, validation_instructions, approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
 
     def test_trx_undelegate_resource(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)

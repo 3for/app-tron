@@ -409,11 +409,21 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = (const char *) reviewData;
             txInfos.fields[2].item = "Lock";
             txInfos.fields[2].value = (const char *) reviewData + 100;
-            txInfos.fields[3].item = stringLabelRecipientAddress;
-            txInfos.fields[3].value = toAddress;
-            txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
-            pairList.nbPairs = 5;
+            if (txContent.customData != 0) {
+                txInfos.fields[3].item = "Lock period";
+                txInfos.fields[3].value = (const char *) reviewData + DELEGATE_LOCK_PERIOD_OFFSET;
+                txInfos.fields[4].item = stringLabelRecipientAddress;
+                txInfos.fields[4].value = toAddress;
+                txInfos.fields[5].item = stringLabelSenderAddress;
+                txInfos.fields[5].value = fromAddress;
+                pairList.nbPairs = 6;
+            } else {
+                txInfos.fields[3].item = stringLabelRecipientAddress;
+                txInfos.fields[3].value = toAddress;
+                txInfos.fields[4].item = stringLabelSenderAddress;
+                txInfos.fields[4].value = fromAddress;
+                pairList.nbPairs = 5;
+            }
             txInfos.flowTitle = "Review transaction to\nDelegate Resource";
             infoLongPress.text = "Sign transaction to\nDelegate";
             break;

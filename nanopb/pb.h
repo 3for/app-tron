@@ -381,6 +381,18 @@ typedef enum {
     PB_WT_32BIT  = 5
 } pb_wire_type_t;
 
+/* Optional application policy for strict decoding. When
+ * PB_REJECT_UNKNOWN_FIELDS is enabled, the decoder calls this function before
+ * rejecting a field that is absent from the generated message descriptor.
+ * Applications can use it to admit schema fields deliberately omitted from
+ * their generated structures while continuing to reject truly unknown data.
+ */
+#ifdef PB_REJECT_UNKNOWN_FIELDS
+bool pb_allow_unknown_field(const pb_msgdesc_t *fields,
+                            uint32_t tag,
+                            pb_wire_type_t wire_type);
+#endif
+
 /* Structure for defining the handling of unknown/extension fields.
  * Usually the pb_extension_type_t structure is automatically generated,
  * while the pb_extension_t structure is created by the user. However,
@@ -873,4 +885,3 @@ template <typename GenMessageT> struct MessageDescriptor;
 #endif  /* __cplusplus */
 
 #endif
-

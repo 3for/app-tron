@@ -44,6 +44,8 @@ _Static_assert(CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET + 100 <= REVIEW_DATA_BUFFER_S
                "review snapshot does not cover amount slots");
 _Static_assert(5 * VOTE_PACK <= REVIEW_DATA_BUFFER_SIZE,
                "review snapshot does not cover vote slots");
+_Static_assert(DELEGATE_LOCK_PERIOD_OFFSET + 32 <= REVIEW_DATA_BUFFER_SIZE,
+               "review snapshot does not cover delegate lock period");
 _Static_assert(sizeof(toAddress) >= sizeof(((txContent_t *) 0)->tokenNames[0]),
                "review buffer cannot hold a complete token label");
 _Static_assert(MAX_TOKEN_LENGTH > EXCHANGE_TOKEN_LABEL_MAX_LENGTH,

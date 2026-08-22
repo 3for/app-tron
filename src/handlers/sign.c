@@ -258,6 +258,33 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
     data_warning = ((txContent.dataBytes > 0) ? true : false);
 
+    if (txContent.hasUnreviewedFields) {
+        /* java-tron currently preserves unknown protobuf fields in raw_data and
+         * includes them in the transaction ID. They cannot be represented by
+         * this app's clear-sign model, but remain compatible with the existing
+         * full-hash review when blind signing is explicitly enabled.
+         */
+#ifdef HAVE_SWAP
+        if (G_called_from_swap) {
+            return io_send_sw(E_SWAP_CHECKING_FAIL);
+        }
+#endif
+        if (!HAS_SETTING(S_SIGN_BY_HASH)) {
+            txContext.initialized = false;
+            return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+        }
+        format_hex(transactionContext.hash, 32, fullHash, sizeof(fullHash));
+        if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {
+            return io_send_sw(E_INCORRECT_DATA);
+        }
+
+        ux_flow_display(txContent.contractType == ACCOUNTPERMISSIONUPDATECONTRACT
+                            ? APPROVAL_PERMISSION_UPDATE
+                            : APPROVAL_SIMPLE_TRANSACTION,
+                        data_warning);
+        return 0;
+    }
+
     if (txContent.contractType == TRIGGERSMARTCONTRACT) {
         if (print_amount(txContent.feeLimit,
                          strings.common.maxFee,
@@ -607,6 +634,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
+            memset(G_io_apdu_buffer, 0, REVIEW_DATA_BUFFER_SIZE);
             if (txContent.resource == 0)
                 strcpy(fullContract, "Bandwidth");
             else
@@ -616,6 +644,19 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
             } else {
                 strlcpy((char *) G_io_apdu_buffer + 100, "True", sizeof(G_io_apdu_buffer) - 100);
+            }
+
+            char *lock_period = (char *) G_io_apdu_buffer + DELEGATE_LOCK_PERIOD_OFFSET;
+            if (txContent.customData == 0) {
+                strlcpy(lock_period, "Not applied", 32);
+            } else if (txContent.lockPeriod == 0) {
+                strlcpy(lock_period, "Network default", 32);
+            } else {
+                if ((txContent.lockPeriod < 0) ||
+                    (print_amount((uint64_t) txContent.lockPeriod, lock_period, 32, 0) == 0) ||
+                    (strlcat(lock_period, " blocks", 32) >= 32)) {
+                    return io_send_sw(E_INCORRECT_DATA);
+                }
             }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);

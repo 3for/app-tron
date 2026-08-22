@@ -87,3 +87,30 @@ enabling or releasing swap support for an asset with ambiguous metadata:
 Unique-metadata legacy configurations do not require a CAL format migration,
 but the release evidence should still include at least one successful legacy
 TRC20 swap to guard the existing app-exchange flow.
+
+## Blocking: protobuf forward-compatibility review
+
+The transaction decoder now prevents clear signing whenever the signed bytes
+contain fields omitted from the Ledger review model. To remain compatible with
+java-tron's current protobuf behavior, those transactions can still be signed
+through the existing full-hash review when blind signing is enabled; Swap mode
+continues to fail closed. `DelegateResourceContract.lock_period` field 6 is
+modeled directly and displayed for locked delegations.
+
+Complete the following items with Ledger security, release, and app-exchange
+owners before release:
+
+- [ ] Approve the policy that unmodeled transaction fields force full-hash
+      review instead of being silently clear-signed or rejected outright.
+- [ ] Confirm that app-exchange must reject every transaction carrying an
+      unmodeled field and must never fall back to blind signing.
+- [ ] Capture the release-time mainnet values of `getAllowProtoFilterNum`,
+      `getMaxDelegateLockPeriod`, and the delegate-lock feature gate, and
+      re-check the java-tron schema and actuators for newly meaningful fields.
+- [ ] Verify on Speculos and a physical device that ordinary vote transactions
+      remain clear-signed, while `VoteWitnessContract.support`, nonempty
+      `raw.auths`/`raw.scripts`, and permission-update contents use full-hash
+      review.
+- [ ] Verify locked delegation with a nonzero `lock_period`, zero/default
+      `lock_period`, and an unlocked legacy delegation, including the exact
+      displayed period and resulting transaction signatures.

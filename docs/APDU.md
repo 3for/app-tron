@@ -145,6 +145,10 @@ expired unfreeze, withdraw balance (claim rewards), and account permission updat
 
 **Relevant settings & errors**
 
+- Transaction fields that are not represented by the app's clear-sign model
+  are included in the transaction hash and force full-hash review. Blind
+  signing must be enabled, otherwise the app returns `0x6A8C`. Swap mode
+  rejects such transactions instead of falling back to blind signing.
 - Custom (non transfer/approve) smart-contract calls require the *Custom contracts* setting,
   else `0x6A8D`.
 - Contracts with extra `data` require the *Data allowed* setting, else `0x6A8B`.

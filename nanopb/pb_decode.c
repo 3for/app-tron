@@ -1059,6 +1059,10 @@ static bool checkreturn pb_decode_inner(pb_istream_t *stream, const pb_msgdesc_t
             }
 
             /* No match found, skip data */
+#ifdef PB_REJECT_UNKNOWN_FIELDS
+            if (!pb_allow_unknown_field(fields, tag, wire_type))
+                PB_RETURN_ERROR(stream, "unknown field");
+#endif
             if (!pb_skip_field(stream, wire_type))
                 return false;
             continue;

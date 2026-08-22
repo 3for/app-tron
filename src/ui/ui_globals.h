@@ -39,6 +39,7 @@
 // existing uses of G_io_apdu_buffer.
 #define CUSTOM_CONTRACT_TRC10_AMOUNT_OFFSET 100
 #define REVIEW_DATA_BUFFER_SIZE             250
+#define DELEGATE_LOCK_PERIOD_OFFSET         110
 
 #ifdef HAVE_NBGL
 #if LARGE_ICON_SIZE == 64

@@ -82,6 +82,7 @@ typedef struct _protocol_DelegateResourceContract {
     int64_t balance; 
     pb_byte_t receiver_address[21]; 
     bool lock; 
+    int64_t lock_period; 
 } protocol_DelegateResourceContract;
 
 typedef PB_BYTES_ARRAY_T(19) protocol_ExchangeCreateContract_first_token_id_t;
@@ -268,7 +269,7 @@ extern "C" {
 #define protocol_FreezeBalanceV2Contract_init_default {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_UnfreezeBalanceV2Contract_init_default {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_WithdrawExpireUnfreezeContract_init_default {{0}}
-#define protocol_DelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0}
+#define protocol_DelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0, 0}
 #define protocol_UnDelegateResourceContract_init_default {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_default {{{NULL}, NULL}}
 #define protocol_WithdrawBalanceContract_init_default {{0}}
@@ -301,7 +302,7 @@ extern "C" {
 #define protocol_FreezeBalanceV2Contract_init_zero {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_UnfreezeBalanceV2Contract_init_zero {{0}, 0, _protocol_ResourceCode_MIN}
 #define protocol_WithdrawExpireUnfreezeContract_init_zero {{0}}
-#define protocol_DelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0}
+#define protocol_DelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}, 0, 0}
 #define protocol_UnDelegateResourceContract_init_zero {{0}, _protocol_ResourceCode_MIN, 0, {0}}
 #define protocol_UnfreezeAssetContract_init_zero {{{NULL}, NULL}}
 #define protocol_WithdrawBalanceContract_init_zero {{0}}
@@ -354,6 +355,7 @@ extern "C" {
 #define protocol_DelegateResourceContract_balance_tag 3
 #define protocol_DelegateResourceContract_receiver_address_tag 4
 #define protocol_DelegateResourceContract_lock_tag 5
+#define protocol_DelegateResourceContract_lock_period_tag 6
 #define protocol_ExchangeCreateContract_owner_address_tag 1
 #define protocol_ExchangeCreateContract_first_token_id_tag 2
 #define protocol_ExchangeCreateContract_first_token_balance_tag 3
@@ -575,7 +577,8 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
 X(a, STATIC,   SINGULAR, UENUM,    resource,          2) \
 X(a, STATIC,   SINGULAR, INT64,    balance,           3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, receiver_address,   4) \
-X(a, STATIC,   SINGULAR, BOOL,     lock,              5)
+X(a, STATIC,   SINGULAR, BOOL,     lock,              5) \
+X(a, STATIC,   SINGULAR, INT64,    lock_period,       6)
 #define protocol_DelegateResourceContract_CALLBACK NULL
 #define protocol_DelegateResourceContract_DEFAULT NULL
 
@@ -764,7 +767,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_TriggerSmartContract_size depends on runtime parameters */
 #define protocol_AccountPermissionUpdateContract_size 23
 #define protocol_AssetIssueContract_FrozenSupply_size 22
-#define protocol_DelegateResourceContract_size   61
+#define protocol_DelegateResourceContract_size   72
 #define protocol_ExchangeCreateContract_size     87
 #define protocol_ExchangeInjectContract_size     66
 #define protocol_ExchangeTransactionContract_size 77

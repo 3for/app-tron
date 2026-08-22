@@ -144,6 +144,7 @@ typedef struct txContent_t {
     // transaction model so every signing path can review or reject them.
     uint64_t callTokenValue;
     uint64_t tokenId;
+    int64_t lockPeriod;
     uint8_t account[ADDRESS_SIZE];
     uint8_t destination[ADDRESS_SIZE];
     uint8_t contractAddress[ADDRESS_SIZE];
@@ -163,6 +164,9 @@ typedef struct txContent_t {
     // safely review exactly one contract. Track the occurrence across every
     // APDU in the signing session, not only within one nanopb decode.
     bool contractSeen;
+    // Unknown or deliberately omitted protobuf fields are included in the
+    // signed hash but cannot be represented safely by the clear-signing UI.
+    bool hasUnreviewedFields;
     uint32_t customData;
 } txContent_t;
 

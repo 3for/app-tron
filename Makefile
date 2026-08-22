@@ -70,6 +70,7 @@ NANOPB_DIR = nanopb
 
 CFLAGS += "-I$(NANOPB_DIR)" -Iproto
 DEFINES   += PB_NO_ERRMSG=1
+DEFINES   += PB_REJECT_UNKNOWN_FIELDS=1
 SOURCE_FILES += $(NANOPB_DIR)/pb_encode.c $(NANOPB_DIR)/pb_decode.c $(NANOPB_DIR)/pb_common.c
 APP_SOURCE_PATH += proto
 
