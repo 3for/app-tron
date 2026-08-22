@@ -23,11 +23,7 @@
 #include "ui_review_menu.h"
 
 #define VOTE_ADDRESS 0
-#ifdef HAVE_BAGL
-#define VOTE_ADDRESS_SIZE 15
-#else
 #define VOTE_ADDRESS_SIZE BASE58CHECK_ADDRESS_SIZE + 1
-#endif
 #define VOTE_AMOUNT           VOTE_ADDRESS_SIZE
 #define VOTE_AMOUNT_SIZE      15
 #define VOTE_PACK             (VOTE_ADDRESS_SIZE + VOTE_AMOUNT_SIZE)

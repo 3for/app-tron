@@ -39,18 +39,9 @@
 #define MAX_PERMISSION_ID 9
 
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
-#ifdef HAVE_BAGL
-    memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
-    memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, 5);
-    memcpy(destination + 5 + voteSlot(index, VOTE_ADDRESS), "...", 3);
-    memcpy(destination + 8 + voteSlot(index, VOTE_ADDRESS),
-           from + (BASE58CHECK_ADDRESS_SIZE - 5),
-           5);
-    PRINTF("Vote Address: %d - %s\n", index, destination + (voteSlot(index, VOTE_ADDRESS)));
-#else
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
     memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, VOTE_ADDRESS_SIZE);
-#endif
+    PRINTF("Vote Address: %d - %s\n", index, destination + (voteSlot(index, VOTE_ADDRESS)));
 }
 
 static void fillVoteAmountSlot(void *destination, uint64_t value, uint8_t index) {
@@ -531,7 +522,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             PRINTF("Voting!!\n");
             PRINTF("Count: %d\n", contract->votes_count);
-            memset(G_io_apdu_buffer, 0, 200);
+            memset(G_io_apdu_buffer, 0, REVIEW_DATA_BUFFER_SIZE);
             txContent.amount[0] = 0;
             votes_count = contract->votes_count;
 #if defined(HAVE_NBGL)

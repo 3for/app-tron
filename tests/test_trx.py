@@ -1222,6 +1222,56 @@ class TestTRX():
                 ]))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_vote_witness_displays_full_addresses(self, backend, firmware,
+                                                      navigator):
+        if not firmware.is_nano:
+            pytest.skip("BAGL witness-address paging is Nano-specific")
+
+        client = TronClient(backend, firmware, navigator)
+        vote_addresses = [
+            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+            "TE7hnUtWRRBz3SkFrX8JESWUmEvxxAhoPt",
+            "TTcYhypP8m4phDhN6oRexz2174zAerjEWP",
+            "TY65QiDt4hLTMpf3WRzcX357BnmdxT2sw9",
+        ]
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=[
+                    contract.VoteWitnessContract.Vote(
+                        vote_address=bytes.fromhex(
+                            client.address_hex(vote_address)),
+                        vote_count=100)
+                    for vote_address in vote_addresses
+                ]))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate(
+                [NavInsID.RIGHT_CLICK],
+                screen_change_before_first_instruction=True)
+            for index, vote_address in enumerate(vote_addresses):
+                if index > 0:
+                    navigator.navigate(
+                        [NavInsID.RIGHT_CLICK],
+                        screen_change_before_first_instruction=False)
+                screen = backend.get_current_screen_content()
+                displayed_text = "".join(event.get("text", "")
+                                         for event in screen["events"])
+                assert vote_address in displayed_text, screen
+
+            navigator.navigate_until_text(
+                NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], r"^Sign$",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     @pytest.mark.parametrize("vote_counts, expected_total", [
         ([], "0: 0"),
         ([0], "1: 0"),

@@ -247,32 +247,32 @@ UX_STEP_NOCB(ux_approval_vote_flow_1_step,
 UX_STEP_NOCB(ux_approval_vote_flow_2_step,
              bnnn_paging,
              {
-                 .title = (char *) (reviewData + voteSlot(0, VOTE_ADDRESS)),
-                 .text = (char *) (reviewData + voteSlot(0, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(0, VOTE_AMOUNT)),
+                 .text = (char *) (reviewData + voteSlot(0, VOTE_ADDRESS)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_3_step,
              bnnn_paging,
              {
-                 .title = (char *) (reviewData + voteSlot(1, VOTE_ADDRESS)),
-                 .text = (char *) (reviewData + voteSlot(1, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(1, VOTE_AMOUNT)),
+                 .text = (char *) (reviewData + voteSlot(1, VOTE_ADDRESS)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_4_step,
              bnnn_paging,
              {
-                 .title = (char *) (reviewData + voteSlot(2, VOTE_ADDRESS)),
-                 .text = (char *) (reviewData + voteSlot(2, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(2, VOTE_AMOUNT)),
+                 .text = (char *) (reviewData + voteSlot(2, VOTE_ADDRESS)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_5_step,
              bnnn_paging,
              {
-                 .title = (char *) (reviewData + voteSlot(3, VOTE_ADDRESS)),
-                 .text = (char *) (reviewData + voteSlot(3, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(3, VOTE_AMOUNT)),
+                 .text = (char *) (reviewData + voteSlot(3, VOTE_ADDRESS)),
              });
 UX_STEP_NOCB(ux_approval_vote_flow_6_step,
              bnnn_paging,
              {
-                 .title = (char *) (reviewData + voteSlot(4, VOTE_ADDRESS)),
-                 .text = (char *) (reviewData + voteSlot(4, VOTE_AMOUNT)),
+                 .title = (char *) (reviewData + voteSlot(4, VOTE_AMOUNT)),
+                 .text = (char *) (reviewData + voteSlot(4, VOTE_ADDRESS)),
              });
 
 // 11 slots for dynamic Nano UX voting steps
