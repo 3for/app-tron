@@ -29,7 +29,8 @@ int handleGetAppConfiguration(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
 
     // Add info to buffer
     uint8_t resp[4] = {0};
-    resp[0] = N_settings & 0x0f;
+    // Do not expose the deprecated address-truncation bit as an active setting.
+    resp[0] = N_settings & ACTIVE_SETTINGS_MASK;
     resp[1] = MAJOR_VERSION;
     resp[2] = MINOR_VERSION;
     resp[3] = PATCH_VERSION;

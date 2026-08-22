@@ -25,9 +25,18 @@ extern const internal_storage_t N_storage_real;
 // check a setting item
 #define HAS_SETTING(k) ((N_settings & (1 << (k))) >> (k))
 
-#define S_DATA_ALLOWED    0
-#define S_CUSTOM_CONTRACT 1
-#define S_SIGN_BY_HASH    2
+#define S_DATA_ALLOWED     0
+#define S_CUSTOM_CONTRACT  1
+// Reserved for the removed address-truncation setting. Never reuse this
+// persisted bit for authorization: older installations may retain it.
+#define S_TRUNCATE_ADDRESS 2
+#define S_SIGN_BY_HASH     3
+
+#define ACTIVE_SETTINGS_MASK \
+    ((1U << S_DATA_ALLOWED) | (1U << S_CUSTOM_CONTRACT) | (1U << S_SIGN_BY_HASH))
+
+_Static_assert((ACTIVE_SETTINGS_MASK & (1U << S_TRUNCATE_ADDRESS)) == 0,
+               "deprecated address-truncation bit must remain reserved");
 
 #define S_INITIALIZED 7
 

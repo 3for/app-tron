@@ -202,8 +202,12 @@ ignored.
 | --- | -------------------- | -------------------------------------- |
 | 0   | `S_DATA_ALLOWED`     | Allow contracts carrying `data`        |
 | 1   | `S_CUSTOM_CONTRACT`  | Allow arbitrary smart-contract calls   |
-| 2   | `S_TRUNCATE_ADDRESS` | Display truncated addresses            |
+| 2   | `S_TRUNCATE_ADDRESS` | Deprecated; reserved for compatibility |
 | 3   | `S_SIGN_BY_HASH`     | Allow blind signing by hash            |
+
+The app always displays full addresses. Bit 2 is retained only to preserve the
+persistent and wire layouts of older releases; it is ignored and is never
+interpreted as authorization for blind signing.
 
 ---
 

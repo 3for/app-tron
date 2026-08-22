@@ -150,6 +150,8 @@ class TestTRX():
     def test_trx_get_version(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         resp = client.getVersion()
+        expected_settings = (1 << 0) | (1 << 1) | (1 << 3)
+        assert resp.data[0] == expected_settings
         major, minor, patch = client.unpackGetVersionResponse(resp.data)
         path = str(Path(__file__).parent.parent.resolve()) + "/VERSION"
         version_file = open(path, "r").read()
@@ -1929,8 +1931,10 @@ class TestTRX():
                 screen_change_after_last_instruction=False)
             displayed_address = (signer_address[:12]
                                  if firmware.is_nano else signer_address)
-            assert backend.compare_screen_with_text(displayed_address), \
-                backend.get_current_screen_content()
+            screen = backend.get_current_screen_content()
+            displayed_text = "".join(event.get("text", "")
+                                     for event in screen["events"])
+            assert displayed_address in displayed_text, screen
             navigator.navigate_until_text(
                 navigate_instruction,
                 validation_instructions,
