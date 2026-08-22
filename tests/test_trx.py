@@ -582,6 +582,112 @@ class TestTRX():
 
         self.sign_and_validate(client, firmware, 1, tx, tokenSignature)
 
+    @pytest.mark.parametrize("exchange_operation", [
+        "create_first",
+        "create_second",
+        "create_precision_five",
+        "inject",
+        "withdraw",
+    ])
+    def test_trx_exchange_trx_prefixed_trc10_uses_authenticated_precision(
+            self, backend, firmware, navigator, exchange_operation):
+        if firmware.device != "flex":
+            pytest.skip(
+                "Direct exchange amount assertion is calibrated for Flex")
+
+        trx_signature = (
+            "0a0354525810061a463044022037c53ecb06abe1bfd708bd7afd047720b72e2bfc"
+            "0a2e4b6ade9a33ae813565a802200a7d5086dc08c4a6f866aad803ac7438942c3c"
+            "0a6371adcb6992db94487f66c7")
+        trx_market_signature = (
+            "0a095452584d61726b657410001a473045022100e24a62c1a5413f509efc0c6a344"
+            "b6c3e205534ed58ea7a6df4797aff64a185f302200c6309324d161da1559e62ef0"
+            "a5bf08de6a082215333e417817a5540e62952a9")
+        trx_lsilver_signature = (
+            "0a0a5452584c53696c76657210051a46304402205bbc4995abbef4dec85d7e498e"
+            "9538cd8f82936fbbebe10511ea152cce4f772902207d0bce8a77784c53b53ae0a"
+            "b4b52595fe4c337f91a812fff7ce8d94512f5baae")
+        exchange_signature = (
+            "088b011207313030313233371a095452584d61726b657420002a015f320354525838"
+            "0642473045022100e470c4c1ff5b69bf17521d8ca24dc7ccd1dd76319dd3767164"
+            "762fab1cb5b02b0220663de69c36a2e7c05ee708617fc5c03b71253ab452a14812"
+            "4d86dc93bb749e97")
+
+        client = TronClient(backend, firmware, navigator)
+        owner = bytes.fromhex(client.getAccount(0)['addressHex'])
+        if exchange_operation.startswith("create"):
+            trc10_is_first = exchange_operation != "create_second"
+            precision_five = exchange_operation == "create_precision_five"
+            trc10_id = b"1002531" if precision_five else b"1001237"
+            trc10_amount = 1234567 if precision_five else 1000000
+            trc10_amount_text = "12.34567" if precision_five else "1000000"
+            trc10_signature = (trx_lsilver_signature
+                               if precision_five else trx_market_signature)
+            tx = client.packContract(
+                tron.Transaction.Contract.ExchangeCreateContract,
+                contract.ExchangeCreateContract(
+                    owner_address=owner,
+                    first_token_id=trc10_id if trc10_is_first else b"_",
+                    first_token_balance=(trc10_amount
+                                         if trc10_is_first else 123456000000),
+                    second_token_id=b"_" if trc10_is_first else trc10_id,
+                    second_token_balance=(123456000000 if trc10_is_first else
+                                          trc10_amount)))
+            signatures = ([trc10_signature, trx_signature] if trc10_is_first
+                          else [trx_signature, trc10_signature])
+            expected_amounts = ([trc10_amount_text, "123456"] if trc10_is_first
+                                else ["123456", trc10_amount_text])
+        else:
+            contract_type = (
+                tron.Transaction.Contract.ExchangeInjectContract
+                if exchange_operation == "inject" else
+                tron.Transaction.Contract.ExchangeWithdrawContract)
+            contract_class = (contract.ExchangeInjectContract
+                              if exchange_operation == "inject" else
+                              contract.ExchangeWithdrawContract)
+            tx = client.packContract(
+                contract_type,
+                contract_class(owner_address=owner,
+                               exchange_id=139,
+                               token_id=b"1001237",
+                               quant=1000000))
+            signatures = [exchange_signature]
+            expected_amounts = ["1000000"]
+
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, payload)
+        for signature_index, signature in enumerate(signatures[:-1]):
+            backend.exchange(CLA, InsType.SIGN,
+                             P1.TRC10_NAME | signature_index, 0x00,
+                             bytes.fromhex(signature))
+
+        final_p1 = (P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE |
+                    (len(signatures) - 1))
+        with backend.exchange_async(CLA, InsType.SIGN, final_p1, 0x00,
+                                    bytes.fromhex(signatures[-1])):
+            for amount_index, expected_amount in enumerate(expected_amounts):
+                amount_label = (f"Amount {amount_index + 1}"
+                                if len(expected_amounts) == 2 else "Amount")
+                navigator.navigate_until_text(
+                    NavInsID.SWIPE_CENTER_TO_LEFT, [],
+                    amount_label,
+                    screen_change_before_first_instruction=(amount_index == 0))
+                assert backend.compare_screen_with_text(expected_amount), \
+                    backend.get_current_screen_content()
+
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS,
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
     @pytest.mark.parametrize(("second_token_id", "second_token_signature"), [
         (b"1002035",
          bytes.fromhex(

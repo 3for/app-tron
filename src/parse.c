@@ -288,7 +288,12 @@ bool parseTokenName(uint8_t token_id, uint8_t *data, uint32_t dataLength, txCont
     return true;
 }
 
-static bool printTokenFromID(char *out, size_t outlen, const uint8_t *data, size_t size) {
+static bool printTokenFromID(char *out,
+                             size_t outlen,
+                             const uint8_t *data,
+                             size_t size,
+                             bool *is_native) {
+    *is_native = false;
     if (size != TOKENID_SIZE && size != 1) {
         return false;
     }
@@ -297,6 +302,7 @@ static bool printTokenFromID(char *out, size_t outlen, const uint8_t *data, size
         if (data[0] != '_') {
             return false;
         }
+        *is_native = true;
         strlcpy(out, "TRX", outlen);
         return true;
     }
@@ -447,7 +453,8 @@ static bool transfer_asset_contract(txContent_t *content, pb_istream_t *stream) 
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.transfer_asset_contract.asset_name.bytes,
-                          msg.transfer_asset_contract.asset_name.size)) {
+                          msg.transfer_asset_contract.asset_name.size,
+                          &content->tokenIsNative[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -737,7 +744,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_create_contract.first_token_id.bytes,
-                          msg.exchange_create_contract.first_token_id.size)) {
+                          msg.exchange_create_contract.first_token_id.size,
+                          &content->tokenIsNative[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -745,7 +753,8 @@ static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[1],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_create_contract.second_token_id.bytes,
-                          msg.exchange_create_contract.second_token_id.size)) {
+                          msg.exchange_create_contract.second_token_id.size,
+                          &content->tokenIsNative[1])) {
         return false;
     }
     content->tokenNamesLength[1] = strlen(content->tokenNames[1]);
@@ -771,7 +780,8 @@ static bool exchange_inject_contract(txContent_t *content, pb_istream_t *stream)
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_inject_contract.token_id.bytes,
-                          msg.exchange_inject_contract.token_id.size)) {
+                          msg.exchange_inject_contract.token_id.size,
+                          &content->tokenIsNative[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -796,7 +806,8 @@ static bool exchange_withdraw_contract(txContent_t *content, pb_istream_t *strea
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_withdraw_contract.token_id.bytes,
-                          msg.exchange_withdraw_contract.token_id.size)) {
+                          msg.exchange_withdraw_contract.token_id.size,
+                          &content->tokenIsNative[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
@@ -822,7 +833,8 @@ static bool exchange_transaction_contract(txContent_t *content, pb_istream_t *st
     if (!printTokenFromID(content->tokenNames[0],
                           MAX_TOKEN_LENGTH,
                           msg.exchange_transaction_contract.token_id.bytes,
-                          msg.exchange_transaction_contract.token_id.size)) {
+                          msg.exchange_transaction_contract.token_id.size,
+                          &content->tokenIsNative[0])) {
         return false;
     }
     content->tokenNamesLength[0] = strlen(content->tokenNames[0]);
