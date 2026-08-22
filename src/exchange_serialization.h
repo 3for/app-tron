@@ -19,6 +19,13 @@
 #define TOKEN_SIGNATURE_DOMAIN        "TRON-TOKEN-DETAILS"
 #define TOKEN_SIGNATURE_DOMAIN_LENGTH 18u
 
+#define EXCHANGE_TOKEN_LABEL_MAX_LENGTH \
+    (EXCHANGE_MAX_TOKEN_NAME_LENGTH + TOKEN_ID_MAX_LENGTH + 2u)
+#define EXCHANGE_PAIR_SEPARATOR        " -> "
+#define EXCHANGE_PAIR_SEPARATOR_LENGTH 4u
+#define EXCHANGE_PAIR_REVIEW_MAX_SIZE                                      \
+    ((2u * EXCHANGE_TOKEN_LABEL_MAX_LENGTH) + EXCHANGE_PAIR_SEPARATOR_LENGTH + 1u)
+
 #define EXCHANGE_LEGACY_SIGNATURE_PAYLOAD_MAX_SIZE                    \
     (EXCHANGE_UINT64_DECIMAL_LENGTH + (2u * LEGACY_TOKEN_ID_SIZE) +   \
      (2u * EXCHANGE_MAX_TOKEN_NAME_LENGTH) + 2u)
@@ -99,5 +106,16 @@ bool serialize_exchange_signature_payload(uint8_t *out,
                                           const char *token2_id,
                                           const char *token2_name,
                                           uint32_t token2_precision);
+
+/**
+ * Build the security-critical exchange pair shown during review without
+ * truncating either authenticated token label.
+ */
+bool format_exchange_pair_for_review(char *out,
+                                     size_t out_size,
+                                     const char *token1_label,
+                                     size_t token1_length,
+                                     const char *token2_label,
+                                     size_t token2_length);
 
 #endif

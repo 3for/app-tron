@@ -27,7 +27,7 @@ volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 char toAddress[MAX_TOKEN_LENGTH];
 char addressSummary[40];
-char fullContract[MAX_TOKEN_LENGTH];
+char fullContract[EXCHANGE_PAIR_REVIEW_MAX_SIZE];
 char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
@@ -46,6 +46,10 @@ _Static_assert(5 * VOTE_PACK <= REVIEW_DATA_BUFFER_SIZE,
                "review snapshot does not cover vote slots");
 _Static_assert(sizeof(toAddress) >= sizeof(((txContent_t *) 0)->tokenNames[0]),
                "review buffer cannot hold a complete token label");
+_Static_assert(MAX_TOKEN_LENGTH > EXCHANGE_TOKEN_LABEL_MAX_LENGTH,
+               "token label buffer cannot hold maximum authenticated metadata");
+_Static_assert(sizeof(fullContract) == EXCHANGE_PAIR_REVIEW_MAX_SIZE,
+               "exchange pair review buffer has an unexpected size");
 
 typedef enum {
     UI_REVIEW_NONE = 0,

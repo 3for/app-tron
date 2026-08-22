@@ -189,5 +189,37 @@ int main(void) {
     assert(!serialize_v1(payload, &payload_size, 166, "1002000", "Bit\tTorrent", 6, "_", "TRX", 6));
     assert(!serialize_v1(payload, &payload_size, 166, "1002000", "BitTorrent", 7, "_", "TRX", 6));
 
+    const char maximum_label1[] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA[1234567890123456789]";
+    const char maximum_label2[] = "AAAAAAAAAAAAAAAAAAAAAABBBBBBBBB[9876543210987654321]";
+    char pair[EXCHANGE_PAIR_REVIEW_MAX_SIZE];
+    assert(strlen(maximum_label1) == EXCHANGE_TOKEN_LABEL_MAX_LENGTH);
+    assert(strlen(maximum_label2) == EXCHANGE_TOKEN_LABEL_MAX_LENGTH);
+    assert(format_exchange_pair_for_review(pair,
+                                           sizeof(pair),
+                                           maximum_label1,
+                                           strlen(maximum_label1),
+                                           maximum_label2,
+                                           strlen(maximum_label2)));
+    assert(strlen(pair) == EXCHANGE_PAIR_REVIEW_MAX_SIZE - 1u);
+    assert(strstr(pair, "[1234567890123456789] -> ") != NULL);
+    assert(strstr(pair, "BBBBBBBBB[9876543210987654321]") != NULL);
+
+    char truncated_pair[EXCHANGE_PAIR_REVIEW_MAX_SIZE - 1u];
+    assert(!format_exchange_pair_for_review(truncated_pair,
+                                            sizeof(truncated_pair),
+                                            maximum_label1,
+                                            strlen(maximum_label1),
+                                            maximum_label2,
+                                            strlen(maximum_label2)));
+    assert(truncated_pair[0] == '\0');
+
+    assert(format_exchange_pair_for_review(pair,
+                                           sizeof(pair),
+                                           "1002000",
+                                           strlen("1002000"),
+                                           "TRX",
+                                           strlen("TRX")));
+    assert(strcmp(pair, "1002000 -> TRX") == 0);
+
     return 0;
 }

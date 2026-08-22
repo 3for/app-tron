@@ -311,3 +311,37 @@ bool serialize_exchange_signature_payload(uint8_t *out,
     *payload_size = offset;
     return true;
 }
+
+bool format_exchange_pair_for_review(char *out,
+                                     size_t out_size,
+                                     const char *token1_label,
+                                     size_t token1_length,
+                                     const char *token2_label,
+                                     size_t token2_length) {
+    if ((out == NULL) || (out_size == 0u) || (token1_label == NULL) || (token2_label == NULL)) {
+        return false;
+    }
+    out[0] = '\0';
+
+    if ((token1_length == 0u) || (token1_length > EXCHANGE_TOKEN_LABEL_MAX_LENGTH) ||
+        (token2_length == 0u) || (token2_length > EXCHANGE_TOKEN_LABEL_MAX_LENGTH) ||
+        (token1_label[token1_length] != '\0') || (token2_label[token2_length] != '\0')) {
+        return false;
+    }
+
+    size_t required_size =
+        token1_length + EXCHANGE_PAIR_SEPARATOR_LENGTH + token2_length + 1u;
+    if (required_size > out_size) {
+        return false;
+    }
+
+    size_t offset = 0;
+    append_bytes((uint8_t *) out, &offset, token1_label, token1_length);
+    append_bytes((uint8_t *) out,
+                 &offset,
+                 EXCHANGE_PAIR_SEPARATOR,
+                 EXCHANGE_PAIR_SEPARATOR_LENGTH);
+    append_bytes((uint8_t *) out, &offset, token2_label, token2_length);
+    out[offset] = '\0';
+    return true;
+}

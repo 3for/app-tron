@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "../parse.h"
+#include "../exchange_serialization.h"
 #include "ui_review_menu.h"
 
 #define VOTE_ADDRESS 0
@@ -56,7 +57,8 @@ extern char
 // the second complete token label (name[id]).
 extern char toAddress[MAX_TOKEN_LENGTH];
 extern char addressSummary[40];
-extern char fullContract[MAX_TOKEN_LENGTH];
+// Large enough for two maximum authenticated name[id] labels and " -> ".
+extern char fullContract[EXCHANGE_PAIR_REVIEW_MAX_SIZE];
 extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];

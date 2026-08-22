@@ -476,12 +476,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case EXCHANGETRANSACTIONCONTRACT:
-            // memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0]+1);
-            snprintf(fullContract,
-                     sizeof(fullContract),
-                     "%s -> %s",
-                     txContent.tokenNames[0],
-                     txContent.tokenNames[1]);
+            if (!format_exchange_pair_for_review(fullContract,
+                                                 sizeof(fullContract),
+                                                 txContent.tokenNames[0],
+                                                 txContent.tokenNamesLength[0],
+                                                 txContent.tokenNames[1],
+                                                 txContent.tokenNamesLength[1])) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.exchangeID, (void *) toAddress, sizeof(toAddress), 0);
             print_amount(txContent.amount[0],
