@@ -992,6 +992,93 @@ class TestTRX():
                 ]))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    @pytest.mark.parametrize("vote_counts, expected_total", [
+        ([], "0: 0"),
+        ([0], "1: 0"),
+        ([5_000_000_000], "1: 5000000000"),
+        ([3_000_000_000, 3_000_000_000], "2: 6000000000"),
+        ([(1 << 63) - 1, (1 << 63) - 1, 1],
+         "3: 18446744073709551615"),
+    ])
+    def test_trx_vote_witness_formats_64_bit_total(
+            self, backend, firmware, navigator, vote_counts, expected_total):
+        if firmware.device != "flex":
+            pytest.skip("Direct vote-total assertion is calibrated for Flex")
+
+        client = TronClient(backend, firmware, navigator)
+        vote_addresses = [
+            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+            "TE7hnUtWRRBz3SkFrX8JESWUmEvxxAhoPt",
+            "TTcYhypP8m4phDhN6oRexz2174zAerjEWP",
+        ]
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=[
+                    contract.VoteWitnessContract.Vote(
+                        vote_address=bytes.fromhex(
+                            client.address_hex(vote_addresses[index])),
+                        vote_count=vote_count)
+                    for index, vote_count in enumerate(vote_counts)
+                ]))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [],
+                "Total Vote Count",
+                screen_change_before_first_instruction=True)
+            screen = backend.get_current_screen_content()
+            displayed_text = "".join(event.get("text", "")
+                                     for event in screen["events"])
+            assert expected_total.replace(" ", "") in displayed_text.replace(
+                " ", ""), screen
+            navigator.navigate_until_text(
+                NavInsID.SWIPE_CENTER_TO_LEFT, [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ],
+                "Hold to sign",
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    def test_trx_vote_witness_rejects_64_bit_total_overflow(
+            self, backend, firmware, navigator):
+        if firmware.device != "flex":
+            pytest.skip("Vote-total aggregation is only used on NBGL devices")
+
+        client = TronClient(backend, firmware, navigator)
+        vote_addresses = [
+            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+            "TE7hnUtWRRBz3SkFrX8JESWUmEvxxAhoPt",
+            "TTcYhypP8m4phDhN6oRexz2174zAerjEWP",
+        ]
+        tx = client.packContract(
+            tron.Transaction.Contract.VoteWitnessContract,
+            contract.VoteWitnessContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                votes=[
+                    contract.VoteWitnessContract.Vote(
+                        vote_address=bytes.fromhex(
+                            client.address_hex(vote_address)),
+                        vote_count=(1 << 63) - 1)
+                    for vote_address in vote_addresses
+                ]))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_vote_witness_more_than_5(self, backend, configuration,
                                           firmware, navigator):
         client = TronClient(backend, firmware, navigator)

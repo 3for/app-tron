@@ -508,24 +508,45 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             txContent.amount[0] = 0;
             votes_count = contract->votes_count;
 #if defined(HAVE_NBGL)
-            uint32_t total_votes = 0;
+            uint64_t total_votes = 0;
 #endif
 
             for (int i = 0; i < contract->votes_count; i++) {
                 getBase58FromAddress(contract->votes[i].vote_address, fullContract);
 #if defined(HAVE_NBGL)
-                total_votes += (unsigned int) contract->votes[i].vote_count;
+                if ((contract->votes[i].vote_count < 0) ||
+                    (UINT64_MAX - total_votes < (uint64_t) contract->votes[i].vote_count)) {
+                    return io_send_sw(E_INCORRECT_DATA);
+                }
+                total_votes += (uint64_t) contract->votes[i].vote_count;
 #endif
                 fillVoteAddressSlot((void *) G_io_apdu_buffer, (const char *) fullContract, i);
                 fillVoteAmountSlot((void *) G_io_apdu_buffer, contract->votes[i].vote_count, i);
             }
 
 #if defined(HAVE_NBGL)
-            snprintf((char *) fullContract,
-                     sizeof(fullContract),
-                     "%d: %u",
-                     contract->votes_count,
-                     total_votes);
+            size_t vote_summary_length = 0;
+            if (contract->votes_count == 0u) {
+                fullContract[vote_summary_length++] = '0';
+            } else {
+                vote_summary_length =
+                    print_amount(contract->votes_count, fullContract, sizeof(fullContract), 0);
+            }
+            if ((vote_summary_length == 0u) ||
+                (vote_summary_length + 2u >= sizeof(fullContract))) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+            fullContract[vote_summary_length++] = ':';
+            fullContract[vote_summary_length++] = ' ';
+            if (total_votes == 0u) {
+                fullContract[vote_summary_length++] = '0';
+                fullContract[vote_summary_length] = '\0';
+            } else if (print_amount(total_votes,
+                                    fullContract + vote_summary_length,
+                                    sizeof(fullContract) - vote_summary_length,
+                                    0) == 0) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 #endif
 
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
