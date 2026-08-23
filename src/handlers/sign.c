@@ -71,6 +71,32 @@ static bool copy_token_label(char *destination,
     return true;
 }
 
+static bool set_resource_label(char *destination,
+                               size_t destination_size,
+                               uint8_t resource,
+                               bool allow_tron_power) {
+    const char *label;
+
+    switch (resource) {
+        case protocol_ResourceCode_BANDWIDTH:
+            label = "Bandwidth";
+            break;
+        case protocol_ResourceCode_ENERGY:
+            label = "Energy";
+            break;
+        case protocol_ResourceCode_TRON_POWER:
+            if (!allow_tron_power) {
+                return false;
+            }
+            label = "Tron Power";
+            break;
+        default:
+            return false;
+    }
+
+    return strlcpy(destination, label, destination_size) < destination_size;
+}
+
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -571,10 +597,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
         } break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             if (strlen((const char *) txContent.destination) > 0) {
@@ -587,10 +612,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case UNFREEZEBALANCECONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             if (strlen((const char *) txContent.destination) > 0) {
                 getBase58FromAddress(txContent.destination, toAddress);
@@ -602,10 +626,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, toAddress);
@@ -613,10 +636,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, toAddress);
@@ -626,10 +648,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
             memset(G_io_apdu_buffer, 0, REVIEW_DATA_BUFFER_SIZE);
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract,
+                                    sizeof(fullContract),
+                                    txContent.resource,
+                                    false)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             if (txContent.customData == 0) {
                 strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
@@ -657,10 +681,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case UNDELEGATERESOURCECONTRACT:  // Undelegate resource
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract,
+                                    sizeof(fullContract),
+                                    txContent.resource,
+                                    false)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.destination, toAddress);

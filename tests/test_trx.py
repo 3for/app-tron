@@ -35,6 +35,64 @@ def encode_length_delimited_field(field_number, value):
     return bytes([(field_number << 3) | 2, len(value)]) + value
 
 
+def encode_varint(value):
+    """Encode a non-negative protobuf varint without enum validation."""
+    assert value >= 0
+    encoded = bytearray()
+    while value > 0x7f:
+        encoded.append((value & 0x7f) | 0x80)
+        value >>= 7
+    encoded.append(value)
+    return bytes(encoded)
+
+
+def pack_contract_with_raw_resource(client, contract_type, message,
+                                    resource_field, resource):
+    """Inject a raw enum value so tests also cover unknown wire values."""
+    raw_data = tron.Transaction.raw()
+    raw_data.ParseFromString(client.packContract(contract_type, message))
+    raw_contract = message.SerializeToString(deterministic=True)
+    raw_contract += encode_varint(resource_field << 3)
+    raw_contract += encode_varint(resource)
+    raw_data.contract[0].parameter.value = raw_contract
+    return raw_data.SerializeToString(deterministic=True)
+
+
+def make_resource_contract(client, contract_type, receiver_address=b''):
+    owner_address = bytes.fromhex(client.getAccount(0)['addressHex'])
+    if contract_type == tron.Transaction.Contract.FreezeBalanceContract:
+        return contract.FreezeBalanceContract(
+            owner_address=owner_address,
+            frozen_balance=100000000,
+            frozen_duration=3,
+            receiver_address=receiver_address), 10
+    if contract_type == tron.Transaction.Contract.UnfreezeBalanceContract:
+        return contract.UnfreezeBalanceContract(
+            owner_address=owner_address, receiver_address=receiver_address), 10
+    if contract_type == tron.Transaction.Contract.FreezeBalanceV2Contract:
+        return contract.FreezeBalanceV2Contract(owner_address=owner_address,
+                                                frozen_balance=100000000), 3
+    if contract_type == tron.Transaction.Contract.UnfreezeBalanceV2Contract:
+        return contract.UnfreezeBalanceV2Contract(
+            owner_address=owner_address, unfreeze_balance=100000000), 3
+
+    if not receiver_address:
+        receiver_address = bytes.fromhex(
+            client.address_hex("TGQVLckg1gDZS5wUwPTrPgRG4U8MKC4jcP"))
+    if contract_type == tron.Transaction.Contract.DelegateResourceContract:
+        return contract.DelegateResourceContract(
+            owner_address=owner_address,
+            balance=100000000,
+            receiver_address=receiver_address), 2
+    if contract_type == tron.Transaction.Contract.UnDelegateResourceContract:
+        return contract.UnDelegateResourceContract(
+            owner_address=owner_address,
+            balance=100000000,
+            receiver_address=receiver_address), 2
+    raise AssertionError(
+        f"unsupported resource contract type: {contract_type}")
+
+
 @pytest.mark.parametrize("p1", [P1.FIRST, P1.SIGN])
 def test_personal_message_requires_blind_signing(backend, firmware, navigator,
                                                  p1):
@@ -1425,6 +1483,104 @@ class TestTRX():
                                            resource=contract.ENERGY))
 
         self.sign_and_validate(client, firmware, 0, tx)
+
+    @pytest.mark.parametrize("contract_type", [
+        tron.Transaction.Contract.FreezeBalanceContract,
+        tron.Transaction.Contract.UnfreezeBalanceContract,
+        tron.Transaction.Contract.FreezeBalanceV2Contract,
+        tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+    ])
+    def test_trx_tron_power_resource_is_clear_signed_exactly(
+            self, backend, firmware, navigator, contract_type):
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = "Sign"
+        elif firmware.device == "flex":
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+        else:
+            pytest.skip(
+                "Direct resource-label assertion is calibrated for Flex and Nano"
+            )
+
+        client = TronClient(backend, firmware, navigator)
+        message, resource_field = make_resource_contract(client, contract_type)
+        tx = pack_contract_with_raw_resource(client, contract_type, message,
+                                             resource_field,
+                                             contract.TRON_POWER)
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00, payload):
+            navigator.navigate_until_text(
+                navigate_instruction, [],
+                "Tron Power",
+                screen_change_before_first_instruction=True)
+            assert backend.compare_screen_with_text("Tron Power"), \
+                backend.get_current_screen_content()
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    @pytest.mark.parametrize(("contract_type", "resource"), [
+        *[(contract_type, resource) for contract_type in (
+            tron.Transaction.Contract.FreezeBalanceContract,
+            tron.Transaction.Contract.UnfreezeBalanceContract,
+            tron.Transaction.Contract.FreezeBalanceV2Contract,
+            tron.Transaction.Contract.UnfreezeBalanceV2Contract,
+            tron.Transaction.Contract.DelegateResourceContract,
+            tron.Transaction.Contract.UnDelegateResourceContract,
+        ) for resource in (3, 256)],
+        (tron.Transaction.Contract.DelegateResourceContract,
+         contract.TRON_POWER),
+        (tron.Transaction.Contract.UnDelegateResourceContract,
+         contract.TRON_POWER),
+    ])
+    def test_trx_rejects_unsupported_raw_resource(self, backend, firmware,
+                                                  navigator, contract_type,
+                                                  resource):
+        client = TronClient(backend, firmware, navigator)
+        message, resource_field = make_resource_contract(client, contract_type)
+        tx = pack_contract_with_raw_resource(client, contract_type, message,
+                                             resource_field, resource)
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+    @pytest.mark.parametrize("contract_type", [
+        tron.Transaction.Contract.FreezeBalanceContract,
+        tron.Transaction.Contract.UnfreezeBalanceContract,
+    ])
+    def test_trx_rejects_legacy_tron_power_delegation(self, backend, firmware,
+                                                      navigator,
+                                                      contract_type):
+        client = TronClient(backend, firmware, navigator)
+        receiver_address = bytes.fromhex(client.getAccount(1)['addressHex'])
+        message, resource_field = make_resource_contract(
+            client, contract_type, receiver_address)
+        tx = pack_contract_with_raw_resource(client, contract_type, message,
+                                             resource_field,
+                                             contract.TRON_POWER)
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) < MAX_APDU_LEN
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        assert error.value.status == Errors.INCORRECT_DATA
 
     def test_trx_freeze_balance_delegate_energy(self, backend, configuration,
                                                 firmware, navigator):

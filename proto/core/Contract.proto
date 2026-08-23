@@ -114,6 +114,7 @@ message DeployContract {
 enum ResourceCode {
     BANDWIDTH = 0x00;
     ENERGY = 0x01;
+    TRON_POWER = 0x02;
 }
 
 message FreezeBalanceContract {
