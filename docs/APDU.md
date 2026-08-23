@@ -266,6 +266,11 @@ peer public key. The operation is shown for user approval.
 [65 bytes] peer uncompressed secp256k1 public key
 ```
 
+The peer key must use the canonical `0x04 || X || Y` encoding, contain field-valid coordinates,
+and represent a finite point on secp256k1. Invalid encodings return `0x6A80`; payloads that are not
+exactly 65 bytes after the path return `0x6700`. The command and response format remain unchanged
+for existing clients that send valid uncompressed keys.
+
 **Response**
 
 ```

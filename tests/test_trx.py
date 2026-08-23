@@ -2051,6 +2051,46 @@ class TestTRX():
         shared_key = client.getAccount(1)['dh'].exchange(ec.ECDH(), pubKeyDH)
         assert (shared_key.hex() == resp.data[1:33].hex())
 
+    @pytest.mark.parametrize(("peer_public_key", "expected_status"), [
+        pytest.param(b'\x00', Errors.INCORRECT_LENGTH,
+                     id="infinity-encoding"),
+        pytest.param(
+            bytes.fromhex(
+                "03"
+                "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+                "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8"),
+            Errors.INCORRECT_DATA,
+            id="wrong-prefix"),
+        pytest.param(b'\x04' + (b'\x00' * 64), Errors.INCORRECT_DATA,
+                     id="zero-coordinates"),
+        pytest.param(
+            b'\x04' +
+            bytes.fromhex(
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f") +
+            (b'\x00' * 31) + b'\x01',
+            Errors.INCORRECT_DATA,
+            id="coordinate-outside-field"),
+        pytest.param(
+            b'\x04' + (b'\x00' * 31) + b'\x01' +
+            (b'\x00' * 31) + b'\x01',
+            Errors.INCORRECT_DATA,
+            id="off-curve"),
+    ])
+    def test_trx_ecdh_rejects_invalid_peer_key(self, backend, peer_public_key,
+                                               expected_status):
+        path = pack_derivation_path("m/44'/195'/0'/0/0")
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.GET_ECDH_SECRET, 0x00, 0x01,
+                             path + peer_public_key)
+        assert error.value.status == expected_status
+
+        # Rejection must not leave a pending review or poison the next APDU.
+        response = backend.exchange(CLA, InsType.GET_PUBLIC_KEY, 0x00, 0x00,
+                                    path)
+        assert response.status == Errors.OK
+        assert response.data[0] == 65
+
     def test_trx_custom_contract(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         tx = client.packContract(
