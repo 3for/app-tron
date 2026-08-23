@@ -995,23 +995,99 @@ typedef struct {
     const uint8_t *buf;
     size_t size;
     bool has_value;
+    bool has_duplicate;
 } buffer_t;
 
-bool pb_decode_contract_parameter(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+static bool pb_capture_buffer(pb_istream_t *stream, const pb_field_t *field, void **arg) {
     PB_UNUSED(field);
     buffer_t *buffer = *arg;
 
+    buffer->has_duplicate |= buffer->has_value;
     buffer->buf = stream->state;
     buffer->size = stream->bytes_left;
     buffer->has_value = true;
     return true;
 }
 
-bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+static bool pb_mark_unreviewed_field(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+    PB_UNUSED(stream);
+    PB_UNUSED(field);
+    bool *has_unreviewed_fields = *arg;
+
+    *has_unreviewed_fields = true;
+    return true;
+}
+
+static bool pb_get_tx_data_size(pb_istream_t *stream, const pb_field_t *field, void **arg) {
     PB_UNUSED(field);
     uint64_t *data_size = *arg;
     *data_size = (uint64_t) stream->bytes_left;
     return true;
+}
+
+static const char *get_contract_parameter_type_name(
+    protocol_Transaction_Contract_ContractType type) {
+    switch (type) {
+        case protocol_Transaction_Contract_ContractType_TransferContract:
+            return "TransferContract";
+        case protocol_Transaction_Contract_ContractType_TransferAssetContract:
+            return "TransferAssetContract";
+        case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
+            return "VoteWitnessContract";
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
+            return "FreezeBalanceContract";
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
+            return "UnfreezeBalanceContract";
+        case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
+            return "WithdrawBalanceContract";
+        case protocol_Transaction_Contract_ContractType_ProposalCreateContract:
+            return "ProposalCreateContract";
+        case protocol_Transaction_Contract_ContractType_ProposalApproveContract:
+            return "ProposalApproveContract";
+        case protocol_Transaction_Contract_ContractType_ProposalDeleteContract:
+            return "ProposalDeleteContract";
+        case protocol_Transaction_Contract_ContractType_AccountUpdateContract:
+            return "AccountUpdateContract";
+        case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
+            return "TriggerSmartContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
+            return "ExchangeCreateContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
+            return "ExchangeInjectContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeWithdrawContract:
+            return "ExchangeWithdrawContract";
+        case protocol_Transaction_Contract_ContractType_ExchangeTransactionContract:
+            return "ExchangeTransactionContract";
+        case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
+            return "AccountPermissionUpdateContract";
+        case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
+            return "FreezeBalanceV2Contract";
+        case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
+            return "UnfreezeBalanceV2Contract";
+        case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
+            return "WithdrawExpireUnfreezeContract";
+        case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
+            return "DelegateResourceContract";
+        case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
+            return "UnDelegateResourceContract";
+        default:
+            return NULL;
+    }
+}
+
+static bool is_canonical_contract_type_url(protocol_Transaction_Contract_ContractType type,
+                                           const buffer_t *type_url) {
+    static const char prefix[] = "type.googleapis.com/protocol.";
+    const char *type_name = get_contract_parameter_type_name(type);
+
+    if (type_name == NULL || !type_url->has_value || type_url->has_duplicate) {
+        return false;
+    }
+
+    size_t type_name_length = strlen(type_name);
+    return type_url->size == sizeof(prefix) - 1 + type_name_length &&
+           memcmp(type_url->buf, prefix, sizeof(prefix) - 1) == 0 &&
+           memcmp(type_url->buf + sizeof(prefix) - 1, type_name, type_name_length) == 0;
 }
 
 static bool parse_fee_limit(const uint8_t *buffer, size_t length, uint64_t *fee_limit) {
@@ -1060,8 +1136,20 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
      * stack for Nano S
      */
     buffer_t contract_buffer = {0};
-    transaction.contract->parameter.value.funcs.decode = pb_decode_contract_parameter;
+    buffer_t type_url_buffer = {0};
+    transaction.contract->parameter.value.funcs.decode = pb_capture_buffer;
     transaction.contract->parameter.value.arg = &contract_buffer;
+    transaction.contract->parameter.type_url.funcs.decode = pb_capture_buffer;
+    transaction.contract->parameter.type_url.arg = &type_url_buffer;
+
+    /* provider and ContractName are signed wrapper fields that are not part of
+     * the clear-signing model. Their presence must take the same full-hash
+     * path as descriptor-unknown fields instead of being silently drained by
+     * nanopb's default callback. */
+    transaction.contract->provider.funcs.decode = pb_mark_unreviewed_field;
+    transaction.contract->provider.arg = &content->hasUnreviewedFields;
+    transaction.contract->ContractName.funcs.decode = pb_mark_unreviewed_field;
+    transaction.contract->ContractName.arg = &content->hasUnreviewedFields;
 
     /* Set callback to determine if transaction contains custom data.
      * This allows to retrieve the size of arbitrary data. */
@@ -1085,6 +1173,16 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
             return USTREAM_FAULT;
         }
         content->contractSeen = true;
+
+        /* Standard clients populate Any.type_url with the canonical message
+         * type, while legacy encoders may omit it. Preserve both established
+         * forms, but route duplicate, noncanonical, or contract-mismatched
+         * values to full-hash review because their bytes are otherwise hidden
+         * from the clear-signing model. */
+        if (type_url_buffer.has_value &&
+            !is_canonical_contract_type_url(transaction.contract->type, &type_url_buffer)) {
+            content->hasUnreviewedFields = true;
+        }
     }
 
     if (!HAS_SETTING(S_DATA_ALLOWED) && content->dataBytes != 0) {

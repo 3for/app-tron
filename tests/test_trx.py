@@ -124,6 +124,69 @@ def test_unreviewed_transaction_requires_blind_signing(backend, firmware,
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
+@pytest.mark.parametrize(("wrapper_field", "wrapper_value"), [
+    ("provider", b"attacker-provider"),
+    ("ContractName", b"hidden-contract-name"),
+    ("type_url", "type.googleapis.com/protocol.VoteWitnessContract"),
+    ("type_url", "https://type.googleapis.com/protocol.TransferContract"),
+])
+def test_unreviewed_contract_wrapper_requires_blind_signing(
+        backend, firmware, navigator, wrapper_field, wrapper_value):
+    client = TronClient(backend, firmware, navigator)
+    tx = tron.Transaction.raw()
+    tx.ParseFromString(
+        client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(client.address_hex(
+                    "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000)))
+    if wrapper_field == "type_url":
+        tx.contract[0].parameter.type_url = wrapper_value
+    else:
+        setattr(tx.contract[0], wrapper_field, wrapper_value)
+
+    payload = pack_derivation_path(client.getAccount(0)['path'])
+    payload += tx.SerializeToString(deterministic=True)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+    assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
+
+
+def test_duplicate_contract_type_url_requires_blind_signing(
+        backend, firmware, navigator):
+    client = TronClient(backend, firmware, navigator)
+    raw_tx = tron.Transaction.raw()
+    raw_tx.timestamp = 1575712492061
+    raw_tx.expiration = 1575712551000
+    raw_tx.ref_block_hash = bytes.fromhex("95DA42177DB00507")
+    raw_tx.ref_block_bytes = bytes.fromhex("3DCE")
+
+    type_url = b"type.googleapis.com/protocol.TransferContract"
+    value = contract.TransferContract(
+        owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+        to_address=bytes.fromhex(client.address_hex(
+            "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+        amount=100000000).SerializeToString()
+    any_fields = encode_length_delimited_field(1, type_url)
+    any_fields += encode_length_delimited_field(1, type_url)
+    any_fields += encode_length_delimited_field(2, value)
+    contract_fields = b'\x08\x01'
+    contract_fields += b'\x12' + encode_varint(len(any_fields)) + any_fields
+    serialized_tx = raw_tx.SerializeToString()
+    serialized_tx += b'\x5a' + encode_varint(len(contract_fields))
+    serialized_tx += contract_fields
+
+    payload = pack_derivation_path(client.getAccount(0)['path'])
+    payload += serialized_tx
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+    assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
+
+
 @pytest.mark.usefixtures('configuration')
 class TestTRX():
     '''Test TRX client.'''
@@ -391,6 +454,57 @@ class TestTRX():
         serialized_tx = tx.SerializeToString()
         self.sign_unreviewed_and_validate(backend, client, firmware, navigator,
                                           serialized_tx)
+
+    @pytest.mark.parametrize(("wrapper_field", "wrapper_value"), [
+        ("provider", b"attacker-provider"),
+        ("ContractName", b"hidden-contract-name"),
+        ("type_url", "type.googleapis.com/protocol.VoteWitnessContract"),
+    ])
+    def test_trx_unreviewed_contract_wrapper_uses_hash_review(
+            self, backend, firmware, navigator, wrapper_field, wrapper_value):
+        client = TronClient(backend, firmware, navigator)
+        tx = tron.Transaction.raw()
+        tx.ParseFromString(
+            client.packContract(
+                tron.Transaction.Contract.TransferContract,
+                contract.TransferContract(
+                    owner_address=bytes.fromhex(
+                        client.getAccount(0)['addressHex']),
+                    to_address=bytes.fromhex(client.address_hex(
+                        "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                    amount=100000000)))
+        if wrapper_field == "type_url":
+            tx.contract[0].parameter.type_url = wrapper_value
+        else:
+            setattr(tx.contract[0], wrapper_field, wrapper_value)
+        serialized_tx = tx.SerializeToString(deterministic=True)
+
+        self.sign_unreviewed_and_validate(backend, client, firmware, navigator,
+                                          serialized_tx)
+
+    def test_trx_legacy_parameter_without_type_url_remains_clear_signed(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = tron.Transaction.raw()
+        tx.ParseFromString(
+            client.packContract(
+                tron.Transaction.Contract.TransferContract,
+                contract.TransferContract(
+                    owner_address=bytes.fromhex(
+                        client.getAccount(0)['addressHex']),
+                    to_address=bytes.fromhex(client.address_hex(
+                        "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                    amount=100000000)))
+        tx.contract[0].parameter.type_url = ""
+        serialized_tx = tx.SerializeToString(deterministic=True)
+
+        approval_text = "Sign" if firmware.is_nano else "Hold to sign"
+        response = client.sign(client.getAccount(0)['path'],
+                               serialized_tx,
+                               snappath=Path("test_trx_send"),
+                               text=approval_text)
+        assert check_tx_signature(serialized_tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
 
     def test_trx_vote_support_uses_hash_review(self, backend, firmware,
                                                navigator):
