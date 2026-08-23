@@ -853,6 +853,7 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     content->decimals[0] = trc20->decimals;
     content->tokenNamesLength[0] = strlen(trc20->ticker) + 1;
     memmove(content->tokenNames[0], trc20->ticker, content->tokenNamesLength[0]);
+    content->tokenIdentityAmbiguous = isKnownTokenTickerAmbiguous(trc20);
 
     return true;
 }

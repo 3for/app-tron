@@ -48,6 +48,8 @@ _Static_assert(DELEGATE_LOCK_PERIOD_OFFSET + 32 <= REVIEW_DATA_BUFFER_SIZE,
                "review snapshot does not cover delegate lock period");
 _Static_assert(sizeof(toAddress) >= sizeof(((txContent_t *) 0)->tokenNames[0]),
                "review buffer cannot hold a complete token label");
+_Static_assert(sizeof(addressSummary) > BASE58CHECK_ADDRESS_SIZE,
+               "review buffer cannot hold a complete TRC20 contract address");
 _Static_assert(MAX_TOKEN_LENGTH > EXCHANGE_TOKEN_LABEL_MAX_LENGTH,
                "token label buffer cannot hold maximum authenticated metadata");
 _Static_assert(sizeof(fullContract) == EXCHANGE_PAIR_REVIEW_MAX_SIZE,

@@ -191,11 +191,18 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[2].item = TRC20ActionSendAllow;
             txInfos.fields[2].value = toAddress;
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
-                txInfos.fields[3].item = "Max fee (TRX)";
-                txInfos.fields[3].value = strings.common.maxFee;
-                txInfos.fields[4].item = stringLabelSenderAddress;
-                txInfos.fields[4].value = fromAddress;
-                pairList.nbPairs = 5;
+                uint8_t field_index = 3;
+                if (txContent.tokenIdentityAmbiguous) {
+                    txInfos.fields[field_index].item = "Token contract";
+                    txInfos.fields[field_index].value = addressSummary;
+                    field_index++;
+                }
+                txInfos.fields[field_index].item = "Max fee (TRX)";
+                txInfos.fields[field_index].value = strings.common.maxFee;
+                field_index++;
+                txInfos.fields[field_index].item = stringLabelSenderAddress;
+                txInfos.fields[field_index].value = fromAddress;
+                pairList.nbPairs = field_index + 1;
             } else {
                 txInfos.fields[3].item = stringLabelSenderAddress;
                 txInfos.fields[3].value = fromAddress;

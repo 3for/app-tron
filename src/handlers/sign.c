@@ -450,6 +450,13 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             // get token name if any
             memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            if ((txContent.contractType == TRIGGERSMARTCONTRACT) &&
+                txContent.tokenIdentityAmbiguous) {
+                // A ticker and decimal count are not a unique TRC20 identity. Preserve the
+                // exact contract selected by the signed transaction in the immutable review
+                // model so equal-labelled known tokens cannot produce identical approvals.
+                getBase58FromAddress(txContent.contractAddress, addressSummary);
+            }
 #ifdef HAVE_SWAP
             // If we are in swap context, do not redisplay the message data
             // Instead, ensure they are identical with what was previously displayed

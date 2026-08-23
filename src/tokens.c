@@ -1562,6 +1562,19 @@ const tokenDefinition_t TOKENS_TRC20[NUM_TOKENS_TRC20] = {
      "USDD",
      18}};
 
+bool isKnownTokenTickerAmbiguous(const tokenDefinition_t *token) {
+    for (uint16_t i = 0; i < NUM_TOKENS_TRC20; i++) {
+        const tokenDefinition_t *candidate = PIC(&TOKENS_TRC20[i]);
+
+        if ((memcmp(candidate->address, token->address, ADDRESS_SIZE) != 0) &&
+            (strcmp(candidate->ticker, token->ticker) == 0)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int verifyTokenNameID(const char *tokenId,
                       const char *tokenName,
                       uint32_t decimals,

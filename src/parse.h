@@ -156,6 +156,9 @@ typedef struct txContent_t {
     uint8_t tokenNamesLength[2];
     uint8_t resource;
     uint8_t TRC20Method;
+    // Distinct known contracts can share a ticker. Such tokens require an
+    // address-bearing approval rather than the ordinary ticker-only review.
+    bool tokenIdentityAmbiguous;
     uint32_t customSelector;
     contractType_e contractType;
     uint64_t dataBytes;

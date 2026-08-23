@@ -128,6 +128,12 @@ UX_STEP_NOCB(ux_approval_tx_4_step,
                  .title = TRC20ActionSendAllow,
                  .text = toAddress,
              });
+UX_STEP_NOCB(ux_approval_smart_tx_contract_step,
+             bnnn_paging,
+             {
+                 .title = "Token contract",
+                 .text = addressSummary,
+             });
 UX_STEP_NOCB(ux_approval_smart_tx_fee_step,
              bnnn_paging,
              {
@@ -170,6 +176,29 @@ UX_DEF(ux_approval_smart_tx_data_warning_flow,
        &ux_approval_tx_2_step,
        &ux_approval_tx_3_step,
        &ux_approval_tx_4_step,
+       &ux_approval_smart_tx_fee_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_ambiguous_smart_tx_flow,
+       &ux_approval_tx_1_step,
+       &ux_approval_tx_2_step,
+       &ux_approval_tx_3_step,
+       &ux_approval_tx_4_step,
+       &ux_approval_smart_tx_contract_step,
+       &ux_approval_smart_tx_fee_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_ambiguous_smart_tx_data_warning_flow,
+       &ux_approval_tx_1_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_tx_2_step,
+       &ux_approval_tx_3_step,
+       &ux_approval_tx_4_step,
+       &ux_approval_smart_tx_contract_step,
        &ux_approval_smart_tx_fee_step,
        &ux_approval_from_address_step,
        &ux_approval_confirm_step,
@@ -1039,10 +1068,18 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
     switch (state) {
         case APPROVAL_TRANSFER:
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
-                ux_flow_init(0,
-                             ((data_warning == true) ? ux_approval_smart_tx_data_warning_flow
-                                                     : ux_approval_smart_tx_flow),
-                             NULL);
+                if (txContent.tokenIdentityAmbiguous) {
+                    ux_flow_init(
+                        0,
+                        ((data_warning == true) ? ux_approval_ambiguous_smart_tx_data_warning_flow
+                                                : ux_approval_ambiguous_smart_tx_flow),
+                        NULL);
+                } else {
+                    ux_flow_init(0,
+                                 ((data_warning == true) ? ux_approval_smart_tx_data_warning_flow
+                                                         : ux_approval_smart_tx_flow),
+                                 NULL);
+                }
             } else {
                 ux_flow_init(0,
                              ((data_warning == true) ? ux_approval_tx_data_warning_flow

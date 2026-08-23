@@ -1828,6 +1828,63 @@ class TestTRX():
         self.sign_and_validate(client, firmware, 0, tx)
 
     @pytest.mark.parametrize("selector", ["a9059cbb", "095ea7b3"])
+    @pytest.mark.parametrize(("token_contract", "other_contract"), [
+        ("TVuYcDgE1hPDR78RR6T5CcFe2iyD5XKKQz",
+         "TNo59Khpq46FGf4sD7XSWYFNfYfbc8CqNK"),
+        ("TNo59Khpq46FGf4sD7XSWYFNfYfbc8CqNK",
+         "TVuYcDgE1hPDR78RR6T5CcFe2iyD5XKKQz"),
+    ])
+    def test_trx_trc20_disambiguates_identical_known_token_labels(
+            self, backend, firmware, navigator, selector, token_contract,
+            other_contract):
+        client = TronClient(backend, firmware, navigator)
+        tx_calldata = bytearray(
+            build_trc20_calldata("364b03e0815687edaf90b81ff58e496dea7383d7",
+                                 Decimal(1000000)))
+        tx_calldata[:4] = bytes.fromhex(selector)
+        tx = client.packContract(
+            tron.Transaction.Contract.TriggerSmartContract,
+            contract.TriggerSmartContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex(token_contract)),
+                data=bytes(tx_calldata)))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+        if firmware.is_nano:
+            navigate_instruction = NavInsID.RIGHT_CLICK
+            validation_instructions = [NavInsID.BOTH_CLICK]
+            approval_text = r"^Sign$"
+        else:
+            navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+            validation_instructions = [
+                NavInsID.USE_CASE_REVIEW_CONFIRM,
+                NavInsID.USE_CASE_STATUS_DISMISS
+            ]
+            approval_text = "Hold to sign"
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            navigator.navigate_until_text(
+                navigate_instruction, [], "Token contract",
+                screen_change_before_first_instruction=True)
+            screen = backend.get_current_screen_content()
+            displayed_text = "".join(event.get("text", "")
+                                     for event in screen["events"])
+            assert token_contract in displayed_text, screen
+            assert other_contract not in displayed_text, screen
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    @pytest.mark.parametrize("selector", ["a9059cbb", "095ea7b3"])
     @pytest.mark.parametrize("attached", ["trx", "trc10", "token_id_only"])
     def test_trx_trc20_rejects_hidden_attached_assets(self, backend, firmware,
                                                       navigator, selector,

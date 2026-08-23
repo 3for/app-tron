@@ -38,4 +38,6 @@ typedef struct tokenDefinition_t {
 
 extern tokenDefinition_t const TOKENS_TRC20[NUM_TOKENS_TRC20];
 
+bool isKnownTokenTickerAmbiguous(const tokenDefinition_t *token);
+
 extern const uint8_t SELECTOR[][4];
