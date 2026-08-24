@@ -53,6 +53,17 @@ static bool trigger_has_attached_values(const txContent_t *content) {
     return (content->amount[0] != 0) || (content->callTokenValue != 0) || (content->tokenId != 0);
 }
 
+static bool format_percent(uint64_t value, char *destination, size_t destination_size) {
+    size_t length = print_amount(value, destination, destination_size, 0);
+    if (length == 0 || length + 1 >= destination_size) {
+        return false;
+    }
+
+    destination[length++] = '%';
+    destination[length] = '\0';
+    return true;
+}
+
 static bool copy_token_label(char *destination,
                              size_t destination_size,
                              const txContent_t *content,
@@ -490,6 +501,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #endif  // HAVE_SWAP
 
             break;
+        case UPDATESETTINGCONTRACT:
+            if (!format_percent(txContent.amount[0],
+                                (char *) G_io_apdu_buffer,
+                                REVIEW_DATA_BUFFER_SIZE)) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+            getBase58FromAddress(txContent.contractAddress, toAddress);
+
+            ux_flow_display(APPROVAL_UPDATE_SETTING_TRANSACTION, data_warning);
+            break;
         case EXCHANGECREATECONTRACT:
             if (!copy_token_label(fullContract, sizeof(fullContract), &txContent, 0) ||
                 !copy_token_label(toAddress, sizeof(toAddress), &txContent, 1)) {
@@ -754,13 +775,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case UPDATEBROKERAGECONTRACT: {
-            size_t brokerage_length =
-                print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, 0);
-            if (brokerage_length == 0 || brokerage_length + 1 >= 100) {
+            if (!format_percent(txContent.amount[0],
+                                (char *) G_io_apdu_buffer,
+                                REVIEW_DATA_BUFFER_SIZE)) {
                 return io_send_sw(E_INCORRECT_LENGTH);
             }
-            G_io_apdu_buffer[brokerage_length++] = '%';
-            G_io_apdu_buffer[brokerage_length] = '\0';
 
             ux_flow_display(APPROVAL_UPDATE_BROKERAGE_TRANSACTION, data_warning);
             break;

@@ -36,6 +36,7 @@ typedef union {
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
+    protocol_UpdateSettingContract update_setting_contract;
     protocol_VoteWitnessContract vote_witness_contract;
     protocol_WitnessCreateContract witness_create_contract;
     protocol_WitnessUpdateContract witness_update_contract;
@@ -92,6 +93,7 @@ typedef enum contractType_e {
     CUSTOMCONTRACT,
     CREATESMARTCONTRACT = 30,
     TRIGGERSMARTCONTRACT,
+    UPDATESETTINGCONTRACT = 33,
     EXCHANGECREATECONTRACT = 41,
     EXCHANGEINJECTCONTRACT,
     EXCHANGEWITHDRAWCONTRACT,

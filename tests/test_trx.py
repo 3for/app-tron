@@ -1485,6 +1485,35 @@ class TestTRX():
             client.sign(client.getAccount(0)['path'], tx, navigate=False)
         assert error.value.status == Errors.INCORRECT_DATA
 
+    def test_trx_update_setting(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateSettingContract,
+            contract.UpdateSettingContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                consume_user_resource_percent=20))
+        self.sign_and_validate(client, firmware, 0, tx)
+
+    @pytest.mark.parametrize("percent", [-1, 101])
+    def test_trx_update_setting_rejects_out_of_range(
+            self, backend, firmware, navigator, percent):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateSettingContract,
+            contract.UpdateSettingContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                contract_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                consume_user_resource_percent=percent))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_vote_witness_displays_full_addresses(self, backend, firmware,
                                                       navigator):
         if not firmware.is_nano:

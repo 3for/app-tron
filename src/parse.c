@@ -251,6 +251,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case TRIGGERSMARTCONTRACT:
             strlcpy(out, "Smart Contract", outlen);
             break;
+        case UPDATESETTINGCONTRACT:
+            strlcpy(out, "Setting Update", outlen);
+            break;
         case EXCHANGECREATECONTRACT:
             strlcpy(out, "Exchange Create", outlen);
             break;
@@ -935,6 +938,25 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
+static bool update_setting_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode_transaction(stream,
+                               protocol_UpdateSettingContract_fields,
+                               &msg.update_setting_contract,
+                               &content->hasUnreviewedFields)) {
+        return false;
+    }
+
+    if (msg.update_setting_contract.consume_user_resource_percent < 0 ||
+        msg.update_setting_contract.consume_user_resource_percent > 100) {
+        return false;
+    }
+
+    content->amount[0] = (uint64_t) msg.update_setting_contract.consume_user_resource_percent;
+    COPY_ADDRESS(content->account, &msg.update_setting_contract.owner_address);
+    COPY_ADDRESS(content->contractAddress, &msg.update_setting_contract.contract_address);
+    return true;
+}
+
 static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode_transaction(stream,
                                protocol_ExchangeCreateContract_fields,
@@ -1149,6 +1171,8 @@ static const char *get_contract_parameter_type_name(
             return "AccountUpdateContract";
         case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
             return "TriggerSmartContract";
+        case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
+            return "UpdateSettingContract";
         case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
             return "ExchangeCreateContract";
         case protocol_Transaction_Contract_ContractType_ExchangeInjectContract:
@@ -1366,6 +1390,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
                 ret = trigger_smart_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
+                ret = update_setting_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
                 ret = exchange_create_contract(content, &tx_stream);

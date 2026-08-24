@@ -388,6 +388,39 @@ UX_DEF(ux_approval_update_brokerage_data_warning_flow,
        &ux_approval_confirm_step,
        &ux_approval_reject_step);
 
+// UPDATE CONTRACT SETTING TRANSACTION
+//////////////////////////////////////////////////////////////////////
+UX_STEP_NOCB(ux_approval_update_setting_flow_1_step,
+             pnn,
+             {
+                 &C_icon_eye,
+                 "Update",
+                 "Setting",
+             });
+UX_STEP_NOCB(ux_approval_update_setting_contract_step,
+             bnnn_paging,
+             {.title = "Contract", .text = toAddress});
+UX_STEP_NOCB(ux_approval_update_setting_percent_step,
+             bnnn_paging,
+             {.title = "User pays", .text = (const char *) reviewData});
+
+UX_DEF(ux_approval_update_setting_flow,
+       &ux_approval_update_setting_flow_1_step,
+       &ux_approval_update_setting_contract_step,
+       &ux_approval_update_setting_percent_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_update_setting_data_warning_flow,
+       &ux_approval_update_setting_flow_1_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_update_setting_contract_step,
+       &ux_approval_update_setting_percent_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
 // FREEZE TRANSACTION
 //////////////////////////////////////////////////////////////////////
 UX_STEP_NOCB(ux_approval_freeze_flow_1_step,
@@ -1261,6 +1294,13 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
                 0,
                 ((data_warning == true) ? ux_approval_update_brokerage_data_warning_flow
                                         : ux_approval_update_brokerage_flow),
+                NULL);
+            break;
+        case APPROVAL_UPDATE_SETTING_TRANSACTION:
+            ux_flow_init(
+                0,
+                ((data_warning == true) ? ux_approval_update_setting_data_warning_flow
+                                        : ux_approval_update_setting_flow),
                 NULL);
             break;
         case APPROVAL_FREEZEASSET_TRANSACTION:
