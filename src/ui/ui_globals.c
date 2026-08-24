@@ -63,6 +63,7 @@ typedef enum {
     UI_REVIEW_PERSONAL_MESSAGE,
     UI_REVIEW_ECDH,
     UI_REVIEW_TIP712,
+    UI_REVIEW_BLIND_SIGNING_PROMPT,
 } ui_review_operation_t;
 
 static volatile ui_review_operation_t G_review_operation;
@@ -121,6 +122,15 @@ bool ui_review_begin(ui_approval_state_t state) {
 
 bool ui_review_is_pending(void) {
     return G_review_operation != UI_REVIEW_NONE;
+}
+
+bool ui_blind_signing_prompt_begin(void) {
+    if (G_review_operation != UI_REVIEW_NONE) {
+        return false;
+    }
+
+    G_review_operation = UI_REVIEW_BLIND_SIGNING_PROMPT;
+    return true;
 }
 
 void ui_review_reset(void) {
@@ -202,6 +212,20 @@ bool ui_callback_tx_cancel(bool display_menu) {
 
     if (display_menu) {
         // Display back the original UX
+        ui_idle();
+    }
+
+    return true;
+}
+
+bool ui_callback_blind_signing_prompt(bool display_menu) {
+    if (!ui_review_consume(UI_REVIEW_BLIND_SIGNING_PROMPT)) {
+        return reject_unbound_callback(display_menu);
+    }
+
+    io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+
+    if (display_menu) {
         ui_idle();
     }
 

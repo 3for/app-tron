@@ -18,6 +18,7 @@
 #include "os.h"
 #include "os_io_seproxyhal.h"
 #include "ui_idle_menu.h"
+#include "ui_globals.h"
 #include "ux.h"
 #include "settings.h"
 
@@ -28,6 +29,21 @@ static void switch_settings_sign_by_hash();
 
 #define SETTING_SLOT_SIZE 12  // = sizeof("NOT Allowed")
 static char settings_param_value[3 * SETTING_SLOT_SIZE];
+
+UX_STEP_VALID(ux_blind_signing_required_step,
+              pnn,
+              ui_callback_blind_signing_prompt(true),
+              {
+                  &C_icon_warning,
+                  "Blind signing",
+                  "must be enabled",
+              });
+
+UX_DEF(ux_blind_signing_required_flow, &ux_blind_signing_required_step);
+
+void ui_error_blind_signing_pending(void) {
+    ux_flow_init(0, ux_blind_signing_required_flow, NULL);
+}
 
 UX_STEP_VALID(ux_settings_flow_1_step,
               bnnn,

@@ -54,7 +54,12 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
     // Personal messages are arbitrary, potentially binary streams that cannot
     // be interpreted or fully displayed by the app. Treat this as blind signing.
     if (!HAS_SETTING(S_SIGN_BY_HASH)) {
-        return failPersonalMessageSigning(E_MISSING_SETTING_SIGN_BY_HASH);
+        resetPersonalMessageSigningContext();
+        if (!ui_blind_signing_prompt_begin()) {
+            return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+        }
+        ui_error_blind_signing_pending();
+        return 0;
     }
 
     if (p2 != 0) {

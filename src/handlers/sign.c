@@ -299,7 +299,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #endif
         if (!HAS_SETTING(S_SIGN_BY_HASH)) {
             txContext.initialized = false;
-            return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+            explicit_bzero(&transactionContext, sizeof(transactionContext));
+            if (!ui_blind_signing_prompt_begin()) {
+                return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+            }
+            ui_error_blind_signing_pending();
+            return 0;
         }
         format_hex(transactionContext.hash, 32, fullHash, sizeof(fullHash));
         if (!setContractType(txContent.contractType, fullContract, sizeof(fullContract))) {

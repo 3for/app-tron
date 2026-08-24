@@ -72,6 +72,7 @@ extern uint8_t reviewData[REVIEW_DATA_BUFFER_SIZE];
 bool ui_review_begin(ui_approval_state_t state);
 bool ui_review_is_pending(void);
 void ui_review_reset(void);
+bool ui_blind_signing_prompt_begin(void);
 
 bool ui_callback_tx_ok(bool display_menu);
 bool ui_callback_tx_cancel(bool display_menu);
@@ -80,3 +81,8 @@ bool ui_callback_signMessage_ok(bool display_menu);
 bool ui_callback_ecdh_ok(bool display_menu);
 bool ui_callback_signMessage712_v0_cancel(bool display_menu);
 bool ui_callback_signMessage712_v0_ok(bool display_menu);
+bool ui_callback_blind_signing_prompt(bool display_menu);
+
+// Keep the signing APDU pending while explaining that blind signing is disabled.
+// Dismissing the prompt completes the rejected request with 0x6A8C.
+void ui_error_blind_signing_pending(void);

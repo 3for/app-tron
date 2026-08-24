@@ -79,7 +79,8 @@ static const nbgl_content_t contents[SETTING_CONTENTS_NB] = {
 static const nbgl_genericContents_t settingContents = {.callbackCallNeeded = false,
                                                        .contentsList = contents,
                                                        .nbContents = SETTING_CONTENTS_NB};
-void ui_idle(void) {
+
+static void display_home_and_settings(uint8_t initial_page) {
     switches[0].text = "Transactions data";
     switches[0].subText = "Allow extra data in\ntransactions";
     switches[0].token = SWITCH_ALLOW_TX_DATA_TOKEN;
@@ -103,10 +104,33 @@ void ui_idle(void) {
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &APP_TRON_ICON,
                                 NULL,
-                                INIT_HOME_PAGE,
+                                initial_page,
                                 &settingContents,
                                 &infoList,
                                 NULL,
                                 onQuitCallback);
+}
+
+void ui_idle(void) {
+    display_home_and_settings(INIT_HOME_PAGE);
+}
+
+static void blind_signing_prompt_choice(bool go_to_settings) {
+    if (!ui_callback_blind_signing_prompt(false)) {
+        ui_idle();
+        return;
+    }
+
+    // Page zero is the first settings page; INIT_HOME_PAGE restores the home page.
+    display_home_and_settings(go_to_settings ? 0 : INIT_HOME_PAGE);
+}
+
+void ui_error_blind_signing_pending(void) {
+    nbgl_useCaseChoice(&IMPORTANT_CIRCLE_ICON,
+                       "This transaction cannot be clear-signed",
+                       "Enable blind signing in the settings to sign this transaction.",
+                       "Go to settings",
+                       "Reject transaction",
+                       blind_signing_prompt_choice);
 }
 #endif  // HAVE_NBGL

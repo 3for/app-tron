@@ -147,8 +147,10 @@ expired unfreeze, withdraw balance (claim rewards), and account permission updat
 
 - Transaction fields that are not represented by the app's clear-sign model
   are included in the transaction hash and force full-hash review. Blind
-  signing must be enabled, otherwise the app returns `0x6A8C`. Swap mode
-  rejects such transactions instead of falling back to blind signing.
+  signing must be enabled. Otherwise the app keeps the final APDU pending,
+  explains on-device how to enable blind signing, then returns `0x6A8C` after
+  the user dismisses the prompt. Swap mode rejects such transactions instead
+  of falling back to blind signing or displaying this prompt.
 - Custom (non transfer/approve) smart-contract calls require the *Custom contracts* setting,
   else `0x6A8D`.
 - Contracts with extra `data` require the *Data allowed* setting, else `0x6A8B`.
@@ -242,8 +244,9 @@ the complete 256-bit message hash; BAGL devices paginate it instead of truncatin
 The cumulative data must not exceed the announced length (`0x6700` otherwise).
 Continuation chunks must be contiguous: any non-personal-message APDU or invalid chunk cancels the
 active stream, and a new `P1_FIRST`/`P1_SIGN` safely starts a new stream.
-If the *Sign by hash* setting is disabled, the command returns `0x6A8C` and clears any active
-personal-message stream.
+If the *Sign by hash* setting is disabled, the command clears any active personal-message stream,
+displays an on-device prompt explaining how to enable blind signing, and returns `0x6A8C` after the
+user dismisses the prompt.
 
 **Response**
 

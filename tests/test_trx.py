@@ -93,6 +93,25 @@ def make_resource_contract(client, contract_type, receiver_address=b''):
         f"unsupported resource contract type: {contract_type}")
 
 
+def dismiss_blind_signing_prompt(backend, firmware, navigator,
+                                 compare_snapshots=False):
+    screen = str(backend.get_current_screen_content()).lower()
+    assert "blind signing" in screen
+    instructions = ([NavInsID.BOTH_CLICK]
+                    if firmware.is_nano else
+                    [NavInsID.USE_CASE_CHOICE_REJECT])
+    if compare_snapshots:
+        navigator.navigate_and_compare(
+            Path(__file__).parent.resolve(),
+            "test_personal_message_requires_blind_signing",
+            instructions,
+            screen_change_before_first_instruction=False,
+            screen_change_after_last_instruction=False)
+    else:
+        navigator.navigate(instructions,
+                           screen_change_before_first_instruction=False)
+
+
 @pytest.mark.parametrize("p1", [P1.FIRST, P1.SIGN])
 def test_personal_message_requires_blind_signing(backend, firmware, navigator,
                                                  p1):
@@ -102,7 +121,10 @@ def test_personal_message_requires_blind_signing(backend, firmware, navigator,
     data += struct.pack(">I", len(message)) + message
 
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, p1, 0x00, data)
+        with backend.exchange_async(CLA, InsType.SIGN_PERSONAL_MESSAGE, p1,
+                                    0x00, data):
+            dismiss_blind_signing_prompt(backend, firmware, navigator,
+                                         compare_snapshots=(p1 == P1.FIRST))
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
@@ -120,7 +142,9 @@ def test_unreviewed_transaction_requires_blind_signing(backend, firmware,
     payload += tx + b'\xf8\x01\x01'
 
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            dismiss_blind_signing_prompt(backend, firmware, navigator)
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
@@ -152,7 +176,9 @@ def test_unreviewed_contract_wrapper_requires_blind_signing(
     payload += tx.SerializeToString(deterministic=True)
 
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            dismiss_blind_signing_prompt(backend, firmware, navigator)
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
@@ -183,7 +209,9 @@ def test_duplicate_contract_type_url_requires_blind_signing(
     payload = pack_derivation_path(client.getAccount(0)['path'])
     payload += serialized_tx
     with pytest.raises(ExceptionRAPDU) as error:
-        backend.exchange(CLA, InsType.SIGN, P1.SIGN, 0x00, payload)
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            dismiss_blind_signing_prompt(backend, firmware, navigator)
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
