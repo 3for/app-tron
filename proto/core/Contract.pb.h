@@ -202,6 +202,11 @@ typedef struct _protocol_UpdateAssetContract {
     int64_t new_public_limit; 
 } protocol_UpdateAssetContract;
 
+typedef struct _protocol_UpdateBrokerageContract { 
+    pb_byte_t owner_address[21]; 
+    int32_t brokerage; 
+} protocol_UpdateBrokerageContract;
+
 typedef struct _protocol_VoteAssetContract { 
     pb_callback_t owner_address; 
     pb_callback_t vote_address; 
@@ -292,6 +297,7 @@ extern "C" {
 #define protocol_ExchangeWithdrawContract_init_default {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeTransactionContract_init_default {{0}, 0, {0, {0}}, 0, 0}
 #define protocol_AccountPermissionUpdateContract_init_default {{0}}
+#define protocol_UpdateBrokerageContract_init_default {{0}, 0}
 #define protocol_AccountCreateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}, _protocol_AccountType_MIN}
 #define protocol_AccountUpdateContract_init_zero {{{NULL}, NULL}, {0}}
 #define protocol_TransferContract_init_zero      {{0}, {0}, 0}
@@ -326,6 +332,7 @@ extern "C" {
 #define protocol_ExchangeWithdrawContract_init_zero {{0}, 0, {0, {0}}, 0}
 #define protocol_ExchangeTransactionContract_init_zero {{0}, 0, {0, {0}}, 0, 0}
 #define protocol_AccountPermissionUpdateContract_init_zero {{0}}
+#define protocol_UpdateBrokerageContract_init_zero {{0}, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define protocol_DeployContract_owner_address_tag 1
@@ -427,6 +434,8 @@ extern "C" {
 #define protocol_UpdateAssetContract_url_tag     3
 #define protocol_UpdateAssetContract_new_limit_tag 4
 #define protocol_UpdateAssetContract_new_public_limit_tag 5
+#define protocol_UpdateBrokerageContract_owner_address_tag 1
+#define protocol_UpdateBrokerageContract_brokerage_tag 2
 #define protocol_VoteAssetContract_owner_address_tag 1
 #define protocol_VoteAssetContract_vote_address_tag 2
 #define protocol_VoteAssetContract_support_tag   3
@@ -699,6 +708,12 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1)
 #define protocol_AccountPermissionUpdateContract_CALLBACK NULL
 #define protocol_AccountPermissionUpdateContract_DEFAULT NULL
 
+#define protocol_UpdateBrokerageContract_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, INT32,    brokerage,         2)
+#define protocol_UpdateBrokerageContract_CALLBACK NULL
+#define protocol_UpdateBrokerageContract_DEFAULT NULL
+
 extern const pb_msgdesc_t protocol_AccountCreateContract_msg;
 extern const pb_msgdesc_t protocol_AccountUpdateContract_msg;
 extern const pb_msgdesc_t protocol_TransferContract_msg;
@@ -733,6 +748,7 @@ extern const pb_msgdesc_t protocol_ExchangeInjectContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeWithdrawContract_msg;
 extern const pb_msgdesc_t protocol_ExchangeTransactionContract_msg;
 extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
+extern const pb_msgdesc_t protocol_UpdateBrokerageContract_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define protocol_AccountCreateContract_fields &protocol_AccountCreateContract_msg
@@ -769,6 +785,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_ExchangeWithdrawContract_fields &protocol_ExchangeWithdrawContract_msg
 #define protocol_ExchangeTransactionContract_fields &protocol_ExchangeTransactionContract_msg
 #define protocol_AccountPermissionUpdateContract_fields &protocol_AccountPermissionUpdateContract_msg
+#define protocol_UpdateBrokerageContract_fields &protocol_UpdateBrokerageContract_msg
 
 /* Maximum encoded size of messages (where known) */
 /* protocol_AccountCreateContract_size depends on runtime parameters */
@@ -799,6 +816,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_UnDelegateResourceContract_size 59
 #define protocol_UnfreezeBalanceContract_size    48
 #define protocol_UnfreezeBalanceV2Contract_size  36
+#define protocol_UpdateBrokerageContract_size    34
 #define protocol_VoteWitnessContract_Vote_size   34
 #define protocol_VoteWitnessContract_size        203
 #define protocol_WithdrawBalanceContract_size    23

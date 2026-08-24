@@ -68,3 +68,5 @@ protocol.AccountPermissionUpdateContract.owner_address  max_size: 21, fixed_leng
 protocol.AccountPermissionUpdateContract.owner          type: FT_IGNORE
 protocol.AccountPermissionUpdateContract.witness        type: FT_IGNORE
 protocol.AccountPermissionUpdateContract.actives        type: FT_IGNORE
+
+protocol.UpdateBrokerageContract.owner_address       max_size: 21, fixed_length: true

@@ -57,6 +57,7 @@ typedef union {
     protocol_DelegateResourceContract delegate_resource_contract;
     protocol_UnDelegateResourceContract undelegate_resource_contract;
     protocol_CancelAllUnfreezeV2Contract cancel_all_unfreeze_v2_contract;
+    protocol_UpdateBrokerageContract update_brokerage_contract;
 } contract_t;
 
 extern contract_t msg;
@@ -97,6 +98,7 @@ typedef enum contractType_e {
     EXCHANGETRANSACTIONCONTRACT,
     UPDATEENERGYLIMITCONTRACT,
     ACCOUNTPERMISSIONUPDATECONTRACT,
+    UPDATEBROKERAGECONTRACT = 49,
     FREEZEBALANCEV2CONTRACT = 54,
     UNFREEZEBALANCEV2CONTRACT,
     WITHDRAWEXPIREUNFREEZECONTRACT,

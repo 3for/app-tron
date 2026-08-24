@@ -1460,6 +1460,31 @@ class TestTRX():
                 update_url=b"https://example.com/\x00hidden"))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_update_brokerage(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateBrokerageContract,
+            contract.UpdateBrokerageContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                brokerage=20))
+        self.sign_and_validate(client, firmware, 0, tx)
+
+    @pytest.mark.parametrize("brokerage", [-1, 101])
+    def test_trx_update_brokerage_rejects_out_of_range(
+            self, backend, firmware, navigator, brokerage):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.UpdateBrokerageContract,
+            contract.UpdateBrokerageContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                brokerage=brokerage))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_vote_witness_displays_full_addresses(self, backend, firmware,
                                                       navigator):
         if not firmware.is_nano:

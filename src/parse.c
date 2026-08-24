@@ -266,6 +266,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case ACCOUNTPERMISSIONUPDATECONTRACT:
             strlcpy(out, "Permission Update", outlen);
             break;
+        case UPDATEBROKERAGECONTRACT:
+            strlcpy(out, "Brokerage Update", outlen);
+            break;
         case DELEGATERESOURCECONTRACT:
             strlcpy(out, "Delegate Resource", outlen);
             break;
@@ -1065,6 +1068,24 @@ static bool account_permission_update_contract(txContent_t *content, pb_istream_
     return true;
 }
 
+static bool update_brokerage_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode_transaction(stream,
+                               protocol_UpdateBrokerageContract_fields,
+                               &msg.update_brokerage_contract,
+                               &content->hasUnreviewedFields)) {
+        return false;
+    }
+
+    if (msg.update_brokerage_contract.brokerage < 0 ||
+        msg.update_brokerage_contract.brokerage > 100) {
+        return false;
+    }
+
+    content->amount[0] = (uint64_t) msg.update_brokerage_contract.brokerage;
+    COPY_ADDRESS(content->account, &msg.update_brokerage_contract.owner_address);
+    return true;
+}
+
 typedef struct {
     const uint8_t *buf;
     size_t size;
@@ -1138,6 +1159,8 @@ static const char *get_contract_parameter_type_name(
             return "ExchangeTransactionContract";
         case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
             return "AccountPermissionUpdateContract";
+        case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+            return "UpdateBrokerageContract";
         case protocol_Transaction_Contract_ContractType_FreezeBalanceV2Contract:
             return "FreezeBalanceV2Contract";
         case protocol_Transaction_Contract_ContractType_UnfreezeBalanceV2Contract:
@@ -1358,6 +1381,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
                 ret = account_permission_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+                ret = update_brokerage_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;

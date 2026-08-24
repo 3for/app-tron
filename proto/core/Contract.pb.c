@@ -108,5 +108,8 @@ PB_BIND(protocol_ExchangeTransactionContract, protocol_ExchangeTransactionContra
 PB_BIND(protocol_AccountPermissionUpdateContract, protocol_AccountPermissionUpdateContract, AUTO)
 
 
+PB_BIND(protocol_UpdateBrokerageContract, protocol_UpdateBrokerageContract, AUTO)
+
+
 
 

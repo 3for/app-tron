@@ -753,6 +753,18 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
 
             break;
+        case UPDATEBROKERAGECONTRACT: {
+            size_t brokerage_length =
+                print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, 0);
+            if (brokerage_length == 0 || brokerage_length + 1 >= 100) {
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+            G_io_apdu_buffer[brokerage_length++] = '%';
+            G_io_apdu_buffer[brokerage_length] = '\0';
+
+            ux_flow_display(APPROVAL_UPDATE_BROKERAGE_TRANSACTION, data_warning);
+            break;
+        }
         case INVALID_CONTRACT:
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized
             break;
