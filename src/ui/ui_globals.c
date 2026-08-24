@@ -92,6 +92,7 @@ static ui_review_operation_t get_review_operation(ui_approval_state_t state) {
         case APPROVAL_DELEGATE_RESOURCE_TRANSACTION:
         case APPROVAL_UNDELEGATE_RESOURCE_TRANSACTION:
         case APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION:
+        case APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION:
             return UI_REVIEW_TRANSACTION;
     }
 

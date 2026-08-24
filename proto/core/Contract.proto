@@ -165,6 +165,10 @@ message UnDelegateResourceContract {
   bytes receiver_address = 4;
 }
 
+message CancelAllUnfreezeV2Contract {
+  bytes owner_address = 1;
+}
+
 message UnfreezeAssetContract {
     bytes owner_address = 1;
 }

@@ -31,6 +31,8 @@ protocol.DelegateResourceContract.receiver_address  max_size: 21, fixed_length: 
 protocol.UnDelegateResourceContract.owner_address   max_size: 21, fixed_length: true
 protocol.UnDelegateResourceContract.receiver_address   max_size: 21, fixed_length: true
 
+protocol.CancelAllUnfreezeV2Contract.owner_address  max_size: 21, fixed_length: true
+
 protocol.WithdrawBalanceContract.owner_address      max_size: 21, fixed_length: true
 
 protocol.ProposalCreateContract.owner_address       max_size: 21, fixed_length: true

@@ -226,6 +226,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case WITHDRAWEXPIREUNFREEZECONTRACT:
             strlcpy(out, "Withdraw Unfreeze", outlen);
             break;
+        case CANCELALLUNFREEZEV2CONTRACT:
+            strlcpy(out, "Cancel All Unfreezes", outlen);
+            break;
         case UPDATEASSETCONTRACT:
             strlcpy(out, "Update Asset", outlen);
             break;
@@ -655,6 +658,17 @@ static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t
     return true;
 }
 
+static bool cancel_all_unfreeze_v2_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode_transaction(stream,
+                               protocol_CancelAllUnfreezeV2Contract_fields,
+                               &msg.cancel_all_unfreeze_v2_contract,
+                               &content->hasUnreviewedFields)) {
+        return false;
+    }
+    COPY_ADDRESS(content->account, &msg.cancel_all_unfreeze_v2_contract.owner_address);
+    return true;
+}
+
 static bool delegate_resource_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode_transaction(stream,
                                protocol_DelegateResourceContract_fields,
@@ -1070,6 +1084,8 @@ static const char *get_contract_parameter_type_name(
             return "DelegateResourceContract";
         case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
             return "UnDelegateResourceContract";
+        case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+            return "CancelAllUnfreezeV2Contract";
         default:
             return NULL;
     }
@@ -1236,6 +1252,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_UnDelegateResourceContract:
                 ret = undelegate_resource_contrace(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+                ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_WithdrawBalanceContract:
                 ret = withdraw_balance_contract(content, &tx_stream);

@@ -454,6 +454,13 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nWithdraw Unfreeze";
             infoLongPress.text = "Sign transaction to\nWithdraw";
             break;
+        case APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION:
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = fromAddress;
+            pairList.nbPairs = 1;
+            txInfos.flowTitle = "Review transaction to\nCancel All Unfreezes";
+            infoLongPress.text = "Sign transaction to\nCancel Unfreezes";
+            break;
         default:
             PRINTF("This should not happen !\n");
             break;

@@ -707,6 +707,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
 
             break;
+        case CANCELALLUNFREEZEV2CONTRACT:  // Cancel all pending Stake 2.0 unfreezes
+            ux_flow_display(APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION, data_warning);
+
+            break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
             getBase58FromAddress(txContent.account, toAddress);
 

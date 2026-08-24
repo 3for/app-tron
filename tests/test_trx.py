@@ -2664,3 +2664,11 @@ class TestTRX():
                 owner_address=bytes.fromhex(
                     client.getAccount(0)['addressHex'])))
         self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_cancel_all_unfreeze_v2(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.CancelAllUnfreezeV2Contract,
+            contract.CancelAllUnfreezeV2Contract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex'])))
+        self.sign_and_validate(client, firmware, 0, tx)
