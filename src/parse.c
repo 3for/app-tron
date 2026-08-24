@@ -33,6 +33,9 @@
 _Static_assert(sizeof(((protocol_WitnessCreateContract *) 0)->url.bytes) ==
                    MAX_WITNESS_URL_LENGTH,
                "witness URL protobuf bound is out of sync");
+_Static_assert(sizeof(((protocol_WitnessUpdateContract *) 0)->update_url.bytes) ==
+                   MAX_WITNESS_URL_LENGTH,
+               "witness update URL protobuf bound is out of sync");
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
@@ -596,6 +599,32 @@ static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) 
     return true;
 }
 
+static bool witness_update_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode_transaction(stream,
+                               protocol_WitnessUpdateContract_fields,
+                               &msg.witness_update_contract,
+                               &content->hasUnreviewedFields)) {
+        return false;
+    }
+
+    if (msg.witness_update_contract.update_url.size == 0) {
+        return false;
+    }
+
+    /* Keep the review behavior aligned with WitnessCreateContract: display
+     * printable URLs exactly and route other chain-valid bytes to full hash. */
+    for (pb_size_t i = 0; i < msg.witness_update_contract.update_url.size; i++) {
+        uint8_t byte = msg.witness_update_contract.update_url.bytes[i];
+        if (byte < 0x20 || byte > 0x7e) {
+            content->hasUnreviewedFields = true;
+            break;
+        }
+    }
+
+    COPY_ADDRESS(content->account, &msg.witness_update_contract.owner_address);
+    return true;
+}
+
 static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode_transaction(stream,
                                protocol_FreezeBalanceContract_fields,
@@ -1081,6 +1110,8 @@ static const char *get_contract_parameter_type_name(
             return "VoteWitnessContract";
         case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
             return "WitnessCreateContract";
+        case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+            return "WitnessUpdateContract";
         case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
             return "FreezeBalanceContract";
         case protocol_Transaction_Contract_ContractType_UnfreezeBalanceContract:
@@ -1267,6 +1298,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
                 ret = witness_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+                ret = witness_update_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
                 ret = freeze_balance_contract(content, &tx_stream);

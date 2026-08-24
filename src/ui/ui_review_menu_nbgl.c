@@ -293,6 +293,15 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nCreate Witness";
             infoLongPress.text = "Sign transaction to\nCreate Witness";
             break;
+        case APPROVAL_WITNESS_UPDATE_TRANSACTION:
+            txInfos.fields[0].item = "New URL";
+            txInfos.fields[0].value = witnessUrl;
+            txInfos.fields[1].item = stringLabelSenderAddress;
+            txInfos.fields[1].value = fromAddress;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Witness";
+            infoLongPress.text = "Sign transaction to\nUpdate Witness";
+            break;
         case APPROVAL_FREEZEASSET_TRANSACTION:
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;

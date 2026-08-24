@@ -27,11 +27,6 @@ typedef struct _protocol_UnfreezeAssetContract {
     pb_callback_t owner_address; 
 } protocol_UnfreezeAssetContract;
 
-typedef struct _protocol_WitnessUpdateContract { 
-    pb_callback_t owner_address; 
-    pb_callback_t update_url; 
-} protocol_WitnessUpdateContract;
-
 typedef struct _protocol_AccountCreateContract { 
     pb_callback_t owner_address; 
     pb_callback_t account_address; 
@@ -233,6 +228,12 @@ typedef struct _protocol_WitnessCreateContract {
     protocol_WitnessCreateContract_url_t url; 
 } protocol_WitnessCreateContract;
 
+typedef PB_BYTES_ARRAY_T(256) protocol_WitnessUpdateContract_update_url_t;
+typedef struct _protocol_WitnessUpdateContract { 
+    pb_byte_t owner_address[21]; 
+    protocol_WitnessUpdateContract_update_url_t update_url; 
+} protocol_WitnessUpdateContract;
+
 typedef struct _protocol_ProposalCreateContract { 
     pb_byte_t owner_address[21]; 
     pb_size_t parameters_count;
@@ -265,7 +266,7 @@ extern "C" {
 #define protocol_VoteWitnessContract_init_default {{0}, 0, {protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default, protocol_VoteWitnessContract_Vote_init_default}}
 #define protocol_VoteWitnessContract_Vote_init_default {{0}, 0}
 #define protocol_WitnessCreateContract_init_default {{0}, {0, {0}}}
-#define protocol_WitnessUpdateContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}}
+#define protocol_WitnessUpdateContract_init_default {{0}, {0, {0}}}
 #define protocol_AssetIssueContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0}
 #define protocol_AssetIssueContract_FrozenSupply_init_default {0, 0}
 #define protocol_ParticipateAssetIssueContract_init_default {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
@@ -299,7 +300,7 @@ extern "C" {
 #define protocol_VoteWitnessContract_init_zero   {{0}, 0, {protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero, protocol_VoteWitnessContract_Vote_init_zero}}
 #define protocol_VoteWitnessContract_Vote_init_zero {{0}, 0}
 #define protocol_WitnessCreateContract_init_zero {{0}, {0, {0}}}
-#define protocol_WitnessUpdateContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}}
+#define protocol_WitnessUpdateContract_init_zero {{0}, {0, {0}}}
 #define protocol_AssetIssueContract_init_zero    {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0}
 #define protocol_AssetIssueContract_FrozenSupply_init_zero {0, 0}
 #define protocol_ParticipateAssetIssueContract_init_zero {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
@@ -330,8 +331,6 @@ extern "C" {
 #define protocol_DeployContract_owner_address_tag 1
 #define protocol_DeployContract_script_tag       2
 #define protocol_UnfreezeAssetContract_owner_address_tag 1
-#define protocol_WitnessUpdateContract_owner_address_tag 1
-#define protocol_WitnessUpdateContract_update_url_tag 12
 #define protocol_AccountCreateContract_owner_address_tag 1
 #define protocol_AccountCreateContract_account_address_tag 2
 #define protocol_AccountCreateContract_type_tag  3
@@ -438,6 +437,8 @@ extern "C" {
 #define protocol_WithdrawExpireUnfreezeContract_owner_address_tag 1
 #define protocol_WitnessCreateContract_owner_address_tag 1
 #define protocol_WitnessCreateContract_url_tag   2
+#define protocol_WitnessUpdateContract_owner_address_tag 1
+#define protocol_WitnessUpdateContract_update_url_tag 12
 #define protocol_ProposalCreateContract_owner_address_tag 1
 #define protocol_ProposalCreateContract_parameters_tag 2
 #define protocol_VoteWitnessContract_owner_address_tag 1
@@ -500,9 +501,9 @@ X(a, STATIC,   SINGULAR, BYTES,    url,               2)
 #define protocol_WitnessCreateContract_DEFAULT NULL
 
 #define protocol_WitnessUpdateContract_FIELDLIST(X, a) \
-X(a, CALLBACK, SINGULAR, BYTES,    owner_address,     1) \
-X(a, CALLBACK, SINGULAR, BYTES,    update_url,       12)
-#define protocol_WitnessUpdateContract_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, owner_address,     1) \
+X(a, STATIC,   SINGULAR, BYTES,    update_url,       12)
+#define protocol_WitnessUpdateContract_CALLBACK NULL
 #define protocol_WitnessUpdateContract_DEFAULT NULL
 
 #define protocol_AssetIssueContract_FIELDLIST(X, a) \
@@ -773,7 +774,6 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 /* protocol_AccountCreateContract_size depends on runtime parameters */
 /* protocol_AccountUpdateContract_size depends on runtime parameters */
 /* protocol_VoteAssetContract_size depends on runtime parameters */
-/* protocol_WitnessUpdateContract_size depends on runtime parameters */
 /* protocol_AssetIssueContract_size depends on runtime parameters */
 /* protocol_ParticipateAssetIssueContract_size depends on runtime parameters */
 /* protocol_DeployContract_size depends on runtime parameters */
@@ -804,6 +804,7 @@ extern const pb_msgdesc_t protocol_AccountPermissionUpdateContract_msg;
 #define protocol_WithdrawBalanceContract_size    23
 #define protocol_WithdrawExpireUnfreezeContract_size 23
 #define protocol_WitnessCreateContract_size      282
+#define protocol_WitnessUpdateContract_size      282
 
 #ifdef __cplusplus
 } /* extern "C" */

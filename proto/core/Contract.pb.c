@@ -30,7 +30,7 @@ PB_BIND(protocol_VoteWitnessContract_Vote, protocol_VoteWitnessContract_Vote, AU
 PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, 2)
 
 
-PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, AUTO)
+PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, 2)
 
 
 PB_BIND(protocol_AssetIssueContract, protocol_AssetIssueContract, AUTO)

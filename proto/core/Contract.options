@@ -16,6 +16,8 @@ protocol.VoteWitnessContract.support                type: FT_IGNORE
 
 protocol.WitnessCreateContract.owner_address        max_size: 21, fixed_length: true
 protocol.WitnessCreateContract.url                  max_size: 256
+protocol.WitnessUpdateContract.owner_address        max_size: 21, fixed_length: true
+protocol.WitnessUpdateContract.update_url            max_size: 256
 
 protocol.FreezeBalanceContract.owner_address        max_size: 21, fixed_length: true
 protocol.FreezeBalanceContract.receiver_address     max_size: 21, fixed_length: true
