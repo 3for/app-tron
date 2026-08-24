@@ -307,6 +307,34 @@ UX_STEP_NOCB(ux_approval_vote_flow_6_step,
 // 11 slots for dynamic Nano UX voting steps
 const ux_flow_step_t *ux_approval_vote_flow[11];
 
+// WITNESS CREATE TRANSACTION
+//////////////////////////////////////////////////////////////////////
+UX_STEP_NOCB(ux_approval_witness_create_flow_1_step,
+             pnn,
+             {
+                 &C_icon_eye,
+                 "Create",
+                 "Witness",
+             });
+UX_STEP_NOCB(ux_approval_witness_create_url_step,
+             bnnn_paging,
+             {.title = "URL", .text = witnessUrl});
+
+UX_DEF(ux_approval_witness_create_flow,
+       &ux_approval_witness_create_flow_1_step,
+       &ux_approval_witness_create_url_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
+UX_DEF(ux_approval_witness_create_data_warning_flow,
+       &ux_approval_witness_create_flow_1_step,
+       &ux_approval_tx_data_warning_step,
+       &ux_approval_witness_create_url_step,
+       &ux_approval_from_address_step,
+       &ux_approval_confirm_step,
+       &ux_approval_reject_step);
+
 // FREEZE TRANSACTION
 //////////////////////////////////////////////////////////////////////
 UX_STEP_NOCB(ux_approval_freeze_flow_1_step,
@@ -1161,6 +1189,13 @@ void ux_flow_display(ui_approval_state_t state, bool data_warning) {
             ux_flow_init(0, ux_approval_vote_flow, NULL);
             break;
         }
+        case APPROVAL_WITNESS_CREATE_TRANSACTION:
+            ux_flow_init(
+                0,
+                ((data_warning == true) ? ux_approval_witness_create_data_warning_flow
+                                        : ux_approval_witness_create_flow),
+                NULL);
+            break;
         case APPROVAL_FREEZEASSET_TRANSACTION:
             ux_flow_init(0,
                          ((data_warning == true) ? ux_approval_freeze_data_warning_flow

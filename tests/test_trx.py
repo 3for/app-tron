@@ -1394,6 +1394,39 @@ class TestTRX():
                 ]))
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_create_witness(self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                url=b"https://example.com/super-representative"))
+        self.sign_and_validate(client, firmware, 0, tx)
+
+    def test_trx_create_witness_rejects_empty_url(self, backend, firmware,
+                                                  navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(owner_address=bytes.fromhex(
+                client.getAccount(0)['addressHex'])))
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
+    def test_trx_create_witness_binary_url_uses_hash_review(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.WitnessCreateContract,
+            contract.WitnessCreateContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                url=b"https://example.com/\x00hidden"))
+        self.sign_and_validate(client, firmware, 0, tx)
+
     def test_trx_vote_witness_displays_full_addresses(self, backend, firmware,
                                                       navigator):
         if not firmware.is_nano:

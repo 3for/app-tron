@@ -27,7 +27,7 @@ PB_BIND(protocol_VoteWitnessContract, protocol_VoteWitnessContract, AUTO)
 PB_BIND(protocol_VoteWitnessContract_Vote, protocol_VoteWitnessContract_Vote, AUTO)
 
 
-PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, AUTO)
+PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, 2)
 
 
 PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, AUTO)

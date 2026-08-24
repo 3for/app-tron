@@ -31,6 +31,7 @@ char fullContract[EXCHANGE_PAIR_REVIEW_MAX_SIZE];
 char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
+char witnessUrl[MAX_WITNESS_URL_LENGTH + 1];
 int8_t votes_count;
 transactionContext_t transactionContext;
 publicKeyContext_t publicKeyContext;
@@ -83,6 +84,7 @@ static ui_review_operation_t get_review_operation(ui_approval_state_t state) {
         case APPROVAL_EXCHANGE_TRANSACTION:
         case APPROVAL_EXCHANGE_WITHDRAW_INJECT:
         case APPROVAL_WITNESSVOTE_TRANSACTION:
+        case APPROVAL_WITNESS_CREATE_TRANSACTION:
         case APPROVAL_FREEZEASSET_TRANSACTION:
         case APPROVAL_UNFREEZEASSET_TRANSACTION:
         case APPROVAL_WITHDRAWBALANCE_TRANSACTION:
@@ -121,6 +123,7 @@ bool ui_review_is_pending(void) {
 void ui_review_reset(void) {
     G_review_operation = UI_REVIEW_NONE;
     explicit_bzero(reviewData, sizeof(reviewData));
+    explicit_bzero(witnessUrl, sizeof(witnessUrl));
 }
 
 static bool ui_review_consume(ui_review_operation_t expected_operation) {

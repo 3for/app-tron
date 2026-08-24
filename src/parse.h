@@ -21,6 +21,7 @@
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 #define MAX_RAW_SIGNATURE        65
 #define MAX_TOKEN_LENGTH         67
+#define MAX_WITNESS_URL_LENGTH   256
 
 // java-tron rejects smart-contract fee limits above this protocol-wide
 // governance ceiling (100 billion TRX, expressed in sun). The live network
@@ -36,6 +37,7 @@ typedef union {
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
     protocol_VoteWitnessContract vote_witness_contract;
+    protocol_WitnessCreateContract witness_create_contract;
     protocol_ProposalCreateContract proposal_create_contract;
     protocol_ExchangeCreateContract exchange_create_contract;
     protocol_ExchangeInjectContract exchange_inject_contract;

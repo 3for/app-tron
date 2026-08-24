@@ -59,6 +59,7 @@ extern char fullContract[EXCHANGE_PAIR_REVIEW_MAX_SIZE];
 extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];
+extern char witnessUrl[MAX_WITNESS_URL_LENGTH + 1];
 extern int8_t votes_count;
 extern transactionContext_t transactionContext;
 extern publicKeyContext_t publicKeyContext;

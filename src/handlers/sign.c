@@ -603,6 +603,17 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
 
         } break;
+        case WITNESSCREATECONTRACT: {
+            size_t url_length = msg.witness_create_contract.url.size;
+            if (url_length == 0 || url_length >= sizeof(witnessUrl)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
+            memcpy(witnessUrl, msg.witness_create_contract.url.bytes, url_length);
+            witnessUrl[url_length] = '\0';
+
+            ux_flow_display(APPROVAL_WITNESS_CREATE_TRANSACTION, data_warning);
+            break;
+        }
         case FREEZEBALANCECONTRACT:  // Freeze TRX
             if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
                 return io_send_sw(E_INCORRECT_DATA);
