@@ -182,8 +182,9 @@ def test_unreviewed_contract_wrapper_requires_blind_signing(
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
 
 
-def test_duplicate_contract_type_url_requires_blind_signing(
-        backend, firmware, navigator):
+@pytest.mark.parametrize("duplicate_field", ["type_url", "value"])
+def test_duplicate_contract_parameter_field_requires_blind_signing(
+        backend, firmware, navigator, duplicate_field):
     client = TronClient(backend, firmware, navigator)
     raw_tx = tron.Transaction.raw()
     raw_tx.timestamp = 1575712492061
@@ -198,8 +199,11 @@ def test_duplicate_contract_type_url_requires_blind_signing(
             "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
         amount=100000000).SerializeToString()
     any_fields = encode_length_delimited_field(1, type_url)
-    any_fields += encode_length_delimited_field(1, type_url)
+    if duplicate_field == "type_url":
+        any_fields += encode_length_delimited_field(1, type_url)
     any_fields += encode_length_delimited_field(2, value)
+    if duplicate_field == "value":
+        any_fields += encode_length_delimited_field(2, value)
     contract_fields = b'\x08\x01'
     contract_fields += b'\x12' + encode_varint(len(any_fields)) + any_fields
     serialized_tx = raw_tx.SerializeToString()
@@ -377,6 +381,7 @@ class TestTRX():
         "empty_parameter",
         "type_url_only",
         "empty_value",
+        "fixed32_value",
         "nonempty_then_empty_value",
         "nonempty_then_varint_value",
         "nonempty_then_fixed64_value",
@@ -406,6 +411,9 @@ class TestTRX():
             any_fields = encode_length_delimited_field(1, type_url)
         elif parameter_encoding == "empty_value":
             any_fields = encode_length_delimited_field(2, b"")
+        elif parameter_encoding == "fixed32_value":
+            # Field 2 with WT=5 followed by a four-byte scalar payload.
+            any_fields = b'\x15\x18\x80\x80\x01'
         elif parameter_encoding == "nonempty_then_empty_value":
             # Singular protobuf fields use the final occurrence. Ensure an
             # earlier valid value cannot leave a stale callback buffer behind.

@@ -1310,6 +1310,12 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
             !is_canonical_contract_type_url(transaction.contract->type, &type_url_buffer)) {
             content->hasUnreviewedFields = true;
         }
+
+        /* Preserve protobuf's last-value-wins behavior, but do not clear-sign
+         * earlier parameter values that are hidden from the review model. */
+        if (contract_buffer.has_duplicate) {
+            content->hasUnreviewedFields = true;
+        }
     }
 
     if (!HAS_SETTING(S_DATA_ALLOWED) && content->dataBytes != 0) {
