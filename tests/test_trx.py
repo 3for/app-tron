@@ -15,6 +15,7 @@ from pathlib import Path
 from Crypto.Hash import keccak
 from cryptography.hazmat.primitives.asymmetric import ec
 from inspect import currentframe
+from ragger.backend.interface import RaisePolicy
 from tron import TronClient, Errors, CLA, InsType, P1, MAX_APDU_LEN
 from ragger.navigator import NavInsID, NavIns
 from ragger.bip import pack_derivation_path
@@ -217,6 +218,54 @@ def test_duplicate_contract_parameter_field_requires_blind_signing(
                                     payload):
             dismiss_blind_signing_prompt(backend, firmware, navigator)
     assert error.value.status == Errors.MISSING_SETTING_SIGN_BY_HASH
+
+
+def test_rejected_transaction_cannot_resume_without_blind_signing(
+        backend, firmware, navigator):
+    if not firmware.is_nano:
+        pytest.skip("Direct rejection assertion is calibrated for Nano")
+
+    client = TronClient(backend, firmware, navigator)
+    assert (client.getVersion().data[0] & (1 << 3)) == 0
+
+    tx = client.packContract(
+        tron.Transaction.Contract.TransferContract,
+        contract.TransferContract(
+            owner_address=bytes.fromhex(client.getAccount(0)['addressHex']),
+            to_address=bytes.fromhex(
+                client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+            amount=100000000))
+    payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+    previous_raise_policy = backend.raise_policy
+    try:
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            backend.raise_policy = RaisePolicy.RAISE_NOTHING
+            navigator.navigate_until_text(
+                NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Cancel",
+                screen_change_before_first_instruction=True)
+        rejected = backend.last_async_response
+    finally:
+        backend.raise_policy = previous_raise_policy
+
+    assert rejected.status == Errors.CONDITIONS_OF_USE_NOT_SATISFIED
+    assert len(rejected.data) == 0
+
+    continuation = b'\x0a\x20' + bytes(range(32))
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN, P1.LAST, 0x00, continuation)
+    assert error.value.status == Errors.INCORRECT_P2
+
+    # Rejection closes only the old stream; a fresh clear-sign request works.
+    with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00, payload):
+        navigator.navigate_until_text(
+            NavInsID.RIGHT_CLICK, [NavInsID.BOTH_CLICK], "Sign",
+            screen_change_before_first_instruction=True)
+
+    response = backend.last_async_response
+    assert check_tx_signature(tx, response.data[0:65],
+                              client.getAccount(0)['publicKey'][2:])
 
 
 @pytest.mark.usefixtures('configuration')
