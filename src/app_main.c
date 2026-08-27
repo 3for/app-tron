@@ -43,6 +43,18 @@ const internal_storage_t N_storage_real;
 txContent_t txContent;
 txContext_t txContext;
 
+static void reset_signing_contexts(void) {
+    /* app_main() may be entered again without BSS initialization after an I/O
+     * reset. Unbind pending callbacks before invalidating every streamed
+     * signing context so no continuation can reuse a stale hash or path. */
+    ui_review_reset();
+    explicit_bzero(&txContext, sizeof(txContext));
+    explicit_bzero(&txContent, sizeof(txContent));
+    explicit_bzero(&transactionContext, sizeof(transactionContext));
+    explicit_bzero(&msg, sizeof(msg));
+    resetPersonalMessageSigningContext();
+}
+
 static void nv_app_state_init(void) {
     if (!HAS_SETTING(S_INITIALIZED)) {
         internal_storage_t storage = 0x00;
@@ -61,16 +73,13 @@ void app_main(void) {
     nv_app_state_init();
 
     io_init();
-    ui_review_reset();
+    reset_signing_contexts();
 
 #ifdef HAVE_SWAP
     if (!G_called_from_swap) {
         ui_idle();
     }
 #endif  // HAVE_SWAP
-
-    // Reset context
-    explicit_bzero(&txContent, sizeof(txContent));
 
     for (;;) {
         BEGIN_TRY {
@@ -80,7 +89,7 @@ void app_main(void) {
 
                 // Receive command bytes in G_io_apdu_buffer
                 if ((input_len = io_recv_command()) < 0) {
-                    ui_review_reset();
+                    reset_signing_contexts();
                     CLOSE_TRY;
                     return;
                 }
@@ -109,14 +118,14 @@ void app_main(void) {
                 }
             }
             CATCH(EXCEPTION_IO_RESET) {
-                ui_review_reset();
+                reset_signing_contexts();
                 CLOSE_TRY;
                 THROW(EXCEPTION_IO_RESET);
             }
             CATCH_OTHER(e) {
                 // An exception aborts the command that may have started a
-                // review. Do not leave the dispatcher permanently locked.
-                ui_review_reset();
+                // review or a streamed signature. Do not leave either live.
+                reset_signing_contexts();
                 io_send_sw(e);
             }
             FINALLY {
