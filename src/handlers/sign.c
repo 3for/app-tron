@@ -271,14 +271,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
     // asynchronous review. No later APDU may extend this completed stream.
     txContext.initialized = false;
 
+    // Permission_id is int32 on the wire. Validate the full-width signed value before choosing
+    // the display path so values such as 256 or -256 cannot alias valid IDs after narrowing.
+    if (txContent.permission_id < 0 || txContent.permission_id > MAX_PERMISSION_ID) {
+        PRINTF("Unsupported permission_id: %d\n", txContent.permission_id);
+        return io_send_sw(E_INCORRECT_DATA);
+    }
+
     if (txContent.permission_id > 0) {
-        // The fromAddress buffer only reserves 5 bytes for the "Px - " prefix, which fits a
-        // single decimal digit. Refuse multi-digit IDs to avoid truncation and a misaligned
-        // address being displayed/signed (fail closed).
-        if (txContent.permission_id > MAX_PERMISSION_ID) {
-            PRINTF("Unsupported permission_id: %d\n", txContent.permission_id);
-            return io_send_sw(E_INCORRECT_DATA);
-        }
         PRINTF("Set permission_id...\n");
         snprintf((char *) fromAddress, 6, "P%d - ", txContent.permission_id);
         getBase58FromAddress(txContent.account, fromAddress + 5);

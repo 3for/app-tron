@@ -2660,6 +2660,86 @@ class TestTRX():
                 amount=100000000), None, 2)
         self.sign_and_validate(client, firmware, 0, tx)
 
+    def test_trx_signs_max_supported_permission_id(self, backend, firmware,
+                                                   navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000), None, 9)
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        assert len(payload) <= 255
+
+        with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                    payload):
+            if firmware.is_nano:
+                navigate_instruction = NavInsID.RIGHT_CLICK
+                validation_instructions = [NavInsID.BOTH_CLICK]
+                approval_text = "Sign"
+            else:
+                navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+                validation_instructions = [
+                    NavInsID.USE_CASE_REVIEW_CONFIRM,
+                    NavInsID.USE_CASE_STATUS_DISMISS
+                ]
+                approval_text = "Hold to sign"
+
+            navigator.navigate_until_text(
+                navigate_instruction, [],
+                "From",
+                screen_change_before_first_instruction=True,
+                screen_change_after_last_instruction=False)
+            screen = backend.get_current_screen_content()
+            displayed_text = "".join(event.get("text", "")
+                                     for event in screen["events"])
+            assert "P9 -" in displayed_text, screen
+            navigator.navigate_until_text(
+                navigate_instruction,
+                validation_instructions,
+                approval_text,
+                screen_change_before_first_instruction=False)
+
+        response = backend.last_async_response
+        assert check_tx_signature(tx, response.data[0:65],
+                                  client.getAccount(0)['publicKey'][2:])
+
+    @pytest.mark.parametrize("permission_id", [
+        -256,
+        -1,
+        10,
+        255,
+        256,
+        258,
+        -(1 << 31),
+        (1 << 31) - 1,
+    ])
+    def test_trx_rejects_unsupported_permission_id(
+            self, backend, firmware, navigator, permission_id):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000), None, permission_id)
+
+        raw_data = tron.Transaction.raw()
+        raw_data.ParseFromString(tx)
+        assert raw_data.contract[0].Permission_id == permission_id
+        if permission_id == 256:
+            assert b'\x28\x80\x02' in raw_data.contract[0].SerializeToString(
+                deterministic=True)
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            client.sign(client.getAccount(0)['path'], tx, navigate=False)
+        assert error.value.status == Errors.INCORRECT_DATA
+
     def test_trx_ecdh_key(self, backend, firmware, navigator):
         client = TronClient(backend, firmware, navigator)
         # get ledger public key

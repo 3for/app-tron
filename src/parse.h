@@ -171,7 +171,7 @@ typedef struct txContent_t {
     uint32_t customSelector;
     contractType_e contractType;
     uint64_t dataBytes;
-    uint8_t permission_id;
+    int32_t permission_id;
     // Transaction.raw.contract is repeated on the wire, while this app can
     // safely review exactly one contract. Track the occurrence across every
     // APDU in the signing session, not only within one nanopb decode.
