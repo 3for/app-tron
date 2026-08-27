@@ -267,6 +267,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                0,
                                transactionContext.hash,
                                32));
+    // The digest and derivation path now live in transactionContext for the
+    // asynchronous review. No later APDU may extend this completed stream.
+    txContext.initialized = false;
 
     if (txContent.permission_id > 0) {
         // The fromAddress buffer only reserves 5 bytes for the "Px - " prefix, which fits a

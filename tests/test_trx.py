@@ -651,6 +651,56 @@ class TestTRX():
         assert check_tx_signature(tx, response.data[0:65],
                                   client.getAccount(0)['publicKey'][2:])
 
+    @pytest.mark.parametrize("continuation", [
+        b'\x0a\x20' + bytes(range(32)),
+        b'',
+    ])
+    def test_trx_finalized_session_rejects_continuation(
+            self, backend, firmware, navigator, continuation):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.TransferContract,
+            contract.TransferContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                to_address=bytes.fromhex(
+                    client.address_hex("TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16")),
+                amount=100000000))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+
+        def approve_transaction():
+            with backend.exchange_async(CLA, InsType.SIGN, P1.SIGN, 0x00,
+                                        payload):
+                if firmware.is_nano:
+                    navigate_instruction = NavInsID.RIGHT_CLICK
+                    validation_instructions = [NavInsID.BOTH_CLICK]
+                    approval_text = "Sign"
+                else:
+                    navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+                    validation_instructions = [
+                        NavInsID.USE_CASE_REVIEW_CONFIRM,
+                        NavInsID.USE_CASE_STATUS_DISMISS
+                    ]
+                    approval_text = "Hold to sign"
+                navigator.navigate_until_text(
+                    navigate_instruction,
+                    validation_instructions,
+                    approval_text,
+                    screen_change_before_first_instruction=True)
+
+            response = backend.last_async_response
+            assert check_tx_signature(tx, response.data[0:65],
+                                      client.getAccount(0)['publicKey'][2:])
+
+        approve_transaction()
+
+        with pytest.raises(ExceptionRAPDU) as error:
+            backend.exchange(CLA, InsType.SIGN, P1.LAST, 0x00, continuation)
+        assert error.value.status == Errors.INCORRECT_P2
+
+        # A completed stream is dead, but a new P1_SIGN remains valid.
+        approve_transaction()
+
     def test_trx_vote_details_survive_trailing_field_apdu(
             self, backend, firmware, navigator):
         if firmware.device != "flex":
