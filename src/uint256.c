@@ -509,16 +509,19 @@ bool tostring128(uint128_t *number, uint32_t baseParam, char *out, uint32_t outL
     uint128_t rDiv;
     uint128_t rMod;
     uint128_t base;
+    uint32_t offset = 0;
+    if ((number == NULL) || (out == NULL) || (outLength < 2) || (baseParam < 2) ||
+        (baseParam > 16)) {
+        return false;
+    }
     copy128(&rDiv, number);
     clear128(&rMod);
     clear128(&base);
     LOWER(base) = baseParam;
-    uint32_t offset = 0;
-    if ((baseParam < 2) || (baseParam > 16)) {
-        return false;
-    }
+    out[0] = '\0';
     do {
-        if (offset > (outLength - 1)) {
+        if (offset >= (outLength - 1)) {
+            out[0] = '\0';
             return false;
         }
         divmod128(&rDiv, &base, &rDiv, &rMod);
@@ -533,17 +536,20 @@ bool tostring256(uint256_t *number, uint32_t baseParam, char *out, uint32_t outL
     uint256_t rDiv;
     uint256_t rMod;
     uint256_t base;
+    uint32_t offset = 0;
+    if ((number == NULL) || (out == NULL) || (outLength < 2) || (baseParam < 2) ||
+        (baseParam > 16)) {
+        return false;
+    }
     copy256(&rDiv, number);
     clear256(&rMod);
     clear256(&base);
     UPPER(LOWER(base)) = 0;
     LOWER(LOWER(base)) = baseParam;
-    uint32_t offset = 0;
-    if ((baseParam < 2) || (baseParam > 16)) {
-        return false;
-    }
+    out[0] = '\0';
     do {
-        if (offset > (outLength - 1)) {
+        if (offset >= (outLength - 1)) {
+            out[0] = '\0';
             return false;
         }
         divmod256(&rDiv, &base, &rDiv, &rMod);

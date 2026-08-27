@@ -65,7 +65,10 @@ void swap_handle_get_printable_amount(get_printable_amount_parameters_t *params)
         goto error;
     }
 
-    tostring256(&amount_number, 10, amount_raw_string, sizeof(amount_raw_string));
+    if (!tostring256(&amount_number, 10, amount_raw_string, sizeof(amount_raw_string))) {
+        PRINTF("Amount conversion failed\n");
+        goto error;
+    }
 
     if (!adjustDecimals(amount_raw_string,
                         strnlen(amount_raw_string, sizeof(amount_raw_string)),
