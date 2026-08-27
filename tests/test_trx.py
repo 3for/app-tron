@@ -1466,6 +1466,46 @@ class TestTRX():
         ]
         self.sign_and_validate(client, firmware, 0, tx, exchangeSignature)
 
+    def test_trx_exchange_finalization_error_closes_session(
+            self, backend, firmware, navigator):
+        client = TronClient(backend, firmware, navigator)
+        tx = client.packContract(
+            tron.Transaction.Contract.ExchangeTransactionContract,
+            contract.ExchangeTransactionContract(
+                owner_address=bytes.fromhex(
+                    client.getAccount(0)['addressHex']),
+                exchange_id=6,
+                token_id=b"1000166",
+                quant=10000,
+                expected=100))
+        payload = pack_derivation_path(client.getAccount(0)['path']) + tx
+        exchange_details = bytes.fromhex(
+            "08061207313030303136361a0b43727970746f436861696e20002a015f32035452"
+            "58380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b2"
+            "4e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9"
+            "a1f37bfde192fc448793")
+
+        backend.exchange(CLA, InsType.SIGN, P1.FIRST, 0x00, payload)
+
+        # Final hashing succeeds, but review formatting cannot build an
+        # exchange pair until authenticated metadata supplies the second name.
+        with pytest.raises(ExceptionRAPDU) as finalization_error:
+            backend.exchange(CLA, InsType.SIGN, P1.LAST, 0x00, b'')
+        assert finalization_error.value.status == Errors.INCORRECT_DATA
+
+        # Bytes supplied after that terminal error must not enter the finalized
+        # hash, and valid metadata must not revive the completed stream.
+        continuation = b'\x0a\x20' + bytes(range(32))
+        with pytest.raises(ExceptionRAPDU) as continuation_error:
+            backend.exchange(CLA, InsType.SIGN, P1.MORE, 0x00, continuation)
+        assert continuation_error.value.status == Errors.INCORRECT_P2
+
+        final_metadata_p1 = P1.TRC10_NAME | InsType.SIGN_PERSONAL_MESSAGE
+        with pytest.raises(ExceptionRAPDU) as metadata_error:
+            backend.exchange(CLA, InsType.SIGN, final_metadata_p1, 0x00,
+                             exchange_details)
+        assert metadata_error.value.status == Errors.INCORRECT_P2
+
     @pytest.mark.parametrize(
         ("exchange_id", "token_id", "exchange_details"),
         [
