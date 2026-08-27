@@ -119,6 +119,15 @@ diff -r -u --no-dereference nanopb-original/pb_common.c nanopb/pb_common.c
 diff -r -u --no-dereference nanopb-original/pb_decode.c nanopb/pb_decode.c
 --- nanopb-original/pb_decode.c	2021-03-22 15:44:15.000000000 +0100
 +++ nanopb/pb_decode.c	2021-06-25 11:26:41.757541600 +0200
+@@ -747,3 +747,7 @@
+         return pb_skip_field(stream, wire_type);
+-
++
++    /* Reject non-packable fields before creating a stack-backed scalar substream. */
++    if (PB_LTYPE(field->type) > PB_LTYPE_LAST_PACKABLE && wire_type != PB_WT_STRING)
++        PB_RETURN_ERROR(stream, "wrong wire type");
++
+     if (wire_type == PB_WT_STRING)
 @@ -756,7 +756,7 @@
          do
          {

@@ -745,6 +745,10 @@ static bool checkreturn decode_callback_field(pb_istream_t *stream, pb_wire_type
     if (!field->descriptor->field_callback)
         return pb_skip_field(stream, wire_type);
 
+    /* Reject non-packable fields before creating a stack-backed scalar substream. */
+    if (PB_LTYPE(field->type) > PB_LTYPE_LAST_PACKABLE && wire_type != PB_WT_STRING)
+        PB_RETURN_ERROR(stream, "wrong wire type");
+
     if (wire_type == PB_WT_STRING)
     {
         pb_istream_t substream;

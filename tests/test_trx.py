@@ -378,6 +378,9 @@ class TestTRX():
         "type_url_only",
         "empty_value",
         "nonempty_then_empty_value",
+        "nonempty_then_varint_value",
+        "nonempty_then_fixed64_value",
+        "nonempty_then_fixed32_value",
     ])
     def test_trx_rejects_contract_parameter_without_nonempty_final_value(
             self, backend, firmware, navigator, parameter_encoding):
@@ -403,11 +406,21 @@ class TestTRX():
             any_fields = encode_length_delimited_field(1, type_url)
         elif parameter_encoding == "empty_value":
             any_fields = encode_length_delimited_field(2, b"")
-        else:
+        elif parameter_encoding == "nonempty_then_empty_value":
             # Singular protobuf fields use the final occurrence. Ensure an
             # earlier valid value cannot leave a stale callback buffer behind.
             any_fields = encode_length_delimited_field(2, valid_value)
             any_fields += encode_length_delimited_field(2, b"")
+        else:
+            # A mismatched wire type must be rejected before nanopb invokes
+            # the BYTES callback with a stream backed by temporary storage.
+            malformed_values = {
+                "nonempty_then_varint_value": b'\x10\x01',
+                "nonempty_then_fixed64_value": b'\x11' + (b'\x00' * 8),
+                "nonempty_then_fixed32_value": b'\x15' + (b'\x00' * 4),
+            }
+            any_fields = encode_length_delimited_field(2, valid_value)
+            any_fields += malformed_values[parameter_encoding]
 
         contract_fields = b'\x08\x01'  # TransferContract enum value.
         contract_fields += encode_length_delimited_field(2, any_fields)
