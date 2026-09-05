@@ -163,6 +163,10 @@ message UnDelegateResourceContract {
   bytes receiver_address = 4;
 }
 
+message CancelAllUnfreezeV2Contract {
+    bytes owner_address = 1;
+}
+
 message UnfreezeAssetContract {
     bytes owner_address = 1;
 }
@@ -204,6 +208,12 @@ message TriggerSmartContract {
     int64 token_id = 6;
 }
 
+message UpdateSettingContract {
+    bytes owner_address = 1;
+    bytes contract_address = 2;
+    int64 consume_user_resource_percent = 3;
+}
+
 message ExchangeCreateContract {
     bytes owner_address = 1;
     bytes first_token_id = 2;
@@ -239,4 +249,9 @@ message AccountPermissionUpdateContract {
     Permission owner = 2; // Empty is invalidate
     Permission witness = 3; // Can be empty
     repeated Permission actives = 4; // Empty is invalidate
-  }
+}
+
+message UpdateBrokerageContract {
+    bytes owner_address = 1;
+    int32 brokerage = 2;
+}

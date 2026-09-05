@@ -14,6 +14,11 @@ protocol.VoteWitnessContract.votes                  max_count: 5  # Assume 5 vot
 protocol.VoteWitnessContract.Vote.vote_address      max_size: 21, fixed_length: true
 protocol.VoteWitnessContract.support                type: FT_IGNORE
 
+protocol.WitnessCreateContract.owner_address        max_size: 21, fixed_length: true
+protocol.WitnessCreateContract.url                  max_size: 256
+protocol.WitnessUpdateContract.owner_address        max_size: 21, fixed_length: true
+protocol.WitnessUpdateContract.update_url           max_size: 256
+
 protocol.FreezeBalanceContract.owner_address        max_size: 21, fixed_length: true
 protocol.FreezeBalanceContract.receiver_address     max_size: 21, fixed_length: true
 
@@ -31,6 +36,8 @@ protocol.DelegateResourceContract.receiver_address  max_size: 21, fixed_length: 
 protocol.UnDelegateResourceContract.owner_address   max_size: 21, fixed_length: true
 protocol.UnDelegateResourceContract.receiver_address   max_size: 21, fixed_length: true
 
+protocol.CancelAllUnfreezeV2Contract.owner_address  max_size: 21, fixed_length: true
+
 protocol.WithdrawBalanceContract.owner_address      max_size: 21, fixed_length: true
 
 protocol.ProposalCreateContract.owner_address       max_size: 21, fixed_length: true
@@ -43,6 +50,9 @@ protocol.ProposalDeleteContract.owner_address       max_size: 21, fixed_length: 
 protocol.TriggerSmartContract.owner_address         max_size: 21, fixed_length: true
 protocol.TriggerSmartContract.contract_address      max_size: 21, fixed_length: true
 protocol.TriggerSmartContract.data                  type: FT_CALLBACK
+
+protocol.UpdateSettingContract.owner_address        max_size: 21, fixed_length: true
+protocol.UpdateSettingContract.contract_address     max_size: 21, fixed_length: true
 
 protocol.ExchangeCreateContract.owner_address       max_size: 21, fixed_length: true
 protocol.ExchangeCreateContract.first_token_id      max_size: 8
@@ -59,3 +69,5 @@ protocol.ExchangeTransactionContract.token_id       max_size: 8
 
 protocol.AccountPermissionUpdateContract.owner_address  max_size: 21, fixed_length: true
 protocol.AccountPermissionUpdateContract.actives        max_count: 2  # Assume 2 max actives
+
+protocol.UpdateBrokerageContract.owner_address      max_size: 21, fixed_length: true

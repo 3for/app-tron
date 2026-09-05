@@ -23,6 +23,7 @@
 #define ADD_PRE_FIX_BYTE_MAINNET 0x41
 #define MAX_RAW_SIGNATURE        65
 #define MAX_TOKEN_LENGTH         67
+#define MAX_WITNESS_URL_LENGTH   256
 
 #define NETWORK_STRING_MAX_SIZE 16
 #define SHARED_CTX_FIELD_1_SIZE 256
@@ -34,7 +35,10 @@ typedef union {
     protocol_TransferContract transfer_contract;
     protocol_TransferAssetContract transfer_asset_contract;
     protocol_TriggerSmartContract trigger_smart_contract;
+    protocol_UpdateSettingContract update_setting_contract;
     protocol_VoteWitnessContract vote_witness_contract;
+    protocol_WitnessCreateContract witness_create_contract;
+    protocol_WitnessUpdateContract witness_update_contract;
     protocol_ProposalCreateContract proposal_create_contract;
     protocol_ExchangeCreateContract exchange_create_contract;
     protocol_ExchangeInjectContract exchange_inject_contract;
@@ -52,6 +56,8 @@ typedef union {
     protocol_WithdrawExpireUnfreezeContract withdraw_expire_unfreeze_contract;
     protocol_DelegateResourceContract delegate_resource_contract;
     protocol_UnDelegateResourceContract undelegate_resource_contract;
+    protocol_CancelAllUnfreezeV2Contract cancel_all_unfreeze_v2_contract;
+    protocol_UpdateBrokerageContract update_brokerage_contract;
 } contract_t;
 
 extern contract_t msg;
@@ -86,17 +92,20 @@ typedef enum contractType_e {
     CUSTOMCONTRACT,
     CREATESMARTCONTRACT = 30,
     TRIGGERSMARTCONTRACT,
+    UPDATESETTINGCONTRACT = 33,
     EXCHANGECREATECONTRACT = 41,
     EXCHANGEINJECTCONTRACT,
     EXCHANGEWITHDRAWCONTRACT,
     EXCHANGETRANSACTIONCONTRACT,
     UPDATEENERGYLIMITCONTRACT,
     ACCOUNTPERMISSIONUPDATECONTRACT,
+    UPDATEBROKERAGECONTRACT = 49,
     FREEZEBALANCEV2CONTRACT = 54,
     UNFREEZEBALANCEV2CONTRACT,
     WITHDRAWEXPIREUNFREEZECONTRACT,
     DELEGATERESOURCECONTRACT,
     UNDELEGATERESOURCECONTRACT,
+    CANCELALLUNFREEZEV2CONTRACT,
 
     UNKNOWN_CONTRACT = 254,
     INVALID_CONTRACT = 255
@@ -164,6 +173,7 @@ typedef struct txContent_t {
     bool feeLimitSeen;  // feeLimit was already set from an earlier INS_SIGN chunk
     uint8_t votesCount;
     voteEntry_t votes[MAX_VOTES];
+    char witnessUrl[MAX_WITNESS_URL_LENGTH + 1];
 } txContent_t;
 
 typedef struct messageSigningContext712_t {

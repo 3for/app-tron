@@ -25,6 +25,12 @@
 #include "tokens.h"
 #include "app_errors.h"
 
+_Static_assert(sizeof(((protocol_WitnessCreateContract *) 0)->url.bytes) == MAX_WITNESS_URL_LENGTH,
+               "witness URL protobuf bound is out of sync");
+_Static_assert(sizeof(((protocol_WitnessUpdateContract *) 0)->update_url.bytes) ==
+                   MAX_WITNESS_URL_LENGTH,
+               "witness update URL protobuf bound is out of sync");
+
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;
 
@@ -174,6 +180,9 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
         case WITNESSUPDATECONTRACT:
             strlcpy(out, "Witness Update", outlen);
             break;
+        case UPDATESETTINGCONTRACT:
+            strlcpy(out, "Setting Update", outlen);
+            break;
         case PARTICIPATEASSETISSUECONTRACT:
             strlcpy(out, "Participate Asset", outlen);
             break;
@@ -209,6 +218,12 @@ bool setContractType(contractType_e type, char *out, size_t outlen) {
             break;
         case ACCOUNTPERMISSIONUPDATECONTRACT:
             strlcpy(out, "Permission Update", outlen);
+            break;
+        case UPDATEBROKERAGECONTRACT:
+            strlcpy(out, "Brokerage Update", outlen);
+            break;
+        case CANCELALLUNFREEZEV2CONTRACT:
+            strlcpy(out, "Cancel All Unfreezes", outlen);
             break;
         case UNKNOWN_CONTRACT:
             strlcpy(out, "Unknown Type", outlen);
@@ -476,6 +491,54 @@ static bool vote_witness_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
+static bool copy_witness_url(txContent_t *content, const pb_byte_t *url, pb_size_t url_length) {
+    if (url_length == 0 || url_length > MAX_WITNESS_URL_LENGTH) {
+        return false;
+    }
+
+    /* The review UI consumes a C string. Reject bytes that cannot be rendered
+     * exactly, including embedded NULs, instead of displaying a truncated URL. */
+    for (pb_size_t i = 0; i < url_length; i++) {
+        if (url[i] < 0x20 || url[i] > 0x7e) {
+            return false;
+        }
+    }
+
+    memcpy(content->witnessUrl, url, url_length);
+    content->witnessUrl[url_length] = '\0';
+    return true;
+}
+
+static bool witness_create_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream, protocol_WitnessCreateContract_fields, &msg.witness_create_contract)) {
+        return false;
+    }
+
+    if (!copy_witness_url(content,
+                          msg.witness_create_contract.url.bytes,
+                          msg.witness_create_contract.url.size)) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &msg.witness_create_contract.owner_address);
+    return true;
+}
+
+static bool witness_update_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream, protocol_WitnessUpdateContract_fields, &msg.witness_update_contract)) {
+        return false;
+    }
+
+    if (!copy_witness_url(content,
+                          msg.witness_update_contract.update_url.bytes,
+                          msg.witness_update_contract.update_url.size)) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &msg.witness_update_contract.owner_address);
+    return true;
+}
+
 static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_FreezeBalanceContract_fields, &msg.freeze_balance_contract)) {
         return false;
@@ -539,6 +602,17 @@ static bool withdraw_expire_unfreeze_contract(txContent_t *content, pb_istream_t
         return false;
     }
     COPY_ADDRESS(content->account, &msg.withdraw_expire_unfreeze_contract.owner_address);
+    return true;
+}
+
+static bool cancel_all_unfreeze_v2_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_CancelAllUnfreezeV2Contract_fields,
+                   &msg.cancel_all_unfreeze_v2_contract)) {
+        return false;
+    }
+
+    COPY_ADDRESS(content->account, &msg.cancel_all_unfreeze_v2_contract.owner_address);
     return true;
 }
 
@@ -704,6 +778,22 @@ static bool trigger_smart_contract(txContent_t *content, pb_istream_t *stream) {
     return true;
 }
 
+static bool update_setting_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream, protocol_UpdateSettingContract_fields, &msg.update_setting_contract)) {
+        return false;
+    }
+
+    if (msg.update_setting_contract.consume_user_resource_percent < 0 ||
+        msg.update_setting_contract.consume_user_resource_percent > 100) {
+        return false;
+    }
+
+    content->amount[0] = (uint64_t) msg.update_setting_contract.consume_user_resource_percent;
+    COPY_ADDRESS(content->account, &msg.update_setting_contract.owner_address);
+    COPY_ADDRESS(content->contractAddress, &msg.update_setting_contract.contract_address);
+    return true;
+}
+
 static bool exchange_create_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_ExchangeCreateContract_fields, &msg.exchange_create_contract)) {
         return false;
@@ -805,6 +895,23 @@ static bool account_permission_update_contract(txContent_t *content, pb_istream_
     // owner/witness/actives (Permission sub-messages) are left decoded in
     // msg.account_permission_update_contract for the signing handler to render
     // in full on the review screen; see src/handlers/sign.c.
+    return true;
+}
+
+static bool update_brokerage_contract(txContent_t *content, pb_istream_t *stream) {
+    if (!pb_decode(stream,
+                   protocol_UpdateBrokerageContract_fields,
+                   &msg.update_brokerage_contract)) {
+        return false;
+    }
+
+    if (msg.update_brokerage_contract.brokerage < 0 ||
+        msg.update_brokerage_contract.brokerage > 100) {
+        return false;
+    }
+
+    content->amount[0] = (uint64_t) msg.update_brokerage_contract.brokerage;
+    COPY_ADDRESS(content->account, &msg.update_brokerage_contract.owner_address);
     return true;
 }
 
@@ -916,6 +1023,12 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
             case protocol_Transaction_Contract_ContractType_VoteWitnessContract:
                 ret = vote_witness_contract(content, &tx_stream);
                 break;
+            case protocol_Transaction_Contract_ContractType_WitnessCreateContract:
+                ret = witness_create_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_WitnessUpdateContract:
+                ret = witness_update_contract(content, &tx_stream);
+                break;
             case protocol_Transaction_Contract_ContractType_FreezeBalanceContract:
                 ret = freeze_balance_contract(content, &tx_stream);
                 break;
@@ -930,6 +1043,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_WithdrawExpireUnfreezeContract:
                 ret = withdraw_expire_unfreeze_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_CancelAllUnfreezeV2Contract:
+                ret = cancel_all_unfreeze_v2_contract(content, &tx_stream);
                 break;
             case protocol_Transaction_Contract_ContractType_DelegateResourceContract:
                 ret = delegate_resource_contract(content, &tx_stream);
@@ -955,6 +1071,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
             case protocol_Transaction_Contract_ContractType_TriggerSmartContract:
                 ret = trigger_smart_contract(content, &tx_stream);
                 break;
+            case protocol_Transaction_Contract_ContractType_UpdateSettingContract:
+                ret = update_setting_contract(content, &tx_stream);
+                break;
             case protocol_Transaction_Contract_ContractType_ExchangeCreateContract:
                 ret = exchange_create_contract(content, &tx_stream);
                 break;
@@ -969,6 +1088,9 @@ parserStatus_e processTx(uint8_t *buffer, uint32_t length, txContent_t *content)
                 break;
             case protocol_Transaction_Contract_ContractType_AccountPermissionUpdateContract:
                 ret = account_permission_update_contract(content, &tx_stream);
+                break;
+            case protocol_Transaction_Contract_ContractType_UpdateBrokerageContract:
+                ret = update_brokerage_contract(content, &tx_stream);
                 break;
             default:
                 return USTREAM_FAULT;

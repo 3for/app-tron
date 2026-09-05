@@ -88,6 +88,28 @@ static bool is_zero_address(const uint8_t *raw) {
     return memcmp(raw, zero_address, ADDRESS_SIZE) == 0;
 }
 
+static bool format_percent(uint64_t value, char *destination, size_t destination_size) {
+    if (value > 100 || destination_size < sizeof("0%")) {
+        return false;
+    }
+
+    /* print_amount() represents zero as an empty string, while zero percent is
+     * valid for both UpdateSettingContract and UpdateBrokerageContract. */
+    if (value == 0) {
+        strlcpy(destination, "0%", destination_size);
+        return true;
+    }
+
+    size_t length = print_amount(value, destination, destination_size, 0);
+    if (length == 0 || length + 2 > destination_size) {
+        return false;
+    }
+
+    destination[length++] = '%';
+    destination[length] = '\0';
+    return true;
+}
+
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
@@ -389,6 +411,15 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 #endif  // HAVE_SWAP
 
             break;
+        case UPDATESETTINGCONTRACT:
+            if (!format_percent(txContent.amount[0], fullContract, sizeof(fullContract))) {
+                terminate_signing_session(&txContext, &txContent);
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+            getBase58FromAddress(txContent.contractAddress, toAddress);
+
+            ux_flow_display(APPROVAL_UPDATE_SETTING_TRANSACTION, data_warning);
+            break;
         case EXCHANGECREATECONTRACT:
 
             memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
@@ -496,6 +527,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITNESSVOTE_TRANSACTION, data_warning);
 
         } break;
+        case WITNESSCREATECONTRACT:
+            ux_flow_display(APPROVAL_WITNESS_CREATE_TRANSACTION, data_warning);
+            break;
+        case WITNESSUPDATECONTRACT:
+            ux_flow_display(APPROVAL_WITNESS_UPDATE_TRANSACTION, data_warning);
+            break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
             if (txContent.resource == 0)
                 strcpy(fullContract, "Bandwidth");
@@ -586,6 +623,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITHDRAWEXPIREUNFREEZE_TRANSACTION, data_warning);
 
             break;
+        case CANCELALLUNFREEZEV2CONTRACT:  // Cancel all pending Stake 2.0 unfreezes
+            ux_flow_display(APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION, data_warning);
+
+            break;
         case WITHDRAWBALANCECONTRACT:  // Claim Rewards
             getBase58FromAddress(txContent.account, toAddress);
 
@@ -621,6 +662,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_PERMISSION_UPDATE, data_warning);
 
         } break;
+        case UPDATEBROKERAGECONTRACT:
+            if (!format_percent(txContent.amount[0], fullContract, sizeof(fullContract))) {
+                terminate_signing_session(&txContext, &txContent);
+                return io_send_sw(E_INCORRECT_LENGTH);
+            }
+
+            ux_flow_display(APPROVAL_UPDATE_BROKERAGE_TRANSACTION, data_warning);
+            break;
         case INVALID_CONTRACT:
             terminate_signing_session(&txContext, &txContent);
             return io_send_sw(E_INCORRECT_DATA);  // Contract not initialized

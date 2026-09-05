@@ -283,6 +283,76 @@ def test_sign_vote_witness_more_than_5(backend, accounts):
     assert e.value.status == Errors.INCORRECT_DATA
 
 
+def test_sign_witness_create(backend, accounts, scenario_navigator):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessCreateContract,
+        contract.WitnessCreateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            url=b"https://example.com/super-representative"))
+    _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+def test_sign_witness_create_rejects_empty_url(backend, accounts):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessCreateContract,
+        contract.WitnessCreateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"])))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
+
+
+def test_sign_witness_create_rejects_non_printable_url(backend, accounts):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessCreateContract,
+        contract.WitnessCreateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            url=b"https://example.com/\x00hidden"))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
+
+
+def test_sign_witness_update(backend, accounts, scenario_navigator):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessUpdateContract,
+        contract.WitnessUpdateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            update_url=b"https://example.com/new-super-representative"))
+    _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+def test_sign_witness_update_rejects_empty_url(backend, accounts):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessUpdateContract,
+        contract.WitnessUpdateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"])))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
+
+
+def test_sign_witness_update_rejects_non_printable_url(backend, accounts):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.WitnessUpdateContract,
+        contract.WitnessUpdateContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            update_url=b"https://example.com/\x00hidden"))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
+
+
 # =============================================================================
 # Freeze / Unfreeze (V1)
 # =============================================================================
@@ -402,6 +472,70 @@ def test_sign_withdraw_unfreeze(backend, accounts, scenario_navigator):
         tron.Transaction.Contract.WithdrawExpireUnfreezeContract,
         contract.WithdrawExpireUnfreezeContract(owner_address=bytes.fromhex(accounts[0]["addressHex"])))
     _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+def test_sign_cancel_all_unfreeze_v2(backend, accounts, scenario_navigator):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.CancelAllUnfreezeV2Contract,
+        contract.CancelAllUnfreezeV2Contract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"])))
+    _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+# =============================================================================
+# Witness settings
+# =============================================================================
+
+
+def test_sign_update_brokerage(backend, accounts, scenario_navigator):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.UpdateBrokerageContract,
+        contract.UpdateBrokerageContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            brokerage=20))
+    _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+@pytest.mark.parametrize("brokerage", [-1, 101])
+def test_sign_update_brokerage_rejects_out_of_range(backend, accounts, brokerage):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.UpdateBrokerageContract,
+        contract.UpdateBrokerageContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            brokerage=brokerage))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
+
+
+def test_sign_update_setting(backend, accounts, scenario_navigator):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.UpdateSettingContract,
+        contract.UpdateSettingContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            contract_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
+            consume_user_resource_percent=20))
+    _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+@pytest.mark.parametrize("percent", [-1, 101])
+def test_sign_update_setting_rejects_out_of_range(backend, accounts, percent):
+    client = TronCommandSender(backend)
+    tx = pack_contract(
+        tron.Transaction.Contract.UpdateSettingContract,
+        contract.UpdateSettingContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            contract_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
+            consume_user_resource_percent=percent))
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        client.sign(accounts[0]["path"], tx)
+    assert e.value.status == Errors.INCORRECT_DATA
 
 
 # =============================================================================

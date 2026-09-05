@@ -317,6 +317,44 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.flowTitle = "Review transaction to\nVote";
             infoLongPress.text = "Sign transaction to\nVote";
             break;
+        case APPROVAL_WITNESS_CREATE_TRANSACTION:
+            txInfos.fields[0].item = "URL";
+            txInfos.fields[0].value = txContent.witnessUrl;
+            txInfos.fields[1].item = stringLabelSenderAddress;
+            txInfos.fields[1].value = fromAddress;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nCreate Witness";
+            infoLongPress.text = "Sign transaction to\nCreate Witness";
+            break;
+        case APPROVAL_WITNESS_UPDATE_TRANSACTION:
+            txInfos.fields[0].item = "New URL";
+            txInfos.fields[0].value = txContent.witnessUrl;
+            txInfos.fields[1].item = stringLabelSenderAddress;
+            txInfos.fields[1].value = fromAddress;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Witness";
+            infoLongPress.text = "Sign transaction to\nUpdate Witness";
+            break;
+        case APPROVAL_UPDATE_BROKERAGE_TRANSACTION:
+            txInfos.fields[0].item = "Brokerage";
+            txInfos.fields[0].value = fullContract;
+            txInfos.fields[1].item = stringLabelSenderAddress;
+            txInfos.fields[1].value = fromAddress;
+            pairList.nbPairs = 2;
+            txInfos.flowTitle = "Review transaction to\nUpdate Brokerage";
+            infoLongPress.text = "Sign transaction to\nUpdate Brokerage";
+            break;
+        case APPROVAL_UPDATE_SETTING_TRANSACTION:
+            txInfos.fields[0].item = "Contract";
+            txInfos.fields[0].value = toAddress;
+            txInfos.fields[1].item = "User pays";
+            txInfos.fields[1].value = fullContract;
+            txInfos.fields[2].item = stringLabelSenderAddress;
+            txInfos.fields[2].value = fromAddress;
+            pairList.nbPairs = 3;
+            txInfos.flowTitle = "Review transaction to\nUpdate Setting";
+            infoLongPress.text = "Sign transaction to\nUpdate Setting";
+            break;
         case APPROVAL_FREEZEASSET_TRANSACTION:
             txInfos.fields[0].item = stringLabelGain;
             txInfos.fields[0].value = fullContract;
@@ -460,6 +498,13 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             pairList.nbPairs = 1;
             txInfos.flowTitle = "Review transaction to\nWithdraw Unfreeze";
             infoLongPress.text = "Sign transaction to\nWithdraw";
+            break;
+        case APPROVAL_CANCELALLUNFREEZEV2_TRANSACTION:
+            txInfos.fields[0].item = stringLabelSenderAddress;
+            txInfos.fields[0].value = fromAddress;
+            pairList.nbPairs = 1;
+            txInfos.flowTitle = "Review transaction to\nCancel All Unfreezes";
+            infoLongPress.text = "Sign transaction to\nCancel Unfreezes";
             break;
         default:
             PRINTF("This should not happen !\n");

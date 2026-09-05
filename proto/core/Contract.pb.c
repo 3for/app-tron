@@ -27,10 +27,10 @@ PB_BIND(protocol_VoteWitnessContract, protocol_VoteWitnessContract, AUTO)
 PB_BIND(protocol_VoteWitnessContract_Vote, protocol_VoteWitnessContract_Vote, AUTO)
 
 
-PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, AUTO)
+PB_BIND(protocol_WitnessCreateContract, protocol_WitnessCreateContract, 2)
 
 
-PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, AUTO)
+PB_BIND(protocol_WitnessUpdateContract, protocol_WitnessUpdateContract, 2)
 
 
 PB_BIND(protocol_AssetIssueContract, protocol_AssetIssueContract, AUTO)
@@ -66,6 +66,9 @@ PB_BIND(protocol_DelegateResourceContract, protocol_DelegateResourceContract, AU
 PB_BIND(protocol_UnDelegateResourceContract, protocol_UnDelegateResourceContract, AUTO)
 
 
+PB_BIND(protocol_CancelAllUnfreezeV2Contract, protocol_CancelAllUnfreezeV2Contract, AUTO)
+
+
 PB_BIND(protocol_UnfreezeAssetContract, protocol_UnfreezeAssetContract, AUTO)
 
 
@@ -90,6 +93,9 @@ PB_BIND(protocol_ProposalDeleteContract, protocol_ProposalDeleteContract, AUTO)
 PB_BIND(protocol_TriggerSmartContract, protocol_TriggerSmartContract, AUTO)
 
 
+PB_BIND(protocol_UpdateSettingContract, protocol_UpdateSettingContract, AUTO)
+
+
 PB_BIND(protocol_ExchangeCreateContract, protocol_ExchangeCreateContract, AUTO)
 
 
@@ -103,6 +109,9 @@ PB_BIND(protocol_ExchangeTransactionContract, protocol_ExchangeTransactionContra
 
 
 PB_BIND(protocol_AccountPermissionUpdateContract, protocol_AccountPermissionUpdateContract, 2)
+
+
+PB_BIND(protocol_UpdateBrokerageContract, protocol_UpdateBrokerageContract, AUTO)
 
 
 
