@@ -46,7 +46,11 @@ def _approve(scenario_navigator: NavigateWithScenario, warning: bool = False) ->
             nav.navigator.navigate_and_compare(
                 nav.screenshot_path, f"{nav.test_name}/warning",
                 [NavInsID.USE_CASE_CHOICE_CONFIRM],
-                screen_change_before_first_instruction=False)
+                screen_change_before_first_instruction=False,
+                # The e-ink transition can expose either a blank frame or the
+                # first review page. The following review_approve() waits for
+                # the stable review screen before comparing it.
+                screen_change_after_last_instruction=False)
         nav.review_approve()
 
 

@@ -127,6 +127,10 @@ static bool parse_fee_limit(const uint8_t *fee_amount,
 bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
     PRINTF("Inside Tron swap_copy_transaction_parameters\n");
 
+    if (params == NULL) {
+        return false;
+    }
+
     // Ensure no extraid
     if (params->destination_address_extra_id == NULL) {
         PRINTF("destination_address_extra_id expected\n");
@@ -142,8 +146,8 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         return false;
     }
 
-    if (params->amount == NULL) {
-        PRINTF("Amount expected\n");
+    if ((params->amount == NULL) || (params->amount_length > MAX_SWAP_AMOUNT_LENGTH)) {
+        PRINTF("Valid amount expected\n");
         return false;
     }
 
@@ -214,7 +218,10 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
         return false;
     }
 
-    convertUint256BE(params->amount, params->amount_length, &swap_validated.amount);
+    if (!convertUint256BE(params->amount, params->amount_length, &swap_validated.amount)) {
+        PRINTF("Invalid amount conversion\n");
+        return false;
+    }
 
     swap_validated.initialized = true;
 

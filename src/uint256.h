@@ -17,8 +17,9 @@
 
 // Adapted from https://github.com/calccrypto/uint256_t
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef struct uint128_t {
     uint64_t elements[2];
@@ -35,7 +36,9 @@ typedef struct uint256_t {
 
 void readu128BE(uint8_t *buffer, uint128_t *target);
 void readu256BE(uint8_t *buffer, uint256_t *target);
-void convertUint256BE(const uint8_t *data, uint32_t length, uint256_t *target);
+// Read 0..32 big-endian bytes, padding on the left with zeroes. NULL data is
+// allowed only for length 0 (the value zero). On failure, target is unchanged.
+bool convertUint256BE(const uint8_t *data, size_t length, uint256_t *target);
 bool zero128(uint128_t *number);
 bool zero256(uint256_t *number);
 void copy128(uint128_t *target, uint128_t *number);
