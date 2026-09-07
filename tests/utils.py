@@ -18,10 +18,14 @@ def check_tx_signature(transaction: bytes, signature: bytes, public_key: str) ->
     return check_hash_signature(tx_hash, signature, public_key)
 
 
-def build_trc20_calldata(to_address_hex: str, amount: Decimal) -> bytes:
-    # transfer(address,uint256)
-    selector = bytes.fromhex("a9059cbb")
+def build_trc20_calldata(
+        to_address_hex: str,
+        amount: Decimal,
+        selector: str = "a9059cbb") -> bytes:
+    selector_bytes = bytes.fromhex(selector)
+    if len(selector_bytes) != 4:
+        raise ValueError("TRC20 selector must be exactly four bytes")
     clean_address = to_address_hex[2:] if to_address_hex.startswith("41") else to_address_hex
     address_bytes = bytes.fromhex(clean_address).rjust(32, b"\x00")
     amount_bytes = int(amount).to_bytes(32, "big")
-    return selector + address_bytes + amount_bytes
+    return selector_bytes + address_bytes + amount_bytes

@@ -209,15 +209,20 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = fullContract;
             txInfos.fields[2].item = TRC20ActionSendAllow;
             txInfos.fields[2].value = toAddress;
-            txInfos.fields[3].item = stringLabelSenderAddress;
-            txInfos.fields[3].value = fromAddress;
             txInfos.flowTitle = "Review Transaction";
             infoLongPress.text = "Sign Transaction";
-            pairList.nbPairs = 4;
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
-                txInfos.fields[4].item = "Max Fee";
-                txInfos.fields[4].value = strings.common.maxFee;
-                pairList.nbPairs = 5;
+                txInfos.fields[3].item = "Token contract";
+                txInfos.fields[3].value = addressSummary;
+                txInfos.fields[4].item = stringLabelSenderAddress;
+                txInfos.fields[4].value = fromAddress;
+                txInfos.fields[5].item = "Max Fee";
+                txInfos.fields[5].value = strings.common.maxFee;
+                pairList.nbPairs = 6;
+            } else {
+                txInfos.fields[3].item = stringLabelSenderAddress;
+                txInfos.fields[3].value = fromAddress;
+                pairList.nbPairs = 4;
             }
             break;
         case APPROVAL_SIMPLE_TRANSACTION:

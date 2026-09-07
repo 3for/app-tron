@@ -381,6 +381,11 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             // get token name if any
             memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0] + 1);
+            if (txContent.contractType == TRIGGERSMARTCONTRACT) {
+                // Always bind a known TRC20 review to the exact contract selected by the
+                // transaction instead of relying on mutable token metadata for identity.
+                getBase58FromAddress(txContent.contractAddress, addressSummary);
+            }
 
             if (txContent.contractType == TRIGGERSMARTCONTRACT) {
                 print_amount(txContent.feeLimit,
@@ -395,7 +400,10 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                 if (swap_check_validity((char *) G_io_apdu_buffer,  // Amount
                                         fullContract,               // Token name
                                         TRC20ActionSendAllow,       // "Send To"
-                                        toAddress)) {
+                                        toAddress,
+                                        (txContent.contractType == TRIGGERSMARTCONTRACT)
+                                            ? txContent.contractAddress
+                                            : NULL)) {
                     PRINTF("Signing valid swap transaction\n");
                     ui_callback_tx_ok(false);
                 } else {

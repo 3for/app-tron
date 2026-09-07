@@ -629,7 +629,10 @@ def test_sign_trc20_send_e20_amount(backend, accounts, scenario_navigator):
 
 def test_sign_trc20_approve(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
-    calldata = build_trc20_calldata("364b03e0815687edaf90b81ff58e496dea7383d7", Decimal(1000000))
+    calldata = build_trc20_calldata(
+        "364b03e0815687edaf90b81ff58e496dea7383d7",
+        Decimal(1000000),
+        selector="095ea7b3")
     tx = pack_contract(
         tron.Transaction.Contract.TriggerSmartContract,
         contract.TriggerSmartContract(
@@ -637,6 +640,60 @@ def test_sign_trc20_approve(backend, accounts, scenario_navigator):
             contract_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
             data=calldata))
     _sign_and_check(client, accounts[0], scenario_navigator, tx)
+
+
+@pytest.mark.parametrize("selector", ["a9059cbb", "095ea7b3"])
+@pytest.mark.parametrize(("token_contract", "other_contract"), [
+    (KNOWN_TOKEN, "TVuYcDgE1hPDR78RR6T5CcFe2iyD5XKKQz"),
+    ("TVuYcDgE1hPDR78RR6T5CcFe2iyD5XKKQz", "TNo59Khpq46FGf4sD7XSWYFNfYfbc8CqNK"),
+    ("TNo59Khpq46FGf4sD7XSWYFNfYfbc8CqNK", "TVuYcDgE1hPDR78RR6T5CcFe2iyD5XKKQz"),
+    ("TMdv9upEHuWdWNZ9kc54R2QxLrKg4JWmn5", "TMNaauqXGpqFNGUmK7XxyRn4RutPJvxdPu"),
+])
+def test_sign_trc20_displays_known_token_contract(
+        backend, accounts, scenario_navigator, selector, token_contract, other_contract):
+    client = TronCommandSender(backend)
+    calldata = build_trc20_calldata(
+        "364b03e0815687edaf90b81ff58e496dea7383d7",
+        Decimal(1000000),
+        selector=selector)
+    tx = pack_contract(
+        tron.Transaction.Contract.TriggerSmartContract,
+        contract.TriggerSmartContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            contract_address=bytes.fromhex(address_hex(token_contract)),
+            data=calldata))
+
+    nav = scenario_navigator.navigator
+    if scenario_navigator.backend.device.is_nano:
+        navigate_instruction = NavInsID.RIGHT_CLICK
+        validation_instructions = [NavInsID.BOTH_CLICK]
+        approval_text = "Sign [Tt]ransaction"
+    else:
+        navigate_instruction = NavInsID.SWIPE_CENTER_TO_LEFT
+        validation_instructions = [
+            NavInsID.USE_CASE_REVIEW_CONFIRM,
+            NavInsID.USE_CASE_STATUS_DISMISS,
+        ]
+        approval_text = "Hold to sign"
+
+    with client.sign_tx(accounts[0]["path"], tx):
+        nav.navigate_until_text(
+            navigate_instruction,
+            [],
+            "Token contract",
+            screen_change_before_first_instruction=True)
+        screen = backend.get_current_screen_content()
+        displayed_text = "".join(event.get("text", "") for event in screen["events"])
+        assert token_contract in displayed_text, screen
+        assert other_contract not in displayed_text, screen
+        nav.navigate_until_text(
+            navigate_instruction,
+            validation_instructions,
+            approval_text,
+            screen_change_before_first_instruction=False)
+
+    response = client.get_async_response()
+    assert check_tx_signature(tx, response.data[0:65], accounts[0]["publicKey"][2:])
 
 
 def test_sign_custom_contract(backend, device, navigator, accounts, scenario_navigator):

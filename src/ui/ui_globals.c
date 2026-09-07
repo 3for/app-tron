@@ -38,6 +38,9 @@ publicKeyContext_t publicKeyContext;
 messageSigningContext712_t messageSigningContext712;
 strings_t strings;
 
+_Static_assert(sizeof(addressSummary) > BASE58CHECK_ADDRESS_SIZE,
+               "review buffer cannot hold a complete TRC20 contract address");
+
 bool ui_callback_address_ok(bool display_menu) {
     helper_send_response_pubkey(&publicKeyContext);
 
