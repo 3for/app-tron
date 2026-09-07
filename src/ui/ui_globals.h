@@ -68,7 +68,7 @@ extern char
     fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 extern char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 extern char addressSummary[40];
-extern char fullContract[MAX_TOKEN_LENGTH];
+extern char fullContract[EXCHANGE_PAIR_REVIEW_SIZE];
 extern char TRC20Action[9];
 extern char TRC20ActionSendAllow[8];
 extern char fullHash[HASH_SIZE * 2 + 1];

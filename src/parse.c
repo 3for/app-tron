@@ -30,6 +30,16 @@ _Static_assert(sizeof(((protocol_WitnessCreateContract *) 0)->url.bytes) == MAX_
 _Static_assert(sizeof(((protocol_WitnessUpdateContract *) 0)->update_url.bytes) ==
                    MAX_WITNESS_URL_LENGTH,
                "witness update URL protobuf bound is out of sync");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token1Id) == TOKENID_SIZE + 1,
+               "exchange token ID bound is out of sync");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token2Id) == TOKENID_SIZE + 1,
+               "exchange token ID bound is out of sync");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token1Name) == EXCHANGE_TOKEN_NAME_MAX_LENGTH + 1,
+               "exchange token name bound is out of sync");
+_Static_assert(sizeof(((ExchangeDetails *) 0)->token2Name) == EXCHANGE_TOKEN_NAME_MAX_LENGTH + 1,
+               "exchange token name bound is out of sync");
+_Static_assert(MAX_TOKEN_LENGTH > EXCHANGE_TOKEN_LABEL_MAX_LENGTH,
+               "token label buffer cannot hold maximum authenticated metadata");
 
 tokenDefinition_t *getKnownToken(txContent_t *context) {
     uint16_t i;

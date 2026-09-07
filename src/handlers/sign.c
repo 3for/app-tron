@@ -524,13 +524,16 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_EXCHANGE_WITHDRAW_INJECT, data_warning);
 
             break;
-        case EXCHANGETRANSACTIONCONTRACT:
-            // memcpy(fullContract, txContent.tokenNames[0], txContent.tokenNamesLength[0]+1);
-            snprintf(fullContract,
-                     sizeof(fullContract),
-                     "%s -> %s",
-                     txContent.tokenNames[0],
-                     txContent.tokenNames[1]);
+        case EXCHANGETRANSACTIONCONTRACT: {
+            int written = snprintf(fullContract,
+                                   sizeof(fullContract),
+                                   "%s -> %s",
+                                   txContent.tokenNames[0],
+                                   txContent.tokenNames[1]);
+            if (written < 0 || (size_t) written >= sizeof(fullContract)) {
+                terminate_signing_session(&txContext, &txContent);
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.exchangeID, (void *) toAddress, sizeof(toAddress), 0);
             print_amount(txContent.amount[0],
@@ -545,6 +548,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_EXCHANGE_TRANSACTION, data_warning);
 
             break;
+        }
         case VOTEWITNESSCONTRACT: {
             // vote for SR
             if (txContent.votesCount == 0) {

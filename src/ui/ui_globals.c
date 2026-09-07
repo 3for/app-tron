@@ -27,7 +27,7 @@ volatile uint8_t customContractField;
 char fromAddress[BASE58CHECK_ADDRESS_SIZE + 1 + 5];  // 5 extra bytes used to inform MultSign ID
 char toAddress[BASE58CHECK_ADDRESS_SIZE + 1];
 char addressSummary[40];
-char fullContract[MAX_TOKEN_LENGTH];
+char fullContract[EXCHANGE_PAIR_REVIEW_SIZE];
 char TRC20Action[9];
 char TRC20ActionSendAllow[8];
 char fullHash[HASH_SIZE * 2 + 1];
@@ -40,6 +40,8 @@ strings_t strings;
 
 _Static_assert(sizeof(addressSummary) > BASE58CHECK_ADDRESS_SIZE,
                "review buffer cannot hold a complete TRC20 contract address");
+_Static_assert(sizeof(fullContract) == EXCHANGE_PAIR_REVIEW_SIZE,
+               "exchange pair review buffer has an unexpected size");
 
 bool ui_callback_address_ok(bool display_menu) {
     helper_send_response_pubkey(&publicKeyContext);
