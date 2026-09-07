@@ -25,4 +25,5 @@ bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
                          const char *toAddress,
-                         const uint8_t *contractAddress);
+                         const uint8_t *contractAddress,
+                         uint64_t feeLimit);

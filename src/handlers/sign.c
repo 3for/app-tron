@@ -403,7 +403,8 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
                                         toAddress,
                                         (txContent.contractType == TRIGGERSMARTCONTRACT)
                                             ? txContent.contractAddress
-                                            : NULL)) {
+                                            : NULL,
+                                        txContent.feeLimit)) {
                     PRINTF("Signing valid swap transaction\n");
                     ui_callback_tx_ok(false);
                 } else {

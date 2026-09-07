@@ -30,6 +30,7 @@ typedef struct swap_validated_s {
     char ticker[MAX_SWAP_TOKEN_LENGTH];
     uint8_t contract_address[ADDRESS_SIZE];
     uint256_t amount;
+    uint64_t max_fee_limit;
     char recipient[BASE58CHECK_ADDRESS_SIZE + 1];
 } swap_validated_t;
 
@@ -84,6 +85,41 @@ static bool resolve_trc20_contract(const char *ticker,
     }
 
     memcpy(contract_address, match->address, ADDRESS_SIZE);
+    return true;
+}
+
+static bool parse_fee_limit(const uint8_t *fee_amount,
+                            uint8_t fee_amount_length,
+                            uint64_t *fee_limit) {
+    // Exchange stores fee amounts in a 16-byte buffer. Accept equivalent
+    // zero-padded encodings, but reject values that do not fit Tron int64.
+    if (fee_amount_length == 0) {
+        *fee_limit = 0;
+        return true;
+    }
+    if ((fee_amount == NULL) || (fee_amount_length > 16)) {
+        return false;
+    }
+
+    while ((fee_amount_length > 8) && (*fee_amount == 0)) {
+        fee_amount++;
+        fee_amount_length--;
+    }
+    if (fee_amount_length > 8) {
+        return false;
+    }
+
+    uint64_t value = 0;
+    for (uint8_t i = 0; i < fee_amount_length; i++) {
+        value = (value << 8) | fee_amount[i];
+    }
+
+    // Transaction.raw.fee_limit is an int64 in the Tron protocol.
+    if (value > INT64_MAX) {
+        return false;
+    }
+
+    *fee_limit = value;
     return true;
 }
 
@@ -155,6 +191,13 @@ bool swap_copy_transaction_parameters(create_transaction_parameters_t *params) {
                                     swap_validated.contract_address)) {
             return false;
         }
+
+        if (!parse_fee_limit(params->fee_amount,
+                             params->fee_amount_length,
+                             &swap_validated.max_fee_limit)) {
+            PRINTF("Invalid TRC20 fee limit\n");
+            return false;
+        }
         swap_validated.is_trc20 = true;
     }
 
@@ -215,7 +258,8 @@ bool swap_check_validity(const char *amount,
                          const char *tokenName,
                          const char *action,
                          const char *toAddress,
-                         const uint8_t *contractAddress) {
+                         const uint8_t *contractAddress,
+                         uint64_t feeLimit) {
     PRINTF("Inside Tron swap_check_validity\n");
 
     if (!G_swap_validated.initialized) {
@@ -238,6 +282,10 @@ bool swap_check_validity(const char *amount,
         if ((contractAddress == NULL) ||
             (memcmp(contractAddress, G_swap_validated.contract_address, ADDRESS_SIZE) != 0)) {
             PRINTF("TRC20 contract requested in this transaction does not match swap asset\n");
+            return false;
+        }
+        if (feeLimit > G_swap_validated.max_fee_limit) {
+            PRINTF("TRC20 fee limit requested in this transaction exceeds swap approval\n");
             return false;
         }
     } else if (contractAddress != NULL) {
