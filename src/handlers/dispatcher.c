@@ -40,6 +40,18 @@ int apdu_dispatcher(const command_t *cmd) {
     }
 #endif  // HAVE_SWAP
 
+    if (isTransactionSigningSessionActive() && cmd->ins != INS_SIGN) {
+        PRINTF("Refused INS during a transaction signing stream\n");
+        resetTransactionSigningSession();
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
+    if (isPersonalMessageSigningSessionActive() && cmd->ins != INS_SIGN_PERSONAL_MESSAGE) {
+        PRINTF("Refused INS during a personal-message signing stream\n");
+        resetPersonalMessageSigningSession();
+        return io_send_sw(E_CONDITIONS_OF_USE_NOT_SATISFIED);
+    }
+
     switch (cmd->ins) {
         case INS_GET_PUBLIC_KEY:
             // Request Public Key

@@ -32,40 +32,67 @@
 
 static const char SIGN_MAGIC[] = "\x19TRON Signed Message:\n";
 
-// Keccak state must survive across P1_MORE chunks, each handled by a fresh call.
-static struct {
-    cx_sha3_t sha3;
+typedef struct {
+    cx_sha3_t keccak;
+    bip32_path_t bip32_path;
+    uint32_t remaining_length;
     bool initialized;
-} personal_msg_ctx;
+} personal_message_signing_context_t;
+
+// This state must survive across P1_MORE chunks, each handled by a fresh call.
+static personal_message_signing_context_t personal_msg_ctx;
+
+bool isPersonalMessageSigningSessionActive(void) {
+    return personal_msg_ctx.initialized;
+}
+
+void resetPersonalMessageSigningSession(void) {
+    explicit_bzero(&personal_msg_ctx, sizeof(personal_msg_ctx));
+}
+
+static int failPersonalMessageSigning(uint16_t status_word) {
+    resetPersonalMessageSigningSession();
+    return io_send_sw(status_word);
+}
 
 int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     if (!HAS_SETTING(S_SIGN_BY_HASH)) {
-        return io_send_sw(E_MISSING_SETTING_SIGN_BY_HASH);
+        return failPersonalMessageSigning(E_MISSING_SETTING_SIGN_BY_HASH);
+    }
+
+    if (p2 != 0) {
+        return failPersonalMessageSigning(E_INCORRECT_P1_P2);
     }
 
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+        bip32_path_t bip32_path;
+        off_t ret = read_bip32_path(workBuffer, dataLength, &bip32_path);
         if (ret < 0) {
-            explicit_bzero(&personal_msg_ctx, sizeof(personal_msg_ctx));
-            return io_send_sw(E_INCORRECT_BIP32_PATH);
+            return failPersonalMessageSigning(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;
 
         if (dataLength < 4) {
-            explicit_bzero(&personal_msg_ctx, sizeof(personal_msg_ctx));
-            return io_send_sw(E_INCORRECT_LENGTH);
+            return failPersonalMessageSigning(E_INCORRECT_LENGTH);
         }
 
         // Message Length
-        txContent.dataBytes = U4BE(workBuffer, 0);
+        uint32_t message_length = U4BE(workBuffer, 0);
         workBuffer += 4;
         dataLength -= 4;
+        if (dataLength > message_length) {
+            return failPersonalMessageSigning(E_INCORRECT_LENGTH);
+        }
+
+        // Commit the new session only after the entire first-chunk envelope is valid.
+        resetPersonalMessageSigningSession();
+        personal_msg_ctx.bip32_path = bip32_path;
+        personal_msg_ctx.remaining_length = message_length;
 
         // Initialize message header + length
-        CX_ASSERT(cx_keccak_init_no_throw(&personal_msg_ctx.sha3, 256));
-        personal_msg_ctx.initialized = true;
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.sha3,
+        CX_ASSERT(cx_keccak_init_no_throw(&personal_msg_ctx.keccak, 256));
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.keccak,
                                    0,
                                    (const uint8_t *) SIGN_MAGIC,
                                    sizeof(SIGN_MAGIC) - 1,
@@ -73,37 +100,39 @@ int handleSignPersonalMessage(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint1
                                    0));
 
         char tmp[11];
-        snprintf((char *) tmp, 11, "%d", (uint32_t) txContent.dataBytes);
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.sha3,
+        snprintf(tmp, sizeof(tmp), "%u", (unsigned int) personal_msg_ctx.remaining_length);
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.keccak,
                                    0,
                                    (const uint8_t *) tmp,
                                    strlen(tmp),
                                    NULL,
                                    0));
+        personal_msg_ctx.initialized = true;
 
     } else if (p1 != P1_MORE || !personal_msg_ctx.initialized) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return failPersonalMessageSigning(E_INCORRECT_P1_P2);
     }
 
-    if (p2 != 0) {
-        return io_send_sw(E_INCORRECT_P1_P2);
-    }
-    if (dataLength > txContent.dataBytes) {
-        explicit_bzero(&personal_msg_ctx, sizeof(personal_msg_ctx));
-        return io_send_sw(E_INCORRECT_LENGTH);
+    if (dataLength > personal_msg_ctx.remaining_length) {
+        return failPersonalMessageSigning(E_INCORRECT_LENGTH);
     }
 
-    CX_ASSERT(
-        cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.sha3, 0, workBuffer, dataLength, NULL, 0));
-    txContent.dataBytes -= dataLength;
-    if (txContent.dataBytes == 0) {
-        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.sha3,
+    CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.keccak,
+                               0,
+                               workBuffer,
+                               dataLength,
+                               NULL,
+                               0));
+    personal_msg_ctx.remaining_length -= dataLength;
+    if (personal_msg_ctx.remaining_length == 0) {
+        CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &personal_msg_ctx.keccak,
                                    CX_LAST,
                                    workBuffer,
                                    0,
                                    transactionContext.hash,
                                    32));
-        explicit_bzero(&personal_msg_ctx, sizeof(personal_msg_ctx));
+        transactionContext.bip32_path = personal_msg_ctx.bip32_path;
+        resetPersonalMessageSigningSession();
         format_hex(transactionContext.hash,
                    sizeof(transactionContext.hash),
                    fullContract,

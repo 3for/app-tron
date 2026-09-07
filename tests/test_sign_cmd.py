@@ -2,11 +2,12 @@ from decimal import Decimal
 
 import pytest
 from ragger.backend.interface import BackendInterface
+from ragger.bip import pack_derivation_path
 from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavInsID
 from ragger.navigator.navigation_scenario import NavigateWithScenario
 
-from application_client.tron_command_sender import TronCommandSender, Errors
+from application_client.tron_command_sender import CLA, InsType, P1, TronCommandSender, Errors
 from application_client.tron_transaction import pack_contract, address_hex, contract, tron
 from application_client.settings import SettingID, settings_toggle
 from utils import check_tx_signature, build_trc20_calldata
@@ -89,6 +90,44 @@ def test_sign_transfer_with_data_field(backend, device, navigator, accounts, sce
             amount=100000000),
         b"CryptoChain-TronSR Ledger Transactions Tests")
     _sign_and_check(client, accounts[0], scenario_navigator, tx, warning=True)
+
+
+def test_transaction_stream_rejects_personal_message_interleaving(backend,
+                                                                  device,
+                                                                  navigator,
+                                                                  accounts):
+    client = TronCommandSender(backend)
+    settings_toggle(device,
+                    navigator,
+                    [SettingID.DATA_ALLOWED, SettingID.SIGN_BY_HASH])
+    tx = pack_contract(
+        tron.Transaction.Contract.TransferContract,
+        contract.TransferContract(
+            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+            to_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
+            amount=100000000),
+        b"A" * 150)
+    apdus = client._build_sign_apdus(accounts[0]["path"], tx, [])
+    assert len(apdus) > 1
+    assert apdus[0][0] == P1.FIRST
+    assert b"A" * 150 in bytes(apdus[0][1])
+
+    backend.exchange(CLA, InsType.SIGN, apdus[0][0], 0, apdus[0][1])
+
+    personal_message = pack_derivation_path(accounts[0]["path"]) + b"\x00\x00\x00\x00"
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA,
+                         InsType.SIGN_PERSONAL_MESSAGE,
+                         P1.FIRST,
+                         1,
+                         personal_message)
+    assert error.value.status == Errors.CONDITIONS_OF_USE_NOT_SATISFIED
+
+    # The rejected interleaving aborts the old transaction, so it cannot be
+    # resumed after another command has had a chance to alter signing state.
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN, apdus[1][0], 0, apdus[1][1])
+    assert error.value.status == Errors.INCORRECT_P2
 
 
 def test_sign_transfer_wrong_path(backend, accounts, scenario_navigator):

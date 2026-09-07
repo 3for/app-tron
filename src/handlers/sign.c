@@ -40,6 +40,22 @@
 #define DELEGATE_LOCK_OFFSET        100
 #define DELEGATE_LOCK_PERIOD_OFFSET 106
 
+static bool transaction_signing_session_active;
+
+bool isTransactionSigningSessionActive(void) {
+    return transaction_signing_session_active;
+}
+
+void resetTransactionSigningSession(void) {
+    transaction_signing_session_active = false;
+    terminate_signing_session(&txContext, &txContent);
+}
+
+static int failTransactionSigning(uint16_t status_word) {
+    resetTransactionSigningSession();
+    return io_send_sw(status_word);
+}
+
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
     memcpy(destination + voteSlot(index, VOTE_ADDRESS), from, VOTE_ADDRESS_SIZE);
@@ -164,39 +180,50 @@ static bool format_delegate_lock_period(char *destination,
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
     uint256_t uint256;
     bool data_warning;
+    bool session_was_active = transaction_signing_session_active;
+
+    // A chunk must explicitly reactivate the session before returning E_OK.
+    // Therefore every error makes the previous stream impossible to resume.
+    transaction_signing_session_active = false;
 
     if (p2 != 0x00) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return failTransactionSigning(E_INCORRECT_P1_P2);
     }
 
     // initialize context
     if ((p1 == P1_FIRST) || (p1 == P1_SIGN)) {
-        off_t ret = read_bip32_path(workBuffer, dataLength, &transactionContext.bip32_path);
+        bip32_path_t bip32_path;
+        off_t ret = read_bip32_path(workBuffer, dataLength, &bip32_path);
         if (ret < 0) {
-            return io_send_sw(E_INCORRECT_BIP32_PATH);
+            return failTransactionSigning(E_INCORRECT_BIP32_PATH);
         }
         workBuffer += ret;
         dataLength -= ret;
 
         initTx(&txContext, &txContent);
+        transactionContext.bip32_path = bip32_path;
         customContractField = 0;
 
     } else if ((p1 & 0xF0) == P1_TRC10_NAME) {
+        if (!session_was_active) {
+            return failTransactionSigning(E_INCORRECT_P1_P2);
+        }
         PRINTF("Setting token name\nContract type: %d\n", txContent.contractType);
         switch (txContent.contractType) {
             case TRANSFERASSETCONTRACT:
             case EXCHANGECREATECONTRACT:
                 // Max 2 Tokens Name
                 if ((p1 & 0x07) > 1) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return failTransactionSigning(E_INCORRECT_P1_P2);
                 }
                 // Decode Token name and validate signature
                 if (!parseTokenName((p1 & 0x07), workBuffer, dataLength, &txContent)) {
                     PRINTF("Unexpected parser status\n");
-                    return io_send_sw(E_INCORRECT_DATA);
+                    return failTransactionSigning(E_INCORRECT_DATA);
                 }
                 // if not last token name, return
                 if (!(p1 & 0x08)) {
+                    transaction_signing_session_active = true;
                     return io_send_sw(E_OK);
                 }
                 dataLength = 0;
@@ -207,33 +234,35 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             case EXCHANGETRANSACTIONCONTRACT:
                 // Max 1 pair set
                 if ((p1 & 0x07) > 0) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return failTransactionSigning(E_INCORRECT_P1_P2);
                 }
                 // error if not last
                 if (!(p1 & 0x08)) {
-                    return io_send_sw(E_INCORRECT_P1_P2);
+                    return failTransactionSigning(E_INCORRECT_P1_P2);
                 }
                 PRINTF("Decoding Exchange\n");
                 // Decode Token name and validate signature
                 if (!parseExchange(workBuffer, dataLength, &txContent)) {
                     PRINTF("Unexpected parser status\n");
-                    return io_send_sw(E_INCORRECT_DATA);
+                    return failTransactionSigning(E_INCORRECT_DATA);
                 }
                 dataLength = 0;
                 break;
             default:
                 // Error if any other contract
-                return io_send_sw(E_INCORRECT_DATA);
+                return failTransactionSigning(E_INCORRECT_DATA);
         }
     } else if ((p1 != P1_MORE) && (p1 != P1_LAST)) {
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return failTransactionSigning(E_INCORRECT_P1_P2);
+    } else if (!session_was_active) {
+        return failTransactionSigning(E_INCORRECT_P1_P2);
     }
 
     // Context must be initialized first
     if (!txContext.initialized) {
         PRINTF("Context not initialized\n");
         // NOTE: if txContext is not initialized, then there must be seq errors in P1/P2.
-        return io_send_sw(E_INCORRECT_P1_P2);
+        return failTransactionSigning(E_INCORRECT_P1_P2);
     }
     // hash data
     CX_ASSERT(cx_hash_no_throw((cx_hash_t *) &txContext.sha2, 0, workBuffer, dataLength, NULL, 32));
@@ -263,14 +292,14 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             if (p1 == P1_LAST || p1 == P1_SIGN) {
                 break;
             }
+            transaction_signing_session_active = true;
             return io_send_sw(E_OK);
         case USTREAM_FINISHED:
             break;
         case USTREAM_FAULT:
-            initTx(&txContext, &txContent);
-            return io_send_sw(E_INCORRECT_DATA);
+            return failTransactionSigning(E_INCORRECT_DATA);
         case USTREAM_MISSING_SETTING_DATA_ALLOWED:
-            initTx(&txContext, &txContent);
+            resetTransactionSigningSession();
 #ifdef HAVE_SWAP
             if (G_called_from_swap) {
                 return io_send_sw(E_SWAP_CHECKING_FAIL);
@@ -279,8 +308,7 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             return io_send_sw(E_MISSING_SETTING_DATA_ALLOWED);
         default:
             PRINTF("Unexpected parser status\n");
-            initTx(&txContext, &txContent);
-            return io_send_sw(txResult);
+            return failTransactionSigning(txResult);
     }
 
     // Last data hash

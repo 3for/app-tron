@@ -1,7 +1,13 @@
-from application_client.settings import SettingID, settings_toggle
-from application_client.tron_command_sender import TronCommandSender
+import struct
+
+import pytest
 from Crypto.Hash import keccak
+from ragger.bip import pack_derivation_path
+from ragger.error import ExceptionRAPDU
 from ragger.navigator.navigation_scenario import NavigateWithScenario
+
+from application_client.settings import SettingID, settings_toggle
+from application_client.tron_command_sender import CLA, Errors, InsType, P1, TronCommandSender
 from utils import check_hash_signature
 
 TRX_PATH = "m/44'/195'/0'/0/0"
@@ -19,13 +25,39 @@ def test_sign_personal_message(backend, device, navigator, accounts, scenario_na
     client = TronCommandSender(backend)
     settings_toggle(device, navigator, [SettingID.SIGN_BY_HASH])
     message = b"CryptoChain-TronSR Ledger Transactions Tests"
-    with client.sign_personal_message(accounts[0]["path"], message):
+    split_at = len(message) // 2
+    first_chunk = (pack_derivation_path(accounts[0]["path"]) +
+                   struct.pack(">I", len(message)) + message[:split_at])
+    backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0, first_chunk)
+    with backend.exchange_async(CLA,
+                                InsType.SIGN_PERSONAL_MESSAGE,
+                                P1.MORE,
+                                0,
+                                message[split_at:]):
         _approve(scenario_navigator, "Sign message")
     resp = client.get_async_response().data
 
     signed = SIGN_MAGIC + str(len(message)).encode() + message
     digest = keccak.new(digest_bits=256, data=signed).digest()
     assert check_hash_signature(digest, resp[0:65], accounts[0]["publicKey"][2:])
+
+
+def test_personal_message_stream_rejects_unrelated_instruction(backend,
+                                                               device,
+                                                               navigator,
+                                                               accounts):
+    settings_toggle(device, navigator, [SettingID.SIGN_BY_HASH])
+    first_chunk = (pack_derivation_path(accounts[0]["path"]) +
+                   struct.pack(">I", 2) + b"A")
+    backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.FIRST, 0, first_chunk)
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.GET_APP_CONFIGURATION, 0, 0, b"")
+    assert error.value.status == Errors.CONDITIONS_OF_USE_NOT_SATISFIED
+
+    with pytest.raises(ExceptionRAPDU) as error:
+        backend.exchange(CLA, InsType.SIGN_PERSONAL_MESSAGE, P1.MORE, 0, b"B")
+    assert error.value.status == Errors.INCORRECT_P2
 
 
 def test_sign_tip712(backend, device, navigator, accounts, scenario_navigator):

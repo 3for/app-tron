@@ -46,6 +46,11 @@
 
 int apdu_dispatcher(const command_t *cmd);
 
+bool isTransactionSigningSessionActive(void);
+void resetTransactionSigningSession(void);
+bool isPersonalMessageSigningSessionActive(void);
+void resetPersonalMessageSigningSession(void);
+
 int handleGetPublicKey(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint16_t dataLength);
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);
 int handleSignByHash(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength);

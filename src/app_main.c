@@ -67,7 +67,8 @@ void app_main(void) {
     }
 #endif  // HAVE_SWAP
 
-    terminate_signing_session(&txContext, &txContent);
+    resetTransactionSigningSession();
+    resetPersonalMessageSigningSession();
 
     for (;;) {
         BEGIN_TRY {
@@ -105,7 +106,8 @@ void app_main(void) {
                 }
             }
             CATCH(EXCEPTION_IO_RESET) {
-                terminate_signing_session(&txContext, &txContent);
+                resetTransactionSigningSession();
+                resetPersonalMessageSigningSession();
                 CLOSE_TRY;
                 THROW(EXCEPTION_IO_RESET);
             }
