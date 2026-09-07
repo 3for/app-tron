@@ -36,7 +36,9 @@
 
 // TRON permission model: owner=0, witness=1, active=2..9 (max 8 active permissions).
 // The largest valid ID is a single decimal digit, which is all the "Px - " prefix can hold.
-#define MAX_PERMISSION_ID 9
+#define MAX_PERMISSION_ID           9
+#define DELEGATE_LOCK_OFFSET        100
+#define DELEGATE_LOCK_PERIOD_OFFSET 106
 
 static void fillVoteAddressSlot(void *destination, const char *from, uint8_t index) {
     memset(destination + voteSlot(index, VOTE_ADDRESS), 0, VOTE_PACK);
@@ -108,6 +110,55 @@ static bool format_percent(uint64_t value, char *destination, size_t destination
     destination[length++] = '%';
     destination[length] = '\0';
     return true;
+}
+
+static bool set_resource_label(char *destination,
+                               size_t destination_size,
+                               uint8_t resource,
+                               bool allow_tron_power) {
+    const char *label;
+
+    switch (resource) {
+        case protocol_ResourceCode_BANDWIDTH:
+            label = "Bandwidth";
+            break;
+        case protocol_ResourceCode_ENERGY:
+            label = "Energy";
+            break;
+        case protocol_ResourceCode_TRON_POWER:
+            if (!allow_tron_power) {
+                return false;
+            }
+            label = "Tron Power";
+            break;
+        default:
+            return false;
+    }
+
+    return strlcpy(destination, label, destination_size) < destination_size;
+}
+
+static bool format_delegate_lock_period(char *destination,
+                                        size_t destination_size,
+                                        bool lock,
+                                        int64_t lock_period) {
+    if (!lock) {
+        return strlcpy(destination, "Not applied", destination_size) < destination_size;
+    }
+    if (lock_period == 0) {
+        return strlcpy(destination, "Network default", destination_size) < destination_size;
+    }
+    if (lock_period < 0) {
+        return false;
+    }
+
+    size_t length = print_amount((uint64_t) lock_period, destination, destination_size, 0);
+    if (length == 0) {
+        return false;
+    }
+
+    const char *suffix = lock_period == 1 ? " block" : " blocks";
+    return strlcat(destination, suffix, destination_size) < destination_size;
 }
 
 int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength) {
@@ -546,10 +597,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_WITNESS_UPDATE_TRANSACTION, data_warning);
             break;
         case FREEZEBALANCECONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             if (!is_zero_address(txContent.destination)) {
@@ -562,10 +612,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case UNFREEZEBALANCECONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             if (!is_zero_address(txContent.destination)) {
                 getBase58FromAddress(txContent.destination, toAddress);
@@ -577,10 +626,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case FREEZEBALANCEV2CONTRACT:  // Freeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, toAddress);
@@ -588,10 +636,9 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
             ux_flow_display(APPROVAL_FREEZEASSETV2_TRANSACTION, data_warning);
             break;
         case UNFREEZEBALANCEV2CONTRACT:  // unreeze TRX
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract, sizeof(fullContract), txContent.resource, true)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.account, toAddress);
@@ -600,15 +647,28 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case DELEGATERESOURCECONTRACT:  // Delegate resource
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract,
+                                    sizeof(fullContract),
+                                    txContent.resource,
+                                    false)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             if (txContent.customData == 0) {
-                strlcpy((char *) G_io_apdu_buffer + 100, "False", sizeof(G_io_apdu_buffer) - 100);
+                strlcpy((char *) G_io_apdu_buffer + DELEGATE_LOCK_OFFSET,
+                        "False",
+                        sizeof(G_io_apdu_buffer) - DELEGATE_LOCK_OFFSET);
             } else {
-                strlcpy((char *) G_io_apdu_buffer + 100, "True", sizeof(G_io_apdu_buffer) - 100);
+                strlcpy((char *) G_io_apdu_buffer + DELEGATE_LOCK_OFFSET,
+                        "True",
+                        sizeof(G_io_apdu_buffer) - DELEGATE_LOCK_OFFSET);
+            }
+            if (!format_delegate_lock_period(
+                    (char *) G_io_apdu_buffer + DELEGATE_LOCK_PERIOD_OFFSET,
+                    sizeof(G_io_apdu_buffer) - DELEGATE_LOCK_PERIOD_OFFSET,
+                    txContent.customData != 0,
+                    txContent.lockPeriod)) {
+                return io_send_sw(E_INCORRECT_DATA);
             }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
@@ -618,10 +678,12 @@ int handleSign(uint8_t p1, uint8_t p2, uint8_t *workBuffer, uint16_t dataLength)
 
             break;
         case UNDELEGATERESOURCECONTRACT:  // Undelegate resource
-            if (txContent.resource == 0)
-                strcpy(fullContract, "Bandwidth");
-            else
-                strcpy(fullContract, "Energy");
+            if (!set_resource_label(fullContract,
+                                    sizeof(fullContract),
+                                    txContent.resource,
+                                    false)) {
+                return io_send_sw(E_INCORRECT_DATA);
+            }
 
             print_amount(txContent.amount[0], (char *) G_io_apdu_buffer, 100, SUN_DIG);
             getBase58FromAddress(txContent.destination, toAddress);

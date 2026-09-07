@@ -539,6 +539,34 @@ static bool witness_update_contract(txContent_t *content, pb_istream_t *stream) 
     return true;
 }
 
+static bool copy_resource_code(uint8_t *destination,
+                               protocol_ResourceCode resource,
+                               bool allow_tron_power) {
+    switch (resource) {
+        case protocol_ResourceCode_BANDWIDTH:
+        case protocol_ResourceCode_ENERGY:
+            *destination = (uint8_t) resource;
+            return true;
+        case protocol_ResourceCode_TRON_POWER:
+            if (allow_tron_power) {
+                *destination = (uint8_t) resource;
+                return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+static bool address_is_empty(const uint8_t address[ADDRESS_SIZE]) {
+    for (size_t i = 0; i < ADDRESS_SIZE; i++) {
+        if (address[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) {
     if (!pb_decode(stream, protocol_FreezeBalanceContract_fields, &msg.freeze_balance_contract)) {
         return false;
@@ -550,7 +578,11 @@ static bool freeze_balance_contract(txContent_t *content, pb_istream_t *stream) 
     COPY_ADDRESS(content->account, &msg.freeze_balance_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.freeze_balance_contract.receiver_address);
     content->amount[0] = msg.freeze_balance_contract.frozen_balance;
-    content->resource = msg.freeze_balance_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.freeze_balance_contract.resource, true) ||
+        ((msg.freeze_balance_contract.resource == protocol_ResourceCode_TRON_POWER) &&
+         !address_is_empty(msg.freeze_balance_contract.receiver_address))) {
+        return false;
+    }
     return true;
 }
 
@@ -560,7 +592,11 @@ static bool unfreeze_balance_contract(txContent_t *content, pb_istream_t *stream
                    &msg.unfreeze_balance_contract)) {
         return false;
     }
-    content->resource = msg.unfreeze_balance_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.unfreeze_balance_contract.resource, true) ||
+        ((msg.unfreeze_balance_contract.resource == protocol_ResourceCode_TRON_POWER) &&
+         !address_is_empty(msg.unfreeze_balance_contract.receiver_address))) {
+        return false;
+    }
 
     COPY_ADDRESS(content->account, &msg.unfreeze_balance_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.unfreeze_balance_contract.receiver_address);
@@ -577,7 +613,9 @@ static bool freeze_balance_v2_contract(txContent_t *content, pb_istream_t *strea
     COPY_ADDRESS(content->account, &msg.freeze_balance_v2_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.freeze_balance_v2_contract.owner_address);
     content->amount[0] = msg.freeze_balance_v2_contract.frozen_balance;
-    content->resource = msg.freeze_balance_v2_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.freeze_balance_v2_contract.resource, true)) {
+        return false;
+    }
     return true;
 }
 
@@ -587,7 +625,9 @@ static bool unfreeze_balance_v2_contract(txContent_t *content, pb_istream_t *str
                    &msg.unfreeze_balance_v2_contract)) {
         return false;
     }
-    content->resource = msg.unfreeze_balance_v2_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.unfreeze_balance_v2_contract.resource, true)) {
+        return false;
+    }
     content->amount[0] = msg.unfreeze_balance_v2_contract.unfreeze_balance;
 
     COPY_ADDRESS(content->account, &msg.unfreeze_balance_v2_contract.owner_address);
@@ -622,9 +662,13 @@ static bool delegate_resource_contract(txContent_t *content, pb_istream_t *strea
                    &msg.delegate_resource_contract)) {
         return false;
     }
-    content->resource = msg.delegate_resource_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.delegate_resource_contract.resource, false) ||
+        (msg.delegate_resource_contract.lock && msg.delegate_resource_contract.lock_period < 0)) {
+        return false;
+    }
     content->amount[0] = msg.delegate_resource_contract.balance;
     content->customData = msg.delegate_resource_contract.lock;
+    content->lockPeriod = msg.delegate_resource_contract.lock_period;
 
     COPY_ADDRESS(content->account, &msg.delegate_resource_contract.owner_address);
     COPY_ADDRESS(content->destination, &msg.delegate_resource_contract.receiver_address);
@@ -637,7 +681,9 @@ static bool undelegate_resource_contrace(txContent_t *content, pb_istream_t *str
                    &msg.undelegate_resource_contract)) {
         return false;
     }
-    content->resource = msg.undelegate_resource_contract.resource;
+    if (!copy_resource_code(&content->resource, msg.undelegate_resource_contract.resource, false)) {
+        return false;
+    }
     content->amount[0] = msg.undelegate_resource_contract.balance;
 
     COPY_ADDRESS(content->account, &msg.undelegate_resource_contract.owner_address);

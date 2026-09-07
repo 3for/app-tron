@@ -148,6 +148,7 @@ typedef struct voteEntry_t {
 typedef struct txContent_t {
     uint64_t amount[2];
     uint64_t exchangeID;
+    int64_t lockPeriod;
     uint8_t account[ADDRESS_SIZE];
     uint8_t destination[ADDRESS_SIZE];
     uint8_t contractAddress[ADDRESS_SIZE];

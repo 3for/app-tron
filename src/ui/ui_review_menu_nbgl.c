@@ -476,11 +476,13 @@ static void prepareTxInfos(ui_approval_state_t state, bool data_warning) {
             txInfos.fields[1].value = (const char *) G_io_apdu_buffer;
             txInfos.fields[2].item = "Lock";
             txInfos.fields[2].value = (const char *) G_io_apdu_buffer + 100;
-            txInfos.fields[3].item = stringLabelRecipientAddress;
-            txInfos.fields[3].value = toAddress;
-            txInfos.fields[4].item = stringLabelSenderAddress;
-            txInfos.fields[4].value = fromAddress;
-            pairList.nbPairs = 5;
+            txInfos.fields[3].item = "Lock period";
+            txInfos.fields[3].value = (const char *) G_io_apdu_buffer + 106;
+            txInfos.fields[4].item = stringLabelRecipientAddress;
+            txInfos.fields[4].value = toAddress;
+            txInfos.fields[5].item = stringLabelSenderAddress;
+            txInfos.fields[5].value = fromAddress;
+            pairList.nbPairs = 6;
             txInfos.flowTitle = "Review transaction to\nDelegate Resource";
             infoLongPress.text = "Sign transaction to\nDelegate";
             break;
