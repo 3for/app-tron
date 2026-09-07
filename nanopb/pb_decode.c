@@ -213,6 +213,16 @@ static bool checkreturn pb_decode_varint32_eof(pb_istream_t *stream, uint32_t *d
                     PB_RETURN_ERROR(stream, "varint overflow");
                 }
             }
+            else if (bitpos == 28)
+            {
+                /* Check before truncating, even if the varint continues.
+                 * A negative int32 may be sign extended to ten bytes. */
+                if ((byte & 0x70) != 0 && (byte & 0xF8) != 0xF8)
+                {
+                    PB_RETURN_ERROR(stream, "varint overflow");
+                }
+                result |= (uint32_t)(byte & 0x0F) << bitpos;
+            }
             else
             {
                 result |= (uint32_t)(byte & 0x7F) << bitpos;
@@ -220,11 +230,6 @@ static bool checkreturn pb_decode_varint32_eof(pb_istream_t *stream, uint32_t *d
             bitpos = (uint_fast8_t)(bitpos + 7);
         } while (byte & 0x80);
         
-        if (bitpos == 35 && (byte & 0x70) != 0)
-        {
-            /* The last byte was at bitpos=28, so only bottom 4 bits fit. */
-            PB_RETURN_ERROR(stream, "varint overflow");
-        }
    }
    
    *dest = result;

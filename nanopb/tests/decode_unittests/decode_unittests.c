@@ -99,12 +99,68 @@ int main()
         TEST((s = S("\x00"), pb_decode_varint32(&s, &u) && u == 0));
         TEST((s = S("\x01"), pb_decode_varint32(&s, &u) && u == 1));
         TEST((s = S("\xAC\x02"), pb_decode_varint32(&s, &u) && u == 300));
+        TEST((s = S("\x80\x00"), pb_decode_varint32(&s, &u) && u == 0));
+        TEST((s = S("\x81\x00"), pb_decode_varint32(&s, &u) && u == 1));
         TEST((s = S("\xFF\xFF\xFF\xFF\x0F"), pb_decode_varint32(&s, &u) && u == UINT32_MAX));
         TEST((s = S("\xFF\xFF\xFF\xFF\x8F\x00"), pb_decode_varint32(&s, &u) && u == UINT32_MAX));
+        TEST((s = S("\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x01"),
+              pb_decode_varint32(&s, &u) && u == UINT32_MAX));
+        TEST((s = S("\x80\x80\x80\x80\xF8\xFF\xFF\xFF\xFF\x01"),
+              pb_decode_varint32(&s, &u) && u == 0x80000000U));
         TEST((s = S("\xFF\xFF\xFF\xFF\x10"), !pb_decode_varint32(&s, &u)));
+        TEST((s = S("\x80\x80\x80\x80\x90\x00"), !pb_decode_varint32(&s, &u)));
         TEST((s = S("\xFF\xFF\xFF\xFF\x40"), !pb_decode_varint32(&s, &u)));
+        TEST((s = S("\x80\x80\x80\x80\x78"), !pb_decode_varint32(&s, &u)));
+        TEST((s = S("\xFF\xFF\xFF\xFF\x7F"), !pb_decode_varint32(&s, &u)));
         TEST((s = S("\xFF\xFF\xFF\xFF\xFF\x01"), !pb_decode_varint32(&s, &u)));
         TEST((s = S("\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x80\x00"), !pb_decode_varint32(&s, &u)));
+    }
+
+    {
+        pb_istream_t s;
+        bool value;
+        unsigned int high, length;
+        uint8_t buffer[10];
+
+        COMMENT("Test pb_decode_bool without losing nonzero high bits");
+        TEST((s = S("\x00"), pb_decode_bool(&s, &value) && !value));
+        TEST((s = S("\x01"), pb_decode_bool(&s, &value) && value));
+        TEST((s = S("\x02"), pb_decode_bool(&s, &value) && value));
+        TEST((s = S("\x80\x00"), pb_decode_bool(&s, &value) && !value));
+        TEST((s = S("\x81\x00"), pb_decode_bool(&s, &value) && value));
+        TEST((s = S("\xFF\xFF\xFF\xFF\x0F"), pb_decode_bool(&s, &value) && value));
+        TEST((s = S("\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x01"),
+              !pb_decode_bool(&s, &value)));
+        TEST((s = S("\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x01"),
+              pb_decode_bool(&s, &value) && value));
+        TEST((s = S("\x80"), !pb_decode_bool(&s, &value)));
+
+        /* Every fifth-byte payload that would truncate to zero must fail,
+         * regardless of how many trailing zero-extension bytes follow. */
+        for (high = 0x10; high <= 0x70; high += 0x10)
+        {
+            for (length = 5; length <= sizeof(buffer); length++)
+            {
+                uint32_t u = 123;
+                memset(buffer, 0x80, sizeof(buffer));
+                buffer[4] = (uint8_t)(0x80 | high);
+                buffer[length - 1] &= 0x7F;
+                s = pb_istream_from_buffer(buffer, length);
+                TEST(!pb_decode_varint32(&s, &u) && u == 123);
+                value = true;
+                s = pb_istream_from_buffer(buffer, length);
+                TEST(!pb_decode_bool(&s, &value) && value);
+            }
+        }
+
+        /* Nonminimal encodings of valid values remain supported. */
+        memset(buffer, 0x80, sizeof(buffer));
+        buffer[9] = 0;
+        s = pb_istream_from_buffer(buffer, sizeof(buffer));
+        TEST(pb_decode_bool(&s, &value) && !value && s.bytes_left == 0);
+        buffer[0] = 0x81;
+        s = pb_istream_from_buffer(buffer, sizeof(buffer));
+        TEST(pb_decode_bool(&s, &value) && value && s.bytes_left == 0);
     }
 
     {
