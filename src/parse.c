@@ -321,7 +321,11 @@ static bool printTokenFromID(txContent_t *content,
         content->tokenIsTrx[token_index] = true;
         return true;
     }
-    strlcpy(out, (char *) data, MAX_TOKEN_LENGTH);
+    if (size >= sizeof(content->tokenNames[token_index])) {
+        return false;
+    }
+    memcpy(out, data, size);
+    out[size] = '\0';
     content->tokenIsTrx[token_index] = false;
     return true;
 }

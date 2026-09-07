@@ -48,7 +48,8 @@ def get_default_accounts(mnemonic: str, count: int = 2) -> list:
     return accounts
 
 
-def pack_contract(contract_type, new_contract, data: bytes = None, permission_id: int = None) -> bytes:
+def pack_contract(contract_type, new_contract, data: bytes = None, permission_id: int = None,
+                  contract_value_prefix: bytes = b"") -> bytes:
     """Serialize a Transaction.raw_data wrapping a single contract."""
     tx = tron.Transaction()
     tx.raw_data.timestamp = 1575712492061
@@ -62,6 +63,10 @@ def pack_contract(contract_type, new_contract, data: bytes = None, permission_id
     c.type = contract_type
     param = Any()
     param.Pack(new_contract, deterministic=True)
+    if contract_value_prefix:
+        # Preserve deliberately duplicated wire fields in Any.value. Parsing and
+        # reserializing would collapse singular fields to their final value.
+        param.value = contract_value_prefix + param.value
     c.parameter.CopyFrom(param)
 
     if permission_id:

@@ -16,6 +16,18 @@ from utils import check_tx_signature, build_trc20_calldata
 KNOWN_TOKEN = "TBoTZcARzWVgnNuB9SyE3S5g1RwsXoQL16"
 
 
+def _bytes_field(field_number: int, value: bytes) -> bytes:
+    """Encode the small length-delimited fields used by duplicate-field fixtures."""
+    assert 0 < field_number < 16
+    assert len(value) < 128
+    return bytes([(field_number << 3) | 2, len(value)]) + value
+
+
+def _decode_contract_value(tx: bytes, message_type):
+    raw = type(tron.Transaction().raw_data).FromString(tx)
+    return message_type.FromString(raw.contract[0].parameter.value)
+
+
 def _approve(scenario_navigator: NavigateWithScenario, warning: bool = False) -> None:
     """Approve a Tron transaction review, across devices.
 
@@ -163,13 +175,17 @@ def test_sign_transfer_permissioned(backend, accounts, scenario_navigator):
 
 def test_sign_asset_without_name(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
+    asset = contract.TransferAssetContract(
+        owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+        to_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
+        amount=1000000,
+        asset_name="1002000".encode())
     tx = pack_contract(
         tron.Transaction.Contract.TransferAssetContract,
-        contract.TransferAssetContract(
-            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
-            to_address=bytes.fromhex(address_hex(KNOWN_TOKEN)),
-            amount=1000000,
-            asset_name="1002000".encode()))
+        asset,
+        contract_value_prefix=_bytes_field(1, b"0000000 [USDT]\x00X"))
+    decoded = _decode_contract_value(tx, contract.TransferAssetContract)
+    assert decoded.asset_name == asset.asset_name
     _sign_and_check(client, accounts[0], scenario_navigator, tx)
 
 
@@ -212,14 +228,19 @@ def test_sign_asset_with_name_wrong_signature(backend, accounts):
 
 def test_sign_exchange_create(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
+    exchange = contract.ExchangeCreateContract(
+        owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+        first_token_id="_".encode(),
+        first_token_balance=10000000000,
+        second_token_id="1000166".encode(),
+        second_token_balance=10000000)
     tx = pack_contract(
         tron.Transaction.Contract.ExchangeCreateContract,
-        contract.ExchangeCreateContract(
-            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
-            first_token_id="_".encode(),
-            first_token_balance=10000000000,
-            second_token_id="1000166".encode(),
-            second_token_balance=10000000))
+        exchange,
+        contract_value_prefix=_bytes_field(4, b"0000000X"))
+    decoded = _decode_contract_value(tx, contract.ExchangeCreateContract)
+    assert decoded.first_token_id == exchange.first_token_id
+    assert decoded.second_token_id == exchange.second_token_id
     _sign_and_check(client, accounts[0], scenario_navigator, tx)
 
 
@@ -242,13 +263,17 @@ def test_sign_exchange_create_with_token_name(backend, accounts, scenario_naviga
 
 def test_sign_exchange_inject(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
+    exchange = contract.ExchangeInjectContract(
+        owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+        exchange_id=6,
+        token_id="1000166".encode(),
+        quant=10000000)
     tx = pack_contract(
         tron.Transaction.Contract.ExchangeInjectContract,
-        contract.ExchangeInjectContract(
-            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
-            exchange_id=6,
-            token_id="1000166".encode(),
-            quant=10000000))
+        exchange,
+        contract_value_prefix=_bytes_field(3, b"0000000X"))
+    decoded = _decode_contract_value(tx, contract.ExchangeInjectContract)
+    assert decoded.token_id == exchange.token_id
     exchange_signature = [
         "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
     ]
@@ -257,13 +282,17 @@ def test_sign_exchange_inject(backend, accounts, scenario_navigator):
 
 def test_sign_exchange_withdraw(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
+    exchange = contract.ExchangeWithdrawContract(
+        owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+        exchange_id=6,
+        token_id="1000166".encode(),
+        quant=1000000)
     tx = pack_contract(
         tron.Transaction.Contract.ExchangeWithdrawContract,
-        contract.ExchangeWithdrawContract(
-            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
-            exchange_id=6,
-            token_id="1000166".encode(),
-            quant=1000000))
+        exchange,
+        contract_value_prefix=_bytes_field(3, b"0000000X"))
+    decoded = _decode_contract_value(tx, contract.ExchangeWithdrawContract)
+    assert decoded.token_id == exchange.token_id
     exchange_signature = [
         "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
     ]
@@ -272,14 +301,18 @@ def test_sign_exchange_withdraw(backend, accounts, scenario_navigator):
 
 def test_sign_exchange_transaction(backend, accounts, scenario_navigator):
     client = TronCommandSender(backend)
+    exchange = contract.ExchangeTransactionContract(
+        owner_address=bytes.fromhex(accounts[0]["addressHex"]),
+        exchange_id=6,
+        token_id="1000166".encode(),
+        quant=10000,
+        expected=100)
     tx = pack_contract(
         tron.Transaction.Contract.ExchangeTransactionContract,
-        contract.ExchangeTransactionContract(
-            owner_address=bytes.fromhex(accounts[0]["addressHex"]),
-            exchange_id=6,
-            token_id="1000166".encode(),
-            quant=10000,
-            expected=100))
+        exchange,
+        contract_value_prefix=_bytes_field(3, b"0000000X"))
+    decoded = _decode_contract_value(tx, contract.ExchangeTransactionContract)
+    assert decoded.token_id == exchange.token_id
     exchange_signature = [
         "08061207313030303136361a0b43727970746f436861696e20002a015f3203545258380642473045022100fe276f30a63173b2440991affbbdc5d6d2d22b61b306b24e535a2fb866518d9c02205f7f41254201131382ec6c8b3c78276a2bb136f910b9a1f37bfde192fc448793"
     ]
